@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -954,6 +955,10 @@ func (app *App) Shutdown() {
 
 // checkForUpdates checks for available updates.
 func (app *App) checkForUpdates(ctx context.Context) {
+	// CRUSH_DISABLE_UPDATE_CHECK=1 keeps Crush from asking GitHub for the latest release.
+	if v, _ := strconv.ParseBool(os.Getenv("CRUSH_DISABLE_UPDATE_CHECK")); v {
+		return
+	}
 	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
