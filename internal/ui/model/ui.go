@@ -2257,6 +2257,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionSetThinking:
+		cmds = append(cmds, m.setThinking(msg.Enabled))
+		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleThinking:
 		cmds = append(cmds, m.updateAgentModelCmd(func() tea.Msg {
 			cfg := m.com.Config()
@@ -5292,16 +5295,18 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 // setThinking stores a typed /think or /no_think as the global switch and
 // rebuilds the agent's models so the next request already carries it.
 func (m *UI) setThinking(enabled bool) tea.Cmd {
-	if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, config.ThinkingKey, enabled); err != nil {
-		return util.ReportError(err)
-	}
-	if err := m.com.Workspace.UpdateAgentModel(context.Background()); err != nil {
-		return util.ReportError(err)
-	}
-	if enabled {
-		return util.ReportInfo("Thinking on for all future requests (/no_think turns it off)")
-	}
-	return util.ReportInfo("Thinking off for all future requests (/think turns it on)")
+	return m.updateAgentModelCmd(func() tea.Msg {
+		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, config.ThinkingKey, enabled); err != nil {
+			return util.ReportError(err)()
+		}
+		if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
+			return util.ReportError(err)()
+		}
+		if enabled {
+			return util.NewInfoMsg("Thinking on for all future requests (/no_think turns it off)")
+		}
+		return util.NewInfoMsg("Thinking off for all future requests (/think turns it on)")
+	})
 }
 
 // sendMessageInternal can hide a generated continuation from the chat.

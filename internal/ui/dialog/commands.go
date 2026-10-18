@@ -235,6 +235,7 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 				c.list.SetFilter(value)
 				c.list.ScrollToTop()
 				c.list.SetSelected(0)
+				c.selectExactAlias(value)
 			}
 			return ActionCmd{cmd}
 		}
@@ -453,6 +454,24 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "switch_model", "Switch Model", "ctrl+l", ActionOpenDialog{ModelsID}),
 	}
 
+	// /think and /no_think: the stored switch for models with a thinking
+	// mode on OpenAI-compatible and local servers (Qwen on llama.cpp).
+	thinkingOn, thinkingSet := c.com.Config().Thinking()
+	onTitle, offTitle := "Thinking On", "Thinking Off"
+	if thinkingSet && thinkingOn {
+		onTitle += " (current)"
+	} else if thinkingSet {
+		offTitle += " (current)"
+	}
+	commands = append(commands,
+		NewCommandItem(c.com.Styles, "think", onTitle, "", ActionSetThinking{Enabled: true}).
+			WithAliases("think", "/think").
+			WithDescription("Models with a thinking switch reason before answering, from now on"),
+		NewCommandItem(c.com.Styles, "no_think", offTitle, "", ActionSetThinking{Enabled: false}).
+			WithAliases("nothink", "no_think", "no-think", "/no_think").
+			WithDescription("Models with a thinking switch answer directly, from now on"),
+	)
+
 	// Only show compact command if there's an active session
 	if c.hasSession {
 		commands = append(commands, NewCommandItem(c.com.Styles, "summarize", "Summarize Session", "", ActionSummarize{SessionID: c.sessionID}))
@@ -600,4 +619,27 @@ func (c *Commands) StartLoading() tea.Cmd {
 // StopLoading implements [LoadingDialog].
 func (c *Commands) StopLoading() {
 	c.loading = false
+}
+
+// selectExactAlias moves the selection to the item whose alias is exactly
+// what was typed (a leading "/" ignored, case-insensitive), so "/nothink"
+// lands on Thinking Off even when fuzzy matching ranks another item first.
+func (c *Commands) selectExactAlias(value string) {
+	want := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(value), "/"))
+	if want == "" {
+		return
+	}
+	for i, it := range c.list.FilteredItems() {
+		item, ok := it.(*CommandItem)
+		if !ok || item == nil {
+			continue
+		}
+		for _, a := range item.aliases {
+			if strings.ToLower(strings.TrimPrefix(a, "/")) == want {
+				c.list.SetSelected(i)
+				c.list.ScrollToSelected()
+				return
+			}
+		}
+	}
 }
