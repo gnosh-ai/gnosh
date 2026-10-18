@@ -131,6 +131,9 @@ crush run --continue "Follow up on your last response"
 				slog.SetDefault(slog.New(log.New(os.Stderr)))
 			}
 
+			if enabled, ok := config.ParseThinkingCommand(prompt); ok {
+				return setThinking(clientWs, enabled, cmd.OutOrStdout())
+			}
 			return runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, reasoningEffort, quiet || verbose, sessionID, useLast)
 		}
 
@@ -160,6 +163,9 @@ crush run --continue "Follow up on your last response"
 			sessionID = sess.ID
 		}
 
+		if enabled, ok := config.ParseThinkingCommand(prompt); ok {
+			return setThinking(ws, enabled, cmd.OutOrStdout())
+		}
 		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, largeModel, smallModel, reasoningEffort, quiet || verbose, sessionID, useLast)
 	},
 }
@@ -779,4 +785,18 @@ func resolveSessionByID(ctx context.Context, c *client.Client, wsID, id string) 
 	default:
 		return nil, fmt.Errorf("session ID %q is ambiguous (%d matches)", id, len(matches))
 	}
+}
+
+// setThinking stores a /think or /no_think line as the global switch and says
+// so, instead of sending it to the model.
+func setThinking(ws workspace.Workspace, enabled bool, out io.Writer) error {
+	if err := ws.SetConfigField(config.ScopeGlobal, config.ThinkingKey, enabled); err != nil {
+		return err
+	}
+	state := "off"
+	if enabled {
+		state = "on"
+	}
+	_, err := fmt.Fprintf(out, "Thinking %s for all future requests.\n", state)
+	return err
 }
