@@ -1,8 +1,12 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
+	"log/slog"
+	"os"
+	"path/filepath"
 
 	"github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/config"
@@ -21,7 +25,7 @@ var planPromptTmpl []byte
 var initializePromptTmpl []byte
 
 func coderPrompt(opts ...prompt.Option) (*prompt.Prompt, error) {
-	systemPrompt, err := prompt.NewPrompt("coder", string(coderPromptTmpl), opts...)
+	systemPrompt, err := prompt.NewPrompt("coder", loadTemplate("coder.md.tpl", coderPromptTmpl), opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +33,7 @@ func coderPrompt(opts ...prompt.Option) (*prompt.Prompt, error) {
 }
 
 func taskPrompt(opts ...prompt.Option) (*prompt.Prompt, error) {
-	systemPrompt, err := prompt.NewPrompt("task", string(taskPromptTmpl), opts...)
+	systemPrompt, err := prompt.NewPrompt("task", loadTemplate("task.md.tpl", taskPromptTmpl), opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +41,7 @@ func taskPrompt(opts ...prompt.Option) (*prompt.Prompt, error) {
 }
 
 func planPrompt(opts ...prompt.Option) (*prompt.Prompt, error) {
-	systemPrompt, err := prompt.NewPrompt("plan", string(planPromptTmpl), opts...)
+	systemPrompt, err := prompt.NewPrompt("plan", loadTemplate("plan.md.tpl", planPromptTmpl), opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -45,9 +49,55 @@ func planPrompt(opts ...prompt.Option) (*prompt.Prompt, error) {
 }
 
 func InitializePrompt(cfg *config.ConfigStore) (string, error) {
-	systemPrompt, err := prompt.NewPrompt("initialize", string(initializePromptTmpl))
+	systemPrompt, err := prompt.NewPrompt("initialize", loadTemplate("initialize.md.tpl", initializePromptTmpl))
 	if err != nil {
 		return "", err
 	}
 	return systemPrompt.Build(context.Background(), "", "", cfg)
+}
+
+// UserTemplateDir is where a user's own prompt templates live, beside crushrc:
+// ~/.config/crush/templates. A file named like a built-in template
+// (coder.md.tpl, plan.md.tpl, task.md.tpl, initialize.md.tpl) replaces it.
+// `crush prompt export` writes the built-in one there to start from.
+func UserTemplateDir() string {
+	return filepath.Join(filepath.Dir(config.GlobalConfig()), "templates")
+}
+
+// BuiltinTemplate returns the embedded template of that name.
+func BuiltinTemplate(name string) ([]byte, bool) {
+	switch name {
+	case "coder.md.tpl":
+		return coderPromptTmpl, true
+	case "task.md.tpl":
+		return taskPromptTmpl, true
+	case "plan.md.tpl":
+		return planPromptTmpl, true
+	case "initialize.md.tpl":
+		return initializePromptTmpl, true
+	}
+	return nil, false
+}
+
+// EffectiveTemplate returns the template Crush would use for that name: the
+// user's file when it exists and is not empty, else the built-in one.
+func EffectiveTemplate(name string) (text string, path string, user bool) {
+	builtin, _ := BuiltinTemplate(name)
+	path = filepath.Join(UserTemplateDir(), name)
+	b, err := os.ReadFile(path)
+	if err != nil || len(bytes.TrimSpace(b)) == 0 {
+		return string(builtin), path, false
+	}
+	return string(b), path, true
+}
+
+func loadTemplate(name string, builtin []byte) string {
+	text, path, user := EffectiveTemplate(name)
+	if user {
+		slog.Info("Using the user's prompt template", "path", path)
+	}
+	if text == "" {
+		return string(builtin)
+	}
+	return text
 }
