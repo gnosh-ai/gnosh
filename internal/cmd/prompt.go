@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"charm.land/fantasy"
 	"github.com/spf13/cobra"
 
 	"github.com/charmbracelet/crush/internal/agent"
@@ -106,6 +107,9 @@ exact objects.`,
 		}
 		sort.Slice(infos, func(i, j int) bool { return infos[i].Name < infos[j].Name })
 		out := cmd.OutOrStdout()
+		if export, _ := cmd.Flags().GetBool("export"); export {
+			return exportToolDescriptions(cmd, infos)
+		}
 		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
 			enc := json.NewEncoder(out)
 			enc.SetIndent("", "  ")
@@ -115,7 +119,11 @@ exact objects.`,
 		for _, t := range infos {
 			b, _ := json.Marshal(t)
 			total += len(b)
-			fmt.Fprintf(out, "## %s  (%d bytes)\n%s\n", t.Name, len(b), strings.TrimSpace(t.Description))
+			source := ""
+			if path, used := agent.UserToolDescription(t.Name); used {
+				source = "  (description from " + path + ")"
+			}
+			fmt.Fprintf(out, "## %s  (%d bytes)%s\n%s\n", t.Name, len(b), source, strings.TrimSpace(t.Description))
 			names := make([]string, 0, len(t.Parameters))
 			for name := range t.Parameters {
 				names = append(names, name)
@@ -137,12 +145,43 @@ exact objects.`,
 			fmt.Fprintln(out)
 		}
 		fmt.Fprintf(out, "%d tools, %d bytes of JSON (roughly %d tokens)\n", len(infos), total, total/4)
+		fmt.Fprintf(out, "Descriptions can be edited as %s/<name>.md and tools left out via %s (crush prompt tools --export writes them).\n", agent.UserToolsDir(), agent.DisabledToolsFile())
 		return nil
 	},
+}
+
+// exportToolDescriptions writes each tool's current description to the user
+// tools directory (existing files are kept) and a commented disabled.txt.
+func exportToolDescriptions(cmd *cobra.Command, infos []fantasy.ToolInfo) error {
+	dir := agent.UserToolsDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	written := 0
+	for _, t := range infos {
+		path := filepath.Join(dir, t.Name+".md")
+		if _, err := os.Stat(path); err == nil {
+			continue
+		}
+		if err := os.WriteFile(path, []byte(strings.TrimSpace(t.Description)+"\n"), 0o644); err != nil {
+			return err
+		}
+		written++
+	}
+	disabled := agent.DisabledToolsFile()
+	if _, err := os.Stat(disabled); err != nil {
+		header := "# One tool name per line; these are not offered to the model. Names: crush prompt tools\n"
+		if err := os.WriteFile(disabled, []byte(header), 0o644); err != nil {
+			return err
+		}
+	}
+	_, err := fmt.Fprintf(cmd.OutOrStdout(), "Wrote %d description files to %s (existing ones kept); edit them, or list tools to drop in %s. Crush uses them from the next start.\n", written, dir, disabled)
+	return err
 }
 
 func init() {
 	promptExportCmd.Flags().Bool("force", false, "Overwrite an existing file")
 	promptToolsCmd.Flags().Bool("json", false, "Print the exact JSON objects")
+	promptToolsCmd.Flags().Bool("export", false, "Write each description to ~/.config/crush/tools/<name>.md for editing")
 	promptCmd.AddCommand(promptPathCmd, promptExportCmd, promptShowCmd, promptToolsCmd)
 }

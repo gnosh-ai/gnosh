@@ -997,7 +997,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	// itself is still wrapped from the coder's side.
 	filteredTools = wrapToolsWithHooks(filteredTools, hookRunner, isSubAgent)
 
-	return filteredTools, nil
+	return applyUserTools(filteredTools), nil
 }
 
 // TODO: when we support multiple agents we need to change this so that we pass in the agent specific model config
