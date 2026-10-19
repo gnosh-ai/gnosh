@@ -71,6 +71,7 @@ async function loadSessions() {
 }
 async function open(id) {
   current = id;
+  history.replaceState(null, "", "?session=" + encodeURIComponent(id));
   messages = await api("GET", `/api/sessions/${id}/messages`);
   const s = sessions.find(x => x.id === id);
   $("#title").textContent = s ? (s.title || "(untitled)") : id;
@@ -135,7 +136,7 @@ $("#ctxbtn").onclick = async () => {
       <details><summary>Tools (${(c.tools || []).length})</summary>${(c.tools || []).map(t => `<details><summary>${esc(t.name)} (${JSON.stringify(t).length} bytes)</summary><pre>${esc(t.description)}\n\nparameters: ${esc(JSON.stringify(t.parameters, null, 1))}</pre></details>`).join("")}</details>`;
   } catch (e) { status("No context: " + e.message); }
 };
-loadSessions();
+loadSessions().then(() => { const sid = new URLSearchParams(location.search).get("session"); if (sid) open(sid); });
 </script>
 </body>
 </html>
