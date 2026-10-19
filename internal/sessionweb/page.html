@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crush sessions</title>
+<style>
+  :root { color-scheme: light dark; --line: #8884; --accent: #c45; }
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 0; display: grid; grid-template-columns: 300px 1fr; height: 100vh; }
+  aside { border-right: 1px solid var(--line); overflow: auto; padding: 12px; }
+  main { overflow: auto; padding: 12px 20px; }
+  h1 { font-size: 16px; margin: 0 0 8px; }
+  .session { display: block; width: 100%; text-align: left; border: 1px solid var(--line); background: none; color: inherit; border-radius: 6px; padding: 8px; margin: 0 0 6px; cursor: pointer; }
+  .session.on { border-color: var(--accent); }
+  .session small { opacity: .7; }
+  .msg { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 12px; }
+  .msg header { display: flex; gap: 10px; align-items: baseline; margin-bottom: 6px; }
+  .role { font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: .04em; }
+  .role.user { color: #2a7; } .role.assistant { color: #58c; } .role.tool { color: #a73; }
+  .msg small { opacity: .7; }
+  label { display: block; font-size: 12px; opacity: .8; margin: 8px 0 2px; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 48px; font: 13px/1.4 ui-monospace, monospace; border: 1px solid var(--line); border-radius: 6px; padding: 6px; background: transparent; color: inherit; }
+  button { font: inherit; border: 1px solid var(--line); background: none; color: inherit; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  button.primary { border-color: var(--accent); }
+  .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .finish { font-size: 12px; opacity: .6; margin-top: 6px; }
+  #status { position: fixed; right: 16px; bottom: 12px; opacity: .8; font-size: 12px; }
+  details { margin: 8px 0; } pre { white-space: pre-wrap; font-size: 12px; max-height: 60vh; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+  .sizes { font-size: 13px; margin: 8px 0; }
+</style>
+</head>
+<body>
+<aside>
+  <h1>Sessions</h1>
+  <div id="sessions"></div>
+  <p><small>Edits land in Crush's database at once. A session open in the Crush TUI shows them after you switch to it again (ctrl+s).</small></p>
+</aside>
+<main>
+  <div class="row">
+    <h1 id="title">Pick a session</h1>
+    <button id="ctxbtn" title="The prompt template and the tool descriptions sent with every turn">What the model gets</button>
+  </div>
+  <div id="context"></div>
+  <div id="messages"></div>
+  <div id="add" hidden>
+    <h1>Add a message</h1>
+    <div class="row">
+      <select id="addrole"><option value="user">user</option><option value="assistant">assistant</option></select>
+    </div>
+    <textarea id="addtext" placeholder="Text of the message"></textarea>
+    <div class="row"><button class="primary" id="addbtn">Add to the end</button></div>
+  </div>
+</main>
+<div id="status"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+let sessions = [], current = null, messages = [];
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const when = (t) => t ? new Date(t * 1000).toLocaleString() : "";
+const status = (t) => { $("#status").textContent = t; setTimeout(() => { if ($("#status").textContent === t) $("#status").textContent = ""; }, 4000); };
+async function api(method, url, body) {
+  const r = await fetch(url, { method, headers: body ? {"Content-Type": "application/json"} : {}, body: body ? JSON.stringify(body) : undefined });
+  if (!r.ok) throw new Error(await r.text());
+  return r.status === 204 ? null : r.json();
+}
+async function loadSessions() {
+  sessions = await api("GET", "/api/sessions");
+  sessions.sort((a, b) => b.updated_at - a.updated_at);
+  $("#sessions").innerHTML = sessions.map(s => `<button class="session ${s.id === current ? "on" : ""}" data-id="${esc(s.id)}">${esc(s.title || "(untitled)")}<br><small>${s.message_count} messages · ${esc(when(s.updated_at))}</small></button>`).join("");
+  document.querySelectorAll(".session").forEach(b => b.onclick = () => open(b.dataset.id));
+}
+async function open(id) {
+  current = id;
+  messages = await api("GET", `/api/sessions/${id}/messages`);
+  const s = sessions.find(x => x.id === id);
+  $("#title").textContent = s ? (s.title || "(untitled)") : id;
+  $("#add").hidden = false;
+  $("#context").innerHTML = "";
+  renderMessages();
+  loadSessions();
+}
+function partField(mi, pi, p) {
+  const d = p.data || {};
+  switch (p.type) {
+    case "text": return `<label>text</label><textarea data-m="${mi}" data-p="${pi}" data-k="text">${esc(d.text)}</textarea>`;
+    case "reasoning": return `<label>thinking</label><textarea data-m="${mi}" data-p="${pi}" data-k="thinking">${esc(d.thinking)}</textarea>`;
+    case "tool_call": return `<label>tool call: ${esc(d.name)} (input, JSON)</label><textarea data-m="${mi}" data-p="${pi}" data-k="input">${esc(d.input)}</textarea>`;
+    case "tool_result": return `<label>tool result: ${esc(d.name)}${d.is_error ? " (error)" : ""}</label><textarea data-m="${mi}" data-p="${pi}" data-k="content">${esc(d.content)}</textarea>`;
+    case "finish": return `<div class="finish">finish: ${esc(d.reason)}${d.message ? " · " + esc(d.message) : ""}</div>`;
+    default: return `<label>${esc(p.type)} (raw JSON)</label><textarea data-m="${mi}" data-p="${pi}" data-k="raw">${esc(JSON.stringify(d, null, 1))}</textarea>`;
+  }
+}
+function renderMessages() {
+  $("#messages").innerHTML = messages.map((m, mi) => `
+    <div class="msg" id="m-${mi}">
+      <header><span class="role ${esc(m.role)}">${esc(m.role)}</span><small>${esc(when(m.created_at))}</small><small>${esc(m.model)}</small>${m.is_summary ? "<small>summary</small>" : ""}</header>
+      ${m.parts.map((p, pi) => partField(mi, pi, p)).join("")}
+      <div class="row"><button class="primary" data-save="${mi}">Save</button><button data-del="${mi}">Delete</button></div>
+    </div>`).join("");
+  document.querySelectorAll("[data-save]").forEach(b => b.onclick = () => save(+b.dataset.save));
+  document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => del(+b.dataset.del));
+}
+async function save(mi) {
+  const m = messages[mi];
+  const parts = JSON.parse(JSON.stringify(m.parts));
+  document.querySelectorAll(`#m-${mi} textarea`).forEach(t => {
+    const p = parts[+t.dataset.p];
+    if (t.dataset.k === "raw") { try { p.data = JSON.parse(t.value); } catch (e) { throw new Error("raw JSON of a part does not parse: " + e.message); } }
+    else p.data[t.dataset.k] = t.value;
+  });
+  try { await api("PUT", `/api/messages/${m.id}`, { parts }); m.parts = parts; status("Saved."); }
+  catch (e) { status("Not saved: " + e.message); }
+}
+async function del(mi) {
+  const m = messages[mi];
+  try { await api("DELETE", `/api/messages/${m.id}`); messages.splice(mi, 1); renderMessages(); loadSessions(); status("Deleted."); }
+  catch (e) { status("Not deleted: " + e.message); }
+}
+$("#addbtn").onclick = async () => {
+  if (!current) return;
+  try {
+    await api("POST", `/api/sessions/${current}/messages`, { role: $("#addrole").value, text: $("#addtext").value });
+    $("#addtext").value = ""; await open(current); status("Added.");
+  } catch (e) { status("Not added: " + e.message); }
+};
+$("#ctxbtn").onclick = async () => {
+  try {
+    const c = await api("GET", "/api/context");
+    const toolsJSON = JSON.stringify(c.tools || []);
+    const hist = JSON.stringify(messages.map(m => m.parts));
+    const tok = (n) => Math.round(n / 4).toLocaleString();
+    $("#context").innerHTML = `
+      <div class="sizes">Rough token counts (characters ÷ 4): prompt template ${tok(c.template.length)}, tool descriptions ${tok(toolsJSON.length)}, this session's history ${tok(hist.length)}.</div>
+      <details><summary>Prompt template (${esc(c.template_source)})</summary><pre>${esc(c.template)}</pre></details>
+      <details><summary>Tools (${(c.tools || []).length})</summary>${(c.tools || []).map(t => `<details><summary>${esc(t.name)} (${JSON.stringify(t).length} bytes)</summary><pre>${esc(t.description)}\n\nparameters: ${esc(JSON.stringify(t.parameters, null, 1))}</pre></details>`).join("")}</details>`;
+  } catch (e) { status("No context: " + e.message); }
+};
+loadSessions();
+</script>
+</body>
+</html>
