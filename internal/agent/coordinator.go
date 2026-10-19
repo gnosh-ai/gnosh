@@ -145,6 +145,10 @@ type Coordinator interface {
 	Summarize(context.Context, string) error
 	Model() Model
 	UpdateModels(ctx context.Context) error
+	// ToolInfos builds the coder agent's tools and returns what the model is
+	// told about each one (name, description, parameters): the part of every
+	// request that is not the prompt template. Behind `crush prompt tools`.
+	ToolInfos(ctx context.Context) ([]fantasy.ToolInfo, error)
 	GenerateTitle(ctx context.Context, sessionID, prompt string)
 }
 
@@ -851,6 +855,23 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 	})
 
 	return result, nil
+}
+
+// ToolInfos implements Coordinator.
+func (c *coordinator) ToolInfos(ctx context.Context) ([]fantasy.ToolInfo, error) {
+	agentCfg, ok := c.cfg.Config().Agents[config.AgentCoder]
+	if !ok {
+		return nil, errors.New("coder agent not configured")
+	}
+	tools, err := c.buildTools(ctx, agentCfg, false)
+	if err != nil {
+		return nil, err
+	}
+	infos := make([]fantasy.ToolInfo, 0, len(tools))
+	for _, t := range tools {
+		infos = append(infos, t.Info())
+	}
+	return infos, nil
 }
 
 func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubAgent bool) ([]fantasy.AgentTool, error) {

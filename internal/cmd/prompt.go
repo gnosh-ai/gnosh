@@ -1,13 +1,17 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/workspace"
 )
 
 var promptCmd = &cobra.Command{
@@ -79,7 +83,66 @@ var promptShowCmd = &cobra.Command{
 	},
 }
 
+var promptToolsCmd = &cobra.Command{
+	Use:   "tools",
+	Short: "Print what the model is told about each tool (the rest of every request)",
+	Long: `Every request carries, besides the prompt template, a description of each
+tool the agent may call: its name, what it does and its parameters. This prints
+them as the coder agent builds them in the current directory; --json prints the
+exact objects.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ws, cleanup, err := setupLocalWorkspace(cmd)
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+		appWs, ok := ws.(*workspace.AppWorkspace)
+		if !ok {
+			return fmt.Errorf("unexpected workspace type %T", ws)
+		}
+		infos, err := appWs.App().AgentCoordinator.ToolInfos(cmd.Context())
+		if err != nil {
+			return err
+		}
+		sort.Slice(infos, func(i, j int) bool { return infos[i].Name < infos[j].Name })
+		out := cmd.OutOrStdout()
+		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
+			enc := json.NewEncoder(out)
+			enc.SetIndent("", "  ")
+			return enc.Encode(infos)
+		}
+		total := 0
+		for _, t := range infos {
+			b, _ := json.Marshal(t)
+			total += len(b)
+			fmt.Fprintf(out, "## %s  (%d bytes)\n%s\n", t.Name, len(b), strings.TrimSpace(t.Description))
+			names := make([]string, 0, len(t.Parameters))
+			for name := range t.Parameters {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				desc := ""
+				if m, ok := t.Parameters[name].(map[string]any); ok {
+					desc, _ = m["description"].(string)
+				}
+				req := ""
+				for _, r := range t.Required {
+					if r == name {
+						req = ", required"
+					}
+				}
+				fmt.Fprintf(out, "  - %s%s: %s\n", name, req, strings.TrimSpace(desc))
+			}
+			fmt.Fprintln(out)
+		}
+		fmt.Fprintf(out, "%d tools, %d bytes of JSON (roughly %d tokens)\n", len(infos), total, total/4)
+		return nil
+	},
+}
+
 func init() {
 	promptExportCmd.Flags().Bool("force", false, "Overwrite an existing file")
-	promptCmd.AddCommand(promptPathCmd, promptExportCmd, promptShowCmd)
+	promptToolsCmd.Flags().Bool("json", false, "Print the exact JSON objects")
+	promptCmd.AddCommand(promptPathCmd, promptExportCmd, promptShowCmd, promptToolsCmd)
 }
