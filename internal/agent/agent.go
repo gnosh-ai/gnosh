@@ -893,6 +893,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			}
 
 			prepared.Messages = dropEmptyToolMedia(prepared.Messages)
+			// Neutralize model control tokens that untrusted tool output or pasted text
+			// may contain, so a vision-enabled server cannot read them as image/turn markers.
+			prepared.Messages = sanitizeControlTokens(prepared.Messages)
 			prepared.Messages = a.workaroundProviderMediaLimitations(prepared.Messages, largeModel)
 
 			lastSystemRoleInx := 0
