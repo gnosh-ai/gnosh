@@ -804,6 +804,16 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		return nil, fmt.Errorf("failed to get session messages: %w", err)
 	}
 
+	// Repair ghosts first: an assistant message left without a Finish part
+	// by a crash or hard kill would otherwise render as a second, endless
+	// "working" spinner next to this turn's. No other run can be active for
+	// the session here, so every unfinished reply is an orphan.
+	if finalizeOrphanedAssistants(ctx, a.messages, call.SessionID) > 0 {
+		if msgs, err = a.getSessionMessages(ctx, currentSession); err != nil {
+			return nil, fmt.Errorf("failed to reload session messages: %w", err)
+		}
+	}
+
 	// Generate title from the first real (non-shell) user prompt.
 	// can take tens of seconds. Blocking Run on it delays the
 	// response to the caller. Use a detached context so the title
