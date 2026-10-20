@@ -427,13 +427,25 @@ func formatOutput(stdout, stderr string, execErr error, spillDir string) string 
 // dropped middle is written in full to a file under spillDir so the agent
 // can read it back rather than losing it for good.
 func TruncateOutput(content, spillDir string) string {
-	if ansi.StringWidth(content) <= MaxOutputLength {
+	runeCount := len([]rune(content))
+	if ansi.StringWidth(content) <= MaxOutputLength && runeCount <= MaxOutputLength {
 		return content
 	}
 
 	halfLength := MaxOutputLength / 2
-	start := ansi.Truncate(content, halfLength, "")
-	end := ansi.TruncateLeft(content, ansi.StringWidth(content)-halfLength, "")
+	var start, end string
+	if ansi.StringWidth(content) > MaxOutputLength {
+		start = ansi.Truncate(content, halfLength, "")
+		end = ansi.TruncateLeft(content, ansi.StringWidth(content)-halfLength, "")
+	} else {
+		// Oversized by raw length rather than display width: output full of
+		// zero-width bytes (a binary printed by cat, say) fills the context
+		// window while measuring near nothing on screen, so the width check
+		// alone lets it through. Cut on rune boundaries instead.
+		r := []rune(content)
+		start = string(r[:halfLength])
+		end = string(r[len(r)-halfLength:])
+	}
 
 	truncatedLinesCount := max(strings.Count(content, "\n")-strings.Count(start, "\n")-strings.Count(end, "\n"), 0)
 	marker := fmt.Sprintf("... [%d lines truncated] ...", truncatedLinesCount)
