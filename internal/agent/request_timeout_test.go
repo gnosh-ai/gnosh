@@ -284,3 +284,60 @@ func TestRequestTimeoutRunFinishMessage(t *testing.T) {
 	require.Contains(t, finish.Details, "stopped sending data for 1s")
 	require.Contains(t, finish.Details, "request-timeout")
 }
+
+func TestRequestTimeoutModel_SlowFirstTokenSurvives(t *testing.T) {
+	t.Parallel()
+
+	inner := &fakeLanguageModel{}
+	// The first part arrives after a gap longer than the inter-token idle
+	// timeout but within the time-to-first-token budget (idle *
+	// firstTokenTimeoutFactor), the way a cold prompt-processing phase
+	// streams nothing until the first token. It must survive; bounding the
+	// first part by the plain idle timeout would abort it.
+	inner.stream = func(yield func(fantasy.StreamPart) bool) {
+		select {
+		case <-time.After(150 * time.Millisecond):
+		case <-inner.streamCtx.Done():
+			yield(fantasy.StreamPart{Error: inner.streamCtx.Err()})
+			return
+		}
+		yield(fantasy.StreamPart{})
+	}
+	m := newRequestTimeoutModel(inner, 50*time.Millisecond) // first-token budget 250ms
+	stream, err := m.Stream(t.Context(), fantasy.Call{})
+	require.NoError(t, err)
+
+	parts := 0
+	for part := range stream {
+		require.NoError(t, part.Error)
+		parts++
+	}
+	require.Equal(t, 1, parts, "a slow first token within the time-to-first-token budget must not be aborted")
+}
+
+func TestRequestTimeoutModel_FirstTokenTimeoutReportsItsBudget(t *testing.T) {
+	t.Parallel()
+
+	inner := &fakeLanguageModel{}
+	// Nothing ever streams, so the time-to-first-token budget is what fires.
+	inner.stream = func(yield func(fantasy.StreamPart) bool) {
+		<-inner.streamCtx.Done()
+		yield(fantasy.StreamPart{Error: inner.streamCtx.Err()})
+	}
+	m := newRequestTimeoutModel(inner, 10*time.Millisecond)
+	stream, err := m.Stream(t.Context(), fantasy.Call{})
+	require.NoError(t, err)
+
+	var got error
+	for part := range stream {
+		if part.Error != nil {
+			got = part.Error
+		}
+	}
+
+	var timeoutErr *requestTimeoutError
+	require.ErrorAs(t, got, &timeoutErr)
+	require.ErrorIs(t, got, context.DeadlineExceeded)
+	require.Equal(t, 10*time.Millisecond*firstTokenTimeoutFactor, timeoutErr.timeout,
+		"a timeout before the first part must report the time-to-first-token budget, not the idle timeout")
+}
