@@ -472,6 +472,17 @@ func (c *Commands) defaultCommands() []*CommandItem {
 			WithDescription("Models with a thinking switch answer directly, from now on"),
 	)
 
+	// /loop and /noloop: keep the session working on its task without the
+	// user typing "continue" after every turn.
+	commands = append(commands,
+		NewCommandItem(c.com.Styles, "loop", "Loop On", "", ActionSetLoop{Enabled: true}).
+			WithAliases("loop", "/loop").
+			WithDescription("Keep this session going until it reports the task finished"),
+		NewCommandItem(c.com.Styles, "noloop", "Loop Off", "", ActionSetLoop{Enabled: false}).
+			WithAliases("noloop", "no_loop", "no-loop", "/noloop").
+			WithDescription("Stop looping after the current turn"),
+	)
+
 	// Only show compact command if there's an active session
 	if c.hasSession {
 		commands = append(commands, NewCommandItem(c.com.Styles, "summarize", "Summarize Session", "", ActionSummarize{SessionID: c.sessionID}))

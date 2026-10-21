@@ -422,8 +422,12 @@ type UI struct {
 	// They are event-driven with a TTL backstop, fetched off-thread by
 	// dispatchPromptQueueRefresh (see workspace_cache.go); promptQueue is
 	// always len(promptQueueItems).
-	promptQueue          int
-	promptQueueItems     []string
+	promptQueue      int
+	promptQueueItems []string
+
+	// loop is the /loop driver: while it is active a finished turn sends the
+	// next continue prompt, until the model reports done or the cap is hit.
+	loop                 loopState
 	promptQueueCheckedAt time.Time
 	promptQueueInFlight  bool
 	// promptQueueGen is bumped by every queue state transition; an
@@ -876,6 +880,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pubsub.Event[notify.RunComplete]:
 		m.endPendingTurn(msg.Payload.SessionID)
 		if cmd := m.handlePlanHandoff(msg.Payload); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		if cmd := m.advanceLoop(msg.Payload); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case busyStateMsg:
@@ -2259,6 +2266,13 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionSetThinking:
 		cmds = append(cmds, m.setThinking(msg.Enabled))
+		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionSetLoop:
+		if msg.Enabled {
+			cmds = append(cmds, m.startLoop())
+		} else if cmd := m.stopLoop("stopped"); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleThinking:
 		cmds = append(cmds, m.updateAgentModelCmd(func() tea.Msg {
@@ -5548,6 +5562,10 @@ func (m *UI) cancelAgent() tea.Cmd {
 		// Second escape press — actually cancel.
 		m.isCanceling = false
 
+		// Esc ends a running /loop too, so one cancel stops the whole run
+		// instead of the loop immediately sending the next prompt.
+		loopCmd := m.stopLoop("cancelled")
+
 		// Cancel a running bang command if one is in progress.
 		if m.bangCancel != nil {
 			m.bangCancel()
@@ -5562,7 +5580,7 @@ func (m *UI) cancelAgent() tea.Cmd {
 		m.todoIsSpinning = false
 		m.invalidateBusyCaches()
 		m.renderPills()
-		return m.dispatchBusyRefresh()
+		return tea.Batch(loopCmd, m.dispatchBusyRefresh())
 	}
 
 	// Queued prompts pending: esc clears the queue. Decide from the cached

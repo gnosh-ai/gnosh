@@ -52,7 +52,10 @@ type (
 	ActionToggleCompactMode struct{}
 	ActionToggleThinking    struct{}
 	// ActionSetThinking stores the /think or /no_think switch.
-	ActionSetThinking             struct{ Enabled bool }
+	ActionSetThinking struct{ Enabled bool }
+	// ActionSetLoop starts or stops /loop, which keeps a session working
+	// until the model reports the task finished.
+	ActionSetLoop                 struct{ Enabled bool }
 	ActionTogglePills             struct{}
 	ActionExternalEditor          struct{}
 	ActionToggleYoloMode          struct{}
