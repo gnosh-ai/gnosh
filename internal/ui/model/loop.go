@@ -103,16 +103,13 @@ func (m *UI) startLoop() tea.Cmd {
 	return tea.Sequence(started, m.sendMessageInternal(loopPrompt, true))
 }
 
-// stopLoop clears the loop. It is quiet when no loop was running, so Esc on
-// an idle session says nothing.
+// stopLoop clears the loop and says why. It is quiet when no loop was
+// running, so Esc on an idle session says nothing about loops.
 func (m *UI) stopLoop(reason string) tea.Cmd {
 	if !m.loop.active {
 		return nil
 	}
 	m.loop = loopState{}
-	if reason == "" {
-		return nil
-	}
 	return util.ReportInfo("Loop off: " + reason)
 }
 

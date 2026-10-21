@@ -128,3 +128,19 @@ func TestNoLoopPillWhenIdle(t *testing.T) {
 		t.Fatalf("no loop is running, so no loop pill belongs here:\n%s", u.pillsView)
 	}
 }
+
+// TestLoopPillSurvivesTheFinalTurn pins the window where the loop is still
+// running but its budget has already been spent: advanceLoop decrements when
+// it sends a continuation, so the last turn runs with zero remaining. The
+// layout reserves a pills row for the active loop, so the pill has to fill it.
+func TestLoopPillSurvivesTheFinalTurn(t *testing.T) {
+	u := newTestUI()
+	u.session = &session.Session{ID: "s1"}
+	u.loop = loopState{active: true, sessionID: "s1", remaining: 0}
+	u.updateLayoutAndSize()
+	u.renderPills()
+
+	if !strings.Contains(u.pillsView, "Loop 0 left") {
+		t.Fatalf("the reserved pills row must not be left blank on the final turn:\n%s", u.pillsView)
+	}
+}

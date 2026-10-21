@@ -65,10 +65,10 @@ func queuePill(queue int, t *styles.Styles) string {
 // may still take. A loop starts turns on its own, so without this the only
 // signs of it are the turns themselves.
 func loopPill(remaining int, t *styles.Styles) string {
-	if remaining <= 0 {
-		return ""
-	}
-	text := t.Pills.QueueLabel.Render(fmt.Sprintf("Loop %d left", remaining))
+	// No guard on remaining: it is decremented when a continuation is sent,
+	// so the final turn runs with zero left. Returning nothing there would
+	// blank a pills row that the layout has already reserved.
+	text := t.Pills.QueueLabel.Render(fmt.Sprintf("Loop %d left", max(remaining, 0)))
 	return t.Pills.Focused.Render("\u21bb " + text)
 }
 
