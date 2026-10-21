@@ -25,6 +25,11 @@ const (
 // loopState is the /loop driver. A turn ending publishes RunComplete, and
 // while the loop is active that event sends the next continue prompt, so the
 // session keeps working without the user typing "continue" each time.
+//
+// Only sessionAgent.Run publishes RunComplete, so the loop is driven by real
+// turns alone. Auto-summarization in particular does not publish one, which
+// is what keeps a compaction in the middle of a long loop from reading as a
+// finished turn and spending an iteration on a continuation nobody asked for.
 type loopState struct {
 	active    bool
 	sessionID string
