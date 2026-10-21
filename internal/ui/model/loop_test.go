@@ -3,6 +3,8 @@ package model
 import (
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
@@ -154,4 +156,57 @@ func TestStopLoop_IsQuietWhenNoLoopIsRunning(t *testing.T) {
 	m.loop = loopState{active: true, sessionID: "s1", remaining: 3}
 	require.NotNil(t, m.stopLoop("cancelled"))
 	require.False(t, m.loop.active)
+}
+
+// TestAdvanceLoop_SendsTheNextContinuationHidden covers the branch that makes
+// /loop a loop at all: a finished turn driving the next one. It is the only
+// branch that reaches the workspace, so it needs a real UI rather than a bare
+// struct, and it is where a regression would be least visible — the loop would
+// simply stop continuing, looking like the model had finished.
+func TestAdvanceLoop_SendsTheNextContinuationHidden(t *testing.T) {
+	t.Parallel()
+
+	u, ws := newPlanUI(t, "sess-1")
+	ws.agentReady = true
+	u.loop = loopState{active: true, sessionID: "sess-1", remaining: 3}
+
+	cmd := u.advanceLoop(notify.RunComplete{SessionID: "sess-1", Text: "wrote a.txt, still more to do"})
+	require.NotNil(t, cmd, "an unfinished turn must drive the next one")
+	drainCmd(cmd)
+
+	require.Equal(t, []string{loopPrompt}, ws.runPrompts, "exactly one continuation, and it is the loop's")
+	require.Equal(t, []bool{true}, ws.runHidden, "continuations stay in model history, not in the chat")
+	require.True(t, u.loop.active, "the loop keeps running")
+	require.Equal(t, 2, u.loop.remaining, "and spends one turn of its budget")
+}
+
+// TestAdvanceLoop_SendsNothingOnceTheModelIsDone pairs with the test above:
+// the same setup, but a finished task must drive no further turn.
+func TestAdvanceLoop_SendsNothingOnceTheModelIsDone(t *testing.T) {
+	t.Parallel()
+
+	u, ws := newPlanUI(t, "sess-1")
+	ws.agentReady = true
+	u.loop = loopState{active: true, sessionID: "sess-1", remaining: 3}
+
+	drainCmd(u.advanceLoop(notify.RunComplete{SessionID: "sess-1", Text: "all three files exist\nLOOP_DONE"}))
+
+	require.Empty(t, ws.runPrompts, "a finished task must not be given another turn")
+	require.False(t, u.loop.active)
+}
+
+// drainCmd runs a command and any commands it batches, so the work it
+// describes actually reaches the workspace.
+func drainCmd(cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		for _, c := range msg {
+			drainCmd(c)
+		}
+	case tea.Cmd:
+		drainCmd(msg)
+	}
 }
