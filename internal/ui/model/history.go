@@ -135,22 +135,39 @@ func (m *UI) syncBangModeFromTextarea() {
 	m.setEditorPrompt(m.yoloModeCached())
 }
 
+// historyEntries returns what Up and Down step through: the prompts queued
+// while a turn is running, newest first, followed by the user messages loaded
+// from the database. A queued prompt lives only in the agent's in-memory queue
+// until its turn runs, so without this it shows in the queue pill but cannot be
+// recalled from the editor.
+func (m *UI) historyEntries() []string {
+	if len(m.promptQueueItems) == 0 {
+		return m.promptHistory.messages
+	}
+	entries := make([]string, 0, len(m.promptQueueItems)+len(m.promptHistory.messages))
+	for i := len(m.promptQueueItems) - 1; i >= 0; i-- {
+		entries = append(entries, m.promptQueueItems[i])
+	}
+	return append(entries, m.promptHistory.messages...)
+}
+
 // historyPrev changes the text area content to the previous message in the history
 // it returns false if it could not find the previous message.
 func (m *UI) historyPrev() bool {
-	if len(m.promptHistory.messages) == 0 {
+	entries := m.historyEntries()
+	if len(entries) == 0 {
 		return false
 	}
 	if m.promptHistory.index == -1 {
 		m.promptHistory.draft = m.textarea.Value()
 	}
 	nextIndex := m.promptHistory.index + 1
-	if nextIndex >= len(m.promptHistory.messages) {
+	if nextIndex >= len(entries) {
 		return false
 	}
 	m.promptHistory.index = nextIndex
 	m.textarea.Reset()
-	m.textarea.InsertString(m.promptHistory.messages[nextIndex])
+	m.textarea.InsertString(entries[nextIndex])
 	m.textarea.MoveToBegin()
 	m.syncBangModeFromTextarea()
 	return true
@@ -170,9 +187,13 @@ func (m *UI) historyNext() bool {
 		m.syncBangModeFromTextarea()
 		return true
 	}
+	entries := m.historyEntries()
+	if nextIndex >= len(entries) {
+		return false
+	}
 	m.promptHistory.index = nextIndex
 	m.textarea.Reset()
-	m.textarea.InsertString(m.promptHistory.messages[nextIndex])
+	m.textarea.InsertString(entries[nextIndex])
 	m.syncBangModeFromTextarea()
 	return true
 }
