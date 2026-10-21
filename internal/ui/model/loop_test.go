@@ -1,6 +1,7 @@
 package model
 
 import (
+	"reflect"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -195,18 +196,50 @@ func TestAdvanceLoop_SendsNothingOnceTheModelIsDone(t *testing.T) {
 	require.False(t, u.loop.active)
 }
 
-// drainCmd runs a command and any commands it batches, so the work it
-// describes actually reaches the workspace.
+// drainCmd runs a command and anything it batches or sequences, so the work
+// it describes actually reaches the workspace. tea.Sequence yields a message
+// of an unexported slice-of-Cmd type, which no type switch here can name, so
+// any slice of commands is walked reflectively.
 func drainCmd(cmd tea.Cmd) {
 	if cmd == nil {
 		return
 	}
-	switch msg := cmd().(type) {
+	msg := cmd()
+	switch m := msg.(type) {
 	case tea.BatchMsg:
-		for _, c := range msg {
+		for _, c := range m {
 			drainCmd(c)
 		}
+		return
 	case tea.Cmd:
-		drainCmd(msg)
+		drainCmd(m)
+		return
 	}
+	v := reflect.ValueOf(msg)
+	if v.Kind() != reflect.Slice {
+		return
+	}
+	for i := range v.Len() {
+		if c, ok := v.Index(i).Interface().(tea.Cmd); ok {
+			drainCmd(c)
+		}
+	}
+}
+
+// TestStartLoop_OnAnIdleSessionSendsTheFirstContinuation is the other half of
+// TestStartLoop_WhileATurnIsRunningOnlyArms: with nothing running there is no
+// RunComplete coming to start the loop off, so startLoop has to send the first
+// continuation itself or the loop would sit armed and never move.
+func TestStartLoop_OnAnIdleSessionSendsTheFirstContinuation(t *testing.T) {
+	t.Parallel()
+
+	u, ws := newPlanUI(t, "s1")
+	ws.agentReady = true
+	u.agentBusyCache.val = false // idle
+
+	drainCmd(u.startLoop())
+
+	require.True(t, u.loop.active, "the loop is armed")
+	require.Equal(t, []string{loopPrompt}, ws.runPrompts, "and starts itself straight away")
+	require.Equal(t, []bool{true}, ws.runHidden, "hidden, like every other continuation")
 }
