@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/agent/notify"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
 )
 
@@ -81,4 +82,77 @@ func TestLoopReportedDone_RequiresTheSentinelOnItsOwnLine(t *testing.T) {
 	require.False(t, loopReportedDone("Next I will write b.txt, then say LOOP_DONE."))
 	require.False(t, loopReportedDone("LOOP_DONE_NOT_YET"))
 	require.False(t, loopReportedDone("still working"))
+}
+
+// The tests below drive the real methods on a bare UI. They only exercise
+// paths that must not reach the workspace: if the busy guard in startLoop or
+// a stop branch in advanceLoop regressed into sending a message, the nil
+// workspace would panic, which is exactly the regression being guarded.
+
+func TestStartLoop_NeedsASession(t *testing.T) {
+	t.Parallel()
+
+	m := &UI{}
+	cmd := m.startLoop()
+	require.NotNil(t, cmd, "the user is told why nothing happened")
+	require.False(t, m.loop.active, "no session means no loop to run")
+}
+
+func TestStartLoop_WhileATurnIsRunningOnlyArms(t *testing.T) {
+	t.Parallel()
+
+	m := &UI{}
+	m.session = &session.Session{ID: "s1"}
+	m.agentBusyCache.val = true // a turn is already running
+
+	cmd := m.startLoop()
+
+	require.NotNil(t, cmd)
+	require.True(t, m.loop.active, "the loop is armed")
+	require.Equal(t, "s1", m.loop.sessionID)
+	require.Equal(t, loopMaxIterations, m.loop.remaining)
+	// Reaching sendMessageInternal here would panic on the nil workspace:
+	// the running turn's RunComplete is what drives the first continuation.
+}
+
+func TestAdvanceLoop_StopsAndClearsWhenTheModelReportsDone(t *testing.T) {
+	t.Parallel()
+
+	m := &UI{loop: loopState{active: true, sessionID: "s1", remaining: 5}}
+	cmd := m.advanceLoop(notify.RunComplete{SessionID: "s1", Text: "finished\nLOOP_DONE"})
+
+	require.NotNil(t, cmd, "the user is told the loop ended")
+	require.False(t, m.loop.active, "a finished loop must not keep driving turns")
+}
+
+func TestAdvanceLoop_StopsAndClearsAtTheCap(t *testing.T) {
+	t.Parallel()
+
+	m := &UI{loop: loopState{active: true, sessionID: "s1", remaining: 0}}
+	cmd := m.advanceLoop(notify.RunComplete{SessionID: "s1", Text: "still going"})
+
+	require.NotNil(t, cmd)
+	require.False(t, m.loop.active, "the cap must actually stop the loop")
+}
+
+func TestAdvanceLoop_LeavesAnotherSessionsLoopAlone(t *testing.T) {
+	t.Parallel()
+
+	m := &UI{loop: loopState{active: true, sessionID: "s1", remaining: 5}}
+	cmd := m.advanceLoop(notify.RunComplete{SessionID: "s2", Text: "LOOP_DONE"})
+
+	require.Nil(t, cmd, "another session's turn says nothing")
+	require.True(t, m.loop.active, "and must not disarm this loop")
+	require.Equal(t, 5, m.loop.remaining)
+}
+
+func TestStopLoop_IsQuietWhenNoLoopIsRunning(t *testing.T) {
+	t.Parallel()
+
+	m := &UI{}
+	require.Nil(t, m.stopLoop("cancelled"), "Esc on an idle session says nothing about loops")
+
+	m.loop = loopState{active: true, sessionID: "s1", remaining: 3}
+	require.NotNil(t, m.stopLoop("cancelled"))
+	require.False(t, m.loop.active)
 }

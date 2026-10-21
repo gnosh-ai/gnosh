@@ -81,8 +81,9 @@ func loopReportedDone(text string) bool {
 	return false
 }
 
-// startLoop begins looping the current session, sending the first continue
-// prompt immediately.
+// startLoop begins looping the current session. The first continuation goes
+// out now when the session is idle; when a turn is already running, that
+// turn's RunComplete sends it instead.
 func (m *UI) startLoop() tea.Cmd {
 	if !m.hasSession() {
 		return util.ReportWarn("Start a session before looping")
