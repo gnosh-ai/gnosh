@@ -11,10 +11,6 @@ import (
 )
 
 const (
-	// loopMaxIterations caps how many times /loop re-prompts a session, so a
-	// model that never reports completion cannot run forever.
-	loopMaxIterations = 25
-
 	// loopDoneSentinel is what the model is asked to reply when the task is
 	// finished. Seeing it in a turn's text ends the loop.
 	loopDoneSentinel = "LOOP_DONE"
@@ -88,8 +84,9 @@ func (m *UI) startLoop() tea.Cmd {
 	if !m.hasSession() {
 		return util.ReportWarn("Start a session before looping")
 	}
-	m.loop = loopState{active: true, sessionID: m.session.ID, remaining: loopMaxIterations}
-	started := util.ReportInfo(fmt.Sprintf("Loop on: continuing until %s (max %d turns). Esc stops it.", loopDoneSentinel, loopMaxIterations))
+	maxTurns := m.com.Config().Options.GetLoopMaxTurns()
+	m.loop = loopState{active: true, sessionID: m.session.ID, remaining: maxTurns}
+	started := util.ReportInfo(fmt.Sprintf("Loop on: continuing until %s (max %d turns). Esc stops it.", loopDoneSentinel, maxTurns))
 
 	// A turn already running will publish RunComplete, and that drives the
 	// next continuation. Sending one here as well would put two in flight

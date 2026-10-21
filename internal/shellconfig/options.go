@@ -214,6 +214,7 @@ var optionSpecs = map[string]optionSpec{
 	// Integer fields.
 	"request-timeout":     {jsonKey: "request_timeout", kind: optInt},
 	"max-background-jobs": {jsonKey: "max_background_jobs", kind: optInt},
+	"loop-max-turns":      {jsonKey: "loop_max_turns", kind: optInt},
 
 	// List fields. Keys are singular because each call appends one value.
 	"context-path":        {jsonKey: "context_paths", kind: optList},

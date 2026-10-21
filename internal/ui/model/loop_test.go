@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/agent/notify"
-	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,7 +92,7 @@ func TestLoopReportedDone_RequiresTheSentinelOnItsOwnLine(t *testing.T) {
 func TestStartLoop_NeedsASession(t *testing.T) {
 	t.Parallel()
 
-	m := &UI{}
+	m, _ := newPlanUI(t, "")
 	cmd := m.startLoop()
 	require.NotNil(t, cmd, "the user is told why nothing happened")
 	require.False(t, m.loop.active, "no session means no loop to run")
@@ -101,8 +101,7 @@ func TestStartLoop_NeedsASession(t *testing.T) {
 func TestStartLoop_WhileATurnIsRunningOnlyArms(t *testing.T) {
 	t.Parallel()
 
-	m := &UI{}
-	m.session = &session.Session{ID: "s1"}
+	m, _ := newPlanUI(t, "s1")
 	m.agentBusyCache.val = true // a turn is already running
 
 	cmd := m.startLoop()
@@ -110,7 +109,7 @@ func TestStartLoop_WhileATurnIsRunningOnlyArms(t *testing.T) {
 	require.NotNil(t, cmd)
 	require.True(t, m.loop.active, "the loop is armed")
 	require.Equal(t, "s1", m.loop.sessionID)
-	require.Equal(t, loopMaxIterations, m.loop.remaining)
+	require.Equal(t, config.DefaultLoopMaxTurns, m.loop.remaining)
 	// Reaching sendMessageInternal here would panic on the nil workspace:
 	// the running turn's RunComplete is what drives the first continuation.
 }
