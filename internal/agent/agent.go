@@ -56,7 +56,41 @@ const (
 	largeContextWindowThreshold = 200_000
 	largeContextWindowBuffer    = 20_000
 	smallContextWindowRatio     = 0.2
+
+	// unknownContextWindowFallback bounds a session when the model's real
+	// context window is unknown (discovery failed or the provider does not
+	// report one). It is a conservative floor: modern local coding models are
+	// at least this large, so compacting at this budget avoids the hard
+	// "exceeds context" rejection for any of them, at the cost of compacting a
+	// genuinely larger model earlier than necessary.
+	unknownContextWindowFallback = 32_768
 )
+
+// autoSummarize reports whether a session whose running token total is tokens
+// should be compacted before the next request, given the model's context
+// window cw. It returns false when auto-summarize is disabled.
+//
+// When cw is unknown (<= 0, e.g. a local or custom model whose window could
+// not be discovered) it falls back to unknownContextWindowFallback instead of
+// giving up: without a limit the session grows until the provider hard-rejects
+// the request ("request exceeds the available context size"), which dead-ends
+// the session. Over-summarizing a model that is in fact larger is wasteful but
+// recoverable; crashing is not. A discovered real window is always preferred.
+func autoSummarize(cw, tokens int64, disabled bool) bool {
+	if disabled {
+		return false
+	}
+	if cw <= 0 {
+		cw = unknownContextWindowFallback
+	}
+	var threshold int64
+	if cw > largeContextWindowThreshold {
+		threshold = largeContextWindowBuffer
+	} else {
+		threshold = int64(float64(cw) * smallContextWindowRatio)
+	}
+	return cw-tokens <= threshold
+}
 
 var userAgent = fmt.Sprintf("Charm-Crush/%s (https://charm.land/crush)", version.Version)
 
@@ -1115,21 +1149,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		},
 		StopWhen: []fantasy.StopCondition{
 			func(_ []fantasy.StepResult) bool {
-				cw := int64(largeModel.CatwalkCfg.ContextWindow)
-				// If context window is unknown (0), skip auto-summarize
-				// to avoid immediately truncating custom/local models.
-				if cw == 0 {
-					return false
-				}
 				tokens := currentSession.CompletionTokens + currentSession.PromptTokens
-				remaining := cw - tokens
-				var threshold int64
-				if cw > largeContextWindowThreshold {
-					threshold = largeContextWindowBuffer
-				} else {
-					threshold = int64(float64(cw) * smallContextWindowRatio)
-				}
-				if (remaining <= threshold) && !a.disableAutoSummarize {
+				if autoSummarize(int64(largeModel.CatwalkCfg.ContextWindow), tokens, a.disableAutoSummarize) {
 					shouldSummarize = true
 					return true
 				}
