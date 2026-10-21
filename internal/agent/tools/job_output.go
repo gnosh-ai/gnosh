@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/shell"
@@ -30,6 +31,12 @@ type JobOutputResponseMetadata struct {
 	WorkingDirectory string `json:"working_directory"`
 }
 
+// maxJobOutputWait bounds how long job_output blocks when wait is true, so a
+// background job that never finishes cannot wedge the turn forever. On reaching
+// it the tool returns the output gathered so far with a "running" status, and
+// the model may choose to wait again. It is a var so tests can shorten it.
+var maxJobOutputWait = 5 * time.Minute
+
 func NewJobOutputTool(spillDir string) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		JobOutputToolName,
@@ -46,7 +53,9 @@ func NewJobOutputTool(spillDir string) fantasy.AgentTool {
 			}
 
 			if params.Wait {
-				bgShell.WaitContext(ctx)
+				waitCtx, cancel := context.WithTimeout(ctx, maxJobOutputWait)
+				bgShell.WaitContext(waitCtx)
+				cancel()
 			}
 
 			stdout, stderr, done, err := bgShell.GetOutput()
