@@ -61,6 +61,17 @@ func queuePill(queue int, t *styles.Styles) string {
 	return t.Pills.Focused.Render(content)
 }
 
+// loopPill shows that /loop is driving this session and how many turns it
+// may still take. A loop starts turns on its own, so without this the only
+// signs of it are the turns themselves.
+func loopPill(remaining int, t *styles.Styles) string {
+	if remaining <= 0 {
+		return ""
+	}
+	text := t.Pills.QueueLabel.Render(fmt.Sprintf("Loop %d left", remaining))
+	return t.Pills.Focused.Render("\u21bb " + text)
+}
+
 // todoPill renders the todo progress pill with optional spinner and task name.
 func todoPill(todos []session.Todo, spinnerView string, panelFocused bool, t *styles.Styles) string {
 	if !hasIncompleteTodos(todos) {
@@ -258,7 +269,10 @@ func (m *UI) pillsAreaHeight() int {
 	}
 	hasIncomplete := hasIncompleteTodos(m.session.Todos)
 	hasQueue := m.promptQueue > 0
-	hasPills := hasIncomplete || hasQueue
+	// A running loop is a pill of its own, so the area has to be reserved
+	// for it too: without this the rect stays zero-width and renderPills
+	// returns before drawing anything.
+	hasPills := hasIncomplete || hasQueue || m.loop.active
 	if !hasPills {
 		return 0
 	}
@@ -300,8 +314,9 @@ func (m *UI) renderPills() {
 
 	hasIncomplete := hasIncompleteTodos(m.session.Todos)
 	hasQueue := m.promptQueue > 0
+	hasLoop := m.loop.active
 
-	if !hasIncomplete && !hasQueue {
+	if !hasIncomplete && !hasQueue && !hasLoop {
 		return
 	}
 
@@ -321,6 +336,9 @@ func (m *UI) renderPills() {
 	}
 	if hasQueue {
 		pills = append(pills, queuePill(m.promptQueue, t))
+	}
+	if hasLoop {
+		pills = append(pills, loopPill(m.loop.remaining, t))
 	}
 
 	var expandedList string

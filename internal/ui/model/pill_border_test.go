@@ -99,3 +99,32 @@ func TestEffectiveFocusedSectionFallsThrough(t *testing.T) {
 		})
 	}
 }
+
+// TestLoopPillShowsWhileTheLoopRuns covers the only outward sign that /loop
+// is driving the session. A loop starts turns by itself, so without the pill
+// a user who steps away cannot tell whether the session is working on its own
+// or waiting for them.
+func TestLoopPillShowsWhileTheLoopRuns(t *testing.T) {
+	u := newTestUI()
+	u.session = &session.Session{ID: "s1"}
+	u.loop = loopState{active: true, sessionID: "s1", remaining: 7}
+	u.updateLayoutAndSize()
+	u.renderPills()
+
+	if !strings.Contains(u.pillsView, "Loop 7 left") {
+		t.Fatalf("expected the loop pill in the pills view:\n%s", u.pillsView)
+	}
+}
+
+// TestNoLoopPillWhenIdle pins the other half: an idle session must not grow a
+// pills row it would otherwise not have.
+func TestNoLoopPillWhenIdle(t *testing.T) {
+	u := newTestUI()
+	u.session = &session.Session{ID: "s1"}
+	u.updateLayoutAndSize()
+	u.renderPills()
+
+	if strings.Contains(u.pillsView, "Loop") {
+		t.Fatalf("no loop is running, so no loop pill belongs here:\n%s", u.pillsView)
+	}
+}
