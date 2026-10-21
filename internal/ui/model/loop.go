@@ -88,10 +88,16 @@ func (m *UI) startLoop() tea.Cmd {
 		return util.ReportWarn("Start a session before looping")
 	}
 	m.loop = loopState{active: true, sessionID: m.session.ID, remaining: loopMaxIterations}
-	return tea.Sequence(
-		util.ReportInfo(fmt.Sprintf("Loop on: continuing until %s (max %d turns). Esc stops it.", loopDoneSentinel, loopMaxIterations)),
-		m.sendMessageInternal(loopPrompt, true),
-	)
+	started := util.ReportInfo(fmt.Sprintf("Loop on: continuing until %s (max %d turns). Esc stops it.", loopDoneSentinel, loopMaxIterations))
+
+	// A turn already running will publish RunComplete, and that drives the
+	// next continuation. Sending one here as well would put two in flight
+	// for the same turn, and each of those would again be followed by the
+	// loop's own, so the queue would grow with every iteration.
+	if m.isAgentBusy() {
+		return started
+	}
+	return tea.Sequence(started, m.sendMessageInternal(loopPrompt, true))
 }
 
 // stopLoop clears the loop. It is quiet when no loop was running, so Esc on
