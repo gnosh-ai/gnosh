@@ -1397,7 +1397,7 @@ func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
 	cfg.setDefaults(s.workingDir, dataDir)
 
 	// Merge workspace config if present
-	workspacePath := filepath.Join(cfg.Options.DataDirectory, fmt.Sprintf("%s.json", appName))
+	workspacePath := configFileIn(cfg.Options.DataDirectory)
 	merged, err := mergeWorkspaceConfig(cfg, workspacePath, s.workingDir)
 	if err != nil {
 		return err

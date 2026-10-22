@@ -156,8 +156,12 @@ func TestLookupConfigs_BoundedByProject(t *testing.T) {
 		got := lookupConfigs(project)
 		// A global crushrc is discovered only beside the user config. The data
 		// directory is machine-owned state and must never execute a crushrc.
-		require.Contains(t, got, shellConfigSibling(GlobalConfig()))
-		require.NotContains(t, got, shellConfigSibling(GlobalConfigData()))
+		for _, rc := range shellConfigSiblings(GlobalConfig()) {
+			require.Contains(t, got, rc, "crashrc and, from before the rename, crushrc")
+		}
+		for _, rc := range shellConfigSiblings(GlobalConfigData()) {
+			require.NotContains(t, got, rc)
+		}
 	})
 
 	t.Run("project crushrc and .crushrc are discovered", func(t *testing.T) {
@@ -177,9 +181,10 @@ func TestLookupConfigs_BoundedByProject(t *testing.T) {
 
 		got := lookupConfigs(t.TempDir())
 		require.NotEmpty(t, got)
-		// The system-wide config must be first so it has the lowest
-		// priority when configs are merged.
-		require.Equal(t, "/etc/crush/crush.json", got[0])
+		// The system-wide configs must be first so they have the lowest
+		// priority when configs are merged, the one from before the rename
+		// lowest of all.
+		require.Equal(t, []string{"/etc/crush/crush.json", "/etc/crash/crash.json"}, got[:2])
 	})
 }
 
@@ -277,7 +282,7 @@ func TestConfig_setDefaults(t *testing.T) {
 		require.NotNil(t, cfg.Models)
 		require.NotNil(t, cfg.LSP)
 		require.NotNil(t, cfg.MCP)
-		require.Equal(t, filepath.Join(workingDir, ".crush"), cfg.Options.DataDirectory)
+		require.Equal(t, filepath.Join(workingDir, ".crash"), cfg.Options.DataDirectory)
 		require.Equal(t, "AGENTS.md", cfg.Options.InitializeAs)
 		// DiffMode is deliberately left empty: the permissions dialog treats
 		// the zero value as "pick split or unified based on terminal width".

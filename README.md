@@ -296,6 +296,14 @@ may differ depending on your `XDG_CONFIG_HOME` value. Data directories such as
 `~/.local/share/crush` and `%LOCALAPPDATA%\crush` contain JSON state only; Crush
 does not execute a `crushrc` from them.)
 
+Crush is being renamed Crash, and its directories and files with it:
+`~/.config/crash`, `~/.local/share/crash`, `~/.cache/crash`, a project's
+`.crash/` data directory, and `crash.json`, `crashrc`, `.crashignore` and
+`CRASH.md`. Wherever only the one from before the rename exists — say
+`~/.config/crush` or a project's `.crush/` — that one is used, so an existing
+setup and its sessions keep working without being moved; once the new one
+exists, it wins.
+
 [xdg]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 
 What about the old JSON format? It’s still supported, but it should be

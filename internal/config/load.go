@@ -57,7 +57,7 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 		config:         cfg,
 		workingDir:     workingDir,
 		globalDataPath: GlobalConfigData(),
-		workspacePath:  filepath.Join(cfg.Options.DataDirectory, fmt.Sprintf("%s.json", appName)),
+		workspacePath:  configFileIn(cfg.Options.DataDirectory),
 		loadedPaths:    loadedPaths,
 	}
 
@@ -573,10 +573,11 @@ func (c *Config) NormalizeOptions() {
 func (c *Config) setDefaults(workingDir, dataDir string) {
 	c.NormalizeOptions()
 	if len(c.Options.GlobalContextPaths) == 0 {
-		crushConfigDir := filepath.Dir(GlobalConfig())
+		configDir := filepath.Dir(GlobalConfig())
 		c.Options.GlobalContextPaths = []string{
-			filepath.Join(crushConfigDir, "CRUSH.md"),
-			filepath.Join(filepath.Dir(crushConfigDir), "AGENTS.md"),
+			filepath.Join(configDir, "CRASH.md"),
+			filepath.Join(configDir, "CRUSH.md"),
+			filepath.Join(filepath.Dir(configDir), "AGENTS.md"),
 		}
 	}
 	slices.Sort(c.Options.GlobalContextPaths)
@@ -586,6 +587,8 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 		c.Options.DataDirectory = dataDir
 	} else if c.Options.DataDirectory == "" {
 		if path, ok := fsext.LookupClosestBounded(workingDir, projectBoundary(workingDir), defaultDataDirectory); ok {
+			c.Options.DataDirectory = path
+		} else if path, ok := fsext.LookupClosestBounded(workingDir, projectBoundary(workingDir), legacyDataDirectory); ok {
 			c.Options.DataDirectory = path
 		} else {
 			c.Options.DataDirectory = filepath.Join(workingDir, defaultDataDirectory)
@@ -951,22 +954,18 @@ func lookupConfigs(cwd string) []string {
 	// config directory contributes a crushrc; the data directory is writable
 	// machine state and must never be executed as Bash. Missing files are
 	// skipped when loaded.
-	configPaths := []string{
-		systemConfigPath,
-		GlobalConfig(),
-		shellConfigSibling(GlobalConfig()),
-		GlobalConfigData(),
-	}
+	configPaths := append(slices.Clone(systemConfigPaths), GlobalConfig())
+	configPaths = append(configPaths, shellConfigSiblings(GlobalConfig())...)
+	configPaths = append(configPaths, GlobalConfigData())
 
 	// Ordered high-to-low priority within a directory. LookupBounded returns
 	// matches in this order, and the later reverse + merge make the earliest
-	// listed name win on conflict. So: .crushrc beats crushrc, both beat the
-	// JSON configs, and .crush.json beats crush.json.
-	configNames := []string{
-		"." + appName + "rc",
-		appName + "rc",
-		"." + appName + ".json",
-		appName + ".json",
+	// listed name win on conflict. So: .crashrc beats crashrc, both beat the
+	// JSON configs, and .crash.json beats crash.json; each beats its name
+	// from before the rename.
+	var configNames []string
+	for _, name := range []string{appName, legacyAppName} {
+		configNames = append(configNames, "."+name+"rc", name+"rc", "."+name+".json", name+".json")
 	}
 
 	foundConfigs, err := fsext.LookupBounded(cwd, projectBoundary(cwd), configNames...)
@@ -1213,24 +1212,42 @@ func migrateDisableNotifications() {
 
 // GlobalConfig returns the global configuration file path for the application.
 func GlobalConfig() string {
-	if crushGlobal := env.Getenv("CRASH_GLOBAL_CONFIG"); crushGlobal != "" {
-		return filepath.Join(crushGlobal, fmt.Sprintf("%s.json", appName))
+	if dir := env.Getenv("CRASH_GLOBAL_CONFIG"); dir != "" {
+		return configFileIn(dir)
 	}
-	return filepath.Join(home.Config(), appName, fmt.Sprintf("%s.json", appName))
+	return configFileIn(appDir(home.Config()))
 }
 
-// shellConfigSibling returns the crushrc path that sits alongside a given
-// crush.json path (same directory). Used so global config locations pick up a
-// shell config, not just JSON.
-func shellConfigSibling(jsonPath string) string {
-	return filepath.Join(filepath.Dir(jsonPath), appName+"rc")
+// appDir is the program's directory under base: crash, or crush where only
+// that one exists.
+func appDir(base string) string {
+	return fsext.FirstExisting(filepath.Join(base, appName), filepath.Join(base, legacyAppName))
 }
 
-// isShellConfig reports whether a config path is a shell config (crushrc or
-// the hidden .crushrc), as opposed to a JSON config.
+// configFileIn is the JSON config file in dir: crash.json, or crush.json
+// where only that one exists.
+func configFileIn(dir string) string {
+	return fsext.FirstExisting(filepath.Join(dir, appName+".json"), filepath.Join(dir, legacyAppName+".json"))
+}
+
+// shellConfigSiblings returns the shell config paths that sit alongside a
+// given JSON config path (same directory): crushrc, then crashrc, so that
+// the new name wins where both exist. Both are listed even when missing, so
+// that creating either one is noticed. Used so global config locations pick
+// up a shell config, not just JSON.
+func shellConfigSiblings(jsonPath string) []string {
+	dir := filepath.Dir(jsonPath)
+	return []string{filepath.Join(dir, legacyAppName+"rc"), filepath.Join(dir, appName+"rc")}
+}
+
+// isShellConfig reports whether a config path is a shell config (crashrc,
+// crushrc, or a hidden .crashrc or .crushrc), as opposed to a JSON config.
 func isShellConfig(path string) bool {
-	base := filepath.Base(path)
-	return base == appName+"rc" || base == "."+appName+"rc"
+	switch filepath.Base(path) {
+	case appName + "rc", "." + appName + "rc", legacyAppName + "rc", "." + legacyAppName + "rc":
+		return true
+	}
+	return false
 }
 
 // GlobalCacheDir returns the path to the global cache directory for the
@@ -1240,16 +1257,16 @@ func GlobalCacheDir() string {
 		return crushCache
 	}
 	if xdgCacheHome := os.Getenv("XDG_CACHE_HOME"); xdgCacheHome != "" {
-		return filepath.Join(xdgCacheHome, appName)
+		return appDir(xdgCacheHome)
 	}
 	if runtime.GOOS == "windows" {
 		localAppData := cmp.Or(
 			os.Getenv("LOCALAPPDATA"),
 			filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local"),
 		)
-		return filepath.Join(localAppData, appName, "cache")
+		return filepath.Join(appDir(localAppData), "cache")
 	}
-	return filepath.Join(home.Dir(), ".cache", appName)
+	return appDir(filepath.Join(home.Dir(), ".cache"))
 }
 
 // ProjectConfigs returns list of current project configs paths.
@@ -1260,25 +1277,26 @@ func ProjectConfigs(cwd string) []string {
 // GlobalConfigData returns the path to the main data directory for the application.
 // this config is used when the app overrides configurations instead of updating the global config.
 func GlobalConfigData() string {
-	if crushData := env.Getenv("CRASH_GLOBAL_DATA"); crushData != "" {
-		return filepath.Join(crushData, fmt.Sprintf("%s.json", appName))
+	if dir := env.Getenv("CRASH_GLOBAL_DATA"); dir != "" {
+		return configFileIn(dir)
 	}
 	if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
-		return filepath.Join(xdgDataHome, appName, fmt.Sprintf("%s.json", appName))
+		return configFileIn(appDir(xdgDataHome))
 	}
 
 	// return the path to the main data directory
-	// for windows, it should be in `%LOCALAPPDATA%/crush/`
-	// for linux and macOS, it should be in `$HOME/.local/share/crush/`
+	// for windows, it should be in `%LOCALAPPDATA%/crash/`
+	// for linux and macOS, it should be in `$HOME/.local/share/crash/`
+	// (or crush, where only that one exists)
 	if runtime.GOOS == "windows" {
 		localAppData := cmp.Or(
 			os.Getenv("LOCALAPPDATA"),
 			filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local"),
 		)
-		return filepath.Join(localAppData, appName, fmt.Sprintf("%s.json", appName))
+		return configFileIn(appDir(localAppData))
 	}
 
-	return filepath.Join(home.Dir(), ".local", "share", appName, fmt.Sprintf("%s.json", appName))
+	return configFileIn(appDir(filepath.Join(home.Dir(), ".local", "share")))
 }
 
 // GlobalWorkspaceDir returns the path to the global server workspace
@@ -1371,7 +1389,7 @@ func GlobalSkillsDirs() []string {
 	}
 
 	paths := []string{
-		filepath.Join(home.Config(), appName, "skills"),
+		filepath.Join(appDir(home.Config()), "skills"),
 		filepath.Join(home.Config(), "agents", "skills"),
 		// Per the Agent Skills spec, scan ~/.agents/skills
 		filepath.Join(home.Dir(), ".agents", "skills"),
@@ -1387,7 +1405,7 @@ func GlobalSkillsDirs() []string {
 		)
 		paths = append(
 			paths,
-			filepath.Join(appData, appName, "skills"),
+			filepath.Join(appDir(appData), "skills"),
 			filepath.Join(appData, "agents", "skills"),
 		)
 	}

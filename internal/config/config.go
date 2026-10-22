@@ -21,9 +21,15 @@ import (
 	"github.com/invopop/jsonschema"
 )
 
+// The program is being renamed from Crush to Crash. Its directories and
+// config files take the new name, but where only the one from before the
+// rename exists, that one is used (see fsext.FirstExisting), so existing
+// setups and their sessions keep working without being moved.
 const (
-	appName              = "crush"
-	defaultDataDirectory = ".crush"
+	appName              = "crash"
+	legacyAppName        = "crush"
+	defaultDataDirectory = "." + appName
+	legacyDataDirectory  = "." + legacyAppName
 	defaultInitializeAs  = "AGENTS.md"
 )
 
@@ -35,6 +41,12 @@ var defaultContextPaths = []string{
 	"CLAUDE.local.md",
 	"GEMINI.md",
 	"gemini.md",
+	"crash.md",
+	"crash.local.md",
+	"Crash.md",
+	"Crash.local.md",
+	"CRASH.md",
+	"CRASH.local.md",
 	"crush.md",
 	"crush.local.md",
 	"Crush.md",

@@ -30,6 +30,7 @@ func SkipHidden(path string) bool {
 	}
 
 	commonIgnoredDirs := map[string]bool{
+		".crash":           true,
 		".crush":           true,
 		"node_modules":     true,
 		"vendor":           true,
@@ -260,4 +261,17 @@ func truncate[T any](input []T, limit int) ([]T, bool) {
 		return input[:limit], true
 	}
 	return input, false
+}
+
+// FirstExisting returns the first of paths that exists, or the first path
+// when none does. It picks between a directory or file under its new name
+// and the one from before a rename: the new one wins once it exists, the
+// old one keeps working until then, and a fresh setup gets the new one.
+func FirstExisting(paths ...string) string {
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return paths[0]
 }

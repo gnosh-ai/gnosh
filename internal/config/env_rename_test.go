@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -48,4 +49,91 @@ func TestPushPopCrushEnvPrefersCrash(t *testing.T) {
 	require.Equal(t, "new", os.Getenv("PUSHPOP_TEST_KEY"), "CRASH_ wins over CRUSH_")
 	restore()
 	require.Equal(t, "plain", os.Getenv("PUSHPOP_TEST_KEY"))
+}
+
+// Directories and config files take the name Crash, but where only the one
+// from before the rename exists, that one is used, so an existing setup and
+// its sessions keep working without being moved. Once the new one exists,
+// it wins.
+func TestPathsPreferCrashAndFallBackToCrush(t *testing.T) {
+	mkdir := func(t *testing.T, parts ...string) string {
+		t.Helper()
+		p := filepath.Join(parts...)
+		require.NoError(t, os.MkdirAll(p, 0o755))
+		return p
+	}
+	touch := func(t *testing.T, parts ...string) string {
+		t.Helper()
+		p := filepath.Join(parts...)
+		require.NoError(t, os.WriteFile(p, []byte("{}"), 0o644))
+		return p
+	}
+
+	t.Run("global config", func(t *testing.T) {
+		xdg := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", xdg)
+		t.Setenv("CRUSH_GLOBAL_CONFIG", "") // set by TestMain for isolation
+		require.Equal(t, filepath.Join(xdg, "crash", "crash.json"), GlobalConfig(), "a fresh setup gets the new name")
+
+		mkdir(t, xdg, "crush")
+		require.Equal(t, filepath.Join(xdg, "crush", "crash.json"), GlobalConfig(), "an existing crush directory is used")
+		old := touch(t, xdg, "crush", "crush.json")
+		require.Equal(t, old, GlobalConfig(), "and the crush.json in it")
+		require.Equal(t, filepath.Join(xdg, "crush", "skills"), GlobalSkillsDirs()[0])
+
+		mkdir(t, xdg, "crash")
+		require.Equal(t, filepath.Join(xdg, "crash", "crash.json"), GlobalConfig(), "once the crash directory exists, it wins")
+	})
+
+	t.Run("global data", func(t *testing.T) {
+		xdg := t.TempDir()
+		t.Setenv("XDG_DATA_HOME", xdg)
+		t.Setenv("CRUSH_GLOBAL_DATA", "") // set by TestMain for isolation
+		require.Equal(t, filepath.Join(xdg, "crash", "crash.json"), GlobalConfigData())
+		mkdir(t, xdg, "crush")
+		old := touch(t, xdg, "crush", "crush.json")
+		require.Equal(t, old, GlobalConfigData(), "an existing setup's data directory is used")
+	})
+
+	t.Run("cache", func(t *testing.T) {
+		xdg := t.TempDir()
+		t.Setenv("XDG_CACHE_HOME", xdg)
+		require.Equal(t, filepath.Join(xdg, "crash"), GlobalCacheDir())
+		old := mkdir(t, xdg, "crush")
+		require.Equal(t, old, GlobalCacheDir())
+	})
+
+	t.Run("project data directory", func(t *testing.T) {
+		for _, tc := range []struct {
+			name   string
+			exists []string
+			want   string
+		}{
+			{"fresh project", nil, ".crash"},
+			{"project from before the rename", []string{".crush"}, ".crush"},
+			{"both", []string{".crush", ".crash"}, ".crash"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				workingDir := t.TempDir()
+				for _, d := range tc.exists {
+					mkdir(t, workingDir, d)
+				}
+				cfg := &Config{}
+				cfg.setDefaults(workingDir, "")
+				require.Equal(t, filepath.Join(workingDir, tc.want), cfg.Options.DataDirectory)
+			})
+		}
+	})
+
+	t.Run("project config files", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		t.Setenv("XDG_DATA_HOME", t.TempDir())
+		cwd := t.TempDir()
+		old := touch(t, cwd, "crush.json")
+		newer := touch(t, cwd, "crash.json")
+		paths := lookupConfigs(cwd)
+		require.Contains(t, paths, old, "a crush.json is still read")
+		require.Contains(t, paths, newer)
+		require.Greater(t, slices.Index(paths, newer), slices.Index(paths, old), "crash.json is merged later, so it wins")
+	})
 }

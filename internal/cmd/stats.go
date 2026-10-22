@@ -226,7 +226,7 @@ func runStats(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	if outputDataDir == "" {
-		outputDataDir = ".crush"
+		outputDataDir = ".crash"
 	}
 
 	htmlPath := filepath.Join(outputDataDir, "stats/index.html")
@@ -261,10 +261,11 @@ func crawlForStats(ctx context.Context, rootDir string) ([]ProjectStats, error) 
 			return filepath.SkipDir
 		}
 
-		// Look for .crush/crush.db pattern
+		// Look for the .crash/crush.db pattern, or .crush/crush.db from
+		// before the rename.
 		if !d.IsDir() && d.Name() == "crush.db" {
 			dir := filepath.Dir(path)
-			if filepath.Base(dir) == ".crush" {
+			if base := filepath.Base(dir); base == ".crash" || base == ".crush" {
 				projectDir := filepath.Dir(dir)
 				dbPaths = append(dbPaths, struct {
 					dbPath     string

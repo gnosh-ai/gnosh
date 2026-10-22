@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/home"
 	"github.com/charmbracelet/crush/internal/skills"
 )
@@ -121,11 +122,17 @@ func LoadMCPPrompts() ([]MCPPrompt, error) {
 func buildCommandSources(cfg *config.Config) []commandSource {
 	return []commandSource{
 		{
-			path:   filepath.Join(home.Config(), "crush", "commands"),
+			path: fsext.FirstExisting(
+				filepath.Join(home.Config(), "crash", "commands"),
+				filepath.Join(home.Config(), "crush", "commands"),
+			),
 			prefix: userCommandPrefix,
 		},
 		{
-			path:   filepath.Join(home.Dir(), ".crush", "commands"),
+			path: fsext.FirstExisting(
+				filepath.Join(home.Dir(), ".crash", "commands"),
+				filepath.Join(home.Dir(), ".crush", "commands"),
+			),
 			prefix: userCommandPrefix,
 		},
 		{
