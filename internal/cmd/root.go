@@ -59,6 +59,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", server.DefaultHost(), "Connect to a specific Crash server host (for advanced users)")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
 	addYoloFlags(rootCmd)
+	addToolFlags(rootCmd)
 	rootCmd.PersistentFlags().StringSlice("channels", nil, "MCP servers to enable as channels (repeatable), e.g. --channels server:webhook")
 	_ = rootCmd.PersistentFlags().MarkHidden("channels")
 	addSessionFlags(rootCmd)
@@ -334,6 +335,11 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 		return nil, nil, err
 	}
 
+	allowedTools, disallowedTools, err := toolFlags(cmd)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	store, err := config.Init(cwd, dataDir, debug)
 	if err != nil {
 		return nil, nil, err
@@ -342,6 +348,11 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	cfg := store.Config()
 	store.Overrides().SkipPermissionRequests = yolo
 	store.Overrides().EnabledChannels = channels
+	if len(allowedTools) > 0 || len(disallowedTools) > 0 {
+		store.Overrides().AllowedTools = allowedTools
+		store.Overrides().DisabledTools = disallowedTools
+		store.SetupAgents()
+	}
 
 	if err := os.MkdirAll(cfg.Options.DataDirectory, 0o700); err != nil {
 		return nil, nil, fmt.Errorf("failed to create data directory: %q %w", cfg.Options.DataDirectory, err)
@@ -441,6 +452,14 @@ func setupClientServerWorkspace(cmd *cobra.Command) (workspace.Workspace, func()
 // connectToServer ensures the server is running, creates a client and
 // workspace, and returns a cleanup function that deletes the workspace.
 func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func(), error) {
+	// The workspace's config lives on the server, so tools named here
+	// would not reach it; say so rather than run with them ignored.
+	if allowed, disallowed, err := toolFlags(cmd); err != nil {
+		return nil, nil, nil, err
+	} else if len(allowed) > 0 || len(disallowed) > 0 {
+		return nil, nil, nil, fmt.Errorf("tools named with --allowed-tools or --disallowed-tools cannot reach the server's config with %s=1 yet; set options.disabled_tools or permissions.allowed_tools in the project's crash.json instead", "CRASH_CLIENT_SERVER")
+	}
+
 	hostURL, err := server.ParseHostURL(clientHost)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("invalid host URL: %v", err)
