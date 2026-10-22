@@ -1,6 +1,6 @@
 ---
 name: gno
-description: Use for anything Gno or gno.land - .gno files, gnomod.toml, realms and pure packages, writing, testing or reviewing smart contracts, gnodev, gnoweb, gnokey, deploying or calling realms, or querying a gno.land chain.
+description: Use for anything Gno or gno.land - .gno files, gnomod.toml, realms and pure packages, writing, testing or reviewing smart contracts, gnodev, gnoweb, gnokey, deploying or calling realms, querying a gno.land chain, or paying for a URL that charges through x402 on gno.land.
 ---
 
 # Gno and gno.land
@@ -194,6 +194,35 @@ gnokey maketx run -gas-fee 1000000ugnot -gas-wanted 20000000 -chainid dev -remot
 
 Mainnet spends real GNOT and has no faucet: show the user the full command
 and get a clear yes before signing.
+
+## Paying for a URL with x402
+
+Some HTTP resources charge per request through x402. They answer
+`402 Payment Required` with terms in a `PAYMENT-REQUIRED` header, such as
+250000ugnot on `gno:onyx-1`, and serve the resource once a signed payment
+settles. `fetch` reports such terms. When the user wants to pay, use the
+`x402_fetch` tool with the key they name. It shows them the price, payee,
+chain and network fee, takes the key's password in the masked prompt, has
+gnokey sign one bank send of exactly the price, and returns the resource
+with the transaction hash. Pay only when the user asked you to; one call is
+one payment.
+
+- It pays only on dev and test chains (`dev`, `staging`, `onyx-*`,
+  `test*`), only in ugnot, and at most 1 GNOT per payment. x402 on gno.land
+  is unaudited, testnet-only work, and mainnet has no facilitator.
+- `remote` must reach a node on the seller's chain; the nodes of dev,
+  staging and onyx-1 are known.
+- A session key pays with `master` set to the account that registered it.
+  The chain holds such payments to the session's spend limit and expiry.
+- The payer pays the network fee on top, 0.02 GNOT on onyx-1.
+- If the user declines, stop and ask. An account the chain has never
+  funded cannot pay: tell the user which address to fund
+  (https://faucet.gno.land funds the test networks).
+- A refused payment names its reason, such as
+  `invalid_exact_gno_transaction_simulation_failed` when the account cannot
+  cover the price and the fee.
+- Selling something takes gnoverse/x402 (https://github.com/gnoverse/x402),
+  which has the seller middleware and the facilitator.
 
 ## More
 

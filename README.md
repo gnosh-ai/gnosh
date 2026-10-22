@@ -40,6 +40,8 @@ Signing a gno.land transaction needs a key's password. Crash's `gnokey` tool
 shows you the exact command, then asks for the password in a masked prompt.
 What you type goes straight to gnokey's standard input and is scrubbed from
 its output. The model never sees it, and it is not saved with the session.
+Paying for a web resource [with x402](#built-for-gnoland) works the same way:
+you see the price first, and gnokey signs.
 
 That prompt is the only route to a signature, and the agent cannot step
 around it:
@@ -76,8 +78,9 @@ flood the context.
 
 - Your prompts, and the files the agent reads, go to the model provider you
   choose. Point Crash at a [local model](#local-models) and nothing leaves.
-- `fetch`, `download` and `agentic_fetch` reach the sites the agent asks for,
-  after asking you.
+- `fetch`, `download`, `agentic_fetch` and `x402_fetch` reach the sites the
+  agent asks for, after asking you. `x402_fetch` also reads the paying account
+  from a node of the seller's chain.
 - The `sourcegraph` tool sends the agent's code search to sourcegraph.com
   without asking. Turn it off with `permissions deny sourcegraph`.
 - MCP servers you add reach whatever they reach.
@@ -121,6 +124,20 @@ browser wallet, a device or a script bounded authority instead of your master
 key. A leaked session key costs at most what is left of its limit before it
 expires, and revoking it is one command. Sessions are live on mainnet and on
 the onyx testnet.
+
+**Pay for what you fetch, with x402.** Some web resources charge per request
+through [x402](https://x402.org): they answer `402 Payment Required` with a
+price on a gno.land chain. When you tell the agent to pay, its `x402_fetch`
+tool shows you the price, the payee, the chain and the network fee, and asks
+for the key's password in the masked prompt above. gnokey signs one bank send
+of exactly that price, the seller's facilitator settles it, and the agent gets
+the resource and the transaction hash. Crash checks the signature before the
+payment leaves, pays only in ugnot, at most 1 GNOT at a time, and only on
+local and test chains: x402 on gno.land
+([gnoverse/x402](https://github.com/gnoverse/x402)) is unaudited, testnet-only
+work, so mainnet is refused. Pay from a session key and the chain caps what it
+can spend as well. Nothing is paid without you at the prompt: a run with
+nobody there to type has no paying tool.
 
 **gnopls.** Install the [Gno language server](https://github.com/gnoverse/gnopls)
 and Crash starts it for `.gno` files on its own, as it does gopls for Go.
