@@ -910,9 +910,16 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentRunSubmittedMsg:
 		if msg.err != nil {
 			// The run never started, so no terminal event is coming to
-			// retire its spinner.
+			// retire its spinner, or to drive a loop's next turn: left
+			// armed, the loop would wait idle and then take over the
+			// user's next prompt.
 			m.endPendingTurn(msg.sessionID)
 			cmds = append(cmds, util.ReportError(msg.err))
+			if msg.sessionID == m.loop.sessionID {
+				if cmd := m.stopLoop("the next turn could not be sent"); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+			}
 		}
 		// A prompt was just accepted (run started or enqueued): fetch the
 		// authoritative busy/queue state to confirm the optimistic values
@@ -1120,6 +1127,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case pubsub.DeletedEvent:
 			m.chat.RemoveMessage(msg.Payload.ID)
 		}
+		m.noteLoopReply(msg.Payload)
 		// start the spinner if there is a new message
 		if hasInProgressTodo(m.session.Todos) && m.isAgentBusy() && !m.todoIsSpinning {
 			m.todoIsSpinning = true
@@ -3235,6 +3243,12 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			if cmd := m.cancelAgent(); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
+			return tea.Batch(cmds...)
+		}
+		// A loop armed with nothing running (its next turn failed to
+		// start, say) still stops on Esc, as the start message says.
+		if m.loop.active {
+			cmds = append(cmds, m.stopLoop("stopped"))
 			return tea.Batch(cmds...)
 		}
 	}

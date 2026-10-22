@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -8,6 +9,8 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
+	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,7 +67,7 @@ func TestLoopDecide_StopsAtTheUsersCap(t *testing.T) {
 
 func TestLoopDecide_StopMarkerEndsTheLoopOnlyAtACheckpoint(t *testing.T) {
 	t.Parallel()
-	reply := "The tests need a database this box does not have.\n" + agent.StopMarker
+	reply := "The tests need a database this box does not have.\n" + loopStopSentinel
 
 	stop, cont := loopDecide(running(), notify.RunComplete{SessionID: "s1", Text: reply})
 	require.True(t, cont, "outside a checkpoint the marker is not an answer to anything")
@@ -137,7 +140,7 @@ func TestStartLoop_WhileATurnIsRunningOnlyArms(t *testing.T) {
 	t.Parallel()
 
 	m, _ := newPlanUI(t, "s1")
-	m.agentBusyCache.val = true // a turn is already running
+	m.pending.sessionID = "s1" // this session's turn is already running
 
 	cmd := m.startLoop()
 
@@ -227,7 +230,7 @@ func TestAdvanceLoop_AsksAtEachCheckpoint(t *testing.T) {
 	drainCmd(u.advanceLoop(notify.RunComplete{SessionID: "sess-1", Text: "still more to do"}))
 	require.Equal(t, []string{loopReflectionPrompt(loopReflectEvery)}, ws.runPrompts,
 		"the checkpoint asks instead of just continuing")
-	require.Contains(t, ws.runPrompts[0], agent.StopMarker, "and says how to answer yes")
+	require.Contains(t, ws.runPrompts[0], loopStopSentinel, "and says how to answer yes")
 	require.Equal(t, []bool{true}, ws.runHidden)
 	require.True(t, u.loop.reflecting)
 
@@ -247,7 +250,7 @@ func TestAdvanceLoop_EndsWhenTheAgentJudgesItShouldStop(t *testing.T) {
 	ws.agentReady = true
 	u.loop = loopState{active: true, sessionID: "sess-1", turns: loopReflectEvery + 1, reflecting: true}
 
-	cmd := u.advanceLoop(notify.RunComplete{SessionID: "sess-1", Text: "This needs your API key.\n" + agent.StopMarker})
+	cmd := u.advanceLoop(notify.RunComplete{SessionID: "sess-1", Text: "This needs your API key.\n" + loopStopSentinel})
 	require.NotNil(t, cmd, "the user is told why the loop ended")
 	drainCmd(cmd)
 	require.Empty(t, ws.runPrompts, "no further turn after the agent judged it should stop")
@@ -316,4 +319,102 @@ func TestStartLoop_OnAnIdleSessionSendsTheFirstContinuation(t *testing.T) {
 	require.Equal(t, []string{loopPrompt}, ws.runPrompts, "and starts itself straight away")
 	require.Equal(t, []bool{true}, ws.runHidden, "hidden, like every other continuation")
 	require.Equal(t, 1, u.loop.turns, "and that first turn counts")
+}
+
+// The Stop hook asks its own question at its own checkpoints, with its own
+// marker. A yes to that is not an answer to the loop's check-in.
+func TestLoopDecide_TheStopHooksMarkerIsNotTheLoopsAnswer(t *testing.T) {
+	t.Parallel()
+	st := running()
+	st.reflecting = true
+	stop, cont := loopDecide(st, notify.RunComplete{SessionID: "s1", Text: "Stopping despite the hook.\n" + agent.StopMarker})
+	require.True(t, cont, "only LOOP_STOP answers the loop's check-in")
+	require.Empty(t, string(stop))
+}
+
+// A Stop hook can send the agent back to work after it answered the check-in
+// with LOOP_STOP, so the turn's final text is not that answer. The answer is
+// watched as the replies arrive and still ends the loop.
+func TestNoteLoopReply_KeepsAStopAnswerTheTurnWentOnPast(t *testing.T) {
+	t.Parallel()
+
+	m := &UI{loop: loopState{active: true, sessionID: "s1", turns: loopReflectEvery + 1, reflecting: true}}
+	answer := message.Message{SessionID: "s1", Role: message.Assistant, Parts: []message.ContentPart{
+		message.TextContent{Text: "Blocked on your API key.\n" + loopStopSentinel},
+	}}
+	m.noteLoopReply(answer)
+	require.True(t, m.loop.answeredStop)
+
+	stop, cont := loopDecide(m.loop, notify.RunComplete{SessionID: "s1", Text: "Lint fixed."})
+	require.False(t, cont)
+	require.Equal(t, loopStopJudged, stop)
+}
+
+// Outside a checkpoint turn, or in another session, a reply is not an answer.
+func TestNoteLoopReply_OnlyDuringACheckpointInTheLoopsSession(t *testing.T) {
+	t.Parallel()
+
+	reply := message.Message{SessionID: "s1", Role: message.Assistant, Parts: []message.ContentPart{
+		message.TextContent{Text: loopStopSentinel},
+	}}
+	m := &UI{loop: loopState{active: true, sessionID: "s1", turns: 3}}
+	m.noteLoopReply(reply)
+	require.False(t, m.loop.answeredStop, "not a checkpoint turn")
+
+	m.loop.reflecting = true
+	reply.SessionID = "s2"
+	m.noteLoopReply(reply)
+	require.False(t, m.loop.answeredStop, "another session's reply")
+}
+
+// Another session's running turn must not hold the loop back: its
+// RunComplete does not drive this loop, so waiting for it would leave the
+// loop armed forever. Only this session's own turn defers the first send.
+func TestStartLoop_AnotherSessionsTurnDoesNotHoldItUp(t *testing.T) {
+	t.Parallel()
+
+	u, ws := newPlanUI(t, "s1")
+	ws.agentReady = true
+	u.agentBusyCache.val = true // some session is busy, but not this one
+
+	drainCmd(u.startLoop())
+	require.Equal(t, []string{loopPrompt}, ws.runPrompts, "the loop starts itself in this idle session")
+}
+
+// A continuation that fails to start leaves nothing running; the loop must
+// not stay armed, or it would take over the user's next prompt.
+func TestLoop_StopsWhenTheNextTurnCannotBeSent(t *testing.T) {
+	t.Parallel()
+
+	m, _ := newPlanUI(t, "s1")
+	m.loop = loopState{active: true, sessionID: "s1", turns: 2}
+	_, _ = m.Update(agentRunSubmittedMsg{sessionID: "s1", err: errors.New("provider unreachable")})
+	require.False(t, m.loop.active)
+}
+
+// loop_max_turns, when set, is what startLoop counts down from.
+func TestStartLoop_UsesTheConfiguredCap(t *testing.T) {
+	t.Parallel()
+
+	m, ws := newPlanUI(t, "s1")
+	seven := 7
+	ws.cfg.Options = &config.Options{LoopMaxTurns: &seven}
+	m.pending.sessionID = "s1" // arm only; the running turn sends the first
+
+	m.startLoop()
+	require.Equal(t, 7, m.loop.maxTurns)
+}
+
+// Esc stops a loop that is armed with nothing running, as the start message
+// promises; before, Esc reached the loop only through cancelling a turn.
+func TestEsc_StopsAnArmedLoopWithNothingRunning(t *testing.T) {
+	pinTTLs(t)
+
+	ws := &countingWorkspace{ready: true}
+	m := newBusyUI(ws)
+	warmCaches(m, false) // idle
+	m.loop = loopState{active: true, sessionID: "s1", turns: 2}
+
+	_, _ = m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+	require.False(t, m.loop.active)
 }

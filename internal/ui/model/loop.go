@@ -6,8 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
 
@@ -15,6 +15,12 @@ const (
 	// loopDoneSentinel is what the model is asked to reply when the task is
 	// finished. Seeing it in a turn's text ends the loop.
 	loopDoneSentinel = "LOOP_DONE"
+
+	// loopStopSentinel is the answer to a check-in that there is a genuine
+	// reason to stop. It is the loop's own, not the Stop hook's marker: a
+	// Stop hook asks its own question at its own checkpoints, and a yes to
+	// that must not be read as a yes to the loop's.
+	loopStopSentinel = "LOOP_STOP"
 
 	// loopPrompt is sent after each turn while the loop runs. It goes out as a
 	// hidden continuation: the model sees it in history, but the chat is not
@@ -36,16 +42,16 @@ const (
 // loopReflectionPrompt is sent in place of loopPrompt every loopReflectEvery
 // turns. It asks the agent to decide, before anything else, whether there is a
 // genuine reason to stop, and to answer in one of three set ways; absent such
-// a reason it is told plainly to keep going. The marker is the Stop hook's,
-// which the chat already hides.
+// a reason it is told plainly to keep going.
 //
 // The wording is measured, not guessed. Replaying a real checkpoint request
 // against the box's Qwen, with thinking off as crash sends it, an earlier
 // "step back and judge" version was mostly ignored: the model answered with
 // the next step of the task (1 stop in 5 where the user had said to stop).
 // Saying that the question overrides the system prompt's keep-working rules,
-// and asking for the decision first, stopped it 5 times in 5, and on a task
-// that was still making progress it stopped 0 times in 5 and carried on.
+// and asking for the decision first, stopped it 4 or 5 times in 5 (with this
+// sentinel, and with the Stop hook's marker), and on a task that was still
+// making progress it stopped 0 times in 5 and carried on.
 func loopReflectionPrompt(turns int) string {
 	return fmt.Sprintf(
 		"Checkpoint: this loop has run %d turns and the task is not reported finished. "+
@@ -64,7 +70,7 @@ func loopReflectionPrompt(turns int) string {
 			"2. The whole task is finished: reply with exactly %s on its own line.\n"+
 			"3. Neither: start your reply with \"No reason to stop.\" and carry on "+
 			"with the task. Taking many turns is fine.",
-		turns, agent.StopMarker, loopDoneSentinel,
+		turns, loopStopSentinel, loopDoneSentinel,
 	)
 }
 
@@ -84,8 +90,14 @@ type loopState struct {
 	// maxTurns is the user's own cap from loop_max_turns; 0 means none.
 	maxTurns int
 	// reflecting marks that the latest continue prompt was the checkpoint
-	// question: only the reply to it may end the loop with StopMarker.
+	// question: only the reply to it may end the loop with loopStopSentinel.
 	reflecting bool
+	// answeredStop records that a reply during the checkpoint turn said
+	// loopStopSentinel. The turn's final text may not be that reply: a
+	// Stop hook can send the agent back to work after it, and a prompt
+	// typed meanwhile is answered after it, so the replies are watched as
+	// they arrive (noteLoopReply).
+	answeredStop bool
 }
 
 // loopStop explains why a running loop ended; the empty string means it is
@@ -115,7 +127,7 @@ func loopDecide(st loopState, rc notify.RunComplete) (loopStop, bool) {
 		return loopStopError, false
 	case loopReportedDone(rc.Text):
 		return loopStopDone, false
-	case st.reflecting && agent.HasStopMarker(rc.Text):
+	case st.reflecting && (st.answeredStop || loopReportedStop(rc.Text)):
 		return loopStopJudged, false
 	case st.maxTurns > 0 && st.turns >= st.maxTurns:
 		return loopStopExhausted, false
@@ -129,12 +141,37 @@ func loopDecide(st loopState, rc notify.RunComplete) (loopStop, bool) {
 // talks about it ("I will reply LOOP_DONE when the files exist"), which is
 // the opposite of what the user asked for.
 func loopReportedDone(text string) bool {
+	return hasSentinelLine(text, loopDoneSentinel)
+}
+
+// loopReportedStop reports whether a reply answers a check-in with
+// loopStopSentinel, on its own line like the done sentinel.
+func loopReportedStop(text string) bool {
+	return hasSentinelLine(text, loopStopSentinel)
+}
+
+// hasSentinelLine reports whether sentinel stands alone on a line of text. A
+// line wrapped in inline-code backticks still counts, since some models add
+// them.
+func hasSentinelLine(text, sentinel string) bool {
 	for line := range strings.SplitSeq(text, "\n") {
-		if strings.TrimSpace(line) == loopDoneSentinel {
+		if strings.TrimSpace(strings.Trim(strings.TrimSpace(line), "`")) == sentinel {
 			return true
 		}
 	}
 	return false
+}
+
+// noteLoopReply watches the replies of a checkpoint turn for the stop
+// answer, so it counts even when the turn goes on past it (see
+// loopState.answeredStop).
+func (m *UI) noteLoopReply(msg message.Message) {
+	if !m.loop.active || !m.loop.reflecting || m.loop.answeredStop {
+		return
+	}
+	if msg.SessionID == m.loop.sessionID && msg.Role == message.Assistant && loopReportedStop(msg.Content().Text) {
+		m.loop.answeredStop = true
+	}
 }
 
 // startLoop begins looping the current session. The first continuation goes
@@ -155,8 +192,10 @@ func (m *UI) startLoop() tea.Cmd {
 	// A turn already running will publish RunComplete, and that drives the
 	// next continuation. Sending one here as well would put two in flight
 	// for the same turn, and each of those would again be followed by the
-	// loop's own, so the queue would grow with every iteration.
-	if m.isAgentBusy() {
+	// loop's own, so the queue would grow with every iteration. Only this
+	// session's turn counts: another session's RunComplete does not drive
+	// this loop, so waiting on it would leave the loop armed forever.
+	if m.turnInFlight(m.session.ID) {
 		return started
 	}
 	m.loop.turns++
@@ -180,6 +219,7 @@ func (m *UI) advanceLoop(rc notify.RunComplete) tea.Cmd {
 	stop, cont := loopDecide(m.loop, rc)
 	if cont {
 		prompt := loopPrompt
+		m.loop.answeredStop = false
 		m.loop.reflecting = m.loop.turns > 0 && m.loop.turns%loopReflectEvery == 0
 		if m.loop.reflecting {
 			prompt = loopReflectionPrompt(m.loop.turns)
