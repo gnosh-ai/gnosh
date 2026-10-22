@@ -437,6 +437,15 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 		trace = format.NewToolTrace(os.Stderr)
 	}
 	var printed bool
+	subSessions := map[string]bool{}
+	isSubSession := func(id string) bool {
+		sub, known := subSessions[id]
+		if !known {
+			sub = app.descendsFrom(ctx, id, sess.ID)
+			subSessions[id] = sub
+		}
+		return sub
+	}
 
 	defer func() {
 		if progress && stderrTTY {
@@ -480,23 +489,17 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 		case event := <-messageEvents:
 			msg := event.Payload
 			if msg.SessionID != sess.ID {
-				continue
-			}
-			// A tool's result arrives in a message of its own, after the
-			// assistant message that made the call.
-			if msg.Role == message.Tool {
-				for _, result := range msg.ToolResults() {
-					trace.Result(result.ToolCallID, result.IsError, result.Metadata)
+				// A sub-agent works in a session of its own, under the
+				// run's. Its tool calls are traced too, indented, so a long
+				// stretch of delegated work does not leave the trace silent.
+				if trace != nil && isSubSession(msg.SessionID) {
+					traceToolCalls(trace, msg, true)
 				}
 				continue
 			}
+			traceToolCalls(trace, msg, false)
 			if msg.Role != message.Assistant {
 				continue
-			}
-			for _, call := range msg.ToolCalls() {
-				if call.Finished {
-					trace.Call(call.ID, call.Name, call.Summary())
-				}
 			}
 
 			if len(msg.Parts) == 0 {
@@ -534,6 +537,46 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 			return ctx.Err()
 		}
 	}
+}
+
+// traceToolCalls traces the tool calls and results a message carries:
+// the calls an assistant message made, and the results that come back in
+// a tool message of their own. sub indents a sub-agent's calls.
+func traceToolCalls(trace *format.ToolTrace, msg message.Message, sub bool) {
+	switch msg.Role {
+	case message.Tool:
+		for _, result := range msg.ToolResults() {
+			trace.Result(result.ToolCallID, result.IsError, result.Metadata)
+		}
+	case message.Assistant:
+		for _, call := range msg.ToolCalls() {
+			if !call.Finished {
+				continue
+			}
+			if sub {
+				trace.SubCall(call.ID, call.Name, call.Summary())
+			} else {
+				trace.Call(call.ID, call.Name, call.Summary())
+			}
+		}
+	}
+}
+
+// descendsFrom reports whether session id was made under ancestorID, by
+// a sub-agent of it or of one of its sub-agents. It looks at most eight
+// levels up, so a cycle in bad data cannot keep it walking.
+func (app *App) descendsFrom(ctx context.Context, id, ancestorID string) bool {
+	for range 8 {
+		s, err := app.Sessions.Get(ctx, id)
+		if err != nil || s.ParentSessionID == "" {
+			return false
+		}
+		if s.ParentSessionID == ancestorID {
+			return true
+		}
+		id = s.ParentSessionID
+	}
+	return false
 }
 
 // hookWarningLine is the stderr line a non-interactive run prints for a

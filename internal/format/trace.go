@@ -7,7 +7,8 @@ import (
 )
 
 // ToolTrace prints the --verbose trace of a non-interactive run's tool
-// calls: a line for each call when it is made, and a second line, marked,
+// calls, a sub-agent's indented: a line for each call when it is made, and
+// a second line, marked,
 // when its result says it went wrong: "(failed)" for a tool error, and
 // "(exit N)" for a command that exited non-zero. A call is printed once
 // however often the message carrying it is republished. A nil *ToolTrace
@@ -26,18 +27,28 @@ func NewToolTrace(out io.Writer) *ToolTrace {
 // Call records a tool call whose input is complete, printing it the first
 // time it is seen.
 func (t *ToolTrace) Call(id, name, summary string) {
+	t.call("", id, name, summary)
+}
+
+// SubCall records a tool call a sub-agent made, printed like Call but
+// indented, under the call to the agent tool that started it.
+func (t *ToolTrace) SubCall(id, name, summary string) {
+	t.call("  ", id, name, summary)
+}
+
+func (t *ToolTrace) call(indent, id, name, summary string) {
 	if t == nil || id == "" {
 		return
 	}
 	if _, seen := t.lines[id]; seen {
 		return
 	}
-	line := name
+	line := indent + "tool " + name
 	if summary != "" {
 		line += " " + summary
 	}
 	t.lines[id] = line
-	_, _ = fmt.Fprintf(t.out, "tool %s\n", line)
+	_, _ = fmt.Fprintln(t.out, line)
 }
 
 // Result records the result of a tool call, given whether it is a tool
@@ -67,5 +78,5 @@ func (t *ToolTrace) Result(id string, isError bool, metadata string) {
 		return
 	}
 	t.marked[id] = true
-	_, _ = fmt.Fprintf(t.out, "tool %s %s\n", line, mark)
+	_, _ = fmt.Fprintf(t.out, "%s %s\n", line, mark)
 }
