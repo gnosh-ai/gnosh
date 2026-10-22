@@ -98,6 +98,11 @@ type HookResult struct {
 	// opinion: that is how a safety hook pointed at the wrong path came
 	// to be shown as a green "OK" on every call while checking nothing.
 	Error string
+
+	// rewriteRejected records that the hook's tool-input rewrite was
+	// malformed, so that no allow it gives, wherever in its output, is
+	// taken (see rejectRewrite).
+	rewriteRejected bool
 }
 
 // AggregateResult holds the combined outcome of all hooks for an event.

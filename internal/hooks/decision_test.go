@@ -205,6 +205,39 @@ func TestParseClaudeCodeOutputFieldTypes(t *testing.T) {
 	require.Empty(t, r.Error)
 }
 
+// Claude Code hooks send top-level fields and hookSpecificOutput together,
+// and stop everything with "continue": false. Reading only
+// hookSpecificOutput when it was present dropped a PostToolUse or Stop
+// hook's top-level block, and continue: false was ignored outright.
+func TestParseStdoutClaudeCodeTopLevelFields(t *testing.T) {
+	t.Parallel()
+
+	r := parseStdout(`{"decision":"block","reason":"lint failed","hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"see lint.log"}}`)
+	require.Equal(t, DecisionDeny, r.Decision, "the top-level block holds beside hookSpecificOutput")
+	require.Equal(t, "lint failed", r.Reason)
+	require.Equal(t, "see lint.log", r.Context)
+	require.Empty(t, r.Error)
+
+	r = parseStdout(`{"continue":false,"stopReason":"Secrets in the diff"}`)
+	require.True(t, r.Halt, "continue: false stops everything, as a halt does")
+	require.Equal(t, "Secrets in the diff", r.Reason)
+
+	r = parseStdout(`{"continue":true}`)
+	require.False(t, r.Halt)
+	require.Equal(t, DecisionNone, r.Decision)
+
+	r = parseStdout(`{"decision":"approve","reason":"fine","hookSpecificOutput":{"permissionDecision":"deny","permissionDecisionReason":"no"}}`)
+	require.Equal(t, DecisionDeny, r.Decision, "permissionDecision overrides the deprecated top-level decision")
+	require.Equal(t, "no", r.Reason)
+
+	r = parseStdout(`{"context":"a","hookSpecificOutput":{"additionalContext":"b"}}`)
+	require.Equal(t, "a\nb", r.Context)
+
+	r = parseStdout(`{"updated_input":"oops","hookSpecificOutput":{"permissionDecision":"allow"}}`)
+	require.Equal(t, DecisionNone, r.Decision, "an allow must not outlive the malformed rewrite it came with")
+	require.Contains(t, r.Error, "updated_input must be a JSON object")
+}
+
 // A good rewrite must not be flagged, and both object and stringified
 // object forms stay valid.
 func TestParseStdoutUpdatedInputObjectHasNoError(t *testing.T) {

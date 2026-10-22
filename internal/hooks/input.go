@@ -151,6 +151,13 @@ func hookVar(name, value string) []string {
 
 // parseStdout parses the JSON output from a hook command's stdout.
 // Supports both Crush format and Claude Code format (hookSpecificOutput).
+//
+// The top-level fields are read first, then hookSpecificOutput on top of
+// them, because Claude Code hooks use both at once: a PostToolUse or Stop
+// hook blocks with a top-level "decision": "block" and sends its
+// additionalContext in hookSpecificOutput. Reading only hookSpecificOutput
+// when it was present dropped that block. Claude Code's "continue": false
+// stops everything, which is a halt here.
 func parseStdout(stdout string) HookResult {
 	stdout = strings.TrimSpace(stdout)
 	if stdout == "" {
@@ -162,11 +169,6 @@ func parseStdout(stdout string) HookResult {
 		return HookResult{Decision: DecisionNone}
 	}
 
-	// Claude Code compat: if hookSpecificOutput is present, parse that.
-	if hso, ok := raw["hookSpecificOutput"]; ok {
-		return parseClaudeCodeOutput(hso)
-	}
-
 	var parsed struct {
 		Version      int             `json:"version"`
 		Decision     string          `json:"decision"`
@@ -174,6 +176,10 @@ func parseStdout(stdout string) HookResult {
 		Reason       string          `json:"reason"`
 		Context      json.RawMessage `json:"context"`
 		UpdatedInput json.RawMessage `json:"updated_input"`
+		// Claude Code stops with "continue": false, giving the reason
+		// in stopReason.
+		Continue   *bool  `json:"continue"`
+		StopReason string `json:"stopReason"`
 	}
 	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
 		return HookResult{Decision: DecisionNone}
@@ -188,9 +194,12 @@ func parseStdout(stdout string) HookResult {
 	}
 
 	result := HookResult{
-		Halt:    parsed.Halt,
+		Halt:    parsed.Halt || (parsed.Continue != nil && !*parsed.Continue),
 		Reason:  parsed.Reason,
 		Context: parseContext(parsed.Context),
+	}
+	if result.Halt && result.Reason == "" {
+		result.Reason = parsed.StopReason
 	}
 	decision, err := parseDecision(parsed.Decision)
 	result.Decision = decision
@@ -201,6 +210,10 @@ func parseStdout(stdout string) HookResult {
 		rejectRewrite(&result, patchErr)
 	} else {
 		result.UpdatedInput = updated
+	}
+
+	if hso, ok := raw["hookSpecificOutput"]; ok {
+		applyClaudeCodeOutput(&result, hso)
 	}
 	return result
 }
@@ -248,6 +261,7 @@ func jsonTypeName(raw json.RawMessage) string {
 // runs instead. A deny or a halt still holds.
 func rejectRewrite(result *HookResult, err error) {
 	setParseError(result, err)
+	result.rewriteRejected = true
 	if result.Decision == DecisionAllow {
 		result.Decision = DecisionNone
 	}
@@ -295,44 +309,62 @@ func parseContext(raw json.RawMessage) string {
 	return ""
 }
 
-// parseClaudeCodeOutput handles the Claude Code hook output format:
-// {"hookSpecificOutput": {"permissionDecision": "allow", ...}}
+// applyClaudeCodeOutput applies Claude Code's hookSpecificOutput,
+// {"permissionDecision": "allow", ...}, on top of the top-level fields
+// already in result. A permissionDecision overrides a top-level decision,
+// as it does in Claude Code, where the top-level one is deprecated for
+// PreToolUse; its reason goes with it. additionalContext is added to any
+// top-level context, and updatedInput replaces a top-level updated_input.
 //
 // Each field is read on its own, so that one of the wrong type is
 // reported by name without losing the rest: a deny must hold even when
 // the context beside it is malformed. Decoding them all at once dropped
 // the whole output, deny included, and blamed the object itself
 // ("must be a JSON object, got an object").
-func parseClaudeCodeOutput(data json.RawMessage) HookResult {
+func applyClaudeCodeOutput(result *HookResult, data json.RawMessage) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
-		return HookResult{
-			Decision: DecisionNone,
-			Error:    fmt.Sprintf("hookSpecificOutput must be a JSON object, got %s", jsonTypeName(data)),
-		}
+		setParseError(result, fmt.Errorf("hookSpecificOutput must be a JSON object, got %s", jsonTypeName(data)))
+		return
 	}
 
-	var result HookResult
-	word, err := hookSpecificString(fields, "permissionDecision")
-	if err != nil {
-		setParseError(&result, err)
+	if raw, ok := fields["permissionDecision"]; ok && string(raw) != "null" {
+		word, err := hookSpecificString(fields, "permissionDecision")
+		if err != nil {
+			setParseError(result, err)
+		}
+		decision, err := parseDecision(word)
+		if err != nil {
+			setParseError(result, err)
+		}
+		if decision == DecisionAllow && result.rewriteRejected {
+			// The top-level rewrite this allow goes with was malformed.
+			decision = DecisionNone
+		}
+		result.Decision = decision
+		reason, err := hookSpecificString(fields, "permissionDecisionReason")
+		if err != nil {
+			setParseError(result, err)
+		}
+		if reason != "" {
+			result.Reason = reason
+		}
+	} else if _, err := hookSpecificString(fields, "permissionDecisionReason"); err != nil {
+		setParseError(result, err)
 	}
-	result.Decision, err = parseDecision(word)
-	if err != nil {
-		setParseError(&result, err)
-	}
-	if result.Reason, err = hookSpecificString(fields, "permissionDecisionReason"); err != nil {
-		setParseError(&result, err)
-	}
+
 	// Claude Code's additionalContext is a string; a list of them is taken
 	// too, as Crush's own context field takes one.
 	if raw, ok := fields["additionalContext"]; ok && string(raw) != "null" {
 		if raw[0] != '"' && raw[0] != '[' {
-			setParseError(&result, fmt.Errorf(
+			setParseError(result, fmt.Errorf(
 				"hookSpecificOutput.additionalContext must be a string, got %s", jsonTypeName(raw),
 			))
-		} else {
-			result.Context = parseContext(raw)
+		} else if extra := parseContext(raw); extra != "" {
+			if result.Context != "" {
+				result.Context += "\n"
+			}
+			result.Context += extra
 		}
 	}
 
@@ -342,13 +374,11 @@ func parseClaudeCodeOutput(data json.RawMessage) HookResult {
 		if raw[0] == '{' {
 			result.UpdatedInput = string(raw)
 		} else {
-			rejectRewrite(&result, fmt.Errorf(
+			rejectRewrite(result, fmt.Errorf(
 				"hookSpecificOutput.updatedInput must be a JSON object, got %s", jsonTypeName(raw),
 			))
 		}
 	}
-
-	return result
 }
 
 // hookSpecificString reads a string field of a hookSpecificOutput. A

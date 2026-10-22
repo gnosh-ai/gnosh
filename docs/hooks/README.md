@@ -700,6 +700,13 @@ how a Claude Code `Stop` hook keeps the agent working. Claude Code's
 `hookSpecificOutput.permissionDecision` of `"allow"`, `"deny"` or `"ask"` is
 read too, where `"ask"` falls through to the normal permission prompt.
 
+Claude Code's other envelope fields are read too. `"continue": false` stops
+everything, as a Crush `halt` does, with `stopReason` as the reason. Top-level
+fields count alongside `hookSpecificOutput`, so a `PostToolUse` or `Stop` hook
+that blocks with a top-level `"decision": "block"` and sends `additionalContext`
+in `hookSpecificOutput` gets both; where both give a decision,
+`permissionDecision` wins, as in Claude Code.
+
 Decision values are matched exactly. Anything else — `"Deny"`, `"denied"`,
 `"reject"` — is reported as a failed hook (shown as **Failed** on the tool
 line, or as a warning for a `Stop` hook) rather than quietly treated as no
