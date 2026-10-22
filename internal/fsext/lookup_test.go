@@ -419,6 +419,35 @@ func TestLookupClosestBounded(t *testing.T) {
 		require.True(t, found)
 		require.Equal(t, targetFile, foundPath)
 	})
+
+	t.Run("closest directory holding any target wins", func(t *testing.T) {
+		boundary := t.TempDir()
+
+		subDir := filepath.Join(boundary, "subdir")
+		require.NoError(t, os.Mkdir(subDir, 0o755))
+
+		// The first target sits farther up than the second: the closer
+		// one must win, not the first one found anywhere.
+		require.NoError(t, os.Mkdir(filepath.Join(boundary, ".crash"), 0o755))
+		closer := filepath.Join(subDir, ".crush")
+		require.NoError(t, os.Mkdir(closer, 0o755))
+
+		foundPath, found := LookupClosestBounded(subDir, boundary, ".crash", ".crush")
+		require.True(t, found)
+		require.Equal(t, closer, foundPath)
+	})
+
+	t.Run("earlier target wins within a directory", func(t *testing.T) {
+		testDir := t.TempDir()
+
+		first := filepath.Join(testDir, ".crash")
+		require.NoError(t, os.Mkdir(first, 0o755))
+		require.NoError(t, os.Mkdir(filepath.Join(testDir, ".crush"), 0o755))
+
+		foundPath, found := LookupClosestBounded(testDir, testDir, ".crash", ".crush")
+		require.True(t, found)
+		require.Equal(t, first, foundPath)
+	})
 }
 
 func TestLookupBounded(t *testing.T) {

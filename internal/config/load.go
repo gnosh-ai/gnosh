@@ -586,13 +586,7 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	if dataDir != "" {
 		c.Options.DataDirectory = dataDir
 	} else if c.Options.DataDirectory == "" {
-		if path, ok := fsext.LookupClosestBounded(workingDir, projectBoundary(workingDir), defaultDataDirectory); ok {
-			c.Options.DataDirectory = path
-		} else if path, ok := fsext.LookupClosestBounded(workingDir, projectBoundary(workingDir), legacyDataDirectory); ok {
-			c.Options.DataDirectory = path
-		} else {
-			c.Options.DataDirectory = filepath.Join(workingDir, defaultDataDirectory)
-		}
+		c.Options.DataDirectory = projectDataDir(workingDir)
 	}
 	c.Options.DataDirectory = filepath.Clean(filepathext.SmartJoin(workingDir, c.Options.DataDirectory))
 	if c.Providers == nil {
@@ -1208,6 +1202,22 @@ func migrateDisableNotifications() {
 			slog.Warn("Failed to write migrated config", "path", path, "error", err)
 		}
 	}
+}
+
+// projectDataDir is the data directory for a project in workingDir: the
+// closest .crash or .crush within the project, so that a .crash made
+// farther up (by a run at the repository root) cannot hide the sessions
+// in a closer .crush. Where there is neither, it is a new .crash in
+// workingDir, or the .crush already there: the lookup passes over the
+// home directory, where both would otherwise be missed.
+func projectDataDir(workingDir string) string {
+	if path, ok := fsext.LookupClosestBounded(workingDir, projectBoundary(workingDir), defaultDataDirectory, legacyDataDirectory); ok {
+		return path
+	}
+	return fsext.FirstExisting(
+		filepath.Join(workingDir, defaultDataDirectory),
+		filepath.Join(workingDir, legacyDataDirectory),
+	)
 }
 
 // GlobalConfig returns the global configuration file path for the application.

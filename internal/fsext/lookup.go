@@ -93,27 +93,36 @@ func LookupClosest(dir, target string) (string, bool) {
 // ancestor of dir, the walk still terminates at the filesystem root.
 // The $HOME and ownership safeguards from LookupClosest are preserved
 // as outer bounds.
-func LookupClosestBounded(dir, stopDir, target string) (string, bool) {
+//
+// Given several targets, each directory is checked for all of them, in
+// order, before the walk moves up: the closest directory holding any of
+// them wins, and within one directory the earlier target wins. Looking
+// for one target all the way up before trying the next would let a
+// farther match of the first beat a closer match of the second.
+func LookupClosestBounded(dir, stopDir string, targets ...string) (string, bool) {
 	var found string
 
 	err := traverseUpBounded(dir, stopDir, func(cwd string, owner int) error {
-		fpath := filepath.Join(cwd, target)
+		for _, target := range targets {
+			fpath := filepath.Join(cwd, target)
 
-		err := probeEnt(fpath, owner)
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
+			err := probeEnt(fpath, owner)
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
 
-		if err != nil {
-			return fmt.Errorf("error probing file %s: %w", fpath, err)
-		}
+			if err != nil {
+				return fmt.Errorf("error probing file %s: %w", fpath, err)
+			}
 
-		if cwd == home.Dir() {
+			if cwd == home.Dir() {
+				return filepath.SkipAll
+			}
+
+			found = fpath
 			return filepath.SkipAll
 		}
-
-		found = fpath
-		return filepath.SkipAll
+		return nil
 	})
 
 	return found, err == nil && found != ""

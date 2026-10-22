@@ -442,6 +442,45 @@ func TestConfig_setDefaults(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, filepath.Join(subEval, defaultDataDirectory), gotEval)
 	})
+
+	t.Run("a closer .crush beats a .crash farther up", func(t *testing.T) {
+		if _, err := exec.LookPath("git"); err != nil {
+			t.Skip("git not available")
+		}
+
+		// The sessions live in repo/sub/.crush; a later run at the
+		// repository root made repo/.crash. Running in sub must still
+		// find sub's own sessions.
+		repo := t.TempDir()
+		gitInit := exec.CommandContext(t.Context(), "git", "init", "-q")
+		gitInit.Dir = repo
+		require.NoError(t, gitInit.Run())
+		require.NoError(t, os.Mkdir(filepath.Join(repo, defaultDataDirectory), 0o755))
+
+		sub := filepath.Join(repo, "sub")
+		require.NoError(t, os.Mkdir(sub, 0o755))
+		require.NoError(t, os.Mkdir(filepath.Join(sub, legacyDataDirectory), 0o755))
+
+		cfg := &Config{}
+		cfg.setDefaults(sub, "")
+
+		got, err := filepath.EvalSymlinks(cfg.Options.DataDirectory)
+		require.NoError(t, err)
+		want, err := filepath.EvalSymlinks(filepath.Join(sub, legacyDataDirectory))
+		require.NoError(t, err)
+		require.Equal(t, want, got)
+	})
+
+	t.Run("a .crash beats a .crush in the same directory", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(dir, defaultDataDirectory), 0o755))
+		require.NoError(t, os.Mkdir(filepath.Join(dir, legacyDataDirectory), 0o755))
+
+		cfg := &Config{}
+		cfg.setDefaults(dir, "")
+
+		require.Equal(t, filepath.Join(dir, defaultDataDirectory), cfg.Options.DataDirectory)
+	})
 }
 
 func TestConfig_configureProviders(t *testing.T) {
