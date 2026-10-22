@@ -1704,6 +1704,15 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 		return fantasy.ToolResponse{}, fmt.Errorf("create session: %w", err)
 	}
 
+	// A sub-agent works on its parent's behalf, so when the parent's
+	// session is auto-approved, as a non-interactive run's is, the
+	// sub-agent's is too. Otherwise its first permission request waits
+	// for an answer nobody is there to give: in a crash run on the AI box
+	// a sub-agent hung that way, reading a file in the Go module cache.
+	if c.permissions != nil && c.permissions.IsSessionAutoApproved(params.SessionID) {
+		c.permissions.AutoApproveSession(session.ID)
+	}
+
 	// Call session setup function if provided
 	if params.SessionSetup != nil {
 		params.SessionSetup(session.ID)

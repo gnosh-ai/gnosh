@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
@@ -15,6 +16,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/discover"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -138,6 +140,55 @@ func TestRunSubAgent(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "done", resp.Content)
 		assert.False(t, resp.IsError)
+	})
+
+	// A non-interactive run auto-approves its session; a sub-agent it
+	// starts must be too, or its first permission request waits for an
+	// answer nobody is there to give. Asked in an ordinary session, the
+	// sub-agent still asks.
+	t.Run("inherits the parent's auto-approval", func(t *testing.T) {
+		for _, parentAutoApproved := range []bool{true, false} {
+			env := testEnv(t)
+			coord := newTestCoordinator(t, env, providerID, providerCfg)
+			perms := permission.NewPermissionService(env.workingDir, false, nil)
+			coord.permissions = perms
+
+			parent, err := env.sessions.Create(t.Context(), "Parent")
+			require.NoError(t, err)
+			if parentAutoApproved {
+				perms.AutoApproveSession(parent.ID)
+			}
+
+			var childID string
+			var granted bool
+			agent := newMockAgent(providerID, 4096, func(ctx context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+				childID = call.SessionID
+				if parentAutoApproved {
+					// The request a sub-agent makes reading outside the
+					// working directory; bounded, so a regression fails
+					// rather than hangs.
+					ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+					defer cancel()
+					granted, err = perms.Request(ctx, permission.CreatePermissionRequest{
+						SessionID: call.SessionID, ToolCallID: "view-1", ToolName: "view",
+						Action: "read", Path: "/elsewhere/tool.go",
+					})
+				}
+				return agentResultWithText("done"), nil
+			})
+			_, runErr := coord.runSubAgent(t.Context(), subAgentParams{
+				Agent: agent, SessionID: parent.ID, AgentMessageID: "msg-1",
+				ToolCallID: "call-1", Prompt: "read it", SessionTitle: "Sub",
+			})
+			require.NoError(t, runErr)
+			require.NotEmpty(t, childID)
+			require.NotEqual(t, parent.ID, childID)
+			require.Equal(t, parentAutoApproved, perms.IsSessionAutoApproved(childID))
+			if parentAutoApproved {
+				require.NoError(t, err)
+				require.True(t, granted, "the sub-agent's request is granted at once, not left waiting")
+			}
+		}
 	})
 
 	t.Run("cost update failure preserves output", func(t *testing.T) {
