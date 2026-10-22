@@ -1383,6 +1383,9 @@ func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
 	// Migrate deprecated disable_notifications before reloading config.
 	migrateDisableNotifications()
 
+	if err := checkProjectConfigOwners(s.workingDir); err != nil {
+		return fmt.Errorf("config reload rejected: %w", err)
+	}
 	configPaths := lookupConfigs(s.workingDir)
 	cfg, loadedPaths, err := loadFromConfigPaths(ctx, configPaths)
 	if err != nil {

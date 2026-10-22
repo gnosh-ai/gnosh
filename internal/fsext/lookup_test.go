@@ -589,3 +589,44 @@ func TestProbeEnt(t *testing.T) {
 		require.True(t, errors.Is(err, os.ErrPermission))
 	})
 }
+
+// The files LookupBounded passes over for their owner are what
+// foreignOwnedIn reports; a missing file is not one of them.
+func TestForeignOwnedIn(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "crash.json")
+	require.NoError(t, os.WriteFile(cfg, []byte(`{}`), 0o644))
+	owner, err := Owner(dir)
+	require.NoError(t, err)
+
+	targets := []string{"crash.json", "missing.json"}
+	require.Empty(t, foreignOwnedIn(dir, owner, targets))
+	require.Equal(t, []string{cfg}, foreignOwnedIn(dir, owner+1, targets))
+	require.Empty(t, foreignOwnedIn(dir, -1, targets), "-1 turns the check off, as in probeEnt")
+}
+
+// With a file that really belongs to someone else, ForeignOwnedBounded
+// reports exactly what LookupBounded leaves out.
+func TestForeignOwnedBoundedMatchesWhatLookupBoundedSkips(t *testing.T) {
+	if os.Getuid() != 0 {
+		t.Skip("giving a file to another user needs root")
+	}
+	t.Parallel()
+
+	dir := t.TempDir()
+	mine := filepath.Join(dir, "crash.json")
+	theirs := filepath.Join(dir, "crush.json")
+	require.NoError(t, os.WriteFile(mine, []byte(`{}`), 0o644))
+	require.NoError(t, os.WriteFile(theirs, []byte(`{}`), 0o644))
+	require.NoError(t, os.Chown(theirs, 65534, 65534))
+
+	found, err := LookupBounded(dir, dir, "crash.json", "crush.json")
+	require.NoError(t, err)
+	require.Equal(t, []string{mine}, found)
+
+	foreign, err := ForeignOwnedBounded(dir, dir, "crash.json", "crush.json")
+	require.NoError(t, err)
+	require.Equal(t, []string{theirs}, foreign)
+}

@@ -11,6 +11,7 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -46,6 +47,9 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 	// Migrate deprecated disable_notifications before loading config.
 	migrateDisableNotifications()
 
+	if err := checkProjectConfigOwners(workingDir); err != nil {
+		return nil, err
+	}
 	configPaths := lookupConfigs(workingDir)
 
 	cfg, loadedPaths, err := loadFromConfigPaths(context.Background(), configPaths)
@@ -957,17 +961,7 @@ func lookupConfigs(cwd string) []string {
 	configPaths = append(configPaths, shellConfigSiblings(GlobalConfig())...)
 	configPaths = append(configPaths, GlobalConfigData())
 
-	// Ordered high-to-low priority within a directory. LookupBounded returns
-	// matches in this order, and the later reverse + merge make the earliest
-	// listed name win on conflict. So: .crashrc beats crashrc, both beat the
-	// JSON configs, and .crash.json beats crash.json; each beats its name
-	// from before the rename.
-	var configNames []string
-	for _, name := range []string{appName, legacyAppName} {
-		configNames = append(configNames, "."+name+"rc", name+"rc", "."+name+".json", name+".json")
-	}
-
-	foundConfigs, err := fsext.LookupBounded(cwd, projectBoundary(cwd), configNames...)
+	foundConfigs, err := fsext.LookupBounded(cwd, projectBoundary(cwd), projectConfigNames()...)
 	if err != nil {
 		// returns at least default configs
 		return configPaths
@@ -977,6 +971,56 @@ func lookupConfigs(cwd string) []string {
 	slices.Reverse(foundConfigs)
 
 	return append(configPaths, foundConfigs...)
+}
+
+// projectConfigNames are the names a project config file can have, in
+// priority order within a directory. LookupBounded returns matches in
+// this order, and the later reverse + merge make the earliest listed
+// name win on conflict. So: .crashrc beats crashrc, both beat the JSON
+// configs, and .crash.json beats crash.json; each beats its name from
+// before the rename.
+func projectConfigNames() []string {
+	var names []string
+	for _, name := range []string{appName, legacyAppName} {
+		names = append(names, "."+name+"rc", name+"rc", "."+name+".json", name+".json")
+	}
+	return names
+}
+
+// checkProjectConfigOwners refuses a project config file that the lookup
+// passes over because someone other than the owner of the project
+// directory owns it. The lookup skips such a file so that another user
+// cannot plant settings in a directory they can write to, but it skipped
+// it without a word: a crash.json written with sudo into your own
+// project, say, was ignored, and the settings in it, a disabled tool
+// among them, silently did not apply.
+func checkProjectConfigOwners(cwd string) error {
+	foreign, err := fsext.ForeignOwnedBounded(cwd, projectBoundary(cwd), projectConfigNames()...)
+	if err != nil || len(foreign) == 0 {
+		// A lookup that cannot run is lookupConfigs' to handle.
+		return nil
+	}
+	path := foreign[0]
+	fileOwner, err := fsext.Owner(path)
+	if err != nil {
+		return nil
+	}
+	dirOwner, err := fsext.Owner(cwd)
+	if err != nil {
+		return nil
+	}
+	return fmt.Errorf(
+		"project config %s belongs to %s, but %s belongs to %s. Crash reads a project config only from the owner of the project directory, so its settings would not apply. If it is meant for this project, give it to %s (chown %s %s); otherwise remove it",
+		path, userName(fileOwner), cwd, userName(dirOwner), userName(dirOwner), userName(dirOwner), path,
+	)
+}
+
+// userName is the login name for uid, or "uid N" when there is none.
+func userName(uid int) string {
+	if u, err := user.LookupId(strconv.Itoa(uid)); err == nil {
+		return u.Username
+	}
+	return "uid " + strconv.Itoa(uid)
 }
 
 func loadFromConfigPaths(ctx context.Context, configPaths []string) (*Config, []string, error) {

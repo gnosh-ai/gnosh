@@ -166,6 +166,42 @@ func LookupBounded(dir, stopDir string, targets ...string) ([]string, error) {
 	return found, nil
 }
 
+// ForeignOwnedBounded returns the targets that exist in dir and its
+// ancestors up to stopDir, the places LookupBounded searches, but that
+// LookupBounded passes over because someone other than dir's owner owns
+// them, so a caller can say so instead of ignoring them in silence.
+func ForeignOwnedBounded(dir, stopDir string, targets ...string) ([]string, error) {
+	var found []string
+	err := traverseUpBounded(dir, stopDir, func(cwd string, owner int) error {
+		found = append(found, foreignOwnedIn(cwd, owner, targets)...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return found, nil
+}
+
+// foreignOwnedIn returns the targets in dir that exist and are owned by
+// someone other than owner. An owner of -1 turns the check off, as it
+// does in probeEnt.
+func foreignOwnedIn(dir string, owner int, targets []string) []string {
+	if owner == -1 {
+		return nil
+	}
+	var found []string
+	for _, target := range targets {
+		fpath := filepath.Join(dir, target)
+		if _, err := os.Stat(fpath); err != nil {
+			continue
+		}
+		if fowner, err := Owner(fpath); err == nil && fowner != owner {
+			found = append(found, fpath)
+		}
+	}
+	return found
+}
+
 // traverseUp walks up from given directory up until filesystem root reached.
 // It passes absolute path of current directory and staring directory owner ID
 // to callback function. It is up to user to check ownership.
