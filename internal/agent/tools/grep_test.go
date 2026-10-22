@@ -653,6 +653,16 @@ func TestSearchFilesWithTheRealRipgrep(t *testing.T) {
 
 	_, _, err = searchFiles(t.Context(), "x", filepath.Join(dir, "missing"), "", 100)
 	require.Error(t, err, "a missing path is an error, not an empty result")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.php"), []byte("$user->getName();\nrun --force\n"), 0o644))
+	for _, pattern := range []string{"->getName", "--force"} {
+		matches, _, err = searchFiles(t.Context(), pattern, dir, "", 100)
+		require.NoError(t, err, "a pattern starting with a dash is searched for, not read as an option")
+		require.Len(t, matches, 1, pattern)
+	}
+	matches, _, err = searchFiles(t.Context(), "Start|getName", dir, "*.php", 100)
+	require.NoError(t, err)
+	require.Len(t, matches, 1, "include still filters: a.txt's Start is left out")
 }
 
 // ignore_case matches regardless of case, as grep -i does, so a model has

@@ -51,12 +51,15 @@ func getRgSearchCmd(ctx context.Context, pattern, path, include string) *exec.Cm
 	if name == "" {
 		return nil
 	}
-	// Use -n to show line numbers, -0 for null separation to handle Windows paths
-	args := []string{"--json", "-H", "-n", "-0", pattern}
+	// Use -n to show line numbers, -0 for null separation to handle Windows
+	// paths. The pattern goes in with -e and the path after --, so that a
+	// pattern such as "->getName" or "--force" is searched for rather than
+	// read as an option.
+	args := []string{"--json", "-H", "-n", "-0", "-e", pattern}
 	if include != "" {
-		args = append(args, "--glob", include)
+		args = append(args, "--glob="+include)
 	}
-	args = append(args, path)
+	args = append(args, "--", path)
 
 	return exec.CommandContext(ctx, name, args...)
 }
