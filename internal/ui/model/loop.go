@@ -34,21 +34,36 @@ const (
 )
 
 // loopReflectionPrompt is sent in place of loopPrompt every loopReflectEvery
-// turns. It asks the agent to judge whether there is a genuine reason to stop,
-// and tells it how to say so; absent such a reason it is told plainly to keep
-// going. The marker is the Stop hook's, which the chat already hides.
+// turns. It asks the agent to decide, before anything else, whether there is a
+// genuine reason to stop, and to answer in one of three set ways; absent such
+// a reason it is told plainly to keep going. The marker is the Stop hook's,
+// which the chat already hides.
+//
+// The wording is measured, not guessed. Replaying a real checkpoint request
+// against the box's Qwen, with thinking off as crash sends it, an earlier
+// "step back and judge" version was mostly ignored: the model answered with
+// the next step of the task (1 stop in 5 where the user had said to stop).
+// Saying that the question overrides the system prompt's keep-working rules,
+// and asking for the decision first, stopped it 5 times in 5, and on a task
+// that was still making progress it stopped 0 times in 5 and carried on.
 func loopReflectionPrompt(turns int) string {
 	return fmt.Sprintf(
-		"This loop has now run %d turns without the task being reported finished. "+
-			"Before continuing, step back and judge honestly whether there is a "+
-			"genuine reason to stop — for example: the task cannot be done as "+
-			"asked; it is blocked on something only the user can provide or "+
-			"decide; a check it needs cannot pass in this environment; or you "+
-			"are repeating the same attempts without making progress.\n\n"+
-			"If there is such a reason, explain it clearly for the user, then end "+
-			"your reply with this line on its own:\n%s\n\n"+
-			"If the whole task is in fact finished, reply with exactly %s on its own line.\n\n"+
-			"Otherwise, do not stop: keep working on the task. Taking many turns is fine.",
+		"Checkpoint: this loop has run %d turns and the task is not reported finished. "+
+			"The user set up this loop and asked to be told at these checkpoints when "+
+			"going on is pointless; this question takes precedence over any general "+
+			"instruction to keep working, and stopping here for a genuine reason is "+
+			"not a failure. Before doing anything else, decide whether there is a "+
+			"genuine reason to stop. Genuine reasons include: the user's request says "+
+			"to stop at this point; the task cannot be done as asked; it is blocked on "+
+			"something only the user can provide or decide; a check it needs cannot "+
+			"pass in this environment; or you are repeating the same attempts without "+
+			"making progress.\n\n"+
+			"Then reply in exactly one of these three ways:\n"+
+			"1. There is a genuine reason to stop: explain it for the user, and make "+
+			"the last line of your reply exactly:\n%s\n"+
+			"2. The whole task is finished: reply with exactly %s on its own line.\n"+
+			"3. Neither: start your reply with \"No reason to stop.\" and carry on "+
+			"with the task. Taking many turns is fine.",
 		turns, agent.StopMarker, loopDoneSentinel,
 	)
 }
