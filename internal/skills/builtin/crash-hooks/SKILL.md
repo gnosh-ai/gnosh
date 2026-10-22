@@ -257,7 +257,7 @@ There is no cap on how many times a Stop hook may block: if the work is not
 done, it is not done. Every 10th consecutive block, the agent is instead asked
 to judge whether there is a genuine reason to stop (impossible as asked,
 blocked on the user, a check that cannot pass here, no progress). If so it
-explains why and ends its reply with `<!-- CRUSH_STOP -->` on its own line;
+explains why and ends its reply with `<!-- CRASH_STOP -->` on its own line;
 Crash ends the turn and warns the user. Otherwise it keeps working. A hook
 that wants to object only once can check `CRASH_STOP_HOOK_ACTIVE` and exit 0.
 

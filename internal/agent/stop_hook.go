@@ -28,7 +28,12 @@ const stopHookReflectEvery = 10
 // though the Stop hook still objects. The rest of its reply is its
 // reason, written for the user. Like the plan markers it is an HTML
 // comment, and the UI strips it before rendering (see StripStopMarker).
-const StopMarker = "<!-- CRUSH_STOP -->"
+const StopMarker = "<!-- CRASH_STOP -->"
+
+// legacyStopMarker is the marker from before Crush was renamed Crash. An
+// agent may still write it, from a session or a prompt that predates the
+// rename, and it counts the same.
+const legacyStopMarker = "<!-- CRUSH_STOP -->"
 
 // maxStopReasonLen bounds how much of the agent's reason is quoted in
 // the one-line status-bar warning. The full reason is in its reply.
@@ -182,14 +187,15 @@ func stopMarkerPresent(text string) bool {
 }
 
 func stopMarkerLine(line string) bool {
-	return strings.TrimSpace(strings.Trim(strings.TrimSpace(line), "`")) == StopMarker
+	marker := strings.TrimSpace(strings.Trim(strings.TrimSpace(line), "`"))
+	return marker == StopMarker || marker == legacyStopMarker
 }
 
 // StripStopMarker removes lines consisting solely of StopMarker, so the
 // sentinel never shows in rendered output. Mentions inside prose are left
 // alone, matching stopMarkerPresent.
 func StripStopMarker(text string) string {
-	if !strings.Contains(text, StopMarker) {
+	if !strings.Contains(text, StopMarker) && !strings.Contains(text, legacyStopMarker) {
 		return text
 	}
 	lines := strings.Split(text, "\n")
