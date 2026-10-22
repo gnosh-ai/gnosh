@@ -2,9 +2,12 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +27,7 @@ import (
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/dnaeon/go-vcr.v4/pkg/cassette"
 
 	_ "github.com/joho/godotenv/autoload"
 )
@@ -52,13 +56,40 @@ func hyperBuilder(model string) builderFunc {
 		provider, err := openaicompat.New(
 			openaicompat.WithBaseURL("https://hyper.charm.land/v1"),
 			openaicompat.WithAPIKey(os.Getenv("CRUSH_HYPER_API_KEY")),
-			openaicompat.WithHTTPClient(&http.Client{Transport: r}),
+			openaicompat.WithHTTPClient(&http.Client{Transport: failFastOnStaleCassette{r}}),
 		)
 		if err != nil {
 			return nil, err
 		}
 		return provider.LanguageModel(t.Context(), model)
 	}
+}
+
+// failFastOnStaleCassette turns "no recorded interaction matches this
+// request" into an immediate 400 instead of a transport error.
+//
+// The recorder reports a mismatch as an error from RoundTrip, which the
+// provider stack reads as a flaky network and retries with exponential
+// backoff — so a cassette that no longer matches the prompt cost about 40
+// seconds per subtest, and TestCoderAgent about eight minutes, before
+// failing with the same diff it could have shown at once. A 400 is not
+// retried, so it fails in milliseconds. The recorder's matcher has
+// already logged the diff by the time this returns.
+type failFastOnStaleCassette struct{ next http.RoundTripper }
+
+func (f failFastOnStaleCassette) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := f.next.RoundTrip(req)
+	if err != nil && errors.Is(err, cassette.ErrInteractionNotFound) {
+		const msg = `{"error":{"message":"no recorded interaction matches this request: the cassettes under internal/agent/testdata are stale and must be re-recorded against the live API"}}`
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Status:     "400 Bad Request",
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(msg)),
+			Request:    req,
+		}, nil
+	}
+	return resp, err
 }
 
 func testEnv(t *testing.T) fakeEnv {
