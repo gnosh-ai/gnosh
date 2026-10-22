@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/testenv"
+
 	"charm.land/catwalk/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/env"
@@ -24,6 +26,7 @@ import (
 
 func TestMain(m *testing.M) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	testenv.ClearConfigVars()
 	os.Exit(runIsolated(m))
 }
 
