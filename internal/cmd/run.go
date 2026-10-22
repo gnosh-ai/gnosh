@@ -124,7 +124,7 @@ crash run --continue "Follow up on your last response"
 			event.AppInitialized()
 
 			if !ws.Config.IsConfigured() {
-				return fmt.Errorf("no providers configured - please run '%s' to set up a provider interactively", version.Command)
+				return noProviderError(ws.Config)
 			}
 
 			clientWs := workspace.NewClientWorkspace(c, *ws)
@@ -160,7 +160,7 @@ crash run --continue "Follow up on your last response"
 		event.AppInitialized()
 
 		if !ws.Config().IsConfigured() {
-			return fmt.Errorf("no providers configured - please run '%s' to set up a provider interactively", version.Command)
+			return noProviderError(ws.Config())
 		}
 
 		if verbose {
@@ -996,4 +996,15 @@ func (o *runOutput) finish(runErr error) error {
 		return errors.Join(runErr, err)
 	}
 	return runErr
+}
+
+// noProviderError says why crash run has no provider to use. When the
+// config names providers that loading had to leave out, such as one whose
+// model server did not answer, it says which and why; "no providers
+// configured" sent a user whose server was down to set one up again.
+func noProviderError(cfg *config.Config) error {
+	if why := cfg.SkippedProvidersSummary(); why != "" {
+		return fmt.Errorf("no configured provider can be used: %s", why)
+	}
+	return fmt.Errorf("no providers configured - please run '%s' to set up a provider interactively", version.Command)
 }

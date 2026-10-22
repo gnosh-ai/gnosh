@@ -331,7 +331,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 			// concurrent reload that races with this write will also see the
 			// removal because it re-reads from disk.
 			store.RemoveConfigField(ScopeGlobal, "providers.anthropic")
-			c.Providers.Del(string(p.ID))
+			c.skipProvider(string(p.ID), "a Claude subscription login is no longer supported; set an API key")
 			continue
 		case p.ID == catwalk.InferenceProviderCopilot && config.OAuthToken != nil:
 			prepared.SetupGitHubCopilot()
@@ -347,7 +347,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 			if project == "" || location == "" {
 				if configExists {
 					slog.Warn("Skipping Vertex AI provider due to missing credentials")
-					c.Providers.Del(string(p.ID))
+					c.skipProvider(string(p.ID), "VERTEXAI_PROJECT and VERTEXAI_LOCATION are not set")
 				}
 				continue
 			}
@@ -358,7 +358,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 			if err != nil || endpoint == "" {
 				if configExists {
 					slog.Warn("Skipping Azure provider due to missing API endpoint", "provider", p.ID, "error", err)
-					c.Providers.Del(string(p.ID))
+					c.skipProvider(string(p.ID), "it has no API endpoint")
 				}
 				continue
 			}
@@ -368,7 +368,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 			if p.APIKey == "" && !hasAWSCredentials(env) {
 				if configExists {
 					slog.Warn("Skipping Bedrock provider due to missing AWS credentials")
-					c.Providers.Del(string(p.ID))
+					c.skipProvider(string(p.ID), "there are no AWS credentials")
 				}
 				continue
 			}
@@ -381,7 +381,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 				if v == "" || err != nil {
 					if configExists {
 						slog.Warn("Skipping Hyper provider due to missing API key", "provider", p.ID)
-						c.Providers.Del(string(p.ID))
+						c.skipProvider(string(p.ID), "it has no API key")
 					}
 					continue
 				}
@@ -398,7 +398,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 			if v == "" || err != nil {
 				if configExists {
 					slog.Warn("Skipping provider due to missing API key", "provider", p.ID)
-					c.Providers.Del(string(p.ID))
+					c.skipProvider(string(p.ID), "it has no API key")
 				}
 				continue
 			}
@@ -470,7 +470,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 			providerConfig.Type != hyper.Name &&
 			!discover.IsKnownCustomProvider(string(providerConfig.Type)) {
 			slog.Warn("Skipping custom provider due to unsupported provider type", "provider", id)
-			c.Providers.Del(id)
+			c.skipProvider(id, fmt.Sprintf("its type %q is not supported", providerConfig.Type))
 			continue
 		}
 
@@ -486,7 +486,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 		baseURL, err := resolver.ResolveValue(providerConfig.BaseURL)
 		if baseURL == "" || err != nil {
 			slog.Warn("Skipping custom provider due to missing API endpoint", "provider", id, "error", err)
-			c.Providers.Del(id)
+			c.skipProvider(id, "it has no base_url")
 			continue
 		}
 
@@ -496,7 +496,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 				slog.Warn("Model discovery failed", "provider", id, "error", result.err)
 				if len(providerConfig.Models) == 0 {
 					slog.Warn("Skipping provider with no models after failed discovery", "provider", id)
-					c.Providers.Del(id)
+					c.skipProvider(id, fmt.Sprintf("its model server did not answer (%v)", result.err))
 					continue
 				}
 			} else if len(result.models) > 0 {
@@ -507,7 +507,7 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 
 		if len(providerConfig.Models) == 0 {
 			slog.Warn("Skipping custom provider because the provider has no models", "provider", id)
-			c.Providers.Del(id)
+			c.skipProvider(id, "it lists no models")
 			continue
 		}
 

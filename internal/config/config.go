@@ -942,6 +942,37 @@ type Config struct {
 	Env map[string]string `json:"env,omitempty" jsonschema:"description=Environment variables to set on startup"`
 
 	Agents map[string]Agent `json:"-"`
+
+	// skippedProviders records, for each provider the user configured
+	// that loading had to leave out, why: a model server that did not
+	// answer, a missing key or endpoint. With no provider left, that is
+	// what the user needs to hear, not "no providers configured".
+	skippedProviders map[string]string
+}
+
+// SkippedProviders returns why each provider the user configured was left
+// out when the config loaded, by provider ID.
+func (c *Config) SkippedProviders() map[string]string {
+	return maps.Clone(c.skippedProviders)
+}
+
+// SkippedProvidersSummary says, in one line, which configured providers
+// were left out and why, or "" when none were.
+func (c *Config) SkippedProvidersSummary() string {
+	var parts []string
+	for _, id := range slices.Sorted(maps.Keys(c.skippedProviders)) {
+		parts = append(parts, id+": "+c.skippedProviders[id])
+	}
+	return strings.Join(parts, "; ")
+}
+
+// skipProvider leaves provider id out of the config, recording why.
+func (c *Config) skipProvider(id, reason string) {
+	if c.skippedProviders == nil {
+		c.skippedProviders = map[string]string{}
+	}
+	c.skippedProviders[id] = reason
+	c.Providers.Del(id)
 }
 
 // cloneForWrite returns a copy of c that the store's typed field mutators
