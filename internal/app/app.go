@@ -284,7 +284,9 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 
 // RunNonInteractive runs the application in non-interactive mode with the
 // given prompt, printing to stdout.
-func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner, traceTools bool, continueSessionID string, useLast bool) error {
+// RunNonInteractive runs one prompt without the TUI, writing the answer to
+// output. onSession, when set, is told the session the run uses.
+func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner, traceTools bool, continueSessionID string, useLast bool, onSession func(sessionID string)) error {
 	slog.Info("Running in non-interactive mode")
 
 	// Re-initialize the coder agent without interactive-only tools.
@@ -366,6 +368,9 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	sess, err := app.resolveSession(ctx, continueSessionID, useLast)
 	if err != nil {
 		return fmt.Errorf("failed to create session for non-interactive mode: %w", err)
+	}
+	if onSession != nil {
+		onSession(sess.ID)
 	}
 
 	if continueSessionID != "" || useLast {

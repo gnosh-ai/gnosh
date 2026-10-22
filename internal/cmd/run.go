@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -96,6 +99,12 @@ crash run --continue "Follow up on your last response"
 			return fmt.Errorf("no prompt provided")
 		}
 
+		outputFormat, _ := cmd.Flags().GetString("output-format")
+		output, err := newRunOutput(outputFormat, os.Stdout)
+		if err != nil {
+			return err
+		}
+
 		event.SetNonInteractive(true)
 
 		switch {
@@ -139,7 +148,7 @@ crash run --continue "Follow up on your last response"
 				return setThinking(clientWs, enabled, cmd.OutOrStdout())
 			}
 			hideSpinner, traceTools := runOutputFlags(quiet, verbose)
-			return runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast)
+			return output.finish(runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, output))
 		}
 
 		ws, cleanup, err := setupLocalWorkspace(cmd)
@@ -172,7 +181,9 @@ crash run --continue "Follow up on your last response"
 			return setThinking(ws, enabled, cmd.OutOrStdout())
 		}
 		hideSpinner, traceTools := runOutputFlags(quiet, verbose)
-		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast)
+		return output.finish(appWs.App().RunNonInteractive(ctx, output.w, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, func(id string) {
+			output.sessionID = id
+		}))
 	},
 }
 
@@ -198,6 +209,7 @@ func addRunFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it")
 	cmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	cmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
+	cmd.Flags().String("output-format", "text", "How the answer is printed: text, as it streams, or json, one result object at the end (as Claude Code's -p --output-format json)")
 	// The yolo flags are accepted so that Claude Code's
 	// `-p --dangerously-skip-permissions` works, and change nothing: run
 	// already accepts its own session's permission requests, and keeps
@@ -233,6 +245,7 @@ func runNonInteractive(
 	hideSpinner, traceTools bool,
 	continueSessionID string,
 	useLast bool,
+	output *runOutput,
 ) error {
 	slog.Info("Running in non-interactive mode")
 
@@ -302,6 +315,7 @@ func runNonInteractive(
 	if err != nil {
 		return fmt.Errorf("failed to resolve session: %w", err)
 	}
+	output.sessionID = sess.ID
 	if continueSessionID != "" || useLast {
 		slog.Info("Continuing session for non-interactive run", "session_id", sess.ID)
 		// If no explicit model override was requested, restore the
@@ -340,7 +354,7 @@ func runNonInteractive(
 	stream := &runStream{
 		sessionID: sess.ID,
 		runID:     runID,
-		out:       os.Stdout,
+		out:       output.w,
 		errOut:    os.Stderr,
 		trace:     newToolTrace(traceTools),
 		read:      make(map[string]int),
@@ -876,4 +890,62 @@ func setThinking(ws workspace.Workspace, enabled bool, out io.Writer) error {
 	}
 	_, err := fmt.Fprintf(out, "Thinking %s for all future requests.\n", state)
 	return err
+}
+
+// runOutput is where crash run writes its answer, by --output-format:
+// streamed as it comes for text, or collected and printed as one result
+// object at the end for json, as Claude Code's -p --output-format json
+// does, for scripts that read the answer and the session to resume.
+type runOutput struct {
+	json      bool
+	w         io.Writer     // what the run writes the answer to
+	answer    *bytes.Buffer // json: the answer, collected
+	stdout    io.Writer     // json: where the result object goes
+	start     time.Time
+	sessionID string // set once the run knows its session
+}
+
+func newRunOutput(format string, stdout io.Writer) (*runOutput, error) {
+	switch format {
+	case "", "text":
+		return &runOutput{w: stdout, stdout: stdout, start: time.Now()}, nil
+	case "json":
+		answer := &bytes.Buffer{}
+		return &runOutput{json: true, w: answer, answer: answer, stdout: stdout, start: time.Now()}, nil
+	case "stream-json":
+		return nil, fmt.Errorf("--output-format stream-json is not supported yet; use text or json")
+	default:
+		return nil, fmt.Errorf("--output-format %q: expected text or json", format)
+	}
+}
+
+// finish ends the run's output and passes runErr on. In json, it prints
+// the result object, a failed run included, so a script always gets one.
+func (o *runOutput) finish(runErr error) error {
+	if !o.json {
+		return runErr
+	}
+	res := struct {
+		Type       string `json:"type"`
+		Subtype    string `json:"subtype"`
+		IsError    bool   `json:"is_error"`
+		Result     string `json:"result"`
+		SessionID  string `json:"session_id,omitempty"`
+		DurationMS int64  `json:"duration_ms"`
+	}{
+		Type:       "result",
+		Subtype:    "success",
+		Result:     strings.TrimSpace(o.answer.String()),
+		SessionID:  o.sessionID,
+		DurationMS: time.Since(o.start).Milliseconds(),
+	}
+	if runErr != nil {
+		res.Subtype = "error_during_execution"
+		res.IsError = true
+		res.Result = runErr.Error()
+	}
+	if err := json.NewEncoder(o.stdout).Encode(res); err != nil {
+		return errors.Join(runErr, err)
+	}
+	return runErr
 }
