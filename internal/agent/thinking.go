@@ -17,6 +17,20 @@ func applyThinking(opts fantasy.ProviderOptions, providerCfg config.ProviderConf
 	if !set {
 		return
 	}
+	setEnableThinking(opts, providerCfg, enabled)
+}
+
+// disableThinking switches reasoning off for one request, whatever the
+// user's /think setting. It is for requests whose answer is a few words,
+// such as a session title, where a thinking model would otherwise spend its
+// whole small budget reasoning and be cut off before answering.
+func disableThinking(opts fantasy.ProviderOptions, providerCfg config.ProviderConfig) {
+	setEnableThinking(opts, providerCfg, false)
+}
+
+// setEnableThinking writes llama.cpp's chat-template switch into opts for
+// OpenAI-compatible providers; other provider kinds are left untouched.
+func setEnableThinking(opts fantasy.ProviderOptions, providerCfg config.ProviderConfig, enabled bool) {
 	if string(providerCfg.Type) != openaicompat.Name && !discover.IsKnownCustomProvider(string(providerCfg.Type)) {
 		return
 	}

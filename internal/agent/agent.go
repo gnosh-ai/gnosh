@@ -1840,6 +1840,37 @@ func hasUserTextMessage(msgs []message.Message) bool {
 }
 
 // GenerateTitle generates a session title based on the initial prompt.
+// titleFromPrompt is the title a session gets when the model does not
+// produce one: the start of the user's prompt, truncated to 50 columns. It
+// says far more than DefaultSessionName when looking for the session later;
+// the generic name is kept for an empty prompt.
+func titleFromPrompt(userPrompt string) string {
+	fallback := strings.TrimSpace(strings.ReplaceAll(userPrompt, "\n", " "))
+	if len(fallback) > 50 {
+		fallback = ansi.Truncate(fallback, 50, "…")
+	}
+	return cmp.Or(fallback, DefaultSessionName)
+}
+
+// titleProviderOptions returns the request options for asking model for a
+// title: thinking off, where its provider supports the switch.
+//
+// The title prompt also carries a /no_think hint and an empty think block,
+// but newer Qwen models ignore both; only llama.cpp's chat-template switch
+// reaches them. Without it the model reasoned through its 40-token budget,
+// was cut off before answering, and every session on the AI box came out
+// "Untitled Session".
+func (a *sessionAgent) titleProviderOptions(model Model) fantasy.ProviderOptions {
+	opts := fantasy.ProviderOptions{}
+	if a.cfg == nil || a.cfg.Config().Providers == nil {
+		return opts
+	}
+	if providerCfg, ok := a.cfg.Config().Providers.Get(model.ModelCfg.Provider); ok {
+		disableThinking(opts, providerCfg)
+	}
+	return opts
+}
+
 func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, userPrompt string) {
 	if userPrompt == "" {
 		return
@@ -1852,7 +1883,7 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 		if !titleSaved {
 			fallbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			if err := a.sessions.Rename(fallbackCtx, sessionID, DefaultSessionName); err != nil {
+			if err := a.sessions.Rename(fallbackCtx, sessionID, titleFromPrompt(userPrompt)); err != nil {
 				slog.Error("Failed to save fallback session title", "error", err)
 			}
 		}
@@ -1904,7 +1935,9 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 			tok = attempt.model.CatwalkCfg.DefaultMaxTokens
 		}
 		agent := newAgent(attempt.model.Model, titlePrompt, tok)
-		resp, err = agent.Stream(ctx, streamCall)
+		call := streamCall
+		call.ProviderOptions = a.titleProviderOptions(attempt.model)
+		resp, err = agent.Stream(ctx, call)
 		if err == nil && resp.Response.FinishReason != fantasy.FinishReasonLength {
 			model = attempt.model
 			slog.Debug("Generated title with " + attempt.name + " model")
@@ -1932,15 +1965,8 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 
 	title = strings.TrimSpace(title)
 	if title == "" {
-		// LLM returned empty content. Use the prompt itself as a
-		// fallback title, truncated to 50 chars, before resorting to
-		// the generic default.
-		fallback := strings.ReplaceAll(userPrompt, "\n", " ")
-		fallback = strings.TrimSpace(fallback)
-		if len(fallback) > 50 {
-			fallback = ansi.Truncate(fallback, 50, "…")
-		}
-		title = cmp.Or(fallback, DefaultSessionName)
+		// The model returned empty content.
+		title = titleFromPrompt(userPrompt)
 	}
 
 	// Calculate usage and cost.

@@ -3,6 +3,7 @@ package agent
 import (
 	"testing"
 
+	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/openaicompat"
 
@@ -57,4 +58,27 @@ func TestApplyThinking(t *testing.T) {
 			t.Fatalf("options were added: %v", opts)
 		}
 	})
+}
+
+// disableThinking is for requests whose answer is a few words. It must
+// switch reasoning off whatever the user's /think setting, or a thinking
+// model spends its small budget reasoning and is cut off before answering.
+func TestDisableThinking(t *testing.T) {
+	t.Parallel()
+
+	for _, typ := range []string{"llamacpp", openaicompat.Name} {
+		opts := fantasy.ProviderOptions{}
+		disableThinking(opts, config.ProviderConfig{ID: "p", Type: catwalk.Type(typ)})
+		kw, ok := thinkingKwargs(t, opts)
+		if !ok || kw["enable_thinking"] != false {
+			t.Fatalf("%s: kwargs = %v (present %v)", typ, kw, ok)
+		}
+	}
+
+	// Providers without the switch are left alone.
+	opts := fantasy.ProviderOptions{}
+	disableThinking(opts, config.ProviderConfig{ID: "a", Type: "anthropic"})
+	if len(opts) != 0 {
+		t.Fatalf("options were added for a provider without the switch: %v", opts)
+	}
 }
