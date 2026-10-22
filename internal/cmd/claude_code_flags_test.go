@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,6 +44,63 @@ func TestClaudeCodeFlagNames(t *testing.T) {
 
 	_, err := parse("--resume", "abc", "--continue")
 	require.Error(t, err, "--resume and --continue are exclusive, as --session and --continue are")
+}
+
+// Claude Code users run `claude -p --dangerously-skip-permissions "question"`
+// and `claude -p -r <session-id> "question"`; after the -p rewrite these
+// must parse on the run command.
+func TestRunAcceptsClaudeCodeFlags(t *testing.T) {
+	t.Parallel()
+
+	resetRunFlags := func() {
+		runCmd.Flags().VisitAll(func(f *pflag.Flag) {
+			switch f.Value.Type() {
+			case "bool":
+				_ = f.Value.Set("false")
+			default:
+				_ = f.Value.Set(f.DefValue)
+			}
+		})
+	}
+
+	parseRun := func(args ...string) (*cobra.Command, error) {
+		resetRunFlags()
+		runCmd.SetArgs(args)
+		return runCmd, runCmd.ParseFlags(args)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		args    []string
+		session string
+		yolo    bool
+	}{
+		{"plain", []string{"hi"}, "", false},
+		{"yolo", []string{"--yolo", "hi"}, "", true},
+		{"dangerously", []string{"--dangerously-skip-permissions", "hi"}, "", true},
+		{"resume", []string{"-r", "abc", "hi"}, "abc", false},
+		{"resume-long", []string{"--resume", "abc", "hi"}, "abc", false},
+		{"session", []string{"-s", "abc", "hi"}, "abc", false},
+		{"resume-and-yolo", []string{"-r", "abc", "--dangerously-skip-permissions", "hi"}, "abc", true},
+		{"existing-model", []string{"-m", "qwen", "hi"}, "", false},
+		{"existing-quiet", []string{"-q", "hi"}, "", false},
+		{"existing-verbose", []string{"-v", "hi"}, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd, err := parseRun(tc.args...)
+			require.NoError(t, err, tc.name)
+			require.Equal(t, tc.session, sessionFlag(cmd), tc.name)
+			require.Equal(t, tc.yolo, yoloFlag(cmd), tc.name)
+		})
+	}
+
+	// -r and --continue are mutually exclusive, as -s and --continue are.
+	{
+		resetRunFlags()
+		runCmd.SetArgs([]string{"-r", "abc", "-C", "hi"})
+		require.NoError(t, runCmd.ParseFlags([]string{"-r", "abc", "-C", "hi"}))
+		require.Error(t, runCmd.ValidateFlagGroups(), "-r and -C are exclusive")
+	}
 }
 
 // Claude Code's -p/--print, one question without the TUI, is crash run.

@@ -74,9 +74,11 @@ crash run --continue "Follow up on your last response"
 			largeModel, _      = cmd.Flags().GetString("model")
 			smallModel, _      = cmd.Flags().GetString("small-model")
 			reasoningEffort, _ = cmd.Flags().GetString("reasoning-effort")
-			sessionID, _       = cmd.Flags().GetString("session")
 			useLast, _         = cmd.Flags().GetBool("continue")
 		)
+
+		// sessionID is read from --session or --resume.
+		sessionID := sessionFlag(cmd)
 
 		// Cancel on SIGINT or SIGTERM.
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
@@ -188,8 +190,10 @@ func init() {
 	runCmd.Flags().String("small-model", "", "Small model to use. If not provided, uses the default small model for the provider")
 	runCmd.Flags().String("reasoning-effort", "", "Reasoning effort for the model (e.g. low, medium, high). Levels depend on the model; unsupported values are rejected with the accepted values listed")
 	runCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
+	runCmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it")
 	runCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
-	runCmd.MarkFlagsMutuallyExclusive("session", "continue")
+	runCmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
+	addYoloFlags(runCmd)
 }
 
 // runNonInteractive executes the agent via the server and streams output
