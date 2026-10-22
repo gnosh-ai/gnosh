@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/binary"
 	"fmt"
+	"github.com/charmbracelet/crush/internal/agent"
 	"hash/fnv"
 	"strings"
 
@@ -582,7 +583,9 @@ func (a *AssistantMessageItem) cachedContent(width int) string {
 	if a.contentSec.hit(width, srcHash, extra) {
 		return a.contentSec.out
 	}
-	text := a.message.Content().Text
+	// A Stop-hook checkpoint reply may end with the stop sentinel; it is
+	// for the harness, not the reader.
+	text := agent.StripStopMarker(a.message.Content().Text)
 	// In plan mode the agent ends its final plan with a sentinel marker.
 	// Hide the end plan marker and wrap the message in a background "card" so
 	// the plan stands out from regular assistant replies. Mirrors the

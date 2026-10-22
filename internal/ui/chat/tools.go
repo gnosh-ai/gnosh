@@ -1002,7 +1002,7 @@ func renderHookLine(sty *styles.Styles, hi hooks.HookInfo, rawName, detail strin
 
 	labelStyle := sty.Tool.HookLabel
 	arrowStyle := sty.Tool.HookArrow
-	if hi.Decision == "deny" {
+	if hi.Decision == "deny" || hi.Error != "" {
 		labelStyle = sty.Tool.HookDeniedLabel
 		arrowStyle = sty.Tool.HookDeniedLabel
 	}
@@ -1023,8 +1023,15 @@ func hookDetail(sty *styles.Styles, hi hooks.HookInfo) string {
 	const (
 		okMessage      = "OK"
 		denialMessage  = "Denied"
+		failedMessage  = "Failed"
 		rewroteMessage = "Rewrote Output"
 	)
+	// A hook that never reached a verdict is not "OK": it checked
+	// nothing. It is still non-blocking, so the call went ahead, but the
+	// line has to say the hook did not run rather than vouch for it.
+	if hi.Error != "" {
+		return sty.Tool.HookDenied.Render(failedMessage) + " " + sty.Tool.HookDeniedReason.Render(hi.Error)
+	}
 	switch hi.Decision {
 	case "deny":
 		if hi.Reason != "" {

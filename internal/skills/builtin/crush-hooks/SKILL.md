@@ -16,8 +16,17 @@ need to author correct hooks.
 
 ## Supported Events
 
-Only `PreToolUse` is currently supported. Event names are case-insensitive and
-accept snake_case (`PreToolUse`, `pretooluse`, `pre_tool_use` all work).
+`PreToolUse` fires before every tool call. `Stop` fires when the agent is about
+to finish its turn.
+
+Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
+`PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Crush refuses
+to start on an event name it doesn't fire, rather than accepting a hook that
+would look configured and silently never run.
+
+A `matcher` only makes sense for `PreToolUse`. There is no tool in play when a
+turn ends, so a `matcher` on a `Stop` hook is a config error too, and every
+configured `Stop` hook runs.
 
 ## Configuration
 
@@ -51,13 +60,14 @@ the input/output contract is identical regardless of language.
 
 | Variable                     | Description                              |
 | ---------------------------- | ---------------------------------------- |
-| `CRUSH_EVENT`                | Event name (e.g. `PreToolUse`)           |
-| `CRUSH_TOOL_NAME`            | Tool being called (e.g. `bash`)          |
+| `CRUSH_EVENT`                | Event name (`PreToolUse` or `Stop`)      |
+| `CRUSH_TOOL_NAME`            | Tool being called; empty on `Stop`       |
 | `CRUSH_SESSION_ID`           | Current session ID                       |
 | `CRUSH_CWD`                  | Working directory                        |
 | `CRUSH_PROJECT_DIR`          | Project root directory                   |
 | `CRUSH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command      |
 | `CRUSH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
+| `CRUSH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` if an earlier `Stop` hook is why the turn is still running |
 
 **JSON on stdin:**
 
@@ -183,15 +193,53 @@ If the original call was `{"command": "npm test", "timeout": 60000}`, the
 tool runs with `{"command": "<rewritten>", "timeout": 60000}` — `timeout` is
 preserved.
 
+### Refuse to let the turn end (Stop)
+
+A `Stop` hook fires when the agent is about to finish. Exit `2` means "you are
+not finished": the turn stays alive and your stderr becomes the reason the model
+is told to keep working. Exit `49` means end the turn now, and wins over any
+other hook's block.
+
+```jsonc
+{ "hooks": { "Stop": [{ "command": "./hooks/tests-must-pass.sh" }] } }
+```
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+if ! go test ./... >/tmp/stop-hook.log 2>&1; then
+  echo "Tests are still failing:" >&2
+  tail -20 /tmp/stop-hook.log >&2
+  exit 2
+fi
+```
+
+There is no cap on how many times a Stop hook may block: if the work is not
+done, it is not done. Every 10th consecutive block, the agent is instead asked
+to judge whether there is a genuine reason to stop (impossible as asked,
+blocked on the user, a check that cannot pass here, no progress). If so it
+explains why and ends its reply with `<!-- CRUSH_STOP -->` on its own line;
+Crush ends the turn and warns the user. Otherwise it keeps working. A hook
+that wants to object only once can check `CRUSH_STOP_HOOK_ACTIVE` and exit 0.
+
+A Claude Code-style Stop hook that prints `{"decision": "block", "reason": "…"}`
+works the same as exit `2`. Decision values are matched exactly: `allow`,
+`deny`, `approve`, `block`, or `ask` (via `hookSpecificOutput`). Any other
+value is reported as a failed hook, not silently ignored.
+
 ## Authoring Checklist
 
 1. Add `#!/usr/bin/env bash` and `set -euo pipefail` (for shell scripts).
 2. `chmod +x` the script.
-3. Add the entry under `hooks.PreToolUse` in `crush.json` with the right matcher.
+3. Add the entry under `hooks.PreToolUse` (with the right matcher) or
+   `hooks.Stop` (no matcher) in `crush.json`. Spell the event name exactly;
+   anything else is a startup error.
 4. Decide intent: inject context (omit `decision`), auto-approve (`"allow"`),
-   block (`exit 2`), or halt (`exit 49`).
-5. If rewriting input, remember `updated_input` is a shallow merge — only
-   include the keys you want to change.
+   block (`exit 2`), or halt (`exit 49`). On `Stop`, `exit 2` means "keep
+   working" and `exit 49` means "end now".
+5. On `Stop`, check `CRUSH_STOP_HOOK_ACTIVE` so a hook that blocks can't loop.
+6. If rewriting input, remember `updated_input` is a shallow merge — only
+   include the keys you want to change (`PreToolUse` only).
 
 ## Debugging
 

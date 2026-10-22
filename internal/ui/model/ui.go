@@ -5997,6 +5997,10 @@ func (m *UI) handleAgentNotification(n notify.Notification) tea.Cmd {
 		return m.handleAWSSSOAuth(n.AWSSOCommand, n.AWSSOURL)
 	case notify.TypeAWSSSOAuthResult:
 		return m.handleAWSSSOAuthResult(n.Message)
+	case notify.TypeHookWarning:
+		// Informational only. Returning here, before the busy/queue
+		// refresh below, keeps it from being read as a turn ending.
+		return util.ReportWarn(n.Message)
 	default:
 		return nil
 	}

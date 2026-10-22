@@ -17,8 +17,10 @@ forward.
 - Hooks are Claude Code-compatible
 - Crush ships with a builtin `crush-hook` skill write, edit, and configure
   hooks; just tell Crush how to configure Crush
-- Crush currently supports just one hook, `PreToolUse`, with plans to support
-  the full gamut; please let us know which hooks you'd like to see next
+- Crush supports two hooks: `PreToolUse`, which fires before a tool call, and
+  `Stop`, which fires when the agent is about to finish its turn and can refuse
+  to let it end; plans are to support the full gamut, so please let us know
+  which hooks you'd like to see next
 - Hooks run in parallel for speed, but their results compose in config order
   for determinism
 
@@ -176,7 +178,7 @@ wins when rewriting input, but first deny wins when blocking.
 
 ## Events
 
-Here are the events you can hook into (spoiler: there's currently just one):
+Here are the events you can hook into:
 
 ### PreToolUse
 
@@ -187,15 +189,72 @@ stuff, and so on.
 **Matched against**: the tool name (e.g. `bash`, `edit`, `write`,
 `mcp_github_create_pull_request`).
 
-> [!NOTE]
-> Event names are case insensitive and snake-caseable, so `PreToolUse`,
-> `pretooluse`, `PRETOOLUSE`, `pre_tool_use`, and `PRE_TOOL_USE` all work.
+> [!IMPORTANT]
+> Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
+> `PRE_TOOL_USE` are all errors, not spellings of `PreToolUse`. Crush refuses to
+> start on an event name it doesn't fire, rather than loading a hook that would
+> look configured and silently never run.
 
 **Scope**: `PreToolUse` only fires on the **top-level agent's** tool calls.
 Sub-agents (the `agent` task tool, `agentic_fetch`, etc.) run without hook
 interception so a single delegated turn doesn't trigger your hook N times. The
 outer sub-agent tool call itself _is_ hooked, so policy like "never let the
 agent spawn sub-agents" still works.
+
+### Stop
+
+This hook fires when the agent is about to finish its turn. Use it to refuse the
+stop: run the test suite, check the linter, or look at the answer the agent is
+about to end on, and send it back to work if the job isn't done.
+
+**Matched against**: nothing. There is no tool in play at the end of a turn, so
+a `matcher` on a `Stop` hook is a config error rather than a setting that
+matches nothing. Every configured `Stop` hook runs.
+
+**Blocking**: exit code `2` means "you are not finished" — the turn stays alive
+and your stderr is handed to the model as the reason to keep working. Exit code
+`49` means the opposite: end the turn now, even if another `Stop` hook blocked
+it.
+
+```jsonc
+{
+  "hooks": {
+    "Stop": [
+      { "command": "./hooks/tests-must-pass.sh" }
+    ]
+  }
+}
+```
+
+```bash
+#!/usr/bin/env bash
+# hooks/tests-must-pass.sh — don't let the turn end on a red test suite.
+if ! go test ./... >/tmp/stop-hook.log 2>&1; then
+  echo "Tests are still failing:" >&2
+  tail -20 /tmp/stop-hook.log >&2
+  exit 2
+fi
+```
+
+**No cap — the agent reflects instead**: there is no limit on how many times a
+`Stop` hook may say "not done"; some tasks genuinely take many attempts, and
+giving up on a counter would defeat the point of the hook. Instead, at every
+10th consecutive block the agent is asked to step back and judge honestly
+whether there is a genuine reason to stop — the task cannot be done as asked,
+it is blocked on something only you can provide or decide, the hook's check
+cannot pass in this environment, or it is repeating itself without progress. If
+it finds one, it explains why and the turn ends, and Crush shows a warning
+quoting its reason and the hook's last objection. Otherwise it keeps working.
+You can always cancel the turn yourself.
+
+A hook that wants to object only once can still stand down on its own:
+`stop_hook_active` in the payload (and `CRUSH_STOP_HOOK_ACTIVE` in the
+environment) is set when the turn is only still running because an earlier
+`Stop` hook blocked it.
+
+**Scope**: like `PreToolUse`, `Stop` fires only for the **top-level agent**, and
+not for sub-agents. It is also skipped when the turn is being continued for
+auto-summarization, since that turn isn't ending either.
 
 Hooks are keyed by event name. Only `command` is required, and you can omit
 `matcher` to match all tools.
@@ -238,12 +297,13 @@ The available environment variables are:
 | `AGENT`                      | Always `crush`.                                |
 | `AI_AGENT`                   | Always `crush`.                                |
 | `CRUSH_EVENT`                | The hook event name (e.g. `PreToolUse`).       |
-| `CRUSH_TOOL_NAME`            | The tool being called (e.g. `bash`).           |
+| `CRUSH_TOOL_NAME`            | The tool being called (e.g. `bash`). Empty on `Stop`. |
 | `CRUSH_SESSION_ID`           | Current session ID.                            |
 | `CRUSH_CWD`                  | Working directory.                             |
 | `CRUSH_PROJECT_DIR`          | Project root directory.                        |
 | `CRUSH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command being run. |
 | `CRUSH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
+| `CRUSH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` when the turn is only still running because an earlier `Stop` hook blocked it, else `0`. |
 
 The `CRUSH`, `AGENT`, and `AI_AGENT` markers are also set by the `bash`
 tool, so a script can detect "am I running under Crush?" the same way in
@@ -324,7 +384,7 @@ the input, or still deny/halt with a reason:
 ```jsonc
 {
   "version": 1, // Output envelope version. Optional; defaults to 1.
-  "decision": "allow", // "allow", "deny", or null. Omit for no opinion.
+  "decision": "allow", // "allow" or "deny" ("approve" / "block" also accepted, as in Claude Code). Omit for no opinion.
   "halt": false, // If true, halts the turn entirely.
   "reason": "LGTM", // Shown when denying or halting.
   "context": "Scrubbed secrets", // String or array of strings. Appended to what the model sees.
@@ -579,6 +639,17 @@ stdin payload, output envelope, and exit codes line up so most Claude Code
 hooks run under Crush unchanged. This document covers the Crush-specific API
 only — anything not documented here isn't guaranteed to work.
 
+Both decision vocabularies are understood. Crush's own top-level `decision`
+is `"allow"` or `"deny"`; Claude Code's is `"approve"` or `"block"`, which is
+how a Claude Code `Stop` hook keeps the agent working. Claude Code's
+`hookSpecificOutput.permissionDecision` of `"allow"`, `"deny"` or `"ask"` is
+read too, where `"ask"` falls through to the normal permission prompt.
+
+Decision values are matched exactly. Anything else — `"Deny"`, `"denied"`,
+`"reject"` — is reported as a failed hook (shown as **Failed** on the tool
+line, or as a warning for a `Stop` hook) rather than quietly treated as no
+opinion. Like any failed hook it does not block, but you will see it.
+
 One intentional divergence: Crush treats `updated_input` as a shallow-merge
 patch against the original `tool_input` rather than a full replacement. Keys
 you omit are preserved. See [Output](#output) for details.
@@ -606,6 +677,8 @@ Each entry under a `hooks.<EventName>` array:
   "name": "no-rm-rf",
 
   // string. Optional. Regex tested against the tool name. Omit to match all.
+  // PreToolUse only: a matcher on a Stop hook is a config error, because
+  // there is no tool to match when a turn ends.
   "matcher": "^bash$",
 
   // string. Required. Shell command to run.
@@ -648,6 +721,25 @@ Extends the common payload:
   "tool_input": {
     "command": "npm test",
   },
+}
+```
+
+### Stdin payload — Stop
+
+Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
+
+```jsonc
+{
+  // ...common fields...
+
+  // boolean. True when the turn is only still running because an earlier
+  // Stop hook blocked it. Return success while this is set if your hook
+  // should object once and then stand down.
+  "stop_hook_active": false,
+
+  // string. The assistant message the turn is about to end on, so the hook
+  // can judge the answer without reading the session back out of the database.
+  "last_assistant_message": "I've fixed the parser.",
 }
 ```
 

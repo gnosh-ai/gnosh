@@ -159,6 +159,21 @@ type SessionAgentCall struct {
 	// paths treat as covered by any present mark, preserving the
 	// pre-sequence behavior.
 	acceptSeq uint64
+	// stopHookDepth counts how many times in a row a Stop hook has
+	// refused to let this turn end. It rides along on the queued
+	// continuation so the cap in stopHookContinuation is enforced
+	// across the recursive run path; a prompt the user actually typed
+	// always starts at 0.
+	stopHookDepth int
+	// stopHookReason is the objection the last Stop hook raised, carried
+	// alongside stopHookDepth so that if the agent later judges it should
+	// stop anyway, the user can be told what was still unresolved.
+	stopHookReason string
+	// stopHookReflecting marks a continuation sent at a reflection
+	// checkpoint, where the agent was asked whether there is a genuine
+	// reason to stop. Only on such a turn does StopMarker in its reply
+	// end the turn; elsewhere the Stop hook stays in charge.
+	stopHookReflecting bool
 	// OnAuthRefresh, when non-nil, is called by fantasy when a stream
 	// fails with an authentication error (HTTP 401). The callback should
 	// refresh credentials and return nil on success, in which case
@@ -427,8 +442,37 @@ func (a *sessionAgent) sessionMu(sessionID string) *sync.Mutex {
 	return mu
 }
 
-// enqueueCall appends call to the session's message queue. The
-// OnComplete hook is stripped: the caller that supplied it (typically
+// queueContinuation appends call to the session's message queue under
+// the per-session dispatch mutex.
+//
+// The mutex is what makes the append safe: csync.Map synchronizes each
+// Get and Set, but not a read-modify-write across the two, and
+// enqueueCall does the same read-modify-write while holding this mutex.
+// A continuation queued at the end of a turn races exactly that path —
+// the session still looks busy at this point, so a prompt arriving now
+// goes to enqueueCall — and an interleaving would drop one of the two
+// appends, losing a prompt the user had already sent.
+func (a *sessionAgent) queueContinuation(call SessionAgentCall) {
+	mu := a.sessionMu(call.SessionID)
+	mu.Lock()
+	defer mu.Unlock()
+	existing, ok := a.messageQueue.Get(call.SessionID)
+	if !ok {
+		existing = []SessionAgentCall{}
+	}
+	a.messageQueue.Set(call.SessionID, append(existing, call))
+}
+
+// enqueueCall appends call to the session's message queue.
+//
+// The caller must hold the session's dispatch mutex (see sessionMu).
+// csync.Map synchronizes each Get and Set but not the read-modify-write
+// across the two, so two unsynchronized appends drop one of the calls —
+// a prompt the user already sent, lost without a trace. Run holds the
+// mutex across the busy-session branch that calls this; a caller that
+// does not already hold it wants queueContinuation instead.
+//
+// The OnComplete hook is stripped: the caller that supplied it (typically
 // coordinator.Run) has its own retry/coalesce scope that ends when it
 // returns, so by the time the queue drains nobody is left to consume the
 // buffered terminal event. The recursive Run falls back to the default
@@ -1261,23 +1305,32 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		}
 		// If the agent wasn't done...
 		if len(currentAssistant.ToolCalls()) > 0 {
-			existing, ok := a.messageQueue.Get(call.SessionID)
-			if !ok {
-				existing = []SessionAgentCall{}
-			}
 			call.Prompt = fmt.Sprintf("The previous session was interrupted because it got too long, the initial user request was: `%s`", call.Prompt)
-			existing = append(existing, call)
-			a.messageQueue.Set(call.SessionID, existing)
+			a.queueContinuation(call)
+		}
+	}
+
+	// Stop hooks get the last word on whether the turn is really over.
+	// One that denies re-queues this same call (same RunID) with the
+	// hook's reason as the prompt, so the queue handoff below puts the
+	// agent back to work instead of ending the turn. Skipped when
+	// summarization already queued a continuation of its own.
+	stopHookContinued := false
+	if !shouldSummarize && currentAssistant != nil {
+		if next, blocked := a.stopHookContinuation(ctx, call, currentAssistant.Content().String()); blocked {
+			stopHookContinued = true
+			a.queueContinuation(next)
 		}
 	}
 
 	// Route the finished turn's response back to the channel it came
 	// from, unless the turn was cut short for summarization with work
 	// still pending — the queued continuation carries the channel and
-	// replies when it actually finishes. Runs before the busy state is
-	// released so a follow-up push queued behind this turn cannot
-	// overtake its reply.
-	if currentAssistant != nil && (!shouldSummarize || len(currentAssistant.ToolCalls()) == 0) {
+	// replies when it actually finishes. A turn a Stop hook refused to
+	// end is likewise not finished, so its continuation replies instead.
+	// Runs before the busy state is released so a follow-up push queued
+	// behind this turn cannot overtake its reply.
+	if currentAssistant != nil && !stopHookContinued && (!shouldSummarize || len(currentAssistant.ToolCalls()) == 0) {
 		a.sendChannelReply(ctx, call, currentAssistant.Content().String(), completedToolCalls)
 	}
 
@@ -1290,7 +1343,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 
 	// Send notification that agent has finished its turn (skip for
 	// nested/non-interactive sessions).
-	if !call.NonInteractive && a.notify != nil {
+	if !call.NonInteractive && !stopHookContinued && a.notify != nil {
 		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 			SessionID:    call.SessionID,
 			SessionTitle: currentSession.Title,
