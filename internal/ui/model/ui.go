@@ -3829,7 +3829,7 @@ func (m *UI) View() tea.View {
 	}
 	v.MouseMode = mouseMode(m.mouseEnabled, m.activeInline != nil || m.dialog.HandlesHover())
 	v.ReportFocus = m.caps.ReportFocusEvents
-	v.WindowTitle = "crush " + home.Short(m.com.Workspace.WorkingDir())
+	v.WindowTitle = version.Command + " " + home.Short(m.com.Workspace.WorkingDir())
 
 	key, cacheable := m.currentFrameKey()
 	if cacheable {
