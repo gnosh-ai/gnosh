@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -80,7 +81,7 @@ func TestWrite_TerseFailure(t *testing.T) {
 	require.Contains(t, page, "did not")
 	// With no subject the sentence must not dangle on a preposition.
 	require.NotContains(t, page, "access to <span")
-	require.Contains(t, page, "Crush was not granted access.")
+	require.Contains(t, page, version.Name+" was not granted access.")
 }
 
 // TestWrite_EscapesUntrustedText proves provider-supplied strings cannot

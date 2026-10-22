@@ -19,6 +19,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/charmbracelet/crush/internal/version"
 )
 
 //go:embed page.html page.css page.js heartbit.svg heartbit-grumpy.svg charm.svg
@@ -124,7 +126,7 @@ func Write(w io.Writer, r Result) error {
 	data.Favicon = template.URL("data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString(art))
 
 	if r.ContinueURL != "" {
-		data.Title = "Authorize — Crush"
+		data.Title = "Authorize — " + version.Name
 		data.Kind = "continue"
 		data.Heading = "One more click"
 		data.Detail = "Continue to the authorization page for"
@@ -133,23 +135,23 @@ func Write(w io.Writer, r Result) error {
 		}
 		data.Status = "The authorization page will close itself when you’re done."
 	} else if r.Failed() {
-		data.Title = "Authorization failed — Crush"
+		data.Title = "Authorization failed — " + version.Name
 		data.Kind = "failed"
 		data.Heading = "Authorization failed"
-		data.Detail = "Crush was not granted access to"
+		data.Detail = version.Name + " was not granted access to"
 		if r.Subject == "" {
-			data.Detail = "Crush was not granted access."
+			data.Detail = version.Name + " was not granted access."
 		}
 		// A failed page keeps itself open: the reader needs the reason,
 		// and closing the tab out from under them would take it away.
-		data.Status = "Close this tab and try again from Crush."
+		data.Status = "Close this tab and try again from " + version.Name + "."
 	} else {
-		data.Title = "Authorized — Crush"
+		data.Title = "Authorized — " + version.Name
 		data.Kind = "ok"
 		data.Heading = "You’re all set"
-		data.Detail = "Crush is now connected to"
+		data.Detail = version.Name + " is now connected to"
 		if r.Subject == "" {
-			data.Detail = "Crush is now connected."
+			data.Detail = version.Name + " is now connected."
 		}
 		// Replaced by the countdown as soon as the script runs, so this
 		// text is what a reader without JavaScript is left with.
