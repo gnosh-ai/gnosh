@@ -273,6 +273,7 @@ func TestProcessMultiEditExistingFilePartialFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, resp.IsError)
 	require.Contains(t, resp.Content, "Applied 1 of 2 edits")
+	require.Contains(t, resp.Content, "- edit 2: old_string not found", "the model is told why the edit failed")
 
 	content, err := os.ReadFile(filePath)
 	require.NoError(t, err)
@@ -313,6 +314,7 @@ func TestProcessMultiEditWithCreationPartialFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, resp.IsError)
 	require.Contains(t, resp.Content, "File created with 2 of 3 edits")
+	require.Contains(t, resp.Content, "- edit 3: old_string not found")
 
 	content, err := os.ReadFile(filePath)
 	require.NoError(t, err)
@@ -325,4 +327,37 @@ func TestProcessMultiEditWithCreationPartialFailure(t *testing.T) {
 	require.Equal(t, 3, meta.EditsFailed[0].Index)
 	require.Equal(t, "", meta.OldContent)
 	require.Equal(t, "one\nTWO\nthree\n", meta.NewContent)
+}
+
+// When every edit fails, the reply says why each one did. It used to say
+// only "no changes made - all 1 edit(s) failed", and the self-improvement
+// agent had to read the file again to guess.
+func TestProcessMultiEditAllFailedSaysWhy(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "test.txt")
+	require.NoError(t, os.WriteFile(filePath, []byte("one\ntwo\ntwo\n"), 0o644))
+
+	edit := editContext{
+		ctx:         context.WithValue(t.Context(), SessionIDContextKey, "session"),
+		permissions: &mockPermissionService{},
+		files:       &mockHistoryService{},
+		filetracker: &mockEditFileTracker{lastRead: time.Now().Add(time.Second)},
+		workingDir:  dir,
+	}
+	params := MultiEditParams{
+		FilePath: filePath,
+		Edits: []MultiEditOperation{
+			{OldString: "missing", NewString: "MISSING"},
+			{OldString: "two", NewString: "TWO"},
+		},
+	}
+
+	resp, err := processMultiEditExistingFile(edit, params, fantasy.ToolCall{ID: "call"})
+	require.NoError(t, err)
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "all 2 edit(s) failed:")
+	require.Contains(t, resp.Content, "- edit 1: old_string not found")
+	require.Contains(t, resp.Content, "- edit 2: old_string appears multiple times")
 }

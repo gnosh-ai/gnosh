@@ -123,6 +123,17 @@ func validateEdits(edits []MultiEditOperation) error {
 	return nil
 }
 
+// failedEditsNote says why each failed edit failed, one line each, for the
+// model: the count alone left it to read the file again and guess, and
+// the reasons were in the metadata, which it never sees.
+func failedEditsNote(failed []FailedEdit) string {
+	var b strings.Builder
+	for _, f := range failed {
+		fmt.Fprintf(&b, "\n- edit %d: %s", f.Index, f.Error)
+	}
+	return b.String()
+}
+
 // applyEditsToContent applies edits sequentially, collecting the ones that
 // failed. It also reports whether any edit only matched after whitespace
 // normalization.
@@ -233,7 +244,7 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 
 	var message string
 	if len(failedEdits) > 0 {
-		message = fmt.Sprintf("File created with %d of %d edits: %s (%d edit(s) failed)", editsApplied, len(params.Edits), params.FilePath, len(failedEdits))
+		message = fmt.Sprintf("File created with %d of %d edits: %s (%d edit(s) failed):", editsApplied, len(params.Edits), params.FilePath, len(failedEdits)) + failedEditsNote(failedEdits)
 	} else {
 		message = fmt.Sprintf("File created with %d edits: %s", len(params.Edits), params.FilePath)
 	}
@@ -268,7 +279,7 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 		// If we have failed edits, report them
 		if len(failedEdits) > 0 {
 			return fantasy.WithResponseMetadata(
-				fantasy.NewTextErrorResponse(fmt.Sprintf("no changes made - all %d edit(s) failed", len(failedEdits))),
+				fantasy.NewTextErrorResponse(fmt.Sprintf("no changes made - all %d edit(s) failed:", len(failedEdits))+failedEditsNote(failedEdits)),
 				MultiEditResponseMetadata{
 					EditsApplied: 0,
 					EditsFailed:  failedEdits,
@@ -328,7 +339,7 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 
 	var message string
 	if len(failedEdits) > 0 {
-		message = fmt.Sprintf("Applied %d of %d edits to file: %s (%d edit(s) failed)", editsApplied, len(params.Edits), params.FilePath, len(failedEdits))
+		message = fmt.Sprintf("Applied %d of %d edits to file: %s (%d edit(s) failed):", editsApplied, len(params.Edits), params.FilePath, len(failedEdits)) + failedEditsNote(failedEdits)
 	} else {
 		message = fmt.Sprintf("Applied %d edits to file: %s", len(params.Edits), params.FilePath)
 	}
