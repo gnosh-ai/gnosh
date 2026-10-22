@@ -1,202 +1,230 @@
 # Crash
 
-Crash is Jae Kwon's fork of Charm's [Crush](https://github.com/charmbracelet/crush), renamed. Build it from source
-(`go build -o crash .`); the package managers under [Installation](#installation) install upstream Crush.
+**A security-first coding agent for your terminal, built for gno.land.**
 
-<p align="center">
-    <a href="https://stuff.charm.sh/crush/charm-crush.png"><img width="450" alt="Charm Crush Logo" src="https://github.com/user-attachments/assets/cf8ca3ce-8b02-43f0-9d0f-5a331488da4b" /></a><br />
-    <a href="https://github.com/charmbracelet/crush/releases"><img src="https://img.shields.io/github/release/charmbracelet/crush" alt="Latest Release"></a>
-    <a href="https://github.com/charmbracelet/crush/actions"><img src="https://github.com/charmbracelet/crush/actions/workflows/build.yml/badge.svg" alt="Build Status"></a>
-</p>
+Crash is a fork of Charm's [Crush](https://github.com/charmbracelet/crush):
+the same terminal UI, sessions, LSP and MCP support, and any model you like,
+from a hosted API to one running on your own machine. On top of that it keeps
+your keys and your work to itself, knows Gno and gno.land natively, speaks
+Claude Code's flags and hooks, and fixes a long list of things that broke,
+hung or failed without saying so.
 
-<p align="center">Your new coding bestie, now available in your favourite terminal.<br />Your tools, your code, and your workflows, wired into your LLM of choice.</p>
-<p align="center">终端里的编程新搭档，<br />无缝接入你的工具、代码与工作流，全面兼容主流 LLM 模型。</p>
+- [Security first](#security-first)
+- [Built for gno.land](#built-for-gnoland)
+- [Coming from Claude Code](#coming-from-claude-code)
+- [What else changed from Crush](#what-else-changed-from-crush)
+- [Installation](#installation)
 
-<p align="center"><img width="800" alt="Crush Demo" src="https://github.com/user-attachments/assets/58280caf-851b-470a-b6f7-d5c4ea8a1968" /></p>
+## Security first
 
-## Features
+### Nothing phones home
 
-- **Multi-Model:** choose from a wide range of LLMs or add your own via OpenAI- or Anthropic-compatible APIs
-- **Flexible:** switch LLMs mid-session while preserving context
-- **Session-Based:** maintain multiple work sessions and contexts per project
-- **LSP-Enhanced:** Crush uses LSPs for additional context, just like you do
-- **Extensible:** add capabilities via MCPs (`http`, `stdio`, and `sse`)
-- **Works Everywhere:** first-class support in every terminal on macOS, Linux, Windows (PowerShell and WSL), Android, FreeBSD, OpenBSD, and NetBSD
-- **Industrial Grade:** built on the Charm ecosystem, powering 25k+ applications, from leading open source projects to business-critical infrastructure
+Upstream Crush talks to Charm from its first start: usage metrics to its
+analytics service, the provider catalog from its servers, and a release check
+on GitHub. Crash does none of that unless you ask. With a fresh config, the
+only traffic is to the model provider you chose.
+
+| Upstream Crush does this unless switched off           | Crash does it only when turned on                                             |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Sends usage metrics to `data.charm.land`               | `option metrics true`, or `CRASH_DISABLE_METRICS=0`                           |
+| Fetches the provider catalog from Charm's servers      | `option provider-auto-update true`, or `CRASH_DISABLE_PROVIDER_AUTO_UPDATE=0` |
+| Checks GitHub for a newer release of upstream Crush    | `CRASH_DISABLE_UPDATE_CHECK=0`                                                |
+
+Without the fetch, Crash uses the provider catalog built into the binary, and
+`crash update-providers` refreshes it by hand. `DO_NOT_TRACK=1` keeps metrics
+off whatever else is set. [Metrics](#metrics) lists what they would contain.
+
+### Your keys never reach the model
+
+Signing a gno.land transaction needs a key's password. Crash's `gnokey` tool
+shows you the exact command, then asks for the password in a masked prompt.
+What you type goes straight to gnokey's standard input and is scrubbed from
+its output. The model never sees it, and it is not saved with the session.
+
+There is no way around the prompt. The shell tool refuses gnokey's
+password-on-stdin flag, and key management (`gnokey add`, `delete`, `export`
+and the rest) stays in your own terminal. A run with no one to type a
+password, such as `crash run`, has no signing tool at all, so the agent hands
+you the command to run yourself.
+
+### Untrusted text stays untrusted
+
+Web pages, command output and server replies can carry a model's own control
+tokens, such as `<|im_start|>` or llama.cpp's media marker, to rewrite the
+conversation from inside a tool result. Crash defuses them before the model
+reads them. Tool output is capped by its raw size, so a runaway command cannot
+flood the context.
+
+### Mistakes fail closed
+
+- A hook with a misspelt event name, or a `crashrc` option Crash does not
+  know, stops it at startup with the names it does know. Upstream ignored
+  such a hook, so a misspelt guard simply never ran.
+- A hook whose answer is malformed cannot approve a tool call by accident, and
+  a deny it gave still holds.
+
+### What still leaves your machine
+
+- Your prompts, and the files the agent reads, go to the model provider you
+  choose. Point Crash at a [local model](#local-models) and nothing leaves.
+- `fetch`, `download` and `agentic_fetch` reach the sites the agent asks for,
+  after asking you.
+- The `sourcegraph` tool sends the agent's code search to sourcegraph.com
+  without asking. Turn it off with `permissions deny sourcegraph`.
+- MCP servers you add reach whatever they reach.
+
+## Built for gno.land
+
+[gno.land](https://gno.land) is a smart-contract platform whose contracts,
+called realms, are written in Gno, an interpreted and deterministic Go. Crash
+knows it the way it knows Go.
+
+**The gno skill.** A built-in skill loads itself whenever a task touches
+`.gno` files, `gnomod.toml`, gnokey or gnodev. It teaches the agent how Gno
+differs from Go, how realms keep state, and how a realm tells who is calling
+it (`cur realm`, `cross(cur)`, `cur.Previous()`). It covers testing with
+`gno test` and filetests, running a local chain with `gnodev`, querying any
+chain for free, and deploying and calling realms. It carries the review
+checklist from gno's own guide for realm authors, and the chain ids and
+endpoints of every network, with mainnet called out because its coins are
+real.
+
+**Deploy and call with your key, never the model's.** The `gnokey` tool runs
+`maketx addpkg`, `call`, `send` and `run`, `sign` and `broadcast`, through the
+masked password prompt above. You see the full command before anything is
+signed. Read-only queries need no password.
+
+**Session accounts.** gno.land lets a master key authorize a separate signing
+key, a session, within limits the chain itself enforces:
+
+- **An expiry**, after which the key is dead.
+- **A spend limit per period**, counted across every coin that leaves the
+  master's account, gas and storage deposits included. Refunds never top it
+  back up.
+- **The messages it may send, and the realms it may call**, by path prefix.
+- **A floor no setting overrides**: a session can never create or revoke
+  sessions, and never add a package.
+
+Realms see the master as the caller, so nothing on the realm side changes.
+Crash's `gnokey` tool creates and revokes sessions (`gnokey maketx session
+create`, `revoke`, `revokeall`) through the same masked prompt. You can give a
+browser wallet, a device or a script bounded authority instead of your master
+key. A leaked session key costs at most what is left of its limit before it
+expires, and revoking it is one command. Sessions are live on mainnet and on
+the onyx testnet.
+
+**gnopls.** Install the [Gno language server](https://github.com/gnoverse/gnopls)
+and Crash starts it for `.gno` files on its own, as it does gopls for Go.
+
+**gno-mcp.** The gno team's MCP server, [gno-mcp](https://mcp.gno.dev), runs in
+Crash like any other:
+
+```bash
+# crashrc
+mcp add gnomcp --command gnomcp
+```
+
+It adds tools for reading realms, packages, accounts and history. Its own
+safety rules confine its writes to local and test chains, keep mainnet
+read-only, and never hand it your key: to act as you, it proposes a session
+that you sign with gnokey yourself.
+
+## Coming from Claude Code
+
+Claude Code's names work here too.
+
+| Claude Code                      | Crash                                              | What it does                                                |
+| -------------------------------- | -------------------------------------------------- | ----------------------------------------------------------- |
+| `claude -p "…"`                  | `crash run "…"`, or `crash -p "…"`                 | Answer one prompt without the TUI                           |
+| `-p --output-format json`        | `crash run --output-format json`                   | Print one JSON result at the end                            |
+| `claude -r <id>`                 | `crash -s <id>`, or `crash -r <id>`                | Continue a session by ID                                    |
+| `claude -c`                      | `crash -C`                                         | Continue the last session; `-c` sets the working directory |
+| `--dangerously-skip-permissions` | `--yolo`, or `--dangerously-skip-permissions`      | Skip every permission prompt                                |
+
+- **Hooks** take Claude Code's events and answers: `PreToolUse`,
+  `PostToolUse`, `PostToolUseFailure` and `Stop`, with `tool_use_id`,
+  `hook_event_name`, `continue: false` and `hookSpecificOutput`. A Stop hook
+  can keep the agent working until your tests pass. See
+  [docs/hooks](docs/hooks/README.md).
+- **Context and skills.** Crash reads `CLAUDE.md` and `CLAUDE.local.md`
+  alongside `CRASH.md` and `AGENTS.md`, and loads skills from `~/.claude/skills`
+  and a project's `.claude/skills`.
+- **`/loop`** keeps a session working on a task until it is done.
+
+## What else changed from Crush
+
+Over a hundred commits, most of them fixing things that broke, hung, lost work
+or failed without saying so. The ones you will notice:
+
+**It keeps going.**
+
+- It rides out a restart of the model server instead of losing the turn.
+- A slow local model gets longer for its first token, and a stream that stalls
+  after that is still caught.
+- Replies left half-written by a crash or a kill are finished, so the session
+  reopens cleanly.
+- The conversation is compacted even when the model's context size is
+  unknown.
+- `/loop` and Stop hooks keep work going until it is done. An agent caught
+  repeating itself is told so, instead of having its turn silently ended.
+- Waiting on a background job, and a grep, are both bounded, so neither can
+  hang a turn.
+
+**It tells you what happened.**
+
+- `crash run --verbose` shows every tool call, a sub-agent's included, and
+  marks the ones that failed. Bash results carry their exit code.
+- When an edit is refused because the file changed, when a multi-edit fails,
+  or when a grep for code with brackets finds nothing, the agent is told why
+  and what to do.
+- A language server that is not installed is reported once, and one that
+  fails to start is retried with a back-off.
+
+**It is yours to change.**
+
+- The system prompt and every tool description are files you can edit:
+  `crash prompt export`, `show`, `path` and `tools`.
+- `crash session web` serves a local page to read and edit a session's
+  messages.
+- `/think` and `/no_think` switch a model's thinking on or off, and it sticks.
+- Prompts typed while the agent works are queued, and <kbd>Up</kbd> edits
+  them in place.
+
+**Better tools.** `view` reads 2,000 lines by default and cuts an oversized
+section instead of failing. `grep` can ignore case, and can search for a
+pattern that starts with a dash. Bash points the agent to the file tools for
+file work, since they keep track of what it has read.
 
 ## Installation
 
-Use a package manager:
+Crash is built from source, with Go 1.27 or newer. From a checkout of this
+repository:
 
 ```bash
-# Homebrew
-brew install charmbracelet/tap/crush
-
-# NPM
-npm install -g @charmland/crush
-
-# Arch Linux (btw)
-yay -S crush-bin
-
-# Nix
-nix run github:numtide/nix-ai-tools#crush
-
-# FreeBSD
-pkg install crush
+go build -o crash .
+install -m 755 crash ~/.local/bin/crash   # or anywhere on your PATH
 ```
 
-Windows users:
+On Oracle Solaris, add `-tags sqlite3_dotlk` so the local database uses
+dot-file locking.
 
-```bash
-# Winget
-winget install charmbracelet.crush
+Everything named `crush` keeps working. An existing `~/.config/crush`, a
+project's `.crush/`, a `crushrc` or `crush.json`, `CRUSH.md` and `CRUSH_*`
+variables are all still read, and where a `crash` one exists it wins.
+`crash dirs` shows which directories are in use.
 
-# Scoop
-scoop bucket add charm https://github.com/charmbracelet/scoop-bucket.git
-scoop install crush
-```
+## Getting started
 
-<details>
-<summary><strong>Nix (NUR)</strong></summary>
-
-Crush is available via the official Charm [NUR](https://github.com/nix-community/NUR) in `nur.repos.charmbracelet.crush`, which is the most up-to-date way to get Crush in Nix.
-
-You can also try out Crush via the NUR with `nix-shell`:
-
-```bash
-# Add the NUR channel.
-nix-channel --add https://github.com/nix-community/NUR/archive/main.tar.gz nur
-nix-channel --update
-
-# Get Crush in a Nix shell.
-nix-shell -p '(import <nur> { pkgs = import <nixpkgs> {}; }).repos.charmbracelet.crush'
-```
-
-### NixOS & Home Manager Module Usage via NUR
-
-Crush provides NixOS and Home Manager modules via NUR.
-You can use these modules directly in your flake by importing them from NUR. Since it auto detects whether it's a home manager or nixos context you can use the import the exact same way :)
-
-```nix
-{
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nur.url = "github:nix-community/NUR";
-  };
-
-  outputs = { self, nixpkgs, nur, ... }: {
-    nixosConfigurations.your-hostname = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
-      modules = [
-        nur.modules.nixos.default
-        nur.repos.charmbracelet.modules.crush
-        {
-          programs.crush = {
-            enable = true;
-            settings = {
-              providers = {
-                openai = {
-                  id = "openai";
-                  name = "OpenAI";
-                  base_url = "https://api.openai.com/v1";
-                  type = "openai";
-                  api_key = "sk-fake123456789abcdef...";
-                  models = [
-                    {
-                      id = "gpt-4";
-                      name = "GPT-4";
-                    }
-                  ];
-                };
-              };
-              lsp = {
-                go = { command = "gopls"; enabled = true; };
-                nix = { command = "nil"; enabled = true; };
-              };
-              options = {
-                context_paths = [ "/etc/nixos/configuration.nix" ];
-                tui = { compact_mode = true; };
-                debug = false;
-              };
-            };
-          };
-        }
-      ];
-    };
-  };
-}
-```
-
-</details>
-
-<details>
-<summary><strong>Debian/Ubuntu</strong></summary>
-
-```bash
-sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
-echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
-sudo apt update && sudo apt install crush
-```
-
-</details>
-
-<details>
-<summary><strong>Fedora/RHEL</strong></summary>
-
-```bash
-echo '[charm]
-name=Charm
-baseurl=https://repo.charm.sh/yum/
-enabled=1
-gpgcheck=1
-gpgkey=https://repo.charm.sh/yum/gpg.key' | sudo tee /etc/yum.repos.d/charm.repo
-sudo yum install crush
-```
-
-</details>
-
-Or, download it:
-
-- [Packages][releases] are available in Debian and RPM formats
-- [Binaries][releases] are available for Linux, macOS, Windows, FreeBSD, OpenBSD, and NetBSD
-
-[releases]: https://github.com/charmbracelet/crush/releases
-
-Or just install it with Go:
-
-```
-go install github.com/charmbracelet/crush@latest
-```
-
-On illumos (OpenIndiana, OmniOS), the command above works as-is. Only native
-OS notifications are unavailable there; terminal-based notifications (OSC) and
-the terminal bell still work. On Oracle Solaris, add `-tags sqlite3_dotlk` so
-the local database uses dot-file locking:
-
-```
-go install -tags sqlite3_dotlk github.com/charmbracelet/crush@latest
-```
-
-> [!WARNING]
-> Productivity may increase when using Crush and you may find yourself nerd
-> sniped when first using the application. If the symptoms persist, join the
-> [Slack][slack] or [Discord][discord] and nerd snipe the rest of us.
-
-## Getting Started
-
-The quickest way to get started is to choose a [Hyper][hyper] model from model
-picker. Follow the steps to authenticate and you'll be good to go.
-
-[Hyper], from Charm, is the official Crash provider. It’s subscription-based,
-with a free tier, and optimized for Crash. It’s privacy focused, with zero data
-retention (ZDR) is and designed to comply with GDPR. [More on Hyper][hyper].
-
-<p><a href="https://hyper.charm.land"><img width="340" height="200" alt="Charm Hyper" src="https://github.com/user-attachments/assets/50875289-7992-454d-9f14-9f790413fb5e" /></a></p>
+Run `crash` in a project directory and press <kbd>ctrl+l</kbd> to pick a
+model. Crash works with Anthropic, OpenAI, Google, OpenRouter, Groq and many
+more hosted providers, with any OpenAI- or Anthropic-compatible endpoint, and
+with models on your own machine through llama.cpp, Ollama or LM Studio (see
+[Local Models](#local-models)). Charm's own provider, [Hyper][hyper], is there
+too.
 
 ## API Keys
 
-You can also use Crash with many other providers such as Anthopic, OpenAI,
+You can also use Crash with many other providers such as Anthropic, OpenAI,
 Gemini, OpenRouter and so on. Press <kbd>ctrl+l</kbd> to open the model picker,
 choose the provider of your choice, and paste your API key.
 
@@ -238,14 +266,6 @@ That said, you can also set environment variables for preferred providers:
 Also note that Crash can support nearly any provider, including
 [Local Models](#local-models). For more info see
 [Custom Providers](#custom-providers) below.
-
-### By the Way
-
-Is there a provider you’d like to see in Crash? Is there an existing model that needs an update?
-
-Crash’s default model listing is managed in [Catwalk](https://github.com/charmbracelet/catwalk), a community-supported, open source repository of Crash-compatible models, and you’re welcome to contribute.
-
-<a href="https://github.com/charmbracelet/catwalk"><img width="174" height="174" alt="Catwalk Badge" src="https://github.com/user-attachments/assets/95b49515-fe82-4409-b10d-5beb0873787d" /></a>
 
 ## Configuration
 
@@ -606,20 +626,6 @@ You can also skip all permission prompts completely by running Crash with the
 `--yolo` flag (or `--dangerously-skip-permissions`, as Claude Code calls it).
 Be very, very careful with this feature.
 
-### Coming from Claude Code
-
-Claude Code's names for the everyday flags work here too:
-
-| Claude Code                      | Crash                | What it does                               |
-| -------------------------------- | -------------------- | ------------------------------------------ |
-| `claude -p "…"`                  | `crash run "…"`      | Answer one prompt without the TUI          |
-| `claude -r <id>`                 | `crash -s <id>`      | Continue a session by ID                   |
-| `--dangerously-skip-permissions` | `--yolo`             | Skip every permission prompt               |
-
-So `crash -p "…"`, `crash -r <id>` and `crash --dangerously-skip-permissions`
-do what you expect. One exception: Claude Code's `-c` (continue the last
-session) is `-C` here, since `-c` sets the working directory.
-
 ### Disabling Skills
 
 You can prevent Crash from using certain skills entirely. Disabled skills are
@@ -714,24 +720,6 @@ disable-model-invocation: true
 ```
 
 Skills with `disable-model-invocation` won't appear in the model's available skills list but can still be invoked manually by users.
-
-### Gno and gno.land
-
-Crash knows [Gno](https://gno.land). A builtin `gno` skill teaches the agent
-the language, the toolchain (`gno test`, `gno lint`, `gnodev`), the networks,
-and how to deploy and call realms; it loads itself when a task touches `.gno`
-files, `gnomod.toml`, gnokey or gnodev.
-
-Transactions are signed with a key's password, which the model must never
-see. The `gnokey` tool runs gnokey for the agent: it shows you the exact
-command, then asks for the password in a masked prompt whose answer goes
-straight to gnokey's standard input. Queries need no password. Key
-management (`gnokey add` and friends) stays in your own terminal. A
-non-interactive run (`crash run`) has no one to type a password, so the tool
-is absent there and the agent prints the command for you instead.
-
-Install [gnopls](https://github.com/gnoverse/gnopls) and Crash starts it for
-`.gno` files on its own, like the other language servers it knows.
 
 ### Desktop notifications
 
@@ -981,42 +969,24 @@ option debug true
 option debug-lsp true
 ```
 
-## Provider Auto-Updates
+## The provider catalog
 
-By default, Crash automatically checks for the latest and greatest list of
-providers and models from [Catwalk](https://github.com/charmbracelet/catwalk),
-the open source Crash provider database. This means that when new providers and
-models are available, or when model metadata changes, Crash automatically
-updates your local configuration.
-
-### Custom provider catalog
-
-You can also override [Catwalk](https://github.com/charmbracelet/catwalk) default URL (for testing, using a fork).
-
-You can do so by setting `CATWALK_URL` enviromental variable. (e.g. `export CATWALK_URL=http://localhost:8000`)
-
-### Disabling automatic provider updates
-
-For those with restricted internet access, or those who prefer to work in
-air-gapped environments, this might not be want you want, and this feature can
-be disabled.
-
-To disable automatic provider updates in your `crashrc`:
+Crash's list of providers and models comes from
+[Catwalk](https://github.com/charmbracelet/catwalk), Charm's open source
+catalog, and a copy is built into the binary. Upstream Crush fetches a fresh
+one from Charm's servers on every start. Crash uses the built-in copy unless
+you ask for the fetch:
 
 ```bash
-option provider-auto-update false
+# crashrc
+option provider-auto-update true
 ```
 
-Or set the `CRASH_DISABLE_PROVIDER_AUTO_UPDATE` environment variable:
+Or set `CRASH_DISABLE_PROVIDER_AUTO_UPDATE=0`. To point the fetch at another
+catalog, for testing or a fork of Catwalk, set `CATWALK_URL`
+(`export CATWALK_URL=http://localhost:8000`).
 
-```bash
-export CRASH_DISABLE_PROVIDER_AUTO_UPDATE=1
-```
-
-### Manually updating providers
-
-Manually updating providers is possible with the `crash update-providers`
-command:
+To refresh the catalog once, by hand, use `crash update-providers`:
 
 ```bash
 # Update providers remotely from Catwalk.
@@ -1028,7 +998,7 @@ crash update-providers https://example.com/
 # Update providers from a local file.
 crash update-providers /path/to/local-providers.json
 
-# Reset providers to the embedded version, embedded at crash at build time.
+# Reset providers to the copy built into crash.
 crash update-providers embedded
 
 # For more info:
@@ -1037,23 +1007,20 @@ crash update-providers --help
 
 ## Metrics
 
-Crash records pseudonymous usage metrics (tied to a device-specific hash),
-which maintainers rely on to inform development and support priorities. The
-metrics include solely usage metadata; prompts and responses are NEVER
-collected.
+Crash sends no usage metrics unless you opt in, where upstream Crush sends
+them to Charm's analytics service by default. Turned on with
+`option metrics true`, or `CRASH_DISABLE_METRICS=0`, Crash sends Charm
+pseudonymous events keyed to a hash of your machine's ID:
 
-Details on exactly what’s collected are in the source code ([here](https://github.com/charmbracelet/crush/tree/main/internal/event)
-and [here](https://github.com/charmbracelet/crush/blob/main/internal/llm/agent/event.go)).
+- when it starts and exits, and how long it ran;
+- sessions created, switched and deleted;
+- for each prompt and reply, the session ID, provider, model, reasoning effort,
+  whether yolo mode is on, and the tokens used;
+- errors, your OS and CPU architecture, terminal, shell and Crash's version.
 
-You can opt out of metrics collection at any time by setting the environment
-variable by setting the following in your environment:
-
-```bash
-export CRASH_DISABLE_METRICS=1
-```
-
-Crash also respects the [`DO_NOT_TRACK`](https://donottrack.sh/) convention
-which can be enabled via `export DO_NOT_TRACK=1`.
+Prompts, replies and code are never sent. `DO_NOT_TRACK=1` keeps metrics off
+whatever else is set. The events are defined in
+[internal/event](internal/event) and [internal/agent/event.go](internal/agent/event.go).
 
 ## Q&A
 
@@ -1070,36 +1037,15 @@ Installing an extra tool might be needed on Unix-like environments.
 
 ## Contributing
 
-See the [contributing guide](https://github.com/charmbracelet/crush?tab=contributing-ov-file#contributing).
-
-## Whatcha think?
-
-We’d love to hear your thoughts on this project. Need help? We gotchu. You can find us on:
-
-- [Twitter](https://twitter.com/charmcli)
-- [Slack][slack]
-- [Discord][discord]
-- [The Fediverse](https://mastodon.social/@charmcli)
-- [Bluesky](https://bsky.app/profile/charm.land)
-
-[slack]: https://charm.land/slack
-[discord]: https://charm.land/discord
+See [CONTRIBUTING.md](./CONTRIBUTING.md). A contribution is licensed to this
+fork's maintainer and to Charm, so that work done here can go upstream to
+Crush without coming back to you. You keep every right to your own work.
 
 ## License
 
-[FSL-1.1-MIT](./LICENSE.md), the same licence as upstream Crush. Each
-version becomes MIT two years after Charm released it.
+[FSL-1.1-MIT](./LICENSE.md), the same licence as upstream Crush. Each version
+becomes MIT two years after Charm released it.
 
-Contributions are covered by the agreement in
-[CONTRIBUTING.md](./CONTRIBUTING.md), which licenses your work to this
-fork's maintainer and to Charmbracelet, so that it can go upstream later
-without coming back to you. You keep every right to your own work.
-
----
-
-Part of [Charm](https://charm.land).
-
-<a href="https://charm.land/"><img alt="The Charm logo" width="400" src="https://stuff.charm.sh/charm-banner-softy.jpg" /></a>
-
-<!--prettier-ignore-->
-Charm热爱开源 • Charm loves open source
+Crash is a fork of [Crush](https://github.com/charmbracelet/crush) by
+[Charm](https://charm.land). Crush and Charm are Charmbracelet's names; this
+fork is not affiliated with or endorsed by them.
