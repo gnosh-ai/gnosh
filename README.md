@@ -598,7 +598,22 @@ To disable tools from MCP servers, see the [MCP config section](#mcps).
 ### You only live once
 
 You can also skip all permission prompts completely by running Crush with the
-`--yolo` flag. Be very, very careful with this feature.
+`--yolo` flag (or `--dangerously-skip-permissions`, as Claude Code calls it).
+Be very, very careful with this feature.
+
+### Coming from Claude Code
+
+Claude Code's names for the everyday flags work here too:
+
+| Claude Code                      | Crash                | What it does                               |
+| -------------------------------- | -------------------- | ------------------------------------------ |
+| `claude -p "…"`                  | `crash run "…"`      | Answer one prompt without the TUI          |
+| `claude -r <id>`                 | `crash -s <id>`      | Continue a session by ID                   |
+| `--dangerously-skip-permissions` | `--yolo`             | Skip every permission prompt               |
+
+So `crash -p "…"`, `crash -r <id>` and `crash --dangerously-skip-permissions`
+do what you expect. One exception: Claude Code's `-c` (continue the last
+session) is `-C` here, since `-c` sets the working directory.
 
 ### Disabling Skills
 
