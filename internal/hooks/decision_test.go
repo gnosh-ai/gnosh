@@ -178,6 +178,33 @@ func TestParseStdoutUpdatedInputNonObjectIsAnError(t *testing.T) {
 	})
 }
 
+// A hookSpecificOutput field of the wrong type is reported by name, and
+// the rest of the output still counts. Decoding the object all at once
+// dropped it whole, so a deny next to a malformed additionalContext let
+// the call run, and the error blamed the object ("must be a JSON object,
+// got an object").
+func TestParseClaudeCodeOutputFieldTypes(t *testing.T) {
+	t.Parallel()
+
+	r := parseStdout(`{"hookSpecificOutput":{"permissionDecision":"deny","permissionDecisionReason":"no","additionalContext":{"x":1}}}`)
+	require.Equal(t, DecisionDeny, r.Decision, "the deny holds")
+	require.Equal(t, "no", r.Reason)
+	require.Equal(t, "hookSpecificOutput.additionalContext must be a string, got an object", r.Error)
+
+	r = parseStdout(`{"hookSpecificOutput":{"permissionDecision":"deny","permissionDecisionReason":5}}`)
+	require.Equal(t, DecisionDeny, r.Decision)
+	require.Equal(t, "hookSpecificOutput.permissionDecisionReason must be a string, got a number or boolean", r.Error)
+
+	r = parseStdout(`{"hookSpecificOutput":{"permissionDecision":true}}`)
+	require.Equal(t, DecisionNone, r.Decision)
+	require.Equal(t, "hookSpecificOutput.permissionDecision must be a string, got a number or boolean", r.Error)
+
+	r = parseStdout(`{"hookSpecificOutput":{"permissionDecision":"deny","additionalContext":["a","","b"]}}`)
+	require.Equal(t, DecisionDeny, r.Decision)
+	require.Equal(t, "a\nb", r.Context, "a list of context strings is taken, as for the native context field")
+	require.Empty(t, r.Error)
+}
+
 // A good rewrite must not be flagged, and both object and stringified
 // object forms stay valid.
 func TestParseStdoutUpdatedInputObjectHasNoError(t *testing.T) {

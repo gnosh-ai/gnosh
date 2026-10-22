@@ -267,43 +267,72 @@ func parseContext(raw json.RawMessage) string {
 
 // parseClaudeCodeOutput handles the Claude Code hook output format:
 // {"hookSpecificOutput": {"permissionDecision": "allow", ...}}
+//
+// Each field is read on its own, so that one of the wrong type is
+// reported by name without losing the rest: a deny must hold even when
+// the context beside it is malformed. Decoding them all at once dropped
+// the whole output, deny included, and blamed the object itself
+// ("must be a JSON object, got an object").
 func parseClaudeCodeOutput(data json.RawMessage) HookResult {
-	var hso struct {
-		PermissionDecision       string          `json:"permissionDecision"`
-		PermissionDecisionReason string          `json:"permissionDecisionReason"`
-		UpdatedInput             json.RawMessage `json:"updatedInput"`
-		AdditionalContext        string          `json:"additionalContext"`
-	}
-	if err := json.Unmarshal(data, &hso); err != nil {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
 		return HookResult{
 			Decision: DecisionNone,
 			Error:    fmt.Sprintf("hookSpecificOutput must be a JSON object, got %s", jsonTypeName(data)),
 		}
 	}
 
-	decision, err := parseDecision(hso.PermissionDecision)
-	result := HookResult{
-		Decision: decision,
-		Reason:   hso.PermissionDecisionReason,
-		Context:  hso.AdditionalContext,
-	}
+	var result HookResult
+	word, err := hookSpecificString(fields, "permissionDecision")
 	if err != nil {
-		result.Error = err.Error()
+		setParseError(&result, err)
+	}
+	result.Decision, err = parseDecision(word)
+	if err != nil {
+		setParseError(&result, err)
+	}
+	if result.Reason, err = hookSpecificString(fields, "permissionDecisionReason"); err != nil {
+		setParseError(&result, err)
+	}
+	// Claude Code's additionalContext is a string; a list of them is taken
+	// too, as Crush's own context field takes one.
+	if raw, ok := fields["additionalContext"]; ok && string(raw) != "null" {
+		if raw[0] != '"' && raw[0] != '[' {
+			setParseError(&result, fmt.Errorf(
+				"hookSpecificOutput.additionalContext must be a string, got %s", jsonTypeName(raw),
+			))
+		} else {
+			result.Context = parseContext(raw)
+		}
 	}
 
 	// Claude Code's updatedInput is an object and nothing else: unlike
 	// Crush's own updated_input, a string holding one is not accepted.
-	if len(hso.UpdatedInput) > 0 && string(hso.UpdatedInput) != "null" {
-		if hso.UpdatedInput[0] == '{' {
-			result.UpdatedInput = string(hso.UpdatedInput)
+	if raw := fields["updatedInput"]; len(raw) > 0 && string(raw) != "null" {
+		if raw[0] == '{' {
+			result.UpdatedInput = string(raw)
 		} else {
 			rejectRewrite(&result, fmt.Errorf(
-				"hookSpecificOutput.updatedInput must be a JSON object, got %s", jsonTypeName(hso.UpdatedInput),
+				"hookSpecificOutput.updatedInput must be a JSON object, got %s", jsonTypeName(raw),
 			))
 		}
 	}
 
 	return result
+}
+
+// hookSpecificString reads a string field of a hookSpecificOutput. A
+// missing or null field is empty.
+func hookSpecificString(fields map[string]json.RawMessage, name string) (string, error) {
+	raw, ok := fields[name]
+	if !ok || string(raw) == "null" {
+		return "", nil
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return "", fmt.Errorf("hookSpecificOutput.%s must be a string, got %s", name, jsonTypeName(raw))
+	}
+	return s, nil
 }
 
 // rawToString converts a json.RawMessage to a string suitable for use
