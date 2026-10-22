@@ -9,6 +9,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/agent/agenttest"
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
@@ -21,6 +22,7 @@ import (
 // entered so tests can observe the dispatched goroutine. Every other
 // method returns a zero value.
 type blockingCoordinator struct {
+	agenttest.NopCoordinator
 	entered  chan struct{}
 	release  chan struct{}
 	runCount atomic.Int32
@@ -51,18 +53,8 @@ func (c *blockingCoordinator) RunAccepted(ctx context.Context, accept *agent.Acc
 	return nil, nil
 }
 
-func (c *blockingCoordinator) BeginAccepted(sessionID string) *agent.AcceptedRun { return nil }
-func (c *blockingCoordinator) Cancel(string)                                     {}
-func (c *blockingCoordinator) CancelAll()                                        {}
-func (c *blockingCoordinator) IsBusy() bool                                      { return c.busy }
-func (c *blockingCoordinator) IsSessionBusy(string) bool                         { return false }
-func (c *blockingCoordinator) QueuedPrompts(string) int                          { return 0 }
-func (c *blockingCoordinator) QueuedPromptsList(string) []string                 { return nil }
-func (c *blockingCoordinator) ClearQueue(string)                                 {}
-func (c *blockingCoordinator) Summarize(context.Context, string) error           { return nil }
-func (c *blockingCoordinator) Model() agent.Model                                { return agent.Model{} }
-func (c *blockingCoordinator) UpdateModels(context.Context) error                { return nil }
-func (c *blockingCoordinator) GenerateTitle(context.Context, string, string)     {}
+func (c *blockingCoordinator) IsBusy() bool { return c.busy }
+
 func (c *blockingCoordinator) SetMainAgent(agentName string) error {
 	c.lastMainAgentSet.Store(agentName)
 	return c.setMainAgentErr

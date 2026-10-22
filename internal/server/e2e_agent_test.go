@@ -14,6 +14,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/agent/agenttest"
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/message"
@@ -43,6 +44,8 @@ import (
 // codebase, so this stub reproduces the documented black-box outcome by
 // controlling run timing directly through blockEntered / release.
 type scriptedCoordinator struct {
+	agenttest.NopCoordinator
+
 	app *app.App
 
 	// blockEntered, when non-nil, is signaled (once) right after a run
@@ -211,17 +214,6 @@ func (c *scriptedCoordinator) CancelAll() {
 		sc.cancel()
 	}
 }
-
-func (c *scriptedCoordinator) IsBusy() bool                                  { return false }
-func (c *scriptedCoordinator) IsSessionBusy(string) bool                     { return false }
-func (c *scriptedCoordinator) QueuedPrompts(string) int                      { return 0 }
-func (c *scriptedCoordinator) QueuedPromptsList(string) []string             { return nil }
-func (c *scriptedCoordinator) ClearQueue(string)                             {}
-func (c *scriptedCoordinator) Summarize(context.Context, string) error       { return nil }
-func (c *scriptedCoordinator) Model() agent.Model                            { return agent.Model{} }
-func (c *scriptedCoordinator) UpdateModels(context.Context) error            { return nil }
-func (c *scriptedCoordinator) SetMainAgent(string) error                     { return nil }
-func (c *scriptedCoordinator) GenerateTitle(context.Context, string, string) {}
 
 // agentE2EHarness extends the SSE harness with a scripted coordinator
 // wired into the workspace's embedded app.App, so POST /agent drives a

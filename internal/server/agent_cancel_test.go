@@ -13,6 +13,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/agent/agenttest"
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/message"
@@ -28,6 +29,7 @@ import (
 // ctx and the error returned to the caller are recorded for
 // assertions.
 type runCoordinator struct {
+	agenttest.NopCoordinator
 	release  chan struct{}
 	returnFn func(ctx context.Context) error
 
@@ -71,21 +73,13 @@ func (s *runCoordinator) RunAccepted(ctx context.Context, accept *agent.Accepted
 func (s *runCoordinator) BeginAccepted(sessionID string) *agent.AcceptedRun {
 	return nil
 }
-func (s *runCoordinator) Cancel(string) {}
-func (s *runCoordinator) CancelAll()    {}
-func (s *runCoordinator) IsBusy() bool  { return s.busy }
+func (s *runCoordinator) IsBusy() bool { return s.busy }
 func (s *runCoordinator) IsSessionBusy(string) bool {
 	return false
 }
-func (s *runCoordinator) QueuedPrompts(string) int          { return 0 }
-func (s *runCoordinator) QueuedPromptsList(string) []string { return nil }
-func (s *runCoordinator) ClearQueue(string)                 {}
 func (s *runCoordinator) Summarize(context.Context, string) error {
 	return nil
 }
-func (s *runCoordinator) Model() agent.Model                            { return agent.Model{} }
-func (s *runCoordinator) UpdateModels(context.Context) error            { return nil }
-func (s *runCoordinator) GenerateTitle(context.Context, string, string) {}
 func (s *runCoordinator) SetMainAgent(agentName string) error {
 	s.lastMainAgentSet.Store(agentName)
 	return s.setMainAgentErr

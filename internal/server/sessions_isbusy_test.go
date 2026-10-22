@@ -10,6 +10,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/agent/agenttest"
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/message"
@@ -24,6 +25,7 @@ import (
 // the type satisfies the interface without dragging in the full
 // coordinator dependency graph.
 type stubCoordinator struct {
+	agenttest.NopCoordinator
 	busy map[string]bool
 }
 
@@ -38,22 +40,12 @@ func (s *stubCoordinator) RunAccepted(ctx context.Context, accept *agent.Accepte
 func (s *stubCoordinator) BeginAccepted(sessionID string) *agent.AcceptedRun {
 	return nil
 }
-func (s *stubCoordinator) Cancel(string) {}
-func (s *stubCoordinator) CancelAll()    {}
-func (s *stubCoordinator) IsBusy() bool  { return false }
 func (s *stubCoordinator) IsSessionBusy(id string) bool {
 	return s.busy[id]
 }
-func (s *stubCoordinator) QueuedPrompts(string) int          { return 0 }
-func (s *stubCoordinator) QueuedPromptsList(string) []string { return nil }
-func (s *stubCoordinator) ClearQueue(string)                 {}
 func (s *stubCoordinator) Summarize(context.Context, string) error {
 	return nil
 }
-func (s *stubCoordinator) Model() agent.Model                            { return agent.Model{} }
-func (s *stubCoordinator) UpdateModels(context.Context) error            { return nil }
-func (s *stubCoordinator) SetMainAgent(string) error                     { return nil }
-func (s *stubCoordinator) GenerateTitle(context.Context, string, string) {}
 
 // stubSessions is a minimal session.Service that returns a fixed list
 // (and supports Get by ID). All other methods return zero values; the

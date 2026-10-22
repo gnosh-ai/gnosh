@@ -11,6 +11,7 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/agent/agenttest"
 	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/config"
@@ -139,6 +140,7 @@ func TestWorkspaceViewedSessions(t *testing.T) {
 // session/prompt of each RunAccepted call, plus the per-turn channel
 // provenance carried on the context.
 type recordingCoordinator struct {
+	agenttest.NopCoordinator
 	runs     chan [2]string // {sessionID, prompt}
 	channels chan string    // per-turn channel provenance
 }
@@ -156,20 +158,6 @@ func (c *recordingCoordinator) RunAccepted(ctx context.Context, _ *agent.Accepte
 	c.runs <- [2]string{sessionID, prompt}
 	return nil, nil
 }
-
-func (c *recordingCoordinator) BeginAccepted(string) *agent.AcceptedRun       { return nil }
-func (c *recordingCoordinator) Cancel(string)                                 {}
-func (c *recordingCoordinator) CancelAll()                                    {}
-func (c *recordingCoordinator) IsBusy() bool                                  { return false }
-func (c *recordingCoordinator) IsSessionBusy(string) bool                     { return false }
-func (c *recordingCoordinator) QueuedPrompts(string) int                      { return 0 }
-func (c *recordingCoordinator) QueuedPromptsList(string) []string             { return nil }
-func (c *recordingCoordinator) ClearQueue(string)                             {}
-func (c *recordingCoordinator) Summarize(context.Context, string) error       { return nil }
-func (c *recordingCoordinator) Model() agent.Model                            { return agent.Model{} }
-func (c *recordingCoordinator) UpdateModels(context.Context) error            { return nil }
-func (c *recordingCoordinator) SetMainAgent(string) error                     { return nil }
-func (c *recordingCoordinator) GenerateTitle(context.Context, string, string) {}
 
 // fullFakeSessions adapts fakeChannelSessions to the full session.Service
 // interface by embedding it; only the channelSessionStore subset is
