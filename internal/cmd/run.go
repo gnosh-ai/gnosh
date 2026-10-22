@@ -207,6 +207,22 @@ func addRunFlags(cmd *cobra.Command) {
 	cmd.Flags().Lookup("dangerously-skip-permissions").Usage = "Same as --yolo"
 }
 
+// ours reports whether an agent event belongs to this run. Async events
+// from an unrelated workspace run share the channel, so a foreign failure
+// must not abort us:
+//   - if the event carries a RunID, it is the authoritative correlator: it
+//     must match our run exactly, otherwise it belongs to a different
+//     request.
+//   - if the event carries no RunID (an older server, or a notification
+//     about the session such as a hook warning), it must carry our
+//     SessionID.
+func (s *runStream) ours(ev proto.AgentEvent) bool {
+	if ev.RunID != "" {
+		return ev.RunID == s.runID
+	}
+	return ev.SessionID != "" && ev.SessionID == s.sessionID
+}
+
 // runNonInteractive executes the agent via the server and streams output
 // to stdout.
 func runNonInteractive(
@@ -325,6 +341,7 @@ func runNonInteractive(
 		sessionID: sess.ID,
 		runID:     runID,
 		out:       os.Stdout,
+		errOut:    os.Stderr,
 		trace:     newToolTrace(traceTools),
 		read:      make(map[string]int),
 	}
@@ -392,6 +409,8 @@ type runStream struct {
 	sessionID string
 	runID     string
 	out       io.Writer
+	// errOut receives hook warnings; nil drops them.
+	errOut io.Writer
 	// trace prints the --verbose tool trace; nil when not tracing.
 	trace   *format.ToolTrace
 	read    map[string]int
@@ -507,23 +526,16 @@ func (s *runStream) handle(ev any, stopSpinner func()) (done bool, err error) {
 		return true, nil
 
 	case pubsub.Event[proto.AgentEvent]:
-		if e.Payload.Error == nil {
+		if e.Payload.Error == nil || !s.ours(e.Payload) {
 			return false, nil
 		}
-		// Attribute the error to our run before treating it as
-		// fatal. Async errors from an unrelated workspace run share
-		// this channel, so a foreign failure must not abort us:
-		//   - if the event carries a RunID, it is the authoritative
-		//     correlator: it must match our run exactly, otherwise it
-		//     belongs to a different request and we ignore it.
-		//   - if the event carries no RunID (older server), fall back
-		//     to SessionID: it must be present and match our session,
-		//     otherwise we ignore it.
-		if e.Payload.RunID != "" {
-			if e.Payload.RunID != s.runID {
-				return false, nil
+		// A hook warning carries its text in Error too, but the turn goes
+		// on or ends normally: print it rather than fail the run.
+		if e.Payload.Type == proto.AgentEventTypeHookWarning {
+			if s.errOut != nil {
+				stop()
+				_, _ = fmt.Fprintf(s.errOut, "warning: %s\n", e.Payload.Error)
 			}
-		} else if e.Payload.SessionID == "" || e.Payload.SessionID != s.sessionID {
 			return false, nil
 		}
 		stop()

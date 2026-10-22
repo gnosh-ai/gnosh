@@ -401,6 +401,17 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	}
 	done := make(chan response, 1)
 
+	// Hook warnings (a Stop hook that failed to run, an agent that
+	// stopped over a Stop hook's objection) are notifications only the TUI
+	// shows. A run prints them on stderr instead of losing them.
+	notifications := app.agentNotifications.Subscribe(ctx)
+	warn := func(n notify.Notification) {
+		if line, ok := hookWarningLine(n, sess.ID); ok {
+			stopSpinner()
+			_, _ = fmt.Fprint(os.Stderr, line)
+		}
+	}
+
 	go func(ctx context.Context, sessionID, prompt string) {
 		result, err := app.AgentCoordinator.Run(ctx, sess.ID, prompt)
 		if err != nil {
@@ -442,6 +453,16 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 		select {
 		case result := <-done:
 			stopSpinner()
+			// A Stop hook's warning is published just before the turn
+			// ends, so it may still be waiting here.
+			for drained := false; !drained; {
+				select {
+				case event := <-notifications:
+					warn(event.Payload)
+				default:
+					drained = true
+				}
+			}
 			if result.err != nil {
 				if errors.Is(result.err, context.Canceled) || errors.Is(result.err, agent.ErrRequestCancelled) {
 					slog.Debug("Non-interactive: agent processing cancelled", "session_id", sess.ID)
@@ -500,11 +521,23 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 			}
 			messageReadBytes[msg.ID] = len(content)
 
+		case event := <-notifications:
+			warn(event.Payload)
+
 		case <-ctx.Done():
 			stopSpinner()
 			return ctx.Err()
 		}
 	}
+}
+
+// hookWarningLine is the stderr line a non-interactive run prints for a
+// notification, when it is a hook warning for the run's own session.
+func hookWarningLine(n notify.Notification, sessionID string) (string, bool) {
+	if n.Type != notify.TypeHookWarning || n.SessionID != sessionID || n.Message == "" {
+		return "", false
+	}
+	return "warning: " + n.Message + "\n", true
 }
 
 func (app *App) UpdateAgentModel(ctx context.Context) error {

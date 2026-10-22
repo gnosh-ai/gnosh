@@ -12,6 +12,9 @@ const (
 	AgentEventTypeError     AgentEventType = "error"
 	AgentEventTypeResponse  AgentEventType = "response"
 	AgentEventTypeSummarize AgentEventType = "summarize"
+	// AgentEventTypeHookWarning carries a hook warning (a Stop hook that
+	// failed to run, say), its text in Error. It is not a failed run.
+	AgentEventTypeHookWarning AgentEventType = "hook_warning"
 )
 
 // MarshalText implements the [encoding.TextMarshaler] interface.

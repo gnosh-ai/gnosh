@@ -533,3 +533,41 @@ func TestRunOutputFlags(t *testing.T) {
 		require.Equal(t, tc.traceTool, trace, "quiet=%v verbose=%v", tc.quiet, tc.verbose)
 	}
 }
+
+// A hook warning arrives with its text in Error, like a failure, but the
+// turn goes on or ends normally: crash run prints it on stderr and keeps
+// going. It used to end the run as "agent error".
+func TestRunStream_HookWarningIsNotAFailure(t *testing.T) {
+	t.Parallel()
+
+	var errOut bytes.Buffer
+	s := &runStream{sessionID: "S", out: &bytes.Buffer{}, errOut: &errOut, read: map[string]int{}}
+
+	done, err := s.handle(pubsub.Event[proto.AgentEvent]{Payload: proto.AgentEvent{
+		SessionID: "S",
+		Type:      proto.AgentEventTypeHookWarning,
+		Error:     errors.New(`Stop hook "tests" failed: exit 1`),
+	}}, nil)
+	require.NoError(t, err)
+	require.False(t, done)
+	require.Equal(t, "warning: Stop hook \"tests\" failed: exit 1\n", errOut.String())
+
+	// Another session's warning is not ours to print.
+	errOut.Reset()
+	_, err = s.handle(pubsub.Event[proto.AgentEvent]{Payload: proto.AgentEvent{
+		SessionID: "other",
+		Type:      proto.AgentEventTypeHookWarning,
+		Error:     errors.New("not ours"),
+	}}, nil)
+	require.NoError(t, err)
+	require.Empty(t, errOut.String())
+
+	// A real agent error still fails the run.
+	done, err = s.handle(pubsub.Event[proto.AgentEvent]{Payload: proto.AgentEvent{
+		SessionID: "S",
+		Type:      proto.AgentEventTypeError,
+		Error:     errors.New("boom"),
+	}}, nil)
+	require.True(t, done)
+	require.ErrorContains(t, err, "agent error: boom")
+}

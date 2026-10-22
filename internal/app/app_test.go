@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/stretchr/testify/require"
 )
@@ -182,4 +183,19 @@ func testNConsumers(t *testing.T, n int) {
 		})
 	}
 	wg.Wait()
+}
+
+// crash run prints a hook warning for its own session as a stderr line,
+// and nothing for any other notification.
+func TestHookWarningLine(t *testing.T) {
+	t.Parallel()
+
+	line, ok := hookWarningLine(notify.Notification{SessionID: "S", Type: notify.TypeHookWarning, Message: "Stop hook failed"}, "S")
+	require.True(t, ok)
+	require.Equal(t, "warning: Stop hook failed\n", line)
+
+	_, ok = hookWarningLine(notify.Notification{SessionID: "other", Type: notify.TypeHookWarning, Message: "x"}, "S")
+	require.False(t, ok, "another session's warning")
+	_, ok = hookWarningLine(notify.Notification{SessionID: "S", Type: notify.TypeAgentError, Message: "x"}, "S")
+	require.False(t, ok, "not a hook warning")
 }

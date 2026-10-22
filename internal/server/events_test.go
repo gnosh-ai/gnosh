@@ -184,6 +184,28 @@ func TestAgentErrorToProto_PreservesRunID(t *testing.T) {
 	require.Equal(t, "boom", decoded.Payload.Error.Error())
 }
 
+// A hook warning reaches a client as a hook_warning event, its text in
+// Error, so crash run can print it instead of taking it for a failed run.
+func TestHookWarningToProto(t *testing.T) {
+	t.Parallel()
+
+	env := wrapEvent(pubsub.Event[notify.Notification]{
+		Type: pubsub.CreatedEvent,
+		Payload: notify.Notification{
+			SessionID: "S",
+			Type:      notify.TypeHookWarning,
+			Message:   `Stop hook "tests" failed: exit 1`,
+		},
+	})
+	require.NotNil(t, env)
+
+	var decoded pubsub.Event[proto.AgentEvent]
+	require.NoError(t, json.Unmarshal(env.Payload, &decoded))
+	require.Equal(t, proto.AgentEventTypeHookWarning, decoded.Payload.Type)
+	require.Equal(t, "S", decoded.Payload.SessionID)
+	require.Equal(t, `Stop hook "tests" failed: exit 1`, decoded.Payload.Error.Error())
+}
+
 // TestRunCompleteToProto_Error verifies that error- and cancel-shaped
 // RunComplete events round-trip cleanly so clients can distinguish
 // "agent failed" (returns non-zero from `crush run`) from "agent
