@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	fang "charm.land/fang/v2"
@@ -227,9 +229,30 @@ func Execute() {
 		rootCmd,
 		fang.WithVersion(version.Version),
 		fang.WithNotifySignal(os.Interrupt),
+		fang.WithErrorHandler(errorHandler),
 	); err != nil {
 		os.Exit(1)
 	}
+}
+
+// errorHandler prints a command's error as fang does, but capitalizes only
+// its first letter. fang title-cases the whole first word, capitalizing
+// after every - or ( and lowercasing the rest, so an error that starts
+// with a flag, a quoted name, an environment variable or a path showed it
+// changed: --Disallowed-Tools, "Bash(Git:*)", Crash_client_server.
+func errorHandler(w io.Writer, styles fang.Styles, err error) {
+	styles.ErrorText = styles.ErrorText.Transform(capitalizeFirstLetter)
+	fang.DefaultErrorHandler(w, styles, err)
+}
+
+// capitalizeFirstLetter upper-cases s's first character if it is a
+// lower-case letter, and leaves the rest of s as it is.
+func capitalizeFirstLetter(s string) string {
+	r, size := utf8.DecodeRuneInString(s)
+	if !unicode.IsLower(r) {
+		return s
+	}
+	return string(unicode.ToUpper(r)) + s[size:]
 }
 
 // supportsProgressBar tries to determine whether the current terminal supports
