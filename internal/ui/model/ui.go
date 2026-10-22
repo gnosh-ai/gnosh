@@ -896,6 +896,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.applyPromptQueue(msg)...)
 	case promptQueuePopMsg:
 		cmds = append(cmds, m.applyPromptQueuePop(msg)...)
+	case loopStartProbeMsg:
+		if cmd := m.applyLoopStartProbe(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case lspStatesMsg:
 		if cmd := m.applyLSPStates(msg); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -5350,7 +5354,10 @@ func (m *UI) setThinking(enabled bool) tea.Cmd {
 // sendMessageInternal can hide a generated continuation from the chat.
 func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...message.Attachment) tea.Cmd {
 	if err := m.com.Workspace.AgentReadyErr(); err != nil {
-		return util.ReportError(err)
+		// Reported like a send that failed, so whatever waits on it (a
+		// running /loop) hears that nothing started.
+		sessionID := m.currentSessionID()
+		return func() tea.Msg { return agentRunSubmittedMsg{sessionID: sessionID, err: err} }
 	}
 
 	// Any new prompt supersedes a pending, unconfirmed plan.

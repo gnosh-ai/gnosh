@@ -127,6 +127,7 @@ type testWorkspace struct {
 	setMainCalledWith string
 	updateCalls       int
 	agentReady        bool
+	sessionBusy       bool
 	agentBusy         bool
 	runPrompts        []string
 	yolo              bool
@@ -159,6 +160,8 @@ func (w *testWorkspace) PermissionSetSkipRequests(skip bool) { w.yolo = skip }
 func (w *testWorkspace) AgentIsReady() bool {
 	return w.agentReady
 }
+
+func (w *testWorkspace) AgentIsSessionBusy(string) bool { return w.sessionBusy }
 
 func (w *testWorkspace) AgentIsBusy() bool {
 	return w.agentBusy

@@ -10,6 +10,8 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/stretchr/testify/require"
@@ -87,4 +89,47 @@ func TestRun_ADeniedPermissionMarksTheTurnHalted(t *testing.T) {
 		t.Fatal("no RunComplete")
 	}
 	require.Equal(t, int64(1), llm.calls.Load(), "a halted turn does not ask the model again")
+}
+
+// A turn the user ended by denying a permission is not handed to the Stop
+// hooks: their "not done" would send the agent straight back to what was just
+// refused. (Claude Code does not run Stop hooks when the user stops the
+// agent either.) The hook here would block once, so a regression costs one
+// extra turn and fails, instead of hanging.
+func TestRun_ADeniedPermissionIsNotHandedToTheStopHooks(t *testing.T) {
+	env := testEnv(t)
+	cfg := &config.Config{Hooks: map[string][]config.HookConfig{hooks.EventStop: {{
+		Command: `[ "$CRUSH_STOP_HOOK_ACTIVE" = "1" ] && exit 0; echo "not done" >&2; exit 2`,
+	}}}}
+	require.NoError(t, cfg.ValidateHooks())
+
+	llm := &deniedToolModel{}
+	write := fantasy.NewAgentTool("write", "Write a file.",
+		func(context.Context, deniedWriteParams, fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			return tools.NewPermissionDeniedResponse(), nil
+		})
+	model := Model{Model: llm, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000}}
+	a := NewSessionAgent(SessionAgentOptions{
+		LargeModel:           model,
+		SmallModel:           model,
+		SystemPrompt:         "test",
+		IsYolo:               true,
+		DisableAutoSummarize: true,
+		Sessions:             env.sessions,
+		Messages:             env.messages,
+		Tools:                []fantasy.AgentTool{write},
+		Cfg:                  config.NewTestStore(cfg),
+	}).(*sessionAgent)
+
+	sess, err := env.sessions.Create(t.Context(), "denied with a stop hook")
+	require.NoError(t, err)
+	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: "earlier prompt"}},
+	})
+	require.NoError(t, err)
+
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, RunID: "run-1", Prompt: "write a.txt"})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), llm.calls.Load(), "the Stop hook must not resume a turn the user halted")
 }

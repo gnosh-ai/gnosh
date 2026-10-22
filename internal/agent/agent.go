@@ -1327,7 +1327,12 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// hook's reason as the prompt. Neither applies when summarization
 	// already queued a continuation of its own.
 	continued := false
-	if !shouldSummarize && currentAssistant != nil {
+	// A turn the user or a hook halted (a denied permission, a cancelled
+	// question, a hook's halt) is over: that is the last word, as in
+	// Claude Code, where a Stop hook does not run when the user stops the
+	// agent. Asking the Stop hooks could send the agent straight back to
+	// what was just refused.
+	if !shouldSummarize && currentAssistant != nil && !haltedByTool {
 		if loopCalls != nil {
 			slog.Warn("Agent repeated the same tool calls; telling it to change approach",
 				"session_id", call.SessionID,

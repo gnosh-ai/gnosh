@@ -143,18 +143,37 @@ func TestStartLoop_NeedsASession(t *testing.T) {
 func TestStartLoop_WhileATurnIsRunningOnlyArms(t *testing.T) {
 	t.Parallel()
 
-	m, _ := newPlanUI(t, "s1")
-	m.pending.sessionID = "s1" // this session's turn is already running
+	m, ws := newPlanUI(t, "s1")
+	ws.sessionBusy = true // this session's turn is already running
 
-	cmd := m.startLoop()
+	probe := loopStartProbe(t, m.startLoop())
 
-	require.NotNil(t, cmd)
 	require.True(t, m.loop.active, "the loop is armed")
 	require.Equal(t, "s1", m.loop.sessionID)
-	require.Zero(t, m.loop.turns, "the running turn is the user's, not the loop's")
 	require.Zero(t, m.loop.maxTurns, "no cap unless loop_max_turns sets one")
-	// Reaching sendMessageInternal here would panic on the nil workspace:
-	// the running turn's RunComplete is what drives the first continuation.
+	require.True(t, probe.busy)
+	require.Nil(t, m.applyLoopStartProbe(probe), "the running turn's RunComplete drives the first continuation")
+	require.Zero(t, m.loop.turns, "the running turn is the user's, not the loop's")
+	require.Empty(t, ws.runPrompts)
+}
+
+// loopStartProbe runs startLoop's command and returns the answer of its
+// probe of the session, which the event loop would feed back into Update.
+func loopStartProbe(t *testing.T, cmd tea.Cmd) loopStartProbeMsg {
+	t.Helper()
+	require.NotNil(t, cmd)
+	batch, ok := cmd().(tea.BatchMsg)
+	require.True(t, ok, "startLoop says the loop is on and probes the session")
+	for _, c := range batch {
+		if c == nil {
+			continue
+		}
+		if probe, ok := c().(loopStartProbeMsg); ok {
+			return probe
+		}
+	}
+	t.Fatal("startLoop sent no probe of its session")
+	return loopStartProbeMsg{}
 }
 
 func TestAdvanceLoop_StopsAndClearsWhenTheModelReportsDone(t *testing.T) {
@@ -315,9 +334,8 @@ func TestStartLoop_OnAnIdleSessionSendsTheFirstContinuation(t *testing.T) {
 
 	u, ws := newPlanUI(t, "s1")
 	ws.agentReady = true
-	u.agentBusyCache.val = false // idle
 
-	drainCmd(u.startLoop())
+	drainCmd(u.applyLoopStartProbe(loopStartProbe(t, u.startLoop())))
 
 	require.True(t, u.loop.active, "the loop is armed")
 	require.Equal(t, []string{loopPrompt}, ws.runPrompts, "and starts itself straight away")
@@ -345,6 +363,7 @@ func TestNoteLoopReply_KeepsAStopAnswerTheTurnWentOnPast(t *testing.T) {
 	m := &UI{loop: loopState{active: true, sessionID: "s1", turns: loopReflectEvery + 1, reflecting: true}}
 	answer := message.Message{SessionID: "s1", Role: message.Assistant, Parts: []message.ContentPart{
 		message.TextContent{Text: "Blocked on your API key.\n" + loopStopSentinel},
+		message.Finish{Reason: message.FinishReasonEndTurn},
 	}}
 	m.noteLoopReply(answer)
 	require.True(t, m.loop.answeredStop)
@@ -360,6 +379,7 @@ func TestNoteLoopReply_OnlyDuringACheckpointInTheLoopsSession(t *testing.T) {
 
 	reply := message.Message{SessionID: "s1", Role: message.Assistant, Parts: []message.ContentPart{
 		message.TextContent{Text: loopStopSentinel},
+		message.Finish{Reason: message.FinishReasonEndTurn},
 	}}
 	m := &UI{loop: loopState{active: true, sessionID: "s1", turns: 3}}
 	m.noteLoopReply(reply)
@@ -379,10 +399,42 @@ func TestStartLoop_AnotherSessionsTurnDoesNotHoldItUp(t *testing.T) {
 
 	u, ws := newPlanUI(t, "s1")
 	ws.agentReady = true
-	u.agentBusyCache.val = true // some session is busy, but not this one
+	u.agentBusyCache.val = true      // some session is busy, but not this one
+	u.pending.sessionID = "s1-stale" // nor is a leftover spinner this session's turn
 
-	drainCmd(u.startLoop())
+	drainCmd(u.applyLoopStartProbe(loopStartProbe(t, u.startLoop())))
 	require.Equal(t, []string{loopPrompt}, ws.runPrompts, "the loop starts itself in this idle session")
+}
+
+// A RunComplete can drive the first continuation before the probe answers;
+// the late answer must not send a second one, or the queue would grow by one
+// every iteration.
+func TestApplyLoopStartProbe_SendsTheFirstTurnOnlyOnce(t *testing.T) {
+	t.Parallel()
+
+	u, ws := newPlanUI(t, "s1")
+	ws.agentReady = true
+	u.loop = loopState{active: true, sessionID: "s1", turns: 1}
+
+	require.Nil(t, u.applyLoopStartProbe(loopStartProbeMsg{sessionID: "s1"}))
+	require.Empty(t, ws.runPrompts)
+}
+
+// When the agent is not ready, the next turn never starts; the loop must
+// not stay armed with nothing running.
+func TestLoop_StopsWhenTheAgentIsNotReady(t *testing.T) {
+	t.Parallel()
+
+	u, ws := newPlanUI(t, "s1")
+	ws.agentReady = false
+	u.loop = loopState{active: true, sessionID: "s1", turns: 2}
+
+	cmd := u.advanceLoop(notify.RunComplete{SessionID: "s1", Text: "still going"})
+	require.NotNil(t, cmd)
+	msg, ok := cmd().(agentRunSubmittedMsg)
+	require.True(t, ok, "a send that cannot start is reported like a failed send")
+	_, _ = u.Update(msg)
+	require.False(t, u.loop.active)
 }
 
 // A continuation that fails to start leaves nothing running; the loop must
@@ -421,4 +473,16 @@ func TestEsc_StopsAnArmedLoopWithNothingRunning(t *testing.T) {
 
 	_, _ = m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
 	require.False(t, m.loop.active)
+}
+
+// A reply still streaming is not an answer yet: cut mid-line, "LOOP_STOP would
+// be premature" reads as a line saying just LOOP_STOP.
+func TestNoteLoopReply_IgnoresAReplyStillStreaming(t *testing.T) {
+	t.Parallel()
+
+	m := &UI{loop: loopState{active: true, sessionID: "s1", turns: loopReflectEvery + 1, reflecting: true}}
+	m.noteLoopReply(message.Message{SessionID: "s1", Role: message.Assistant, Parts: []message.ContentPart{
+		message.TextContent{Text: "No reason to stop.\n" + loopStopSentinel},
+	}})
+	require.False(t, m.loop.answeredStop)
 }

@@ -174,7 +174,9 @@ func (m *UI) noteLoopReply(msg message.Message) {
 	if !m.loop.active || !m.loop.reflecting || m.loop.answeredStop {
 		return
 	}
-	if msg.SessionID == m.loop.sessionID && msg.Role == message.Assistant && loopReportedStop(msg.Content().Text) {
+	// Only a finished reply counts: mid-stream, "LOOP_STOP would be
+	// premature" can read as a line saying just LOOP_STOP.
+	if msg.SessionID == m.loop.sessionID && msg.Role == message.Assistant && msg.IsFinished() && loopReportedStop(msg.Content().Text) {
 		m.loop.answeredStop = true
 	}
 }
@@ -194,17 +196,38 @@ func (m *UI) startLoop() tea.Cmd {
 	}
 	started := util.ReportInfo(fmt.Sprintf("Loop on: continuing until %s (%s). Esc stops it.", loopDoneSentinel, limit))
 
-	// A turn already running will publish RunComplete, and that drives the
-	// next continuation. Sending one here as well would put two in flight
-	// for the same turn, and each of those would again be followed by the
-	// loop's own, so the queue would grow with every iteration. Only this
-	// session's turn counts: another session's RunComplete does not drive
-	// this loop, so waiting on it would leave the loop armed forever.
-	if m.turnInFlight(m.session.ID) {
-		return started
+	// Who sends the first continuation depends on whether this session
+	// has a turn running: if it does, its RunComplete drives the loop, and
+	// sending one here as well would put two in flight for that turn, each
+	// then followed by the loop's own, so the queue would grow with every
+	// iteration; if not, nothing else will start the loop. The memoized
+	// busy state covers every session, and a chat spinner can outlive its
+	// turn, so the session is asked directly, off the Update goroutine (a
+	// synchronous HTTP round-trip in client/server mode).
+	ws := m.com.Workspace
+	sessionID := m.session.ID
+	probe := func() tea.Msg {
+		return loopStartProbeMsg{sessionID: sessionID, busy: ws.AgentIsSessionBusy(sessionID)}
+	}
+	return tea.Batch(started, probe)
+}
+
+// loopStartProbeMsg answers whether the loop's session had a turn running
+// when /loop was switched on.
+type loopStartProbeMsg struct {
+	sessionID string
+	busy      bool
+}
+
+// applyLoopStartProbe sends the loop's first continuation when its session
+// turned out to be idle. Nothing is sent if the loop was stopped or
+// restarted meanwhile, or a RunComplete already drove the first turn.
+func (m *UI) applyLoopStartProbe(msg loopStartProbeMsg) tea.Cmd {
+	if msg.busy || !m.loop.active || m.loop.sessionID != msg.sessionID || m.loop.turns > 0 {
+		return nil
 	}
 	m.loop.turns++
-	return tea.Sequence(started, m.sendMessageInternal(loopPrompt, true))
+	return m.sendMessageInternal(loopPrompt, true)
 }
 
 // stopLoop clears the loop and says why. It is quiet when no loop was
