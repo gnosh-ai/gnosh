@@ -156,13 +156,15 @@ unaffected.
 
 ### Motivation
 
-Today Crush supports two hook events: `PreToolUse`, which gates and rewrites
-tool calls, and `Stop`, which can refuse to let a turn end. Neither can touch
+Today Crush supports three hook events: `PreToolUse`, which gates and rewrites
+tool calls, `PostToolUse`, which reacts to a call that ran, and `Stop`, which
+can refuse to let a turn end. None of them can touch
 the prompt on its way in. The next-most-useful event is
 `UserPromptSubmit`: fires after the user hits Enter but before the turn hits the
 LLM. Lets hooks inject context, rewrite prompts, or gate on content without the
-mutation complexity of `PostToolUse` (output scrubbing, error coercion, size
-limits — all rabbit holes).
+mutation complexity of rewriting a tool's output, which `PostToolUse`
+deliberately does not do (output scrubbing, error coercion, size limits — all
+rabbit holes).
 
 ### Use cases
 

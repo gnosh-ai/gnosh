@@ -43,3 +43,14 @@ func TestHookDetail_UnchangedForRealVerdicts(t *testing.T) {
 	require.Contains(t, denied, "Denied")
 	require.Contains(t, denied, "rm -rf")
 }
+
+// A PostToolUse hook that blocks has given feedback on a call that ran;
+// its line must not say the call was denied.
+func TestHookDetailPostToolUseFeedback(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	got := plain(hookDetail(&sty, hooks.HookInfo{Event: hooks.EventPostToolUse, Decision: "deny", Reason: "lint failed"}))
+	require.Contains(t, got, "Feedback lint failed")
+	require.NotContains(t, got, "Denied")
+}

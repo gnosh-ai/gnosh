@@ -25,7 +25,7 @@ func loadScriptErr(t *testing.T, script string) error {
 func TestHookAddRejectsUnknownEvent(t *testing.T) {
 	t.Parallel()
 
-	for _, bad := range []string{"pre_tool_use", "pretooluse", "PRE_TOOL_USE", "stop", "PostToolUse", "banana"} {
+	for _, bad := range []string{"pre_tool_use", "pretooluse", "PRE_TOOL_USE", "stop", "UserPromptSubmit", "banana"} {
 		t.Run(bad, func(t *testing.T) {
 			t.Parallel()
 			err := loadScriptErr(t, `hook add `+bad+` --command "echo hi"`)
@@ -40,10 +40,12 @@ func TestHookAddAcceptsKnownEvents(t *testing.T) {
 	t.Parallel()
 
 	result := loadScript(t, `hook add PreToolUse --command "echo pre"
+hook add PostToolUse --command "echo post" --matcher "^edit$"
 hook add Stop --command "echo stop"`)
 
 	hooks := result["hooks"].(map[string]any)
 	require.Len(t, hooks["PreToolUse"].([]any), 1)
+	require.Len(t, hooks["PostToolUse"].([]any), 1)
 	require.Len(t, hooks["Stop"].([]any), 1)
 }
 

@@ -201,6 +201,50 @@ interception so a single delegated turn doesn't trigger your hook N times. The
 outer sub-agent tool call itself _is_ hooked, so policy like "never let the
 agent spawn sub-agents" still works.
 
+### PostToolUse
+
+This hook fires right after a tool call succeeds. Use it to format or lint the
+file the agent just edited, run the tests it touched, or log what happened. A
+call that failed — the tool returned an error, a hook blocked it, you denied
+the permission — does not fire it.
+
+**Matched against**: the tool name, as for `PreToolUse`.
+
+**The call has already run**, so a `PostToolUse` hook approves, blocks and
+rewrites nothing. What it says goes to the model after the tool's output: exit
+code `2` (or `"decision": "block"`) hands it your stderr (or `reason`) as
+feedback — "lint failed on line 12" — and `context` (or Claude Code's
+`additionalContext`) is appended the same way. Exit `49` ends the turn.
+
+```jsonc
+{
+  "hooks": {
+    "PostToolUse": [
+      { "matcher": "^(edit|multiedit|write)$", "command": "./hooks/gofumpt.sh" }
+    ]
+  }
+}
+```
+
+```bash
+#!/usr/bin/env bash
+# hooks/gofumpt.sh — format every Go file the agent writes.
+f="$CRUSH_TOOL_INPUT_FILE_PATH"
+[[ "$f" == *.go ]] || exit 0
+if ! out=$(gofumpt -w "$f" 2>&1); then
+  echo "gofumpt failed on $f: $out" >&2
+  exit 2
+fi
+```
+
+**Formatters**: a hook that changes the file the agent just wrote would make
+the agent's next edit of it fail as "modified since it was last read". Crush
+records a fresh read of the file instead, and tells the model the hook changed
+it, so it can view it again before editing near what changed. Claude Code does
+the same.
+
+**Scope**: like `PreToolUse`, only the **top-level agent's** tool calls.
+
 ### Stop
 
 This hook fires when the agent is about to finish its turn. Use it to refuse the
@@ -688,8 +732,8 @@ Each entry under a `hooks.<EventName>` array:
   "name": "no-rm-rf",
 
   // string. Optional. Regex tested against the tool name. Omit to match all.
-  // PreToolUse only: a matcher on a Stop hook is a config error, because
-  // there is no tool to match when a turn ends.
+  // PreToolUse and PostToolUse only: a matcher on a Stop hook is a config
+  // error, because there is no tool to match when a turn ends.
   "matcher": "^bash$",
 
   // string. Required. Shell command to run.
@@ -731,6 +775,25 @@ Extends the common payload:
   // object. Raw JSON input the model sent to the tool. Shape is per-tool.
   "tool_input": {
     "command": "npm test",
+  },
+}
+```
+
+### Stdin payload — PostToolUse
+
+The PreToolUse payload, plus what the tool returned:
+
+```jsonc
+{
+  // ...PreToolUse fields...
+
+  // object. What the tool returned. "output" is the text the model reads;
+  // "metadata" is the tool's metadata object, when it has one (for bash it
+  // includes "exit_code"). Claude Code's tool_response is shaped per tool;
+  // Crush's is this one shape for every tool.
+  "tool_response": {
+    "output": "ok  	example.com/pkg	0.012s",
+    "metadata": { "exit_code": 0 },
   },
 }
 ```
@@ -809,8 +872,9 @@ Extends the common envelope:
 | `49`  | Halt the whole turn. Stderr becomes the halt reason. Stdout is ignored.  |
 | other | Non-blocking error. Logged and ignored; the tool call proceeds.          |
 
-Exit `2` only applies to events that can block something. On events where
-there's nothing to block, it's treated as a non-blocking error.
+Exit `2` blocks the tool call on `PreToolUse` and keeps the agent working on
+`Stop`. On `PostToolUse`, where the call has already run, it hands stderr to the
+model as feedback instead.
 
 ### Aggregation
 

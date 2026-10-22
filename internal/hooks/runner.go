@@ -94,6 +94,29 @@ func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolIn
 	return r.run(ctx, r.matchingHooks(toolName), eventName, toolName, toolInputJSON, envVars, payload)
 }
 
+// RunPostToolUse executes the PostToolUse hooks whose matcher matches
+// toolName, once that tool call has succeeded. output and metadata are
+// what the tool returned; the hooks see them as tool_response.
+//
+// A DecisionDeny result is feedback, not a veto: the call has already
+// run, so the caller hands the aggregated Reason to the agent alongside
+// the result. Halt still ends the turn. There is nothing left to
+// approve or rewrite, so an allow counts as no opinion and UpdatedInput
+// is always cleared, on the aggregate and on each hook.
+func (r *Runner) RunPostToolUse(ctx context.Context, sessionID, toolName, toolInputJSON, output, metadata string) (AggregateResult, error) {
+	envVars := BuildEnv(EventPostToolUse, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON)
+	payload := BuildPostPayload(sessionID, r.cwd, toolName, toolInputJSON, output, metadata)
+	agg, err := r.run(ctx, r.matchingHooks(toolName), EventPostToolUse, toolName, toolInputJSON, envVars, payload)
+	if agg.Decision == DecisionAllow {
+		agg.Decision = DecisionNone
+	}
+	agg.UpdatedInput = ""
+	for i := range agg.Hooks {
+		agg.Hooks[i].InputRewrite = false
+	}
+	return agg, err
+}
+
 // RunStop executes every configured hook for the Stop event, which fires
 // when the agent is about to finish its turn. Matchers do not apply —
 // there is no tool to match, and ValidateHooks rejects a matcher on a
@@ -154,6 +177,7 @@ func (r *Runner) run(
 	for i, h := range deduped {
 		agg.Hooks[i] = HookInfo{
 			Name:         h.DisplayName(),
+			Event:        eventName,
 			Matcher:      h.Matcher,
 			Decision:     results[i].Decision.String(),
 			Halt:         results[i].Halt,

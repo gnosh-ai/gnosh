@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"strings"
 	"sync"
@@ -471,7 +472,7 @@ func TestValidateHooksRejectsUnknownEventNames(t *testing.T) {
 		{"kebab_case", "pre-tool-use"},
 		{"near_miss", "PreToolUsage"},
 		{"lowercase_stop", "stop"},
-		{"not_an_event", "PostToolUse"},
+		{"not_an_event", "UserPromptSubmit"},
 		{"nonsense", "banana"},
 		{"empty", ""},
 	}
@@ -488,6 +489,7 @@ func TestValidateHooksRejectsUnknownEventNames(t *testing.T) {
 			require.Contains(t, err.Error(), "unknown event name")
 			require.Contains(t, err.Error(), EventPreToolUse,
 				"the error must list the names that do work")
+			require.Contains(t, err.Error(), EventPostToolUse)
 			require.Contains(t, err.Error(), EventStop)
 		})
 	}
@@ -526,6 +528,63 @@ func TestValidateHooksRejectsMatcherOnStop(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "matcher is not supported")
 	require.Contains(t, err.Error(), EventStop)
+}
+
+// A PostToolUse hook has nothing left to approve or rewrite once the call
+// has run: an allow counts as no opinion and an input rewrite is dropped,
+// while a deny stays, as feedback. Its matcher is tested against the tool
+// name, as a PreToolUse hook's is.
+func TestRunPostToolUse(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Hooks: map[string][]config.HookConfig{
+			EventPostToolUse: {{
+				Command: `echo '{"decision":"allow","updated_input":{"command":"rm -rf /"}}'`,
+				Matcher: "^bash$",
+			}},
+		},
+	}
+	require.NoError(t, cfg.ValidateHooks(), "a PostToolUse hook may carry a matcher")
+	r := NewRunner(cfg.Hooks[EventPostToolUse], t.TempDir(), t.TempDir())
+
+	result, err := r.RunPostToolUse(context.Background(), "sess", "bash", `{"command":"ls"}`, "out", "")
+	require.NoError(t, err)
+	require.Equal(t, DecisionNone, result.Decision)
+	require.Empty(t, result.UpdatedInput)
+	require.Len(t, result.Hooks, 1)
+	require.False(t, result.Hooks[0].InputRewrite)
+	require.Equal(t, EventPostToolUse, result.Hooks[0].Event)
+
+	result, err = r.RunPostToolUse(context.Background(), "sess", "edit", `{}`, "out", "")
+	require.NoError(t, err)
+	require.Zero(t, result.HookCount, "the matcher keeps it to bash")
+
+	deny := NewRunner([]config.HookConfig{{Command: `echo "fix the lint" >&2; exit 2`}}, t.TempDir(), t.TempDir())
+	result, err = deny.RunPostToolUse(context.Background(), "sess", "edit", `{}`, "out", "")
+	require.NoError(t, err)
+	require.Equal(t, DecisionDeny, result.Decision)
+	require.Equal(t, "fix the lint", result.Reason)
+}
+
+// tool_response carries the tool's metadata only when it is a JSON object.
+func TestBuildPostPayloadMetadata(t *testing.T) {
+	t.Parallel()
+
+	for metadata, want := range map[string]string{
+		`{"exit_code":2}`: `{"output":"out","metadata":{"exit_code":2}}`,
+		"":                `{"output":"out"}`,
+		"[1]":             `{"output":"out"}`,
+		"not json":        `{"output":"out"}`,
+	} {
+		var payload struct {
+			Event        string          `json:"event"`
+			ToolResponse json.RawMessage `json:"tool_response"`
+		}
+		require.NoError(t, json.Unmarshal(BuildPostPayload("sess", "/cwd", "bash", `{}`, "out", metadata), &payload))
+		require.Equal(t, EventPostToolUse, payload.Event)
+		require.JSONEq(t, want, string(payload.ToolResponse), metadata)
+	}
 }
 
 func TestValidateHooksReportsTheOffendingEventFirst(t *testing.T) {

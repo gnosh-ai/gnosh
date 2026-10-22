@@ -37,21 +37,55 @@ type Payload struct {
 	// the turn is about to end on, so a Stop hook can judge the answer
 	// without reading the session back out of the database.
 	LastAssistantMessage string `json:"last_assistant_message,omitempty"`
+	// ToolResponse is set on an EventPostToolUse payload: what the tool
+	// returned, as a ToolResponse object. Named for parity with Claude
+	// Code's PostToolUse hook input.
+	ToolResponse *ToolResponse `json:"tool_response,omitempty"`
+}
+
+// ToolResponse is what a tool call returned, as a PostToolUse hook sees
+// it: the text the agent reads, and the tool's metadata (for bash, its
+// exit code among other things) when it has any.
+type ToolResponse struct {
+	Output   string          `json:"output"`
+	Metadata json.RawMessage `json:"metadata,omitempty"`
 }
 
 // BuildPayload constructs the JSON stdin payload for a hook command.
 func BuildPayload(eventName, sessionID, cwd, toolName, toolInputJSON string) []byte {
+	return marshalPayload(toolPayload(eventName, sessionID, cwd, toolName, toolInputJSON))
+}
+
+// BuildPostPayload constructs the JSON stdin payload for an
+// EventPostToolUse hook: the tool call, plus what it returned. Metadata
+// that is not a JSON object is left out rather than passed on as
+// something a hook would have to guess at.
+func BuildPostPayload(sessionID, cwd, toolName, toolInputJSON, output, metadata string) []byte {
+	p := toolPayload(EventPostToolUse, sessionID, cwd, toolName, toolInputJSON)
+	p.ToolResponse = &ToolResponse{Output: output}
+	if meta := json.RawMessage(metadata); json.Valid(meta) && strings.HasPrefix(strings.TrimSpace(metadata), "{") {
+		p.ToolResponse.Metadata = meta
+	}
+	return marshalPayload(p)
+}
+
+// toolPayload is the payload common to the events that fire around a
+// tool call.
+func toolPayload(eventName, sessionID, cwd, toolName, toolInputJSON string) Payload {
 	toolInput := json.RawMessage(toolInputJSON)
 	if !json.Valid(toolInput) {
 		toolInput = json.RawMessage("{}")
 	}
-	p := Payload{
+	return Payload{
 		Event:     eventName,
 		SessionID: sessionID,
 		CWD:       cwd,
 		ToolName:  toolName,
 		ToolInput: toolInput,
 	}
+}
+
+func marshalPayload(p Payload) []byte {
 	data, err := json.Marshal(p)
 	if err != nil {
 		return []byte("{}")
@@ -71,11 +105,7 @@ func BuildStopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActiv
 		StopHookActive:       stopHookActive,
 		LastAssistantMessage: lastAssistantMessage,
 	}
-	data, err := json.Marshal(p)
-	if err != nil {
-		return []byte("{}")
-	}
-	return data
+	return marshalPayload(p)
 }
 
 // BuildStopEnv constructs the environment variable slice for an

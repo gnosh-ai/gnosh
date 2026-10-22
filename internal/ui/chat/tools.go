@@ -1021,10 +1021,11 @@ func renderHookLine(sty *styles.Styles, hi hooks.HookInfo, rawName, detail strin
 // hookDetail returns the styled detail text for a single hook result.
 func hookDetail(sty *styles.Styles, hi hooks.HookInfo) string {
 	const (
-		okMessage      = "OK"
-		denialMessage  = "Denied"
-		failedMessage  = "Failed"
-		rewroteMessage = "Rewrote Output"
+		okMessage       = "OK"
+		denialMessage   = "Denied"
+		failedMessage   = "Failed"
+		rewroteMessage  = "Rewrote Output"
+		feedbackMessage = "Feedback"
 	)
 	// A hook that never reached a verdict is not "OK": it checked
 	// nothing. It is still non-blocking, so the call went ahead, but the
@@ -1034,6 +1035,11 @@ func hookDetail(sty *styles.Styles, hi hooks.HookInfo) string {
 	}
 	switch hi.Decision {
 	case "deny":
+		// A PostToolUse hook blocks after the call has run: what it
+		// sends the agent is feedback, not a denial.
+		if hi.Event == hooks.EventPostToolUse {
+			return strings.TrimSpace(sty.Tool.HookDenied.Render(feedbackMessage) + " " + sty.Tool.HookDeniedReason.Render(hi.Reason))
+		}
 		if hi.Reason != "" {
 			return sty.Tool.HookDenied.Render(denialMessage) + " " + sty.Tool.HookDeniedReason.Render(hi.Reason)
 		}

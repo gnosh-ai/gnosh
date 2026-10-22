@@ -17,6 +17,8 @@ import (
 const (
 	// EventPreToolUse fires immediately before a tool call runs.
 	EventPreToolUse = config.EventPreToolUse
+	// EventPostToolUse fires right after a tool call succeeds.
+	EventPostToolUse = config.EventPostToolUse
 	// EventStop fires when the agent is about to finish its turn.
 	EventStop = config.EventStop
 )
@@ -40,7 +42,12 @@ type HookMetadata struct {
 
 // HookInfo identifies a single hook that ran and its individual result.
 type HookInfo struct {
-	Name         string `json:"name"`
+	Name string `json:"name"`
+	// Event is the event the hook ran for. A tool call's metadata lists
+	// its PreToolUse and PostToolUse hooks together, and a deny means
+	// something different for each: a blocked call, or feedback on a
+	// call that already ran.
+	Event        string `json:"event,omitempty"`
 	Matcher      string `json:"matcher,omitempty"`
 	Decision     string `json:"decision"`
 	Halt         bool   `json:"halt,omitempty"`

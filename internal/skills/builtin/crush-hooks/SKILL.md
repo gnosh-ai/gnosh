@@ -1,6 +1,6 @@
 ---
 name: crush-hooks
-description: Use when the user wants to add, write, debug, or configure a Crush hook — gating or blocking tool calls, approving or rewriting tool input before execution, injecting context into tool results, or troubleshooting hook behavior in crush.json.
+description: Use when the user wants to add, write, debug, or configure a Crush hook — gating or blocking tool calls, approving or rewriting tool input before execution, running a formatter or linter after a tool call, injecting context into tool results, or troubleshooting hook behavior in crush.json.
 ---
 
 # Crush Hooks
@@ -16,17 +16,17 @@ need to author correct hooks.
 
 ## Supported Events
 
-`PreToolUse` fires before every tool call. `Stop` fires when the agent is about
-to finish its turn.
+`PreToolUse` fires before every tool call. `PostToolUse` fires after a tool
+call succeeds. `Stop` fires when the agent is about to finish its turn.
 
 Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
 `PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Crush refuses
 to start on an event name it doesn't fire, rather than accepting a hook that
 would look configured and silently never run.
 
-A `matcher` only makes sense for `PreToolUse`. There is no tool in play when a
-turn ends, so a `matcher` on a `Stop` hook is a config error too, and every
-configured `Stop` hook runs.
+A `matcher` only makes sense for `PreToolUse` and `PostToolUse`. There is no
+tool in play when a turn ends, so a `matcher` on a `Stop` hook is a config error
+too, and every configured `Stop` hook runs.
 
 ## Configuration
 
@@ -60,7 +60,7 @@ the input/output contract is identical regardless of language.
 
 | Variable                     | Description                              |
 | ---------------------------- | ---------------------------------------- |
-| `CRUSH_EVENT`                | Event name (`PreToolUse` or `Stop`)      |
+| `CRUSH_EVENT`                | Event name (`PreToolUse`, `PostToolUse` or `Stop`) |
 | `CRUSH_TOOL_NAME`            | Tool being called; empty on `Stop`       |
 | `CRUSH_SESSION_ID`           | Current session ID                       |
 | `CRUSH_CWD`                  | Working directory                        |
@@ -83,6 +83,10 @@ the rename; either works.
   "tool_input": {"command": "rm -rf /"}
 }
 ```
+
+A `PostToolUse` payload also carries what the tool returned, as in Claude
+Code: `"tool_response": {"output": "…", "metadata": {…}}` (for `bash`, the
+metadata includes `exit_code`).
 
 ## Output
 
@@ -126,6 +130,12 @@ policy violation).
   Nested objects are replaced wholesale, not deep-merged. Ignored on deny/halt.
   It must be a JSON object; anything else is a failed hook, and an `allow`
   given with it is dropped, so the normal permission check runs.
+
+**On `PostToolUse`** the call has already run, so nothing is approved,
+blocked or rewritten. Exit `2` (or `"decision": "block"`/`"deny"`) hands your
+reason to the model as feedback after the tool's output; `context` (or
+Claude Code's `additionalContext`) is appended the same way; exit `49` ends the
+turn. A failed call does not fire `PostToolUse`.
 
 ## Aggregation (Multiple Hooks)
 
@@ -198,6 +208,27 @@ If the original call was `{"command": "npm test", "timeout": 60000}`, the
 tool runs with `{"command": "<rewritten>", "timeout": 60000}` — `timeout` is
 preserved.
 
+### Format a file after every edit (PostToolUse)
+
+```jsonc
+{ "hooks": { "PostToolUse": [{ "matcher": "^(edit|multiedit|write)$", "command": "./hooks/gofumpt.sh" }] } }
+```
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+f="$CRUSH_TOOL_INPUT_FILE_PATH"
+[[ "$f" == *.go ]] || exit 0
+if ! out=$(gofumpt -w "$f" 2>&1); then
+  echo "gofumpt failed on $f: $out" >&2
+  exit 2
+fi
+```
+
+When a hook changes the file the agent just wrote, Crush records a fresh
+read of it, so the agent's next edit isn't refused as "modified since it was
+read", and tells the agent the file changed.
+
 ### Refuse to let the turn end (Stop)
 
 A `Stop` hook fires when the agent is about to finish. Exit `2` means "you are
@@ -236,9 +267,9 @@ value is reported as a failed hook, not silently ignored.
 
 1. Add `#!/usr/bin/env bash` and `set -euo pipefail` (for shell scripts).
 2. `chmod +x` the script.
-3. Add the entry under `hooks.PreToolUse` (with the right matcher) or
-   `hooks.Stop` (no matcher) in `crush.json`. Spell the event name exactly;
-   anything else is a startup error.
+3. Add the entry under `hooks.PreToolUse` or `hooks.PostToolUse` (with the
+   right matcher) or `hooks.Stop` (no matcher) in `crush.json`. Spell the event
+   name exactly; anything else is a startup error.
 4. Decide intent: inject context (omit `decision`), auto-approve (`"allow"`),
    block (`exit 2`), or halt (`exit 49`). On `Stop`, `exit 2` means "keep
    working" and `exit 49` means "end now".
