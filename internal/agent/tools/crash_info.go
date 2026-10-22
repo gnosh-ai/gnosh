@@ -15,14 +15,14 @@ import (
 	"github.com/charmbracelet/crush/internal/skills"
 )
 
-const CrushInfoToolName = "crush_info"
+const CrashInfoToolName = "crash_info"
 
-//go:embed crush_info.md
-var crushInfoDescription string
+//go:embed crash_info.md
+var crashInfoDescription string
 
-type CrushInfoParams struct{}
+type CrashInfoParams struct{}
 
-func NewCrushInfoTool(
+func NewCrashInfoTool(
 	cfg *config.ConfigStore,
 	lspManager *lsp.Manager,
 	allSkills []*skills.Skill,
@@ -30,15 +30,15 @@ func NewCrushInfoTool(
 	skillTracker *skills.Tracker,
 ) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
-		CrushInfoToolName,
-		crushInfoDescription,
-		func(ctx context.Context, _ CrushInfoParams, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
-			return fantasy.NewTextResponse(buildCrushInfo(cfg, lspManager, allSkills, activeSkills, skillTracker)), nil
+		CrashInfoToolName,
+		crashInfoDescription,
+		func(ctx context.Context, _ CrashInfoParams, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			return fantasy.NewTextResponse(buildCrashInfo(cfg, lspManager, allSkills, activeSkills, skillTracker)), nil
 		},
 	)
 }
 
-func buildCrushInfo(cfg *config.ConfigStore, lspManager *lsp.Manager, allSkills []*skills.Skill, activeSkills []*skills.Skill, skillTracker *skills.Tracker) string {
+func buildCrashInfo(cfg *config.ConfigStore, lspManager *lsp.Manager, allSkills []*skills.Skill, activeSkills []*skills.Skill, skillTracker *skills.Tracker) string {
 	var b strings.Builder
 
 	writeConfigFiles(&b, cfg)

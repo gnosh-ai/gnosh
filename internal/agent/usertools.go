@@ -12,6 +12,7 @@ import (
 	"charm.land/fantasy"
 
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/tooldefs"
 )
 
 // UserToolsDir is where a user's own tool descriptions live, beside crushrc:
@@ -53,7 +54,7 @@ func applyUserTools(tools []fantasy.AgentTool) []fantasy.AgentTool {
 			slog.Info("Tool left out by the user's disabled.txt", "tool", name)
 			continue
 		}
-		if b, err := os.ReadFile(filepath.Join(dir, name+".md")); err == nil {
+		if _, b, err := userDescriptionFile(dir, name); err == nil {
 			if desc, ok := userDescription(b); ok {
 				t = describedTool{AgentTool: t, description: desc}
 			}
@@ -61,6 +62,24 @@ func applyUserTools(tools []fantasy.AgentTool) []fantasy.AgentTool {
 		out = append(out, t)
 	}
 	return out
+}
+
+// userDescriptionFile reads the description file the user keeps for a
+// tool in dir: <name>.md or, where only that exists, the file named for
+// the tool's name from before the rename to Crash. path is where the file
+// is, or where it would go.
+func userDescriptionFile(dir, name string) (path string, b []byte, err error) {
+	path = filepath.Join(dir, name+".md")
+	b, err = os.ReadFile(path)
+	if err != nil {
+		if legacy := tooldefs.LegacyName(name); legacy != "" {
+			legacyPath := filepath.Join(dir, legacy+".md")
+			if lb, lerr := os.ReadFile(legacyPath); lerr == nil {
+				return legacyPath, lb, nil
+			}
+		}
+	}
+	return path, b, err
 }
 
 func readDisabledTools(path string) map[string]bool {
@@ -76,15 +95,14 @@ func readDisabledTools(path string) map[string]bool {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		names[line] = true
+		names[tooldefs.Canonical(line)] = true
 	}
 	return names
 }
 
 // UserToolDescription reports whether the user's file for that tool is in use.
 func UserToolDescription(name string) (path string, used bool) {
-	path = filepath.Join(UserToolsDir(), name+".md")
-	b, err := os.ReadFile(path)
+	path, b, err := userDescriptionFile(UserToolsDir(), name)
 	if err != nil {
 		return path, false
 	}

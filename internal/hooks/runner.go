@@ -12,6 +12,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/shell"
+	"github.com/charmbracelet/crush/internal/tooldefs"
 )
 
 // abandonGrace is how long runOne waits after ctx cancellation for the
@@ -201,11 +202,14 @@ func (r *Runner) run(
 }
 
 // matchingHooks returns hooks whose matcher matches the tool name (or has
-// no matcher, which matches everything).
+// no matcher, which matches everything). A matcher written for the name a
+// tool had before the rename (^crush_logs$) still matches it.
 func (r *Runner) matchingHooks(toolName string) []config.HookConfig {
+	legacy := tooldefs.LegacyName(toolName)
 	var matched []config.HookConfig
 	for _, h := range r.hooks {
-		if h.matcher == nil || h.matcher.MatchString(toolName) {
+		if h.matcher == nil || h.matcher.MatchString(toolName) ||
+			(legacy != "" && h.matcher.MatchString(legacy)) {
 			matched = append(matched, h.cfg)
 		}
 	}

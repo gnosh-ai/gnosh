@@ -225,7 +225,7 @@ func TestToolCallSummary(t *testing.T) {
 		},
 		{
 			name: "empty input",
-			call: ToolCall{ID: "c7", Name: "crush_info"},
+			call: ToolCall{ID: "c7", Name: "crash_info"},
 			want: "",
 		},
 		{

@@ -22,8 +22,8 @@ const MCPPrefix = "mcp_"
 var names = []string{
 	"agent",
 	"bash",
-	"crush_info",
-	"crush_logs",
+	"crash_info",
+	"crash_logs",
 	"job_output",
 	"job_kill",
 	"download",
@@ -56,9 +56,38 @@ func Names() []string {
 	return slices.Clone(names)
 }
 
-// IsKnown reports whether name is a built-in tool.
+// legacyNames maps the names tools had before Crush was renamed Crash
+// to their names now, so that a config or hook naming the old one keeps
+// working.
+var legacyNames = map[string]string{
+	"crush_info": "crash_info",
+	"crush_logs": "crash_logs",
+}
+
+// Canonical returns the current name of a built-in tool given by any of
+// its names. Any other name is returned as it is.
+func Canonical(name string) string {
+	if current, ok := legacyNames[name]; ok {
+		return current
+	}
+	return name
+}
+
+// LegacyName returns the name a built-in tool had before the rename, or
+// "" if it had no other.
+func LegacyName(name string) string {
+	for legacy, current := range legacyNames {
+		if current == name {
+			return legacy
+		}
+	}
+	return ""
+}
+
+// IsKnown reports whether name is a built-in tool, under its current name
+// or the one it had before the rename.
 func IsKnown(name string) bool {
-	return slices.Contains(names, name)
+	return slices.Contains(names, Canonical(name))
 }
 
 // IsMCPToolName reports whether name has the shape of an MCP tool name.

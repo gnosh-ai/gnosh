@@ -30,6 +30,7 @@ import (
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/home"
 	"github.com/charmbracelet/crush/internal/shellconfig"
+	"github.com/charmbracelet/crush/internal/tooldefs"
 	powernapConfig "github.com/charmbracelet/x/powernap/pkg/config"
 	"github.com/qjebbs/go-jsons"
 	"github.com/tidwall/gjson"
@@ -1584,6 +1585,19 @@ func (c *Config) ValidateMCPs() error {
 // prefix). Those are discovered when a server connects, so at config
 // time only the shape can be checked.
 func (c *Config) ValidateTools() error {
+	// A tool named as it was before the rename (crush_logs) means the tool
+	// it is now (crash_logs). Both the load and the reload come through
+	// here, so the lists are put in current names first.
+	if c.Options != nil {
+		for i, name := range c.Options.DisabledTools {
+			c.Options.DisabledTools[i] = tooldefs.Canonical(name)
+		}
+	}
+	if c.Permissions != nil {
+		for i, name := range c.Permissions.AllowedTools {
+			c.Permissions.AllowedTools[i] = tooldefs.Canonical(name)
+		}
+	}
 	if c.Options != nil {
 		for _, name := range c.Options.DisabledTools {
 			if IsKnownToolName(name) {

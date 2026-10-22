@@ -112,3 +112,17 @@ func TestValidateIncludesTools(t *testing.T) {
 	cfg := &Config{Options: &Options{DisabledTools: []string{"nope"}}}
 	require.ErrorContains(t, cfg.Validate(), "invalid tool configuration")
 }
+
+// A tool named as it was before the rename to Crash is the tool it is now:
+// a config written for crush_logs keeps loading, and means crash_logs.
+func TestValidateToolsTakesLegacyToolNames(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Options:     &Options{DisabledTools: []string{"crush_logs"}},
+		Permissions: &Permissions{AllowedTools: []string{"crush_info", "bash"}},
+	}
+	require.NoError(t, cfg.ValidateTools())
+	require.Equal(t, []string{"crash_logs"}, cfg.Options.DisabledTools)
+	require.Equal(t, []string{"crash_info", "bash"}, cfg.Permissions.AllowedTools)
+}

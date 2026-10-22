@@ -922,3 +922,13 @@ func TestParseStdoutClaudeCodeFormat(t *testing.T) {
 		require.Equal(t, "hello", r.Context)
 	})
 }
+
+// A matcher written for a tool's name from before the rename to Crash
+// still matches the tool under its new name.
+func TestMatcherMatchesALegacyToolName(t *testing.T) {
+	t.Parallel()
+
+	r := NewRunner([]config.HookConfig{{Command: "true", Matcher: "^crush_logs$"}}, t.TempDir(), t.TempDir())
+	require.Len(t, r.matchingHooks("crash_logs"), 1)
+	require.Empty(t, r.matchingHooks("bash"))
+}

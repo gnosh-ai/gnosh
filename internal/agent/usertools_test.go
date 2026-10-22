@@ -86,3 +86,22 @@ func TestApplyUserTools_UneditedExportFollowsTheBuiltIn(t *testing.T) {
 	_, used = UserToolDescription("bash")
 	require.True(t, used)
 }
+
+// disabled.txt entries and exported descriptions written for a tool's name
+// from before the rename to Crash keep applying to it.
+func TestApplyUserToolsTakesLegacyToolNames(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CRUSH_GLOBAL_CONFIG", filepath.Join(dir, "crush.json"))
+	require.NoError(t, os.MkdirAll(UserToolsDir(), 0o755))
+	require.NoError(t, os.WriteFile(DisabledToolsFile(), []byte("crush_logs\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(UserToolsDir(), "crush_info.md"), []byte("What Crash is running with.\n"), 0o644))
+
+	got := applyUserTools([]fantasy.AgentTool{userToolFake{"crash_logs", "built-in logs"}, userToolFake{"crash_info", "built-in info"}})
+	require.Len(t, got, 1, "crush_logs in disabled.txt leaves crash_logs out")
+	require.Equal(t, "crash_info", got[0].Info().Name)
+	require.Equal(t, "What Crash is running with.", got[0].Info().Description)
+
+	path, used := UserToolDescription("crash_info")
+	require.True(t, used)
+	require.Equal(t, filepath.Join(UserToolsDir(), "crush_info.md"), path)
+}
