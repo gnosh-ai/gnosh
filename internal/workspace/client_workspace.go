@@ -328,6 +328,9 @@ func (w *ClientWorkspace) AgentClearQueue(sessionID string) {
 func (w *ClientWorkspace) AgentPopQueuedPrompts(sessionID string) []string {
 	prompts, err := w.client.PopAgentSessionQueuedPrompts(context.Background(), w.workspaceID(), sessionID)
 	if err != nil {
+		// The server may have taken the prompts before the reply was
+		// lost, so leave a trace of where they went.
+		slog.Warn("Could not take queued prompts into the editor", "session_id", sessionID, "error", err)
 		return nil
 	}
 	return prompts

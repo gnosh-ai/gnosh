@@ -2296,12 +2296,18 @@ func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
 	return prompts
 }
 
-// PopQueuedPrompts takes the user-sent prompts out of the session's queue,
-// oldest first, leaving any hidden continuation queued for the turn-end
-// handoff to pick up. A prompt that carries a RunID stays queued too: a
-// caller such as `crash run` is waiting for its RunComplete, and taking the
-// prompt away without running it would leave that caller hanging. What is
-// popped is fire-and-forget (the TUI sends no RunID), so removing it
+// PopQueuedPrompts takes the prompts the user typed out of the session's
+// queue, oldest first, and leaves everything else queued:
+//   - hidden continuations, for the turn-end handoff to pick up;
+//   - prompts that carry a RunID: a caller such as `crash run` is waiting
+//     for their RunComplete and would hang;
+//   - channel messages (a Signal message, say): the user did not write
+//     them, and in the editor they would lose the channel their reply
+//     goes back to;
+//   - prompts with attachments (a pasted file or image): only the text
+//     can go into the editor, so the attachment would be lost.
+//
+// What is popped is fire-and-forget (the TUI sends no RunID), so removing it
 // publishes nothing.
 func (a *sessionAgent) PopQueuedPrompts(sessionID string) []string {
 	mu := a.sessionMu(sessionID)
@@ -2314,7 +2320,7 @@ func (a *sessionAgent) PopQueuedPrompts(sessionID string) []string {
 	var popped []string
 	var keep []SessionAgentCall
 	for _, call := range l {
-		if call.HiddenUserMessage || call.RunID != "" {
+		if call.HiddenUserMessage || call.RunID != "" || call.Channel != "" || len(call.Attachments) > 0 {
 			keep = append(keep, call)
 			continue
 		}

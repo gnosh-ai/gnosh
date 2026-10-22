@@ -26,6 +26,7 @@ package model
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -309,16 +310,17 @@ type promptQueuePopMsg struct {
 // goroutine, delivering a promptQueuePopMsg. The pop removes them from the
 // session's queue (leaving any hidden continuation), so the pill stops
 // showing them as soon as they land in the editor. It returns nil while
-// another queue fetch is in flight (their results would race the pop) or
-// when there is nothing to pop.
+// another pop is in flight or when there is nothing to pop. A pill refresh
+// in flight does not hold it up: the pop bumps the queue generation when it
+// lands, so that refresh's older result is discarded, not applied.
 func (m *UI) dispatchPromptQueuePop() tea.Cmd {
-	if m.promptQueueInFlight || m.com == nil || m.com.Workspace == nil {
+	if m.promptQueuePopInFlight || m.com == nil || m.com.Workspace == nil {
 		return nil
 	}
 	if !m.hasSession() || m.promptQueue == 0 {
 		return nil
 	}
-	m.promptQueueInFlight = true
+	m.promptQueuePopInFlight = true
 	ws := m.com.Workspace
 	sessionID := m.session.ID
 	gen := m.promptQueueGen
@@ -340,15 +342,24 @@ func (m *UI) dispatchPromptQueuePop() tea.Cmd {
 // stale, not the pop, and anything typed since Up was pressed is kept after
 // them.
 func (m *UI) applyPromptQueuePop(msg promptQueuePopMsg) []tea.Cmd {
-	m.promptQueueInFlight = false
+	m.promptQueuePopInFlight = false
 	if len(msg.prompts) == 0 {
-		// Nothing was left to take: the turn ended and ran them first,
-		// or a refresh had already emptied the local count. Refetch so
-		// the pill shows what is really queued.
-		if cmd := m.dispatchPromptQueueRefresh(); cmd != nil {
-			return []tea.Cmd{cmd}
+		// Nothing was taken: the turn ended and ran them first, or all
+		// that is queued is what Up leaves in place (a channel message,
+		// a prompt with attachments, one a caller waits on). Do what Up
+		// does with nothing queued, so the key is never dead, and
+		// refetch so the pill shows what is really queued.
+		var cmds []tea.Cmd
+		if msg.forSession == m.currentSessionID() && m.textarea.Length() == 0 {
+			prevHeight := m.textarea.Height()
+			if m.historyPrev() {
+				cmds = append(cmds, m.updateTextareaWithPrevHeight(nil, prevHeight))
+			}
 		}
-		return nil
+		if cmd := m.dispatchPromptQueueRefresh(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		return cmds
 	}
 	if msg.forSession != m.currentSessionID() {
 		// The session changed while the pop was in flight. This editor
@@ -363,7 +374,10 @@ func (m *UI) applyPromptQueuePop(msg promptQueuePopMsg) []tea.Cmd {
 	prevHeight := m.textarea.Height()
 	m.textarea.Reset()
 	m.textarea.InsertString(text)
-	m.textarea.MoveToBegin()
+	// The cursor goes to the end, as after typing, so the next Up moves
+	// within the text rather than straight into history, which would
+	// swap the prompts out of the editor for an old one.
+	m.textarea.MoveToEnd()
 	m.syncBangModeFromTextarea()
 	m.promptHistory.index = -1
 	m.promptHistory.draft = ""
@@ -382,14 +396,17 @@ func (m *UI) applyPromptQueuePop(msg promptQueuePopMsg) []tea.Cmd {
 }
 
 // resendPoppedPrompts sends prompts popped from sessionID's queue back to
-// that session, in order, off the Update goroutine.
+// that session off the Update goroutine, as the one prompt Enter would have
+// sent from the editor. One send keeps their order and cannot lose the rest
+// to an error in the first: in-process, AgentRun runs the whole turn when
+// the session is idle and returns that turn's own error.
 func (m *UI) resendPoppedPrompts(sessionID string, prompts []string) tea.Cmd {
 	ws := m.com.Workspace
+	text := strings.Join(prompts, "\n\n")
 	return func() tea.Msg {
-		for _, prompt := range prompts {
-			if err := ws.AgentRun(context.Background(), sessionID, prompt); err != nil {
-				return util.ReportError(fmt.Errorf("could not send a queued prompt back to its session: %w", err))()
-			}
+		err := ws.AgentRun(context.Background(), sessionID, text)
+		if err != nil && !errors.Is(err, context.Canceled) {
+			return util.ReportError(fmt.Errorf("sending queued prompts back to their session: %w", err))()
 		}
 		return nil
 	}

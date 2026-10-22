@@ -431,6 +431,10 @@ type UI struct {
 	loop                 loopState
 	promptQueueCheckedAt time.Time
 	promptQueueInFlight  bool
+	// promptQueuePopInFlight is set while Up's pop of the queued prompts
+	// is out; it is separate from promptQueueInFlight so a pill refresh
+	// in flight does not swallow the keypress.
+	promptQueuePopInFlight bool
 	// promptQueueGen is bumped by every queue state transition; an
 	// in-flight fetch captures it at dispatch and its result is discarded
 	// if the generation has moved on (see workspace_cache.go).

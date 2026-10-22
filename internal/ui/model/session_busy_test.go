@@ -35,6 +35,7 @@ type countingWorkspace struct {
 	agentBusy      bool
 	yolo           bool
 	queued         []string
+	keepOnPop      bool     // the queue holds only what Up leaves in place
 	runs           []string // "session: prompt" per AgentRun
 	model          workspace.AgentModel
 	lspStates      map[string]workspace.LSPClientInfo
@@ -95,6 +96,9 @@ func (w *countingWorkspace) AgentClearQueue(string) { w.clearQueueCalls++; w.que
 
 func (w *countingWorkspace) AgentPopQueuedPrompts(string) []string {
 	w.popQueueCalls++
+	if w.keepOnPop {
+		return nil
+	}
 	prompts := append([]string(nil), w.queued...)
 	w.queued = nil
 	return prompts

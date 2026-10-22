@@ -49,11 +49,11 @@ func TestUpWithEmptyEditorAndQueuePopsIntoTextarea(t *testing.T) {
 		"the editor holds the popped text, not a history entry")
 }
 
-// TestUpWithQueueWhileRefreshInFlightDefers pins that Up defers the pop
-// while a queue refresh is in flight: their results would race (the refresh
-// would clobber the local queue the pop relies on). The pop is dispatched
-// once the refresh lands.
-func TestUpWithQueueWhileRefreshInFlightDefers(t *testing.T) {
+// TestUpWithQueueWhileRefreshInFlightStillPops pins that a pill refresh in
+// flight does not swallow the keypress: the pop goes out at once, and when
+// it lands it bumps the queue generation, so the refresh's older result is
+// discarded instead of putting the popped prompts back in the pill.
+func TestUpWithQueueWhileRefreshInFlightStillPops(t *testing.T) {
 	pinTTLs(t)
 
 	ws := &countingWorkspace{ready: true, queued: []string{"queued one"}}
@@ -62,23 +62,19 @@ func TestUpWithQueueWhileRefreshInFlightDefers(t *testing.T) {
 	m.promptQueue = 1
 	m.promptQueueItems = []string{"queued one"}
 	m.promptQueueInFlight = true
+	staleGen := m.promptQueueGen
 	ws.resetCounters()
 
 	_, cmd := m.Update(upKey())
-	require.Nil(t, cmd, "the pop must defer while a refresh is in flight")
-	require.Zero(t, ws.popQueueCalls)
-
-	// Let the in-flight refresh land; its generation matches, so it is
-	// applied and clears promptQueueInFlight.
-	_, _ = m.Update(promptQueueMsg{forSession: "s1", gen: m.promptQueueGen, prompts: []string{"queued one"}})
-	require.False(t, m.promptQueueInFlight)
-	require.Equal(t, 1, m.promptQueue, "the refresh must repopulate the queue")
-
-	_, cmd = m.Update(upKey())
-	require.NotNil(t, cmd, "after the refresh lands, Up must dispatch a pop")
+	require.NotNil(t, cmd, "Up must pop even while a refresh is in flight")
 	runCmds(m, cmd)
 	require.Equal(t, 1, ws.popQueueCalls)
 	require.Equal(t, "queued one", m.textarea.Value())
+
+	// The refresh that was in flight lands late, listing the prompt the
+	// pop already took.
+	_, _ = m.Update(promptQueueMsg{forSession: "s1", gen: staleGen, prompts: []string{"queued one"}})
+	require.Zero(t, m.promptQueue, "a refresh older than the pop must not bring the prompt back")
 }
 
 // TestUpWithQueueAndTextGoesToHistory pins that Up pops only from an empty
@@ -189,5 +185,51 @@ func TestUpPopAfterASessionSwitchSendsThePromptsBack(t *testing.T) {
 
 	runCmds(m, cmd)
 	require.Empty(t, m.textarea.Value(), "the other session's editor stays as it was")
-	require.Equal(t, []string{"s1: queued one", "s1: queued two"}, ws.runs)
+	require.Equal(t, []string{"s1: queued one\n\nqueued two"}, ws.runs,
+		"sent back as the one prompt Enter would have sent, so none can be lost or reordered")
+}
+
+// When everything queued is what Up leaves in place (a channel message, a
+// prompt with attachments, one a caller waits on), the pop takes nothing;
+// Up must then do what it does with nothing queued instead of going dead.
+func TestUpWithOnlyKeptPromptsQueuedStepsIntoHistory(t *testing.T) {
+	pinTTLs(t)
+
+	ws := &countingWorkspace{ready: true, queued: []string{"<channel>hi</channel>"}, keepOnPop: true}
+	m := newBusyUI(ws)
+	warmCaches(m, true)
+	m.promptQueue = 1
+	m.promptQueueItems = []string{"<channel>hi</channel>"}
+	m.promptHistory.messages = []string{"earlier prompt"}
+	m.promptHistory.index = -1
+
+	_, cmd := m.Update(upKey())
+	require.NotNil(t, cmd)
+	runCmds(m, cmd)
+	require.Equal(t, 1, ws.popQueueCalls)
+	require.NotEmpty(t, m.textarea.Value(), "Up must not be a dead key")
+	require.Equal(t, 0, m.promptHistory.index, "it steps into history, as with nothing queued")
+}
+
+// After the pop the cursor sits at the end of the text, as after typing, so a
+// second Up moves within the text instead of swapping it out of the editor
+// for an old prompt from history.
+func TestSecondUpAfterPopStaysOnThePoppedText(t *testing.T) {
+	pinTTLs(t)
+
+	ws := &countingWorkspace{ready: true, queued: []string{"queued one"}}
+	m := newBusyUI(ws)
+	warmCaches(m, true)
+	m.promptQueue = 1
+	m.promptQueueItems = []string{"queued one"}
+	m.promptHistory.messages = []string{"older prompt"}
+	m.promptHistory.index = -1
+
+	_, cmd := m.Update(upKey())
+	runCmds(m, cmd)
+	require.Equal(t, "queued one", m.textarea.Value())
+
+	m.handleHistoryUp(nil)
+	require.Equal(t, "queued one", m.textarea.Value(), "the popped text must stay in the editor")
+	require.Equal(t, -1, m.promptHistory.index)
 }

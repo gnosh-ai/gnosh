@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/charmbracelet/crush/internal/message"
 )
 
 // The queue also holds the agent's own hidden continuations (a Stop hook's
@@ -152,4 +154,27 @@ func TestCancel_DropsAQueuedHiddenContinuation(t *testing.T) {
 
 	queued, _ := a.messageQueue.Get(sessionID)
 	require.Empty(t, queued, "the follow-up must not survive the cancel")
+}
+
+// Up takes only what the user typed. A channel message (the user did not
+// write it, and its reply must go back to its channel) and a prompt with
+// attachments (only text fits in the editor) stay queued and run as sent.
+func TestPopQueuedPrompts_LeavesChannelMessagesAndAttachments(t *testing.T) {
+	t.Parallel()
+
+	a := NewSessionAgent(SessionAgentOptions{}).(*sessionAgent)
+	const sessionID = "s1"
+
+	mu := a.sessionMu(sessionID)
+	mu.Lock()
+	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "<channel>hi</channel>", Channel: "signal"})
+	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "look at this", Attachments: []message.Attachment{{FilePath: "paste_1.txt", MimeType: "text/plain", Content: []byte("log")}}})
+	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "typed"})
+	mu.Unlock()
+
+	require.Equal(t, []string{"typed"}, a.PopQueuedPrompts(sessionID))
+	queued, _ := a.messageQueue.Get(sessionID)
+	require.Len(t, queued, 2)
+	require.Equal(t, "signal", queued[0].Channel)
+	require.Len(t, queued[1].Attachments, 1, "the attachment must still go with its prompt")
 }
