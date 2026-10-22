@@ -72,9 +72,13 @@ type ViewResponseMetadata struct {
 }
 
 const (
-	ViewToolName     = "view"
-	MaxViewSize      = 200 * 1024 // 200KB
-	DefaultReadLimit = 200
+	ViewToolName = "view"
+	MaxViewSize  = 200 * 1024 // 200KB
+	// DefaultReadLimit is how many lines a view returns when no limit is
+	// given: 2000, as Claude Code's Read tool does. At 200, an agent paged
+	// through any real source file in several calls, each a model round
+	// trip (tens of seconds for the AI box's local model).
+	DefaultReadLimit = 2000
 	MaxLineLength    = 2000
 )
 

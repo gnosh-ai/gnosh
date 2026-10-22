@@ -360,3 +360,25 @@ func TestSniffImageMimeType(t *testing.T) {
 		})
 	}
 }
+
+// A source file of ordinary length comes back whole from one view, as from
+// Claude Code's Read, instead of in pages.
+func TestViewToolReturnsAnOrdinaryFileWhole(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	filePath := filepath.Join(workingDir, "main.go")
+	lines := make([]string, 600)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("// line %d", i+1)
+	}
+	require.NoError(t, os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0o644))
+
+	tool := newViewToolForTest(workingDir)
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+	resp := runViewTool(t, tool, ctx, ViewParams{FilePath: filePath})
+
+	require.False(t, resp.IsError, resp.Content)
+	require.Contains(t, resp.Content, "// line 600")
+	require.NotContains(t, resp.Content, "File has more lines")
+}
