@@ -109,20 +109,31 @@ var gitGlobalIgnorePatterns = sync.OnceValue(func() []gitignore.Pattern {
 	return parsePatterns(strings.Split(string(bts), "\n"), nil)
 })
 
-// crushGlobalIgnorePatterns returns patterns from the user's
-// ~/.config/crush/ignore file.
+// crushGlobalIgnorePatterns returns patterns from the user's global
+// ignore files, ~/.config/crash/ignore and ~/.config/crush/ignore.
 var crushGlobalIgnorePatterns = sync.OnceValue(func() []gitignore.Pattern {
-	name := filepath.Join(home.Config(), "crush", "ignore")
-	bts, err := os.ReadFile(name)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			slog.Debug("Failed to read crush global ignore file", "path", name, "error", err)
-		}
-		return nil
-	}
-	lines := strings.Split(string(bts), "\n")
-	return parsePatterns(lines, nil)
+	return globalIgnorePatterns(home.Config())
 })
+
+// globalIgnorePatterns reads the global ignore file under configDir by
+// both names, crash and the crush from before the rename. Both are read,
+// as both commands directories are: patterns add up, so one started under
+// the new name drops none of the old one's.
+func globalIgnorePatterns(configDir string) []gitignore.Pattern {
+	var patterns []gitignore.Pattern
+	for _, app := range []string{"crash", "crush"} {
+		name := filepath.Join(configDir, app, "ignore")
+		bts, err := os.ReadFile(name)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				slog.Debug("Failed to read global ignore file", "path", name, "error", err)
+			}
+			continue
+		}
+		patterns = append(patterns, parsePatterns(strings.Split(string(bts), "\n"), nil)...)
+	}
+	return patterns
+}
 
 // parsePatterns parses gitignore pattern strings into Pattern objects.
 // domain is the path components where the patterns are defined (nil for global).

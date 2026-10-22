@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,4 +58,32 @@ func relPaths(tb testing.TB, in []string, base string) []string {
 		out = append(out, filepath.ToSlash(rel))
 	}
 	return out
+}
+
+// The global ignore file is read under both names, and the patterns of
+// both count: one started under the new name drops none of the old one's.
+func TestGlobalIgnorePatternsReadsBothNames(t *testing.T) {
+	t.Parallel()
+
+	configDir := t.TempDir()
+	for app, pattern := range map[string]string{"crash": "*.log", "crush": "secret/"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(configDir, app), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(configDir, app, "ignore"), []byte(pattern+"\n"), 0o644))
+	}
+
+	patterns := globalIgnorePatterns(configDir)
+	require.Len(t, patterns, 2)
+	matches := func(path string, isDir bool) bool {
+		for _, p := range patterns {
+			if p.Match([]string{path}, isDir) == gitignore.Exclude {
+				return true
+			}
+		}
+		return false
+	}
+	require.True(t, matches("debug.log", false), "the crash ignore file counts")
+	require.True(t, matches("secret", true), "and so does the crush one")
+	require.False(t, matches("main.go", false))
+
+	require.Empty(t, globalIgnorePatterns(t.TempDir()), "no ignore file, no patterns")
 }
