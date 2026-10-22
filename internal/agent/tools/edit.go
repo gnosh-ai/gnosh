@@ -289,14 +289,16 @@ func loadExistingFile(edit editContext, filePath, sessionError string) (sessionI
 
 	lastRead := edit.filetracker.LastReadTime(edit.ctx, sessionID, filePath)
 	if lastRead.IsZero() {
-		return "", "", false, fantasy.NewTextErrorResponse("you must read the file before editing it. Use the View tool first"), nil
+		return "", "", false, fantasy.NewTextErrorResponse("you must read the file before editing it. Use the view tool first"), nil
 	}
 
 	modTime := fileInfo.ModTime().Truncate(time.Second)
 	if modTime.After(lastRead) {
 		return "", "", false, fantasy.NewTextErrorResponse(
 			fmt.Sprintf(
-				"file %s has been modified since it was last read (mod time: %s, last read: %s)",
+				"file %s has been modified since it was last read (mod time: %s, last read: %s), "+
+					"perhaps by a command you ran. Read it again with the view tool before editing it, "+
+					"so the edit is made against its current content.",
 				filePath, modTime.Format(time.RFC3339), lastRead.Format(time.RFC3339),
 			),
 		), nil

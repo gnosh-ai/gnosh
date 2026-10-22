@@ -21,6 +21,7 @@ import (
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/anim"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/crush/internal/workspace"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/term"
@@ -111,7 +112,7 @@ crash run --continue "Follow up on your last response"
 			event.AppInitialized()
 
 			if !ws.Config.IsConfigured() {
-				return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
+				return fmt.Errorf("no providers configured - please run '%s' to set up a provider interactively", version.Command)
 			}
 
 			clientWs := workspace.NewClientWorkspace(c, *ws)
@@ -146,7 +147,7 @@ crash run --continue "Follow up on your last response"
 		event.AppInitialized()
 
 		if !ws.Config().IsConfigured() {
-			return fmt.Errorf("no providers configured - please run 'crush' to set up a provider interactively")
+			return fmt.Errorf("no providers configured - please run '%s' to set up a provider interactively", version.Command)
 		}
 
 		if verbose {
