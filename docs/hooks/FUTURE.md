@@ -152,7 +152,12 @@ unaffected.
 
 ## `UserPromptSubmit` event
 
-**Status:** not implemented.
+**Status:** implemented, except `updated_prompt`. See
+[UserPromptSubmit](README.md#userpromptsubmit) in `README.md`. As in Claude
+Code, a hook can add context to a prompt or block it, but not rewrite it. It
+runs when a prompt is sent, so a prompt queued behind a running turn is checked
+then; a blocked prompt is not stored. The design notes below are kept for
+`updated_prompt`.
 
 ### Motivation
 

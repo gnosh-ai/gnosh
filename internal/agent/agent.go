@@ -180,6 +180,13 @@ type SessionAgentCall struct {
 	// fantasy retries the stream transparently. Returning an error
 	// surfaces the original auth error without retry.
 	OnAuthRefresh func(ctx context.Context, err *fantasy.ProviderError) error
+	// promptHooksRan marks a prompt the user sent that has been past its
+	// UserPromptSubmit hooks, which run once, when it is sent, so a
+	// queued prompt that runs later does not run them again.
+	// promptHookContext is what they added for the model to read with
+	// the prompt.
+	promptHooksRan    bool
+	promptHookContext string
 	// channelMeta holds the attributes of the <channel> element a
 	// channel-originated turn was started with, parsed once at Run
 	// entry. It survives the auto-summarize continuation, whose Prompt
@@ -277,6 +284,10 @@ type sessionAgent struct {
 	// Run against a concurrent Cancel. The lock is held only during
 	// the brief handoff (no DB or LLM I/O under the lock).
 	dispatchMu *csync.Map[string, *sync.Mutex]
+	// submitMu holds a per-session mutex that keeps prompts in the order
+	// they were sent while their UserPromptSubmit hooks run; see
+	// sessionSubmitMu.
+	submitMu *csync.Map[string, *sync.Mutex]
 	// acceptedRuns counts dispatched-but-not-yet-active runs per
 	// session. A counter > 0 means a dispatched prompt is in flight
 	// and has not yet completed the dispatch handoff in Run. Only
@@ -346,6 +357,7 @@ func NewSessionAgent(
 		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
 		activeRequests:       csync.NewMap[string, *activeCancel](),
 		dispatchMu:           csync.NewMap[string, *sync.Mutex](),
+		submitMu:             csync.NewMap[string, *sync.Mutex](),
 		acceptedRuns:         csync.NewMap[string, int](),
 		cancelMark:           csync.NewMap[string, uint64](),
 	}
@@ -700,6 +712,20 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		userMsgCreated bool
 	)
 
+	// A prompt the user sent goes past their UserPromptSubmit hooks
+	// first, once, whether it starts a turn or waits in the queue. The
+	// submit lock, held until the dispatch lock below is taken, keeps
+	// prompts sent one after another in that order while hooks run.
+	var submitMu *sync.Mutex
+	if a.wantsPromptHooks(call) {
+		submitMu = a.sessionSubmitMu(call.SessionID)
+		submitMu.Lock()
+		if err := a.runPromptHooks(ctx, &call); err != nil {
+			submitMu.Unlock()
+			return nil, err
+		}
+	}
+
 	// Serialize the dispatch decision (cancel-on-entry | queued | active)
 	// against a concurrent Cancel. Cancel takes the same per-session lock, so
 	// every cancel observes at least one of: a cancel mark, an activeRequests
@@ -710,6 +736,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// and start two runs on the same session.
 	sessMu := a.sessionMu(call.SessionID)
 	sessMu.Lock()
+	if submitMu != nil {
+		submitMu.Unlock()
+	}
 
 	if call.Accepted != nil && a.canceledBySeq(call.SessionID, call.Accepted.seq) {
 		// Cancel-on-entry: a cancel arrived while this accepted run was
@@ -948,7 +977,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		maxOutputTokens = &call.MaxOutputTokens
 	}
 	result, err = agent.Stream(genCtx, fantasy.AgentStreamCall{
-		Prompt:           message.PromptWithTextAttachments(call.Prompt, call.Attachments),
+		Prompt:           message.AppendPromptHookContext(message.PromptWithTextAttachments(call.Prompt, call.Attachments), promptHookBlock(call)),
 		Files:            files,
 		Messages:         history,
 		Headers:          sessionHeaders(call.SessionID),
@@ -1679,6 +1708,12 @@ func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentC
 		attachmentParts = append(attachmentParts, message.BinaryContent{Path: attachment.FilePath, MIMEType: attachment.MimeType, Data: attachment.Content})
 	}
 	parts = append(parts, attachmentParts...)
+	// What the user's UserPromptSubmit hooks added is kept with the
+	// prompt as a hidden part: the chat shows only what was typed, and the
+	// model reads it after the prompt whenever the conversation is rebuilt.
+	if block := promptHookBlock(call); block != "" {
+		parts = append(parts, message.TextContent{Text: block, Hidden: true})
+	}
 	msg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
 		Role:  message.User,
 		Parts: parts,

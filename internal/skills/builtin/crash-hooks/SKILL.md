@@ -17,8 +17,9 @@ need to author correct hooks.
 ## Supported Events
 
 `PreToolUse` fires before every tool call. `PostToolUse` fires after a tool
-call succeeds, and `PostToolUseFailure` after one fails. `Stop` fires when the
-agent is about to finish its turn.
+call succeeds, and `PostToolUseFailure` after one fails. `UserPromptSubmit`
+fires when the user sends a prompt, before the agent sees it. `Stop` fires when
+the agent is about to finish its turn.
 
 Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
 `PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Crash refuses
@@ -26,9 +27,9 @@ to start on an event name it doesn't fire, rather than accepting a hook that
 would look configured and silently never run.
 
 A `matcher` only makes sense for `PreToolUse`, `PostToolUse` and
-`PostToolUseFailure`. There is no
-tool in play when a turn ends, so a `matcher` on a `Stop` hook is a config error
-too, and every configured `Stop` hook runs.
+`PostToolUseFailure`. There is no tool in play when a prompt is sent or a turn
+ends, so a `matcher` on a `UserPromptSubmit` or `Stop` hook is a config error
+too, and every configured hook for those events runs.
 
 ## Configuration
 
@@ -143,6 +144,14 @@ Claude Code's `additionalContext`) is appended the same way; exit `49` ends the
 turn. A failed call does not fire `PostToolUse`; it fires `PostToolUseFailure`,
 which works the same way and gets `"error"` (the error the model reads) instead
 of `tool_response`. Both get `duration_ms`.
+
+**On `UserPromptSubmit`** the input is `{"prompt": ..., "attachments": [...]}`
+beside the common fields. Plain stdout (or `context`, or Claude Code's
+`additionalContext`) is added after the prompt for the agent to read, in a
+`<user-prompt-submit-hook>` tag; the chat shows only what the user typed. Exit
+`2` (or `"decision": "block"`) blocks the prompt: it is not sent or stored, and
+the user sees the reason. It runs once per prompt the user sends, also for one
+queued behind a running turn, and never for the agent's own continuations.
 
 ## Aggregation (Multiple Hooks)
 

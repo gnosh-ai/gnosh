@@ -19,6 +19,12 @@ const (
 	// against the tool name like EventPostToolUse; what a hook says is
 	// added to the error the agent reads.
 	EventPostToolUseFailure = "PostToolUseFailure"
+	// EventUserPromptSubmit fires when the user sends a prompt, before
+	// the agent sees it. A hook for it can add context the agent reads
+	// with the prompt (its stdout, or Claude Code's additionalContext),
+	// or block the prompt so it is not sent. As in Claude Code, hooks for
+	// it may not carry a Matcher.
+	EventUserPromptSubmit = "UserPromptSubmit"
 	// EventStop fires when the agent is about to finish its turn. A
 	// hook that blocks it sends the agent back to work instead of
 	// letting the turn end. There is no tool in play, so hooks for it
@@ -28,7 +34,7 @@ const (
 
 // knownHookEvents lists every recognised event name, in the order they
 // are reported to the user.
-var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventStop}
+var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventStop}
 
 // KnownHookEvents returns the recognised hook event names.
 func KnownHookEvents() []string {

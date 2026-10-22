@@ -580,6 +580,50 @@ func PromptWithTextAttachments(prompt string, attachments []Attachment) string {
 	return sb.String()
 }
 
+// PromptHookContext wraps what a user's UserPromptSubmit hooks added to a
+// prompt in the tag Claude Code gives it, for the model to read after the
+// prompt.
+func PromptHookContext(context string) string {
+	return "<user-prompt-submit-hook>\n" + context + "\n</user-prompt-submit-hook>"
+}
+
+// AppendPromptHookContext puts hook context blocks after a prompt's text,
+// the same way when a turn starts and when the conversation is rebuilt,
+// so the model reads the same prompt both times.
+func AppendPromptHookContext(text string, blocks ...string) string {
+	for _, block := range blocks {
+		if block == "" {
+			continue
+		}
+		if text != "" {
+			text += "\n\n"
+		}
+		text += block
+	}
+	return text
+}
+
+// PromptHookBlocks returns the hidden text parts of a user message after
+// its first text part: the context its UserPromptSubmit hooks added.
+func (m *Message) PromptHookBlocks() []string {
+	var blocks []string
+	first := true
+	for _, part := range m.Parts {
+		text, ok := part.(TextContent)
+		if !ok {
+			continue
+		}
+		if first {
+			first = false
+			continue
+		}
+		if text.Hidden {
+			blocks = append(blocks, text.Text)
+		}
+	}
+	return blocks
+}
+
 func (m *Message) ToAIMessage() []fantasy.Message {
 	var messages []fantasy.Message
 	switch m.Role {
@@ -598,6 +642,7 @@ func (m *Message) ToAIMessage() []fantasy.Message {
 			})
 		}
 		text = PromptWithTextAttachments(text, textAttachments)
+		text = AppendPromptHookContext(text, m.PromptHookBlocks()...)
 		// Include bang-mode shell commands as context for the agent.
 		for _, sc := range m.ShellCommands() {
 			shellText := fmt.Sprintf("$ %s\n%s\n(exit code %d)", sc.Command, ansi.Strip(sc.Output), sc.ExitCode)

@@ -151,9 +151,10 @@ Claude Code's names work here too.
 | `--dangerously-skip-permissions` | `--yolo`, or `--dangerously-skip-permissions`      | Skip every permission prompt                                |
 
 - **Hooks** take Claude Code's events and answers: `PreToolUse`,
-  `PostToolUse`, `PostToolUseFailure` and `Stop`, with `tool_use_id`,
-  `hook_event_name`, `continue: false` and `hookSpecificOutput`. A Stop hook
-  can keep the agent working until your tests pass. See
+  `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit` and `Stop`, with
+  `tool_use_id`, `hook_event_name`, `continue: false` and `hookSpecificOutput`.
+  A UserPromptSubmit hook can add context to every prompt or block one, and a
+  Stop hook can keep the agent working until your tests pass. See
   [docs/hooks](docs/hooks/README.md).
 - **Context and skills.** Crash reads `CLAUDE.md` and `CLAUDE.local.md`
   alongside `CRASH.md` and `AGENTS.md`, and loads skills from `~/.claude/skills`

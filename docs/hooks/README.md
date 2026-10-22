@@ -17,10 +17,12 @@ forward.
 - Hooks are Claude Code-compatible
 - Crash ships with a builtin `crash-hook` skill write, edit, and configure
   hooks; just tell Crash how to configure Crash
-- Crash supports two hooks: `PreToolUse`, which fires before a tool call, and
-  `Stop`, which fires when the agent is about to finish its turn and can refuse
-  to let it end; plans are to support the full gamut, so please let us know
-  which hooks you'd like to see next
+- Crash supports five hooks: `PreToolUse`, which fires before a tool call,
+  `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
+  fails, `UserPromptSubmit`, which fires when you send a prompt and can add
+  context to it or block it, and `Stop`, which fires when the agent is about to
+  finish its turn and can refuse to let it end; plans are to support the full
+  gamut, so please let us know which hooks you'd like to see next
 - Hooks run in parallel for speed, but their results compose in config order
   for determinism
 
@@ -254,6 +256,51 @@ exit code `2` (or `"decision": "block"`) hands your reason to the model after
 the error, `context` is appended the same way, and exit `49` ends the turn. Use
 it to log failures or to add a hint, say "view the file first", when a tool
 keeps failing.
+
+### UserPromptSubmit
+
+This hook fires when you send a prompt, before the agent sees it. Use it to
+hand the agent context you would otherwise type every time (the current branch,
+what failed in CI, notes from your own tools), or to stop a prompt that must
+not go out, one with a secret in it, say.
+
+**Matched against**: nothing, as for `Stop`. A `matcher` on a `UserPromptSubmit`
+hook is a config error, and every configured hook runs.
+
+**Context**: whatever the hook prints on stdout, as plain text, is what the
+agent reads after your prompt, inside a `<user-prompt-submit-hook>` tag, as in
+Claude Code. JSON output works too: Crash's `context`, or Claude Code's
+`hookSpecificOutput.additionalContext`. The chat shows only what you typed; the
+context is kept with the prompt, so the agent reads the same thing when the
+conversation is rebuilt on a later turn.
+
+**Blocking**: exit code `2` (or `"decision": "block"`) blocks the prompt, with
+stderr (or `reason`) as the reason: the agent never sees it, nothing is added to
+the session, and you get the reason as an error. Exit `49` (or `"continue":
+false`) does the same.
+
+**When it runs**: once, when the prompt is sent. A prompt sent while the agent is
+working runs its hook then and waits in the queue with what the hook added; it
+does not run the hook again when its turn comes. Prompts the agent sends itself
+(a `Stop` hook's or `/loop`'s continuation) and a sub-agent's prompt do not fire
+it. A hook that fails (any other exit code, or a timeout) is shown as a warning,
+and the prompt goes out without it.
+
+```bash
+#!/usr/bin/env bash
+# hooks/branch-context.sh — tell the agent where it is.
+echo "Current branch: $(git branch --show-current)"
+echo "Last commit: $(git log -1 --format='%h %s')"
+```
+
+```bash
+#!/usr/bin/env bash
+# hooks/no-secrets.sh — keep keys out of prompts.
+if jq -r .prompt | grep -qE 'sk-[A-Za-z0-9]{20,}'; then
+  echo "That prompt has an API key in it; it was not sent." >&2
+  exit 2
+fi
+```
 
 ### Stop
 
@@ -842,6 +889,22 @@ The PreToolUse payload, plus why the call failed:
 
   // number. How long the call took. PostToolUse payloads carry it too.
   "duration_ms": 12,
+}
+```
+
+### Stdin payload — UserPromptSubmit
+
+Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
+
+```jsonc
+{
+  // ...common fields...
+
+  // string. The prompt as you sent it.
+  "prompt": "fix the login flow",
+
+  // array of strings. The names of the files sent with it, if any.
+  "attachments": ["screenshot.png"],
 }
 ```
 

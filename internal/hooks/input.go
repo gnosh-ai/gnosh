@@ -56,6 +56,11 @@ type Payload struct {
 	// DurationMS is how long a tool call that has run took, on
 	// PostToolUse and PostToolUseFailure payloads.
 	DurationMS int64 `json:"duration_ms,omitempty"`
+	// Prompt is set on an EventUserPromptSubmit payload: the prompt the
+	// user sent, as Claude Code's UserPromptSubmit input carries it.
+	// Attachments names the files sent with it, if any.
+	Prompt      string   `json:"prompt,omitempty"`
+	Attachments []string `json:"attachments,omitempty"`
 }
 
 // ToolResponse is what a tool call returned, as a PostToolUse hook sees
@@ -142,6 +147,21 @@ func BuildStopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActiv
 		LastAssistantMessage: lastAssistantMessage,
 	}
 	return marshalPayload(p)
+}
+
+// BuildUserPromptSubmitPayload constructs the JSON stdin payload for an
+// EventUserPromptSubmit hook. There is no tool in play, so tool_name is
+// empty and tool_input is an empty object.
+func BuildUserPromptSubmitPayload(sessionID, cwd, prompt string, attachments []string) []byte {
+	return marshalPayload(Payload{
+		Event:         EventUserPromptSubmit,
+		HookEventName: EventUserPromptSubmit,
+		SessionID:     sessionID,
+		CWD:           cwd,
+		ToolInput:     json.RawMessage("{}"),
+		Prompt:        prompt,
+		Attachments:   attachments,
+	})
 }
 
 // BuildStopEnv constructs the environment variable slice for an

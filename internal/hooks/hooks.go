@@ -21,6 +21,8 @@ const (
 	EventPostToolUse = config.EventPostToolUse
 	// EventPostToolUseFailure fires right after a tool call fails.
 	EventPostToolUseFailure = config.EventPostToolUseFailure
+	// EventUserPromptSubmit fires when the user sends a prompt.
+	EventUserPromptSubmit = config.EventUserPromptSubmit
 	// EventStop fires when the agent is about to finish its turn.
 	EventStop = config.EventStop
 )

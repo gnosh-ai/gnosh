@@ -25,7 +25,7 @@ func loadScriptErr(t *testing.T, script string) error {
 func TestHookAddRejectsUnknownEvent(t *testing.T) {
 	t.Parallel()
 
-	for _, bad := range []string{"pre_tool_use", "pretooluse", "PRE_TOOL_USE", "stop", "UserPromptSubmit", "banana"} {
+	for _, bad := range []string{"pre_tool_use", "pretooluse", "PRE_TOOL_USE", "stop", "SessionStart", "banana"} {
 		t.Run(bad, func(t *testing.T) {
 			t.Parallel()
 			err := loadScriptErr(t, `hook add `+bad+` --command "echo hi"`)

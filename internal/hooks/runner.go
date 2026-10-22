@@ -3,6 +3,7 @@ package hooks
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -165,6 +166,23 @@ func (r *Runner) RunStop(ctx context.Context, sessionID, lastAssistantMessage st
 	return agg, err
 }
 
+// RunUserPromptSubmit executes every configured hook for the
+// UserPromptSubmit event, which fires when the user sends a prompt and
+// before the agent sees it. Matchers do not apply, as for Stop.
+//
+// A DecisionDeny result or a Halt means a hook blocked the prompt: the
+// caller should not send it, and should tell the user the aggregated
+// Reason. Otherwise Context is what the hooks want the agent to read
+// with the prompt. As in Claude Code, a hook's plain-text stdout counts
+// as context for this event; JSON output is read as for any other.
+func (r *Runner) RunUserPromptSubmit(ctx context.Context, sessionID, prompt string, attachments []string) (AggregateResult, error) {
+	envVars := BuildEnv(EventUserPromptSubmit, "", sessionID, r.cwd, r.projectDir, "")
+	payload := BuildUserPromptSubmitPayload(sessionID, r.cwd, prompt, attachments)
+	agg, err := r.run(ctx, r.Hooks(), EventUserPromptSubmit, "", "", envVars, payload)
+	agg.UpdatedInput = ""
+	return agg, err
+}
+
 // run executes the given hooks concurrently and aggregates their
 // results. Callers choose which hooks apply and build the stdin payload
 // and environment for the event.
@@ -197,7 +215,7 @@ func (r *Runner) run(
 	for i, h := range deduped {
 		go func(idx int, hook config.HookConfig) {
 			defer wg.Done()
-			results[idx] = r.runOne(ctx, hook, envVars, payload)
+			results[idx] = r.runOne(ctx, hook, envVars, payload, eventName == EventUserPromptSubmit)
 		}(i, h)
 	}
 	wg.Wait()
@@ -257,7 +275,10 @@ func (r *Runner) matchingHooks(toolName string) []config.HookConfig {
 //     outer frame reads them;
 //   - on the abandon path, the goroutine may still be writing and the
 //     outer frame must not touch them again.
-func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, envVars []string, payload []byte) HookResult {
+//
+// plainStdoutIsContext makes stdout that is not a JSON object the hook's
+// context, as Claude Code reads a UserPromptSubmit hook's output.
+func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, envVars []string, payload []byte, plainStdoutIsContext bool) HookResult {
 	timeout := hook.TimeoutDuration()
 	ctx, cancel := context.WithTimeout(parentCtx, timeout)
 	defer cancel()
@@ -361,6 +382,9 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, envVa
 	}
 
 	// Exit code 0 — parse stdout JSON.
+	if out := strings.TrimSpace(stdout.String()); plainStdoutIsContext && out != "" && !isJSONObject(out) {
+		return HookResult{Decision: DecisionNone, Context: out}
+	}
 	result := parseStdout(stdout.String())
 	slog.Debug(
 		"Hook executed",
@@ -392,4 +416,10 @@ func hookFailureMessage(exitCode int, stderrText string) string {
 		msg += ": " + first
 	}
 	return msg
+}
+
+// isJSONObject reports whether s is a JSON object, the only output a hook
+// gives as an envelope.
+func isJSONObject(s string) bool {
+	return strings.HasPrefix(s, "{") && json.Valid([]byte(s))
 }
