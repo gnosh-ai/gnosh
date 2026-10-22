@@ -1961,10 +1961,12 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 			success = true
 			break
 		}
+		// Warnings, not errors: the next model, and failing that the start
+		// of the prompt, still give the session a title.
 		if err != nil {
-			slog.Error("Error generating title with "+attempt.name+" model; trying next", "err", err)
+			slog.Warn("Error generating title with "+attempt.name+" model; trying next", "err", err)
 		} else {
-			slog.Error("Title generation hit token limit with " + attempt.name + " model; trying next")
+			slog.Warn("Title generation hit token limit with " + attempt.name + " model; trying next")
 		}
 	}
 	if !success {
