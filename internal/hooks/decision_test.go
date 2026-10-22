@@ -115,7 +115,8 @@ func TestParseStdoutUpdatedInputNonObjectIsAnError(t *testing.T) {
 	t.Run("native stringified", func(t *testing.T) {
 		t.Parallel()
 		r := parseStdout(`{"decision":"allow","updated_input":"just a string"}`)
-		require.Equal(t, DecisionAllow, r.Decision, "a failed rewrite stays non-blocking")
+		require.Equal(t, DecisionNone, r.Decision,
+			"an allow given for a rewrite that failed must not approve the call as it stands")
 		require.Empty(t, r.UpdatedInput)
 		require.Contains(t, r.Error, "updated_input must be a JSON object")
 	})
@@ -141,9 +142,32 @@ func TestParseStdoutUpdatedInputNonObjectIsAnError(t *testing.T) {
 	t.Run("claude code format", func(t *testing.T) {
 		t.Parallel()
 		r := parseStdout(`{"hookSpecificOutput":{"permissionDecision":"allow","updatedInput":"just a string"}}`)
-		require.Equal(t, DecisionAllow, r.Decision)
+		require.Equal(t, DecisionNone, r.Decision)
 		require.Empty(t, r.UpdatedInput)
+		require.Contains(t, r.Error, "hookSpecificOutput.updatedInput must be a JSON object")
+	})
+
+	t.Run("claude code format, an object inside a string", func(t *testing.T) {
+		t.Parallel()
+		// Claude Code itself does not accept this form.
+		r := parseStdout(`{"hookSpecificOutput":{"permissionDecision":"allow","updatedInput":"{\"command\":\"ls\"}"}}`)
+		require.Equal(t, DecisionNone, r.Decision)
+		require.Empty(t, r.UpdatedInput)
+		require.Contains(t, r.Error, "hookSpecificOutput.updatedInput must be a JSON object, got a string")
+	})
+
+	t.Run("a deny still holds", func(t *testing.T) {
+		t.Parallel()
+		r := parseStdout(`{"decision":"deny","reason":"no","updated_input":"oops"}`)
+		require.Equal(t, DecisionDeny, r.Decision, "a malformed rewrite must not soften a deny")
 		require.Contains(t, r.Error, "updated_input must be a JSON object")
+	})
+
+	t.Run("hookSpecificOutput that is not an object", func(t *testing.T) {
+		t.Parallel()
+		r := parseStdout(`{"hookSpecificOutput":"allow"}`)
+		require.Equal(t, DecisionNone, r.Decision)
+		require.Contains(t, r.Error, "hookSpecificOutput must be a JSON object, got a string")
 	})
 
 	t.Run("unknown decision and bad rewrite both surface", func(t *testing.T) {
@@ -179,6 +203,6 @@ func TestRunnerSurfacesNonObjectUpdatedInput(t *testing.T) {
 	})
 	result, err := r.Run(context.Background(), EventPreToolUse, "sess", "bash", `{"command":"ls"}`)
 	require.NoError(t, err)
-	require.Equal(t, DecisionAllow, result.Decision)
+	require.Equal(t, DecisionNone, result.Decision, "the call goes to the normal permission check")
 	require.Contains(t, result.Hooks[0].Error, "updated_input must be a JSON object")
 }

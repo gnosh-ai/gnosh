@@ -124,6 +124,8 @@ policy violation).
 - **`updated_input`**: **shallow-merge patch** against `tool_input`, not a
   replacement. Keys you include overwrite; keys you don't are preserved.
   Nested objects are replaced wholesale, not deep-merged. Ignored on deny/halt.
+  It must be a JSON object; anything else is a failed hook, and an `allow`
+  given with it is dropped, so the normal permission check runs.
 
 ## Aggregation (Multiple Hooks)
 

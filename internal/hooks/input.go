@@ -168,7 +168,7 @@ func parseStdout(stdout string) HookResult {
 		result.Error = err.Error()
 	}
 	if updated, patchErr := parseUpdatedInput(parsed.UpdatedInput); patchErr != nil {
-		setParseError(&result, patchErr)
+		rejectRewrite(&result, patchErr)
 	} else {
 		result.UpdatedInput = updated
 	}
@@ -209,6 +209,17 @@ func jsonTypeName(raw json.RawMessage) string {
 		return "an object"
 	default:
 		return "a number or boolean"
+	}
+}
+
+// rejectRewrite records that a hook's tool-input rewrite is malformed. The
+// hook's "allow" goes with it: a hook that approves a call as it rewrote it
+// must not approve the call as it stands, so the normal permission check
+// runs instead. A deny or a halt still holds.
+func rejectRewrite(result *HookResult, err error) {
+	setParseError(result, err)
+	if result.Decision == DecisionAllow {
+		result.Decision = DecisionNone
 	}
 }
 
@@ -264,7 +275,10 @@ func parseClaudeCodeOutput(data json.RawMessage) HookResult {
 		AdditionalContext        string          `json:"additionalContext"`
 	}
 	if err := json.Unmarshal(data, &hso); err != nil {
-		return HookResult{Decision: DecisionNone}
+		return HookResult{
+			Decision: DecisionNone,
+			Error:    fmt.Sprintf("hookSpecificOutput must be a JSON object, got %s", jsonTypeName(data)),
+		}
 	}
 
 	decision, err := parseDecision(hso.PermissionDecision)
@@ -277,13 +291,15 @@ func parseClaudeCodeOutput(data json.RawMessage) HookResult {
 		result.Error = err.Error()
 	}
 
-	// Marshal updatedInput back to a string for our opaque format.
+	// Claude Code's updatedInput is an object and nothing else: unlike
+	// Crush's own updated_input, a string holding one is not accepted.
 	if len(hso.UpdatedInput) > 0 && string(hso.UpdatedInput) != "null" {
-		updated, patchErr := parseUpdatedInput(hso.UpdatedInput)
-		if patchErr != nil {
-			setParseError(&result, patchErr)
+		if hso.UpdatedInput[0] == '{' {
+			result.UpdatedInput = string(hso.UpdatedInput)
 		} else {
-			result.UpdatedInput = updated
+			rejectRewrite(&result, fmt.Errorf(
+				"hookSpecificOutput.updatedInput must be a JSON object, got %s", jsonTypeName(hso.UpdatedInput),
+			))
 		}
 	}
 

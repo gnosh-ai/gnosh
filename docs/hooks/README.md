@@ -415,6 +415,12 @@ keys in `tool_input`; keys you don't include are preserved. If the model called
 `{"command": "bun test", "timeout": 60000}` — the timeout isn't dropped. The
 merge is shallow: nested objects are replaced wholesale, not deep-merged.
 
+`updated_input` must be a JSON object (a string holding one is also read, for
+older hooks; Claude Code's `hookSpecificOutput.updatedInput` must be an actual
+object). Anything else is reported as a failed hook, and an `allow` given with
+it is dropped too, so the call goes to the normal permission check rather than
+being approved without the rewrite it was approved with. A `deny` still holds.
+
 `halt: true` stops the turn entirely. The agent doesn't get to respond further;
 the user takes over. The exit-code shorthand is `exit 49` with stderr as the
 reason.
