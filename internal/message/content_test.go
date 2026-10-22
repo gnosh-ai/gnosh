@@ -239,6 +239,16 @@ func TestToolCallSummary(t *testing.T) {
 			want: `{"a":1, "b":"x"}`,
 		},
 		{
+			name: "a multi-line command on one line",
+			call: ToolCall{ID: "c12", Name: "bash", Input: `{"command":"cat > f <<'EOF'\nhello\n\tworld\nEOF"}`},
+			want: "cat > f <<'EOF' hello world EOF",
+		},
+		{
+			name: "laid-out raw input on one line",
+			call: ToolCall{ID: "c13", Name: "mcp_tool", Input: "{\n  \"a\": 1\n}"},
+			want: `{ "a": 1 }`,
+		},
+		{
 			name: "long input truncated",
 			call: ToolCall{ID: "c11", Name: "bash", Input: `{"command":"` + strings.Repeat("x", 200) + `"}`},
 			check: func(t *testing.T, got string) {

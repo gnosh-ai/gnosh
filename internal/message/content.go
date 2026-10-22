@@ -146,7 +146,9 @@ func (c ToolCall) Summary() string {
 		}
 		summary = strings.ReplaceAll(c.Input, "\\n", " ")
 	}
-	summary = strings.TrimSpace(summary)
+	// One line, however the input was laid out: a heredoc or a
+	// multi-line prompt would otherwise spill over several trace lines.
+	summary = strings.Join(strings.Fields(summary), " ")
 	if runes := []rune(summary); len(runes) > 120 {
 		summary = string(runes[:117]) + "..."
 	}
