@@ -34,6 +34,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/workspace"
 )
@@ -303,7 +304,7 @@ func (m *UI) applyPromptQueue(msg promptQueueMsg) []tea.Cmd {
 type promptQueuePopMsg struct {
 	forSession string
 	gen        uint64
-	prompts    []string
+	prompts    []message.PoppedPrompt
 }
 
 // dispatchPromptQueuePop pops the user's queued prompts off the Update
@@ -334,8 +335,9 @@ func (m *UI) dispatchPromptQueuePop() tea.Cmd {
 }
 
 // applyPromptQueuePop stores the popped prompts in the editor, oldest first
-// separated by blank lines, and clears the memoized queue so the pill stops
-// showing them. Runs on the Update goroutine.
+// separated by blank lines, and their attachments in the editor's attachment
+// list, then clears the memoized queue so the pill stops showing them. Runs
+// on the Update goroutine.
 //
 // The popped prompts are already out of the agent's queue, so this never
 // drops them: a newer queue generation only means the pill's own fetch is
@@ -346,9 +348,9 @@ func (m *UI) applyPromptQueuePop(msg promptQueuePopMsg) []tea.Cmd {
 	if len(msg.prompts) == 0 {
 		// Nothing was taken: the turn ended and ran them first, or all
 		// that is queued is what Up leaves in place (a channel message,
-		// a prompt with attachments, one a caller waits on). Do what Up
-		// does with nothing queued, so the key is never dead, and
-		// refetch so the pill shows what is really queued.
+		// one a caller waits on). Do what Up does with nothing queued,
+		// so the key is never dead, and refetch so the pill shows what
+		// is really queued.
 		var cmds []tea.Cmd
 		if msg.forSession == m.currentSessionID() && m.textarea.Length() == 0 {
 			prevHeight := m.textarea.Height()
@@ -367,13 +369,25 @@ func (m *UI) applyPromptQueuePop(msg promptQueuePopMsg) []tea.Cmd {
 		// the one they came from, where they run as they would have.
 		return []tea.Cmd{m.resendPoppedPrompts(msg.forSession, msg.prompts)}
 	}
-	text := strings.Join(msg.prompts, "\n\n")
+	var parts []string
+	for _, p := range msg.prompts {
+		if p.Prompt != "" {
+			parts = append(parts, p.Prompt)
+		}
+	}
+	text := strings.Join(parts, "\n\n")
 	if typed := m.textarea.Value(); typed != "" {
-		text += "\n\n" + typed
+		if text != "" {
+			text += "\n\n" + typed
+		} else {
+			text = typed
+		}
 	}
 	prevHeight := m.textarea.Height()
 	m.textarea.Reset()
-	m.textarea.InsertString(text)
+	if text != "" {
+		m.textarea.InsertString(text)
+	}
 	// The cursor goes to the end, as after typing, so the next Up moves
 	// within the text rather than straight into history, which would
 	// swap the prompts out of the editor for an old one.
@@ -381,6 +395,14 @@ func (m *UI) applyPromptQueuePop(msg promptQueuePopMsg) []tea.Cmd {
 	m.syncBangModeFromTextarea()
 	m.promptHistory.index = -1
 	m.promptHistory.draft = ""
+	// The popped prompts' attachments go into the editor's attachment
+	// list, so the attachment row shows them and Enter sends them along
+	// with the text.
+	for _, p := range msg.prompts {
+		for _, a := range p.Attachments {
+			m.attachments.Update(a)
+		}
+	}
 	m.promptQueueItems = nil
 	m.promptQueue = 0
 	m.promptQueueCheckedAt = time.Now()
@@ -397,14 +419,22 @@ func (m *UI) applyPromptQueuePop(msg promptQueuePopMsg) []tea.Cmd {
 
 // resendPoppedPrompts sends prompts popped from sessionID's queue back to
 // that session off the Update goroutine, as the one prompt Enter would have
-// sent from the editor. One send keeps their order and cannot lose the rest
-// to an error in the first: in-process, AgentRun runs the whole turn when
-// the session is idle and returns that turn's own error.
-func (m *UI) resendPoppedPrompts(sessionID string, prompts []string) tea.Cmd {
+// sent from the editor, attachments included. One send keeps their order and
+// cannot lose the rest to an error in the first: in-process, AgentRun runs
+// the whole turn when the session is idle and returns that turn's own error.
+func (m *UI) resendPoppedPrompts(sessionID string, prompts []message.PoppedPrompt) tea.Cmd {
 	ws := m.com.Workspace
-	text := strings.Join(prompts, "\n\n")
+	var parts []string
+	var attachments []message.Attachment
+	for _, p := range prompts {
+		if p.Prompt != "" {
+			parts = append(parts, p.Prompt)
+		}
+		attachments = append(attachments, p.Attachments...)
+	}
+	text := strings.Join(parts, "\n\n")
 	return func() tea.Msg {
-		err := ws.AgentRun(context.Background(), sessionID, text)
+		err := ws.AgentRun(context.Background(), sessionID, text, attachments...)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			return util.ReportError(fmt.Errorf("sending queued prompts back to their session: %w", err))()
 		}

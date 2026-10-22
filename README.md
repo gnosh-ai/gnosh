@@ -166,6 +166,8 @@ Claude Code's names work here too.
 | `claude -r <id>`                 | `crash -s <id>`, or `crash -r <id>`                | Continue a session by ID                                    |
 | `claude -c`                      | `crash -C`                                         | Continue the last session; `-c` sets the working directory |
 | `--dangerously-skip-permissions` | `--yolo`, or `--dangerously-skip-permissions`      | Skip every permission prompt                                |
+| `--allowedTools Read Grep`       | `--allowedTools "Read Grep"`, or `Read,Grep`       | Let these tools run without asking                          |
+| `--disallowedTools Bash Edit`    | `--disallowedTools "Bash Edit"`, or `Bash,Edit`    | Do not give the agent these tools                           |
 
 - **Hooks** take Claude Code's events and answers: `PreToolUse`,
   `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit` and `Stop`, with

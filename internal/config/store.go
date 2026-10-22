@@ -70,6 +70,13 @@ type RuntimeOverrides struct {
 	// selection made here always outranks whatever the shared config file
 	// happens to hold — see pinPreferredModelLocked.
 	Models map[SelectedModelType]SelectedModel
+	// DisabledTools and AllowedTools are the tools named on the command
+	// line by --disallowed-tools and --allowed-tools (Claude Code's
+	// --disallowedTools and --allowedTools). SetupAgents adds them to the
+	// config's options.disabled_tools and permissions.allowed_tools, so a
+	// reload from disk keeps them.
+	DisabledTools []string
+	AllowedTools  []string
 }
 
 // ConfigStore is the single entry point for all config access. It owns the
@@ -243,9 +250,43 @@ func (s *ConfigStore) RefetchHyperProvider(ctx context.Context) error {
 	return nil
 }
 
-// SetupAgents configures the coder and task agents on the config.
+// SetupAgents configures the coder and task agents on the config, with
+// the tools given on the command line added to the config's own lists.
 func (s *ConfigStore) SetupAgents() {
-	s.Config().SetupAgents()
+	cfg := s.Config()
+	applyToolOverrides(cfg, s.overrides)
+	cfg.SetupAgents()
+}
+
+// applyToolOverrides adds the tools named on the command line to cfg's
+// options.disabled_tools and permissions.allowed_tools. They go into the
+// lists themselves, so whatever reads cfg afterwards (the permission
+// service when the app starts, a later SetupAgents on cfg) sees them too.
+func applyToolOverrides(cfg *Config, o RuntimeOverrides) {
+	if len(o.DisabledTools) > 0 {
+		if cfg.Options == nil {
+			cfg.Options = &Options{}
+		}
+		cfg.Options.DisabledTools = appendMissing(cfg.Options.DisabledTools, o.DisabledTools)
+	}
+	if len(o.AllowedTools) > 0 {
+		if cfg.Permissions == nil {
+			cfg.Permissions = &Permissions{}
+		}
+		cfg.Permissions.AllowedTools = appendMissing(cfg.Permissions.AllowedTools, o.AllowedTools)
+	}
+}
+
+// appendMissing returns list with each of extra that it lacks appended,
+// in a new slice.
+func appendMissing(list, extra []string) []string {
+	out := slices.Clone(list)
+	for _, name := range extra {
+		if !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // Overrides returns the runtime overrides for this store.

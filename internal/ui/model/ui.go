@@ -637,6 +637,12 @@ func (m *UI) Init() tea.Cmd {
 		if cmd := m.openModelsDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		// Onboarding opens because no provider could be used. When the
+		// config does name some, say why each was left out, so a model
+		// server that is down is not mistaken for a missing setup.
+		if why := m.com.Config().SkippedProvidersSummary(); why != "" {
+			cmds = append(cmds, util.ReportWarn("No configured provider can be used: "+why))
+		}
 	}
 	// load the user commands async
 	cmds = append(cmds, m.loadCustomCommands())

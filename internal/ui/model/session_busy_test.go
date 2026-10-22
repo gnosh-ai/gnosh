@@ -37,6 +37,8 @@ type countingWorkspace struct {
 	queued         []string
 	keepOnPop      bool     // the queue holds only what Up leaves in place
 	runs           []string // "session: prompt" per AgentRun
+	runAttachments [][]message.Attachment
+	popAttachments map[string][]message.Attachment // attachments per queued prompt, by prompt text
 	model          workspace.AgentModel
 	lspStates      map[string]workspace.LSPClientInfo
 	lspDiags       map[string]lsp.DiagnosticCounts
@@ -94,19 +96,23 @@ func (w *countingWorkspace) PermissionSetSkipRequests(skip bool) {
 
 func (w *countingWorkspace) AgentClearQueue(string) { w.clearQueueCalls++; w.queued = nil }
 
-func (w *countingWorkspace) AgentPopQueuedPrompts(string) []string {
+func (w *countingWorkspace) AgentPopQueuedPrompts(string) []message.PoppedPrompt {
 	w.popQueueCalls++
 	if w.keepOnPop {
 		return nil
 	}
-	prompts := append([]string(nil), w.queued...)
+	prompts := make([]message.PoppedPrompt, len(w.queued))
+	for i, p := range w.queued {
+		prompts[i] = message.PoppedPrompt{Prompt: p, Attachments: w.popAttachments[p]}
+	}
 	w.queued = nil
 	return prompts
 }
 func (w *countingWorkspace) AgentCancel(string) { w.cancelCalls++ }
 
-func (w *countingWorkspace) AgentRun(_ context.Context, sessionID, prompt string, _ ...message.Attachment) error {
+func (w *countingWorkspace) AgentRun(_ context.Context, sessionID, prompt string, atts ...message.Attachment) error {
 	w.runs = append(w.runs, sessionID+": "+prompt)
+	w.runAttachments = append(w.runAttachments, atts)
 	return nil
 }
 

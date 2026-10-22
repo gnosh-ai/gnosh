@@ -263,8 +263,9 @@ func (b *Backend) QueuedPromptsList(workspaceID, sessionID string) ([]string, er
 }
 
 // PopQueuedPrompts takes the user-sent prompts out of the session's queue
-// and returns them, oldest first, leaving any hidden continuation queued.
-func (b *Backend) PopQueuedPrompts(workspaceID, sessionID string) ([]string, error) {
+// and returns them, oldest first, each with the attachments it carried,
+// leaving any hidden continuation queued.
+func (b *Backend) PopQueuedPrompts(workspaceID, sessionID string) ([]message.PoppedPrompt, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return nil, err

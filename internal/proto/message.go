@@ -670,6 +670,30 @@ func AttachmentsFromMessage(as []message.Attachment) []Attachment {
 	return out
 }
 
+// PoppedPrompt is a queued prompt taken out of the session's queue for
+// editing, with the attachments it carried.
+type PoppedPrompt struct {
+	Prompt      string       `json:"prompt"`
+	Attachments []Attachment `json:"attachments,omitempty"`
+}
+
+// ToMessage converts a proto PoppedPrompt to a [message.PoppedPrompt].
+func (p PoppedPrompt) ToMessage() message.PoppedPrompt {
+	return message.PoppedPrompt{
+		Prompt:      p.Prompt,
+		Attachments: AttachmentsToMessage(p.Attachments),
+	}
+}
+
+// PoppedPromptFromMessage converts a [message.PoppedPrompt] to a proto
+// PoppedPrompt.
+func PoppedPromptFromMessage(p message.PoppedPrompt) PoppedPrompt {
+	return PoppedPrompt{
+		Prompt:      p.Prompt,
+		Attachments: AttachmentsFromMessage(p.Attachments),
+	}
+}
+
 // MarshalJSON implements the [json.Marshaler] interface.
 func (a Attachment) MarshalJSON() ([]byte, error) {
 	type Alias Attachment

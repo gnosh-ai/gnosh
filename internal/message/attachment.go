@@ -22,3 +22,11 @@ func ContainsTextAttachment(attachments []Attachment) bool {
 		return a.IsText()
 	})
 }
+
+// PoppedPrompt is a queued prompt taken out of a session's queue to be
+// edited: its text and the attachments that came with it, so editing it
+// loses nothing it carried.
+type PoppedPrompt struct {
+	Prompt      string
+	Attachments []Attachment
+}

@@ -611,8 +611,8 @@ func (c *controllerV1) handlePostWorkspaceAgentSessionPromptClear(w http.Respons
 }
 
 // handlePostWorkspaceAgentSessionPromptPop takes the user-sent queued
-// prompts out of the session's queue and returns them, oldest first,
-// leaving any hidden continuation queued.
+// prompts out of the session's queue and returns them, oldest first, each
+// with the attachments it carried, leaving any hidden continuation queued.
 func (c *controllerV1) handlePostWorkspaceAgentSessionPromptPop(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	sid := r.PathValue("sid")
@@ -621,7 +621,11 @@ func (c *controllerV1) handlePostWorkspaceAgentSessionPromptPop(w http.ResponseW
 		c.handleError(w, r, err)
 		return
 	}
-	jsonEncode(w, prompts)
+	wire := make([]proto.PoppedPrompt, len(prompts))
+	for i, p := range prompts {
+		wire[i] = proto.PoppedPromptFromMessage(p)
+	}
+	jsonEncode(w, wire)
 }
 
 // handlePostWorkspaceAgentSessionSummarize summarizes a session.

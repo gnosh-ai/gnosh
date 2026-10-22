@@ -454,9 +454,9 @@ func (c *Client) ClearAgentSessionQueuedPrompts(ctx context.Context, id string, 
 }
 
 // PopAgentSessionQueuedPrompts takes the user-sent queued prompts out of a
-// session and returns them, oldest first, leaving any hidden agent
-// continuation queued.
-func (c *Client) PopAgentSessionQueuedPrompts(ctx context.Context, id string, sessionID string) ([]string, error) {
+// session and returns them, oldest first, each with the attachments it
+// carried, leaving any hidden agent continuation queued.
+func (c *Client) PopAgentSessionQueuedPrompts(ctx context.Context, id string, sessionID string) ([]message.PoppedPrompt, error) {
 	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/agent/sessions/%s/prompts/pop", id, sessionID), nil, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to pop session agent queued prompts: %w", err)
@@ -465,9 +465,13 @@ func (c *Client) PopAgentSessionQueuedPrompts(ctx context.Context, id string, se
 	if rsp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to pop session agent queued prompts: status code %d", rsp.StatusCode)
 	}
-	var prompts []string
-	if err := json.NewDecoder(rsp.Body).Decode(&prompts); err != nil {
+	var wire []proto.PoppedPrompt
+	if err := json.NewDecoder(rsp.Body).Decode(&wire); err != nil {
 		return nil, fmt.Errorf("failed to decode popped queued prompts: %w", err)
+	}
+	prompts := make([]message.PoppedPrompt, len(wire))
+	for i, p := range wire {
+		prompts[i] = p.ToMessage()
 	}
 	return prompts, nil
 }

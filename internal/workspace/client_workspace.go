@@ -325,7 +325,7 @@ func (w *ClientWorkspace) AgentClearQueue(sessionID string) {
 	_ = w.client.ClearAgentSessionQueuedPrompts(context.Background(), w.workspaceID(), sessionID)
 }
 
-func (w *ClientWorkspace) AgentPopQueuedPrompts(sessionID string) []string {
+func (w *ClientWorkspace) AgentPopQueuedPrompts(sessionID string) []message.PoppedPrompt {
 	prompts, err := w.client.PopAgentSessionQueuedPrompts(context.Background(), w.workspaceID(), sessionID)
 	if err != nil {
 		// The server may have taken the prompts before the reply was

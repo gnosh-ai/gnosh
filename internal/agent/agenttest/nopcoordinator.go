@@ -46,14 +46,14 @@ func (*NopCoordinator) ListSettledMessages(context.Context, string) ([]message.M
 	return nil, nil
 }
 
-func (*NopCoordinator) QueuedPrompts(string) int                      { return 0 }
-func (*NopCoordinator) QueuedPromptsList(string) []string             { return nil }
-func (*NopCoordinator) PopQueuedPrompts(string) []string              { return nil }
-func (*NopCoordinator) ClearQueue(string)                             {}
-func (*NopCoordinator) Summarize(context.Context, string) error       { return nil }
-func (*NopCoordinator) Model() agent.Model                            { return agent.Model{} }
-func (*NopCoordinator) UpdateModels(context.Context) error            { return nil }
-func (*NopCoordinator) GenerateTitle(context.Context, string, string) {}
+func (*NopCoordinator) QueuedPrompts(string) int                       { return 0 }
+func (*NopCoordinator) QueuedPromptsList(string) []string              { return nil }
+func (*NopCoordinator) PopQueuedPrompts(string) []message.PoppedPrompt { return nil }
+func (*NopCoordinator) ClearQueue(string)                              {}
+func (*NopCoordinator) Summarize(context.Context, string) error        { return nil }
+func (*NopCoordinator) Model() agent.Model                             { return agent.Model{} }
+func (*NopCoordinator) UpdateModels(context.Context) error             { return nil }
+func (*NopCoordinator) GenerateTitle(context.Context, string, string)  {}
 
 func (*NopCoordinator) ToolInfos(context.Context) ([]fantasy.ToolInfo, error) {
 	return nil, nil

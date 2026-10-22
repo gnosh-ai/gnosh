@@ -92,6 +92,32 @@ func IsKnown(name string) bool {
 	return slices.Contains(names, Canonical(name))
 }
 
+// claudeCodeNames maps the names Claude Code gives its tools to the
+// built-in tools that do the same job here, so a Claude Code user's
+// --allowedTools Read or --disallowedTools Bash means what they meant.
+var claudeCodeNames = map[string]string{
+	"Agent":      "agent",
+	"Bash":       "bash",
+	"BashOutput": "job_output",
+	"Edit":       "edit",
+	"Glob":       "glob",
+	"Grep":       "grep",
+	"KillShell":  "job_kill",
+	"LS":         "ls",
+	"MultiEdit":  "multiedit",
+	"Read":       "view",
+	"Task":       "agent",
+	"TodoWrite":  "todos",
+	"WebFetch":   "fetch",
+	"Write":      "write",
+}
+
+// FromClaudeCode returns the built-in tool Claude Code calls name, or ""
+// if Claude Code has no tool by that name or Crash none like it.
+func FromClaudeCode(name string) string {
+	return claudeCodeNames[name]
+}
+
 // IsMCPToolName reports whether name has the shape of an MCP tool name.
 func IsMCPToolName(name string) bool {
 	return len(name) > len(MCPPrefix) && name[:len(MCPPrefix)] == MCPPrefix
