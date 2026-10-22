@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/format"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/stretchr/testify/require"
@@ -418,50 +419,40 @@ func TestRunStream_NoRunIDFallsBackToSessionID(t *testing.T) {
 
 // TestRunStream_TracesToolCallsToStderr verifies the --verbose tool
 // trace: each finished tool call is printed exactly once to the trace
-// writer (name + input summary, plus the outcome marker once the tool
-// result has arrived) even though the streaming message is republished
-// on every delta; unfinished (still-streaming) tool calls are not
-// traced; and stdout keeps only the answer text.
+// writer (name + input summary) even though the streaming message is
+// republished on every delta; unfinished (still-streaming) tool calls
+// are not traced; and stdout keeps only the answer text.
 func TestRunStream_TracesToolCallsToStderr(t *testing.T) {
 	t.Parallel()
 
 	out := &bytes.Buffer{}
 	errOut := &bytes.Buffer{}
-	s := &runStream{sessionID: "S", out: out, errOut: errOut, traceTools: true, read: map[string]int{}}
+	s := &runStream{sessionID: "S", out: out, trace: format.NewToolTrace(errOut), read: map[string]int{}}
 
 	bashCall := proto.ToolCall{ID: "c1", Name: "bash", Input: `{"command":"go test ./..."}`, Finished: true}
-	bashResultOK := proto.ToolResult{ToolCallID: "c1", Name: "bash", Content: "FAIL", IsError: true}
 	viewStreaming := proto.ToolCall{ID: "c2", Name: "view", Input: `{"file_path":"/tmp/a.go"`}
 	viewFinished := proto.ToolCall{ID: "c2", Name: "view", Input: `{"file_path":"/tmp/a.go"}`, Finished: true}
-	viewResultOK := proto.ToolResult{ToolCallID: "c2", Name: "view", Content: "1: package main"}
 
-	// First publish: bash finished, view still streaming. No tool
-	// results have arrived yet, so the bash line has no marker.
+	// First publish: bash finished, view still streaming.
 	_, err := s.handle(pubsub.Event[proto.Message]{Payload: proto.Message{
 		ID: "m1", SessionID: "S", Role: proto.Assistant,
 		Parts: []proto.ContentPart{bashCall, viewStreaming},
 	}}, nil)
 	require.NoError(t, err)
 	require.Equal(t, "tool bash go test ./...\n", errOut.String(),
-		"finished bash call traced on first publish; streaming view call must not be traced; no result yet so no marker")
+		"finished bash call traced on first publish; streaming view call must not be traced")
 
-	// Second publish of the same message: view finished, the final
-	// text starts streaming, and the tool results have arrived: bash
-	// failed, view succeeded. The calls are re-marked with their
-	// outcome so the trace shows where the run hit errors.
+	// Second publish of the same message: view finished and final
+	// text starts streaming.
 	done, err := s.handle(pubsub.Event[proto.Message]{Payload: proto.Message{
 		ID: "m1", SessionID: "S", Role: proto.Assistant,
-		Parts: []proto.ContentPart{bashCall, viewFinished, bashResultOK, viewResultOK, proto.TextContent{Text: "the answer"}},
+		Parts: []proto.ContentPart{bashCall, viewFinished, proto.TextContent{Text: "the answer"}},
 	}}, nil)
 	require.NoError(t, err)
 	require.False(t, done)
 
-	// Each tool call is traced when it finishes and re-marked with its
-	// outcome once the result arrives: the bash call is re-marked
-	// "(failed)" and the view call "(ok)".
-	require.Equal(t, "tool bash go test ./...\n"+
-		"tool bash go test ./... (failed)\n"+
-		"tool view /tmp/a.go (ok)\n", errOut.String())
+	// Each tool call traced exactly once, in first-seen order.
+	require.Equal(t, "tool bash go test ./...\ntool view /tmp/a.go\n", errOut.String())
 	// Stdout carries only the answer.
 	require.Equal(t, "the answer", out.String())
 }
@@ -472,8 +463,7 @@ func TestRunStream_TraceDisabledLeavesTraceQuiet(t *testing.T) {
 	t.Parallel()
 
 	out := &bytes.Buffer{}
-	errOut := &bytes.Buffer{}
-	s := &runStream{sessionID: "S", out: out, errOut: errOut, read: map[string]int{}}
+	s := &runStream{sessionID: "S", out: out, read: map[string]int{}} // no trace
 
 	bashCall := proto.ToolCall{ID: "c1", Name: "bash", Input: `{"command":"go test ./..."}`, Finished: true}
 
@@ -482,52 +472,47 @@ func TestRunStream_TraceDisabledLeavesTraceQuiet(t *testing.T) {
 		Parts: []proto.ContentPart{bashCall, proto.TextContent{Text: "the answer"}},
 	}}, nil)
 	require.NoError(t, err)
+	_, err = s.handle(pubsub.Event[proto.Message]{Payload: proto.Message{
+		ID: "m2", SessionID: "S", Role: proto.Tool,
+		Parts: []proto.ContentPart{proto.ToolResult{ToolCallID: "c1", Content: "FAIL", IsError: true}},
+	}}, nil)
+	require.NoError(t, err)
 
-	require.Empty(t, errOut.String())
 	require.Equal(t, "the answer", out.String())
 }
 
-// TestRunStream_TraceMarksFailedToolCall verifies the failure marker:
-// when the tool result for a call carries IsError, the call's trace
-// line is re-marked "(failed)" so a log of a long run shows where the
-// agent hit errors, while successful calls stay unmarked.
-func TestRunStream_TraceMarksFailedToolCall(t *testing.T) {
+// A tool's result arrives in a message of its own, after the assistant
+// message that made the call. A failed result marks the call with a second
+// trace line; a successful one adds nothing, and stdout keeps the answer.
+func TestRunStream_TraceMarksFailedToolCalls(t *testing.T) {
 	t.Parallel()
 
 	out := &bytes.Buffer{}
 	errOut := &bytes.Buffer{}
-	s := &runStream{sessionID: "S", out: out, errOut: errOut, traceTools: true, read: map[string]int{}}
+	s := &runStream{sessionID: "S", out: out, trace: format.NewToolTrace(errOut), read: map[string]int{}}
 
-	bashCall := proto.ToolCall{ID: "c1", Name: "bash", Input: `{"command":"go test ./..."}`, Finished: true}
-	viewCall := proto.ToolCall{ID: "c2", Name: "view", Input: `{"file_path":"/tmp/a.go"}`, Finished: true}
+	publish := func(msg proto.Message) {
+		t.Helper()
+		msg.SessionID = "S"
+		_, err := s.handle(pubsub.Event[proto.Message]{Payload: msg}, nil)
+		require.NoError(t, err)
+	}
+	publish(proto.Message{ID: "m1", Role: proto.Assistant, Parts: []proto.ContentPart{
+		proto.ToolCall{ID: "c1", Name: "bash", Input: `{"command":"go test ./..."}`, Finished: true},
+		proto.ToolCall{ID: "c2", Name: "view", Input: `{"file_path":"/tmp/a.go"}`, Finished: true},
+	}})
+	publish(proto.Message{ID: "m2", Role: proto.Tool, Parts: []proto.ContentPart{
+		proto.ToolResult{ToolCallID: "c1", Name: "bash", Content: "FAIL", IsError: true},
+		proto.ToolResult{ToolCallID: "c2", Name: "view", Content: "1: package main"},
+	}})
+	publish(proto.Message{ID: "m3", Role: proto.Assistant, Parts: []proto.ContentPart{
+		proto.TextContent{Text: "the tests fail"},
+	}})
 
-	// The tool calls are published, results not in yet.
-	_, err := s.handle(pubsub.Event[proto.Message]{Payload: proto.Message{
-		ID: "m1", SessionID: "S", Role: proto.Assistant,
-		Parts: []proto.ContentPart{bashCall, viewCall},
-	}}, nil)
-	require.NoError(t, err)
-	require.Equal(t, "tool bash go test ./...\ntool view /tmp/a.go\n", errOut.String())
-
-	// The results arrive: bash errored, view succeeded.
-	_, err = s.handle(pubsub.Event[proto.Message]{Payload: proto.Message{
-		ID: "m1", SessionID: "S", Role: proto.Assistant,
-		Parts: []proto.ContentPart{
-			bashCall, viewCall,
-			proto.ToolResult{ToolCallID: "c1", Name: "bash", Content: "FAIL", IsError: true},
-			proto.ToolResult{ToolCallID: "c2", Name: "view", Content: "1: package main"},
-		},
-	}}, nil)
-	require.NoError(t, err)
-
-	// Each call is traced when it finishes, in first-seen order, and
-	// re-marked with its outcome once the result arrives: the bash
-	// call is re-marked "(failed)" and the view call "(ok)".
 	require.Equal(t, "tool bash go test ./...\n"+
 		"tool view /tmp/a.go\n"+
-		"tool bash go test ./... (failed)\n"+
-		"tool view /tmp/a.go (ok)\n", errOut.String())
-	require.Empty(t, out.String())
+		"tool bash go test ./... (failed)\n", errOut.String())
+	require.Equal(t, "the tests fail", out.String())
 }
 
 // --verbose traces tool calls on stderr, so it must also hide the spinner,

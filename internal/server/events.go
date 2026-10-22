@@ -371,7 +371,6 @@ func messageToProto(m message.Message) proto.Message {
 				Name:     v.Name,
 				Input:    v.Input,
 				Finished: v.Finished,
-				Status:   toolCallStatusFromResults(m, v.ID),
 			})
 		case message.ToolResult:
 			msg.Parts = append(msg.Parts, proto.ToolResult{
@@ -404,24 +403,6 @@ func messageToProto(m message.Message) proto.Message {
 	}
 
 	return msg
-}
-
-// toolCallStatusFromResults derives the outcome of the tool call with the
-// given ID from the tool result parts of the same message. Tool results
-// are stored as parts of the assistant message that made the call, so a
-// published message already carries the outcome of any call whose result
-// has arrived.
-func toolCallStatusFromResults(m message.Message, toolCallID string) proto.ToolStatus {
-	for _, tr := range m.ToolResults() {
-		if tr.ToolCallID != toolCallID {
-			continue
-		}
-		if tr.IsError {
-			return proto.ToolStatusFailed
-		}
-		return proto.ToolStatusOK
-	}
-	return ""
 }
 
 // skillsEventToProto converts a skills.Event into its wire form. Errors

@@ -416,18 +416,10 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 
 	messageEvents := app.Messages.Subscribe(ctx)
 	messageReadBytes := make(map[string]int)
-	// seenToolCalls tracks finished tool calls already traced to stderr,
-	// so each call is traced at most twice: once when it finishes (before
-	// the result has arrived) and once more when the result arrives with
-	// a non-empty outcome marker.
-	seenToolCalls := make(map[string]bool)
-	// toolCallInfo remembers the name and input of each traced call so
-	// its outcome marker can be printed later, when the tool result
-	// arrives (in a separate message for the local path).
-	toolCallInfo := make(map[string]message.ToolCall)
-	// tracedStatuses holds the last outcome marker printed for each
-	// traced call; empty while the result has not arrived yet.
-	tracedStatuses := make(map[string]string)
+	var trace *format.ToolTrace
+	if traceTools {
+		trace = format.NewToolTrace(os.Stderr)
+	}
 	var printed bool
 
 	defer func() {
@@ -461,50 +453,23 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 
 		case event := <-messageEvents:
 			msg := event.Payload
-			if msg.SessionID != sess.ID || msg.Role != message.Assistant {
+			if msg.SessionID != sess.ID {
 				continue
 			}
-
-			if traceTools {
-				for _, call := range msg.ToolCalls() {
-					if !call.Finished || call.ID == "" {
-						continue
-					}
-					suffix := toolCallStatusSuffix(msg, call.ID)
-					// Each call is traced at most twice: once when it
-					// finishes (before the result has arrived) and
-					// once more when the result arrives with a
-					// non-empty outcome marker.
-					if seenToolCalls[call.ID] {
-						// Re-trace only when the outcome was learned
-						// after the first print and has not been
-						// marked yet.
-						if tracedStatuses[call.ID] != "" || suffix == "" {
-							continue
-						}
-					}
-					seenToolCalls[call.ID] = true
-					toolCallInfo[call.ID] = call
-					tracedStatuses[call.ID] = suffix
-					_, _ = fmt.Fprintf(os.Stderr, "tool %s %s%s\n", call.Name, toolCallSummary(call), suffix)
-				}
-			}
-
-			if traceTools && msg.Role == message.Tool {
-				// The tool result for a traced call arrives in its own
-				// message; re-print the call's trace line once with its
-				// outcome marker.
+			// A tool's result arrives in a message of its own, after the
+			// assistant message that made the call.
+			if msg.Role == message.Tool {
 				for _, result := range msg.ToolResults() {
-					call, ok := toolCallInfo[result.ToolCallID]
-					if !ok || tracedStatuses[result.ToolCallID] != "" {
-						continue
-					}
-					suffix := " (ok)"
-					if result.IsError {
-						suffix = " (failed)"
-					}
-					tracedStatuses[result.ToolCallID] = suffix
-					_, _ = fmt.Fprintf(os.Stderr, "tool %s %s%s\n", call.Name, toolCallSummary(call), suffix)
+					trace.Result(result.ToolCallID, result.IsError)
+				}
+				continue
+			}
+			if msg.Role != message.Assistant {
+				continue
+			}
+			for _, call := range msg.ToolCalls() {
+				if call.Finished {
+					trace.Call(call.ID, call.Name, call.Summary())
 				}
 			}
 
@@ -540,31 +505,6 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 			return ctx.Err()
 		}
 	}
-}
-
-// toolCallSummary renders a short, single-line summary of a tool
-// call's input for the non-interactive --verbose trace. The shared
-// field precedence and truncation live in [ToolCall.Summary]; this
-// wrapper adapts it to the message package's call type.
-func toolCallSummary(call message.ToolCall) string {
-	return call.Summary()
-}
-
-// toolCallStatusSuffix renders the per-call outcome marker for the
-// non-interactive --verbose trace: "(failed)" when the tool result for
-// the call is an error, "(ok)" when it is not, and "" while no result
-// has arrived yet.
-func toolCallStatusSuffix(msg message.Message, toolCallID string) string {
-	for _, result := range msg.ToolResults() {
-		if result.ToolCallID != toolCallID {
-			continue
-		}
-		if result.IsError {
-			return " (failed)"
-		}
-		return " (ok)"
-	}
-	return ""
 }
 
 func (app *App) UpdateAgentModel(ctx context.Context) error {

@@ -204,6 +204,16 @@ func TestToolCallSummary(t *testing.T) {
 			want: "foo",
 		},
 		{
+			name: "grep pattern over the directory it searched",
+			call: ToolCall{ID: "c4b", Name: "grep", Input: `{"pattern":"runStream","path":"/src/internal/cmd"}`},
+			want: "runStream",
+		},
+		{
+			name: "sub-agent prompt, not its raw input",
+			call: ToolCall{ID: "c4c", Name: "agent", Input: `{"prompt":"Find where tool results are stored"}`},
+			want: "Find where tool results are stored",
+		},
+		{
 			name: "url",
 			call: ToolCall{ID: "c5", Name: "fetch", Input: `{"url":"https://example.com/a?b=c"}`},
 			want: "https://example.com/a?b=c",

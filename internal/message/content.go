@@ -130,7 +130,10 @@ func (c ToolCall) Summary() string {
 	}
 
 	var summary string
-	for _, key := range []string{"command", "url", "file_path", "path", "pattern", "symbol", "query"} {
+	// The field that says most about the call comes first: a search is
+	// told apart by its pattern, not the directory it searched, and a
+	// sub-agent by its prompt.
+	for _, key := range []string{"command", "url", "file_path", "pattern", "prompt", "symbol", "query", "path"} {
 		if v, ok := input[key].(string); ok && v != "" {
 			summary = v
 			break
