@@ -136,7 +136,8 @@ crash run --continue "Follow up on your last response"
 			if enabled, ok := config.ParseThinkingCommand(prompt); ok {
 				return setThinking(clientWs, enabled, cmd.OutOrStdout())
 			}
-			return runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, reasoningEffort, quiet, verbose, sessionID, useLast)
+			hideSpinner, traceTools := runOutputFlags(quiet, verbose)
+			return runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast)
 		}
 
 		ws, cleanup, err := setupLocalWorkspace(cmd)
@@ -168,8 +169,16 @@ crash run --continue "Follow up on your last response"
 		if enabled, ok := config.ParseThinkingCommand(prompt); ok {
 			return setThinking(ws, enabled, cmd.OutOrStdout())
 		}
-		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, largeModel, smallModel, reasoningEffort, quiet, verbose, sessionID, useLast)
+		hideSpinner, traceTools := runOutputFlags(quiet, verbose)
+		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast)
 	},
+}
+
+// runOutputFlags maps run's --quiet and --verbose to what a run shows on
+// stderr. Either hides the spinner: --verbose writes logs and a line per
+// tool call to stderr, where the spinner would draw over them.
+func runOutputFlags(quiet, verbose bool) (hideSpinner, traceTools bool) {
+	return quiet || verbose, verbose
 }
 
 func init() {

@@ -476,3 +476,22 @@ func TestRunStream_TraceDisabledLeavesTraceQuiet(t *testing.T) {
 	require.Empty(t, errOut.String())
 	require.Equal(t, "the answer", out.String())
 }
+
+// --verbose traces tool calls on stderr, so it must also hide the spinner,
+// which draws on stderr too.
+func TestRunOutputFlags(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		quiet, verbose         bool
+		hideSpinner, traceTool bool
+	}{
+		{false, false, false, false},
+		{true, false, true, false},
+		{false, true, true, true},
+		{true, true, true, true},
+	} {
+		hide, trace := runOutputFlags(tc.quiet, tc.verbose)
+		require.Equal(t, tc.hideSpinner, hide, "quiet=%v verbose=%v", tc.quiet, tc.verbose)
+		require.Equal(t, tc.traceTool, trace, "quiet=%v verbose=%v", tc.quiet, tc.verbose)
+	}
+}
