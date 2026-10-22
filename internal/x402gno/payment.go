@@ -1,0 +1,446 @@
+// Package x402gno is crash's copy of the client half of gno.land's x402
+// "exact" payment mechanism: building a payment a seller's requirements ask
+// for, checking it against the chain, and completing it with a signature made
+// elsewhere. Crash has gnokey make that signature, so a key's password goes to
+// gnokey and nowhere else.
+//
+// It is gnoverse/x402's client/exact, trimmed to what crash uses: Prepare and
+// Payment, without the x402.SchemeNetworkClient that signs in process, and
+// with the facilitator's three protocol constants written out here so crash
+// does not link the facilitator. Keep the two in step until the Go client is
+// published as a module, then import it instead.
+//
+// A payment is one bank send of exactly the price to the seller, signed and
+// not broadcast; the seller's facilitator broadcasts it. The chain id it is
+// signed for comes from the offer, and the node it reads must serve that
+// chain.
+package x402gno
+
+import (
+	"context"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"math/big"
+	"regexp"
+	"strings"
+
+	"github.com/gnolang/gno/gno.land/pkg/gnoland/ugnot"
+	"github.com/gnolang/gno/tm2/pkg/amino"
+	"github.com/gnolang/gno/tm2/pkg/crypto"
+	"github.com/gnolang/gno/tm2/pkg/sdk/bank"
+	"github.com/gnolang/gno/tm2/pkg/std"
+	x402 "github.com/x402-foundation/x402/go/v2"
+	"github.com/x402-foundation/x402/go/v2/types"
+)
+
+const schemeExact = "exact"
+
+// namespace is the CAIP-2 namespace every gno network shares: a network is
+// "gno:<chain-id>".
+const namespace = "gno"
+
+// The facilitator's protocol constants (gnoverse/x402 facilitator/exact), which
+// a payment has to satisfy.
+const (
+	// assetTransferMethod is how a gno payment moves value: the payer signs a
+	// bank send the facilitator broadcasts. An offer that omits
+	// extra.assetTransferMethod means it.
+	assetTransferMethod = "bank-send"
+
+	// maxMemoBytes caps extra.memo. A payment signed against a longer memo is
+	// one the facilitator never accepts.
+	maxMemoBytes = 256
+)
+
+// chainIDReference is CAIP-2's grammar for the reference half of a network,
+// the one a facilitator holds its own chain id to.
+var chainIDReference = regexp.MustCompile(`^[-_a-zA-Z0-9]{1,32}$`)
+
+// A gno buyer pays its own transaction fee: std.Fee names no payer and the ante
+// charges the first signer, so the payer of the payment is also the payer of the
+// fee. The requirements carry no gas fields, so the buyer chooses.
+//
+// The chain takes the whole fee offered, not the gas used, so the fee follows
+// the chain's gas price for the gas the payment reserves. That price adapts to
+// load, and a payment under it is refused at settle after the resource ran,
+// costing the buyer the resource; it is offered gasPriceMargin times over. A
+// block above the chain's gas target raises the price's amount by at least 1, so
+// at onyx-1's 1ugnot per 1000 gas the margin covers exactly one such block
+// between signing and settle. A bank send uses about an eighth of gasWanted.
+//
+// Both numbers are the TypeScript mechanism's, so the two sign the same payment
+// for the same chain state.
+const (
+	gasWanted      = 10_000_000
+	gasPriceMargin = 2
+)
+
+// unpricedGasFee is the fee offered when the chain reports no gas price: a node
+// may still set a minimum of its own, which the chain does not report, so this
+// is well clear of any.
+var unpricedGasFee = std.Coin{Denom: ugnot.Denom, Amount: 1_000_000}
+
+// denomination is tm2's denomination grammar (std.ValidateDenom), capped at its
+// MaxDenomLength of 274 bytes. The coin a payment sends is amount and asset as
+// one string, so an asset outside it is either refused by the chain or read as
+// another coin: "0ugnot" after "250000" is 2500000ugnot.
+var denomination = regexp.MustCompile(`^[a-z/][a-z0-9_.:/-]{2,273}$`)
+
+// positiveAmount is a whole number above zero, written without a sign or a
+// leading zero.
+var positiveAmount = regexp.MustCompile(`^[1-9][0-9]*$`)
+
+// atomicAmount is a spend cap as upstream's client resolves one: a whole number
+// of the asset's smallest unit.
+var atomicAmount = regexp.MustCompile(`^[0-9]+$`)
+
+// ErrInvalidRequirements reports requirements this mechanism will not sign a
+// payment for: an offer for no gno chain or for another scheme, a malformed
+// price or payee, or terms the mechanism does not implement.
+//
+// The requirements arrive from a seller over the network, so they are checked
+// rather than trusted: a malformed amount or a missing payTo would otherwise
+// become a signed transaction that pays the wrong thing.
+var ErrInvalidRequirements = errors.New("x402-gno: payment requirements refused")
+
+// ErrExceedsSpendCap reports a price above the per-payment cap the client's
+// spend controls set for its asset. The cap bounds the price; the fee is paid on
+// top of it.
+var ErrExceedsSpendCap = errors.New("x402-gno: price exceeds the spend cap")
+
+// Node is the chain access a payment needs before it is signed: which chain the
+// node serves, the number and sequence of the account the signature is verified
+// against, and the gas price the fee follows. Nothing is broadcast through it;
+// the seller's facilitator broadcasts the payment. Implemented by RPCNode and
+// by fakes in tests.
+type Node interface {
+	// NodeChainID is the chain id the node reports for itself.
+	NodeChainID(ctx context.Context) (string, error)
+
+	// Account is the on-chain account of addr. An address the chain holds no
+	// account for is an error: it has nothing to pay with.
+	Account(ctx context.Context, addr crypto.Address) (std.Account, error)
+
+	// SessionAccount is the session account session holds under master.
+	SessionAccount(ctx context.Context, master, session crypto.Address) (std.Account, error)
+
+	// GasPrice is the gas price the chain reports, or nil when it reports none.
+	GasPrice(ctx context.Context) (*std.GasPrice, error)
+}
+
+// Payment is a payment built for a seller's requirements and not yet signed:
+// the transaction, and what a signature over it commits to. Prepare makes one.
+type Payment struct {
+	// Tx is the payment without its signature: one bank.MsgSend of exactly the
+	// price to payTo, the fee, and the memo the requirements bind.
+	Tx std.Tx
+
+	// ChainID is the chain the offer names. AccountNumber and Sequence are the
+	// number and sequence of the account the chain verifies the signature
+	// against: the payer's, or the session's when a session key signs.
+	ChainID       string
+	AccountNumber uint64
+	Sequence      uint64
+
+	// PubKey is the key that must sign.
+	PubKey crypto.PubKey
+
+	// SessionAddr is the session account that signs for the payer, or zero
+	// when the payer's own key signs.
+	SessionAddr crypto.Address
+}
+
+// SignBytes is what a signature over the payment covers.
+func (p *Payment) SignBytes() ([]byte, error) {
+	signBytes, err := p.Tx.GetSignBytes(p.ChainID, p.AccountNumber, p.Sequence)
+	if err != nil {
+		return nil, fmt.Errorf("x402-gno: build the sign doc: %w", err)
+	}
+	return signBytes, nil
+}
+
+// Payload attaches signature, PubKey's signature over the payment, and returns
+// the scheme payload: base64 of the signed std.Tx.
+//
+// The signature is verified first, the way the chain verifies it, so a key
+// that signed anything else — another chain, other account state, another
+// transaction — is refused here rather than by the seller's facilitator. Both
+// renderings of the sign doc the chain accepts are accepted, so a signer that
+// renders the fee as gas_wanted/gas_fee, as older gnokey and gno-js-client do,
+// can pay too.
+func (p *Payment) Payload(signature []byte) (types.PaymentPayload, error) {
+	if p.PubKey == nil {
+		return types.PaymentPayload{}, errors.New("x402-gno: the payment names no key to verify its signature with")
+	}
+	rendering, err := std.VerifySignaturePayload(p.PubKey, p.Tx.SignDoc(p.ChainID, p.AccountNumber, p.Sequence), signature)
+	if err != nil {
+		return types.PaymentPayload{}, fmt.Errorf("x402-gno: build the sign doc: %w", err)
+	}
+	if rendering == std.PayloadRenderingNone {
+		return types.PaymentPayload{}, fmt.Errorf("x402-gno: the signature does not verify for key %s over this payment on chain %s", p.PubKey.Address(), p.ChainID)
+	}
+	tx := p.Tx
+	// The chain reads a session's key and limits at session_addr under the
+	// master MsgSend.FromAddress names.
+	tx.Signatures = []std.Signature{{PubKey: p.PubKey, Signature: signature, SessionAddr: p.SessionAddr}}
+	if err := tx.ValidateBasic(); err != nil {
+		return types.PaymentPayload{}, fmt.Errorf("x402-gno: the signed payment is not a valid transaction: %w", err)
+	}
+	raw, err := amino.Marshal(tx)
+	if err != nil {
+		return types.PaymentPayload{}, fmt.Errorf("x402-gno: encode the payment: %w", err)
+	}
+	return types.PaymentPayload{
+		X402Version: 2,
+		Payload:     map[string]any{"transaction": base64.StdEncoding.EncodeToString(raw)},
+	}, nil
+}
+
+// terms is the payment requirements ask for.
+type terms struct {
+	chainID string
+	payTo   crypto.Address
+	price   std.Coin
+	memo    string
+}
+
+// readTerms checks requirements and returns the payment they ask for. Every
+// refusal wraps ErrInvalidRequirements.
+func readTerms(req types.PaymentRequirements) (terms, error) {
+	chainID, ok := chainIDOf(req.Network)
+	if !ok {
+		return terms{}, refuse("%s does not name a gno chain", req.Network)
+	}
+	if req.Scheme != schemeExact {
+		return terms{}, refuse("scheme %s is not %s", req.Scheme, schemeExact)
+	}
+	if !denomination.MatchString(req.Asset) {
+		return terms{}, refuse("asset %s is not a gno denomination", req.Asset)
+	}
+	if !positiveAmount.MatchString(req.Amount) {
+		return terms{}, refuse("amount %s is not a positive integer", req.Amount)
+	}
+	if req.PayTo == "" {
+		return terms{}, refuse("requirements name no payTo")
+	}
+	// The facilitator compares the recipient's canonical form with payTo as
+	// written, so a payTo that decodes but is written otherwise, such as in
+	// upper case, names an address no payment to it can match.
+	payTo, err := crypto.AddressFromBech32(req.PayTo)
+	if err != nil || payTo.String() != req.PayTo {
+		return terms{}, refuse("payTo %s is not a gno address", req.PayTo)
+	}
+	// §6.1 reserves both keys: an offer naming a transfer method or a flow this
+	// mechanism does not implement is not one it may sign a payment for. A key
+	// set to null names nothing, as upstream's SDKs read it.
+	if v := req.Extra["assetTransferMethod"]; v != nil && v != assetTransferMethod {
+		return terms{}, refuse("assetTransferMethod %v is not %s", v, assetTransferMethod)
+	}
+	if v := req.Extra["paymentFlow"]; v != nil && v != string(x402.PaymentFlowAuthorization) {
+		return terms{}, refuse("paymentFlow %v is not %s", v, x402.PaymentFlowAuthorization)
+	}
+	memo, err := boundMemo(req.Extra)
+	if err != nil {
+		return terms{}, err
+	}
+	// The chain's own coin parse is the one the facilitator matches the payment
+	// against, and it refuses what the grammar above admits but no coin holds,
+	// such as an amount past the range of one.
+	coins, err := std.ParseCoins(req.Amount + req.Asset)
+	if err != nil || len(coins) != 1 {
+		return terms{}, refuse("%s%s is not one coin the chain can hold", req.Amount, req.Asset)
+	}
+	return terms{chainID: chainID, payTo: payTo, price: coins[0], memo: memo}, nil
+}
+
+// refuse is a refusal of the requirements, wrapping ErrInvalidRequirements.
+func refuse(format string, args ...any) error {
+	return fmt.Errorf("%w: "+format, append([]any{ErrInvalidRequirements}, args...)...)
+}
+
+// chainIDOf returns the gno chain id a CAIP-2 network string names, and false
+// when the string names no gno chain.
+//
+// The chain id has to be one CAIP-2 can name, the grammar the facilitator holds
+// its own chain id to: tm2 accepts others, but no facilitator can serve them,
+// so a payment for one could never settle. That also refuses a wildcard such as
+// "gno:*", which names a pattern rather than a chain.
+func chainIDOf(network string) (string, bool) {
+	ns, chainID, _ := strings.Cut(network, ":")
+	if ns != namespace || !chainIDReference.MatchString(chainID) {
+		return "", false
+	}
+	return chainID, true
+}
+
+// boundMemo reads extra.memo, the memo the requirements bind the payment's
+// transaction to, and "" when they bind none.
+//
+// A memo that is present but not a string is a malformed offer rather than an
+// absent one, because signing "" against it would produce a payment the seller
+// refuses for a reason the buyer cannot see. The cap is the facilitator's: a
+// payment signed against a longer memo could never be accepted.
+func boundMemo(extra map[string]any) (string, error) {
+	v, ok := extra["memo"]
+	if !ok {
+		return "", nil
+	}
+	memo, ok := v.(string)
+	if !ok {
+		return "", refuse("extra.memo is %T, want string", v)
+	}
+	if len(memo) > maxMemoBytes {
+		return "", refuse("extra.memo is %d bytes, exceeding the %d-byte maximum", len(memo), maxMemoBytes)
+	}
+	return memo, nil
+}
+
+// withinCap refuses a price above limit, the per-payment cap the client's spend
+// controls resolved for the price's asset; "" caps nothing.
+//
+// Upstream's client drops an offer above the cap before it picks one, so a
+// price over it reaches here only when a payment is asked for directly rather
+// than chosen from a 402. It is refused all the same: this is the last point
+// before a signature exists.
+func withinCap(price std.Coin, limit string) error {
+	if limit == "" {
+		return nil
+	}
+	if !atomicAmount.MatchString(limit) {
+		return fmt.Errorf("x402-gno: spend cap %q is not a whole number of %s", limit, price.Denom)
+	}
+	most, _ := new(big.Int).SetString(limit, 10)
+	if big.NewInt(price.Amount).Cmp(most) > 0 {
+		return fmt.Errorf("%w: %s is more than the %s%s one payment may cost", ErrExceedsSpendCap, price, limit, price.Denom)
+	}
+	return nil
+}
+
+// Prepare builds the payment requirements ask for and checks it against the
+// chain through node, without signing it. pub is the key that will sign: the
+// payer's own, or, with master non-zero, a session key master registered, and
+// then master pays. maxAmountPerPayment caps the price in its asset's smallest
+// unit; "" caps nothing.
+//
+// Show a person what Payment.Tx pays, have the key sign it, and hand the
+// signature to Payload.
+//
+// The requirements are checked before the chain is read.
+func Prepare(ctx context.Context, node Node, pub crypto.PubKey, master crypto.Address, requirements types.PaymentRequirements, maxAmountPerPayment string) (*Payment, error) {
+	t, err := readTerms(requirements)
+	if err != nil {
+		return nil, err
+	}
+	if err := withinCap(t.price, maxAmountPerPayment); err != nil {
+		return nil, err
+	}
+	if node == nil {
+		return nil, errors.New("x402-gno: a payment needs a node to read the chain from")
+	}
+	if pub == nil {
+		return nil, errors.New("x402-gno: the signer has no public key")
+	}
+	// The address of the signing key: the payer itself, or the session that
+	// signs for the master.
+	key := pub.Address()
+
+	// The signature commits to the chain id the offer names and to the account
+	// number and sequence this node reports. Both have to describe one chain: a
+	// payment signed for one chain over another's account state is refused by
+	// both, unless the two accounts happen to agree, and then it pays on a chain
+	// whose state this buyer never read.
+	served, err := node.NodeChainID(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("x402-gno: ask the node which chain it serves: %w", err)
+	}
+	if served != t.chainID {
+		return nil, fmt.Errorf("x402-gno: the offer is for chain %s and the node serves %s", t.chainID, served)
+	}
+
+	price, err := node.GasPrice(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("x402-gno: read the chain's gas price: %w", err)
+	}
+	fee, err := gasFee(price)
+	if err != nil {
+		return nil, err
+	}
+
+	payer, session := key, crypto.Address{}
+	if !master.IsZero() {
+		payer, session = master, key
+	}
+	send := bank.MsgSend{FromAddress: payer, ToAddress: t.payTo, Amount: std.Coins{t.price}}
+	if err := send.ValidateBasic(); err != nil {
+		return nil, fmt.Errorf("x402-gno: the payment is not a valid send: %w", err)
+	}
+
+	account, err := readAccount(ctx, node, master, key)
+	if err != nil {
+		return nil, err
+	}
+	return &Payment{
+		Tx: std.Tx{
+			Msgs: []std.Msg{send},
+			Fee:  std.NewFee(gasWanted, fee),
+			Memo: t.memo,
+		},
+		ChainID:       t.chainID,
+		AccountNumber: account.GetAccountNumber(),
+		Sequence:      account.GetSequence(),
+		PubKey:        pub,
+		SessionAddr:   session,
+	}, nil
+}
+
+// readAccount returns the account the chain verifies key's signature against:
+// the session account key holds under master when master is set, key's own
+// account otherwise. Each keeps its own number and sequence.
+func readAccount(ctx context.Context, node Node, master, key crypto.Address) (std.Account, error) {
+	var (
+		acc std.Account
+		err error
+	)
+	if master.IsZero() {
+		acc, err = node.Account(ctx, key)
+		if err != nil {
+			if _, unknown := errors.AsType[std.UnknownAddressError](err); unknown {
+				return nil, fmt.Errorf("x402-gno: the chain holds no account for %s; fund it before paying from it: %w", key, err)
+			}
+			return nil, fmt.Errorf("x402-gno: read the account of %s: %w", key, err)
+		}
+	} else {
+		acc, err = node.SessionAccount(ctx, master, key)
+		if err != nil {
+			return nil, fmt.Errorf("x402-gno: read session %s of %s: %w", key, master, err)
+		}
+	}
+	if acc == nil {
+		return nil, fmt.Errorf("x402-gno: the node answered with no account for %s", key)
+	}
+	return acc, nil
+}
+
+// gasFee is the fee a payment offers for gasWanted at price: gasPriceMargin
+// times the price, rounded up to a whole unit, or unpricedGasFee when the chain
+// reports none.
+func gasFee(price *std.GasPrice) (std.Coin, error) {
+	if price == nil || price.Gas == 0 || price.Price.Amount == 0 {
+		return unpricedGasFee, nil
+	}
+	if price.Gas < 0 || price.Price.Amount < 0 {
+		return std.Coin{}, fmt.Errorf("x402-gno: the chain reports a gas price of %s per %d gas", price.Price, price.Gas)
+	}
+	gas := big.NewInt(price.Gas)
+	fee := new(big.Int).Mul(big.NewInt(gasWanted*gasPriceMargin), big.NewInt(price.Price.Amount))
+	fee.Add(fee, gas).Sub(fee, big.NewInt(1)).Quo(fee, gas)
+	if !fee.IsInt64() {
+		return std.Coin{}, fmt.Errorf("x402-gno: at %s per %d gas the fee exceeds what one coin holds", price.Price, price.Gas)
+	}
+	coin, err := std.NewCoinSafe(price.Price.Denom, fee.Int64())
+	if err != nil {
+		return std.Coin{}, fmt.Errorf("x402-gno: the chain's gas price names no coin a fee can be paid in: %w", err)
+	}
+	return coin, nil
+}
