@@ -196,6 +196,13 @@ func blockFuncs() []shell.BlockFunc {
 
 		// `go test -exec` can run arbitrary commands
 		shell.ArgumentsBlocker("go", []string{"test"}, []string{"-exec"}),
+
+		// A gno.land key's password belongs in the gnokey tool's masked
+		// prompt, never on a command line the model wrote (see
+		// gnokey.go). gnokey reads it from standard input only with this
+		// flag, so refusing the flag here closes the shell route.
+		shell.ArgumentsBlocker("gnokey", nil, []string{"-insecure-password-stdin"}),
+		shell.ArgumentsBlocker("gnokey", nil, []string{"--insecure-password-stdin"}),
 	}
 }
 

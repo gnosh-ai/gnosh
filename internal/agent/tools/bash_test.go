@@ -239,3 +239,53 @@ func TestBashTool_RecordsTheExitCode(t *testing.T) {
 		require.Equal(t, want, meta.ExitCode, command)
 	}
 }
+
+// TestBashTool_RefusesGnokeyPasswordOnStdin keeps a gno.land key's password
+// off the shell. gnokey reads a password from standard input only with
+// -insecure-password-stdin; that flag belongs to the gnokey tool's masked
+// prompt, so bash refuses it in either spelling while the rest of gnokey
+// stays available.
+func TestBashTool_RefusesGnokeyPasswordOnStdin(t *testing.T) {
+	t.Parallel()
+
+	blockedParts := func(parts []string) bool {
+		for _, block := range blockFuncs() {
+			if block(parts) {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, parts := range [][]string{
+		{"gnokey", "sign", "-insecure-password-stdin", "-tx-path", "tx.json", "alice"},
+		{"gnokey", "maketx", "call", "--insecure-password-stdin=true", "-pkgpath", "gno.land/r/x", "-func", "F", "alice"},
+	} {
+		require.True(t, blockedParts(parts), "must refuse: %v", parts)
+	}
+
+	for _, parts := range [][]string{
+		{"gnokey", "query", "vm/qrender", "-data", "gno.land/r/x:"},
+		{"gnokey", "maketx", "call", "-pkgpath", "gno.land/r/x", "-func", "F", "-broadcast=false", "alice"},
+		{"gnokey", "list"},
+	} {
+		require.False(t, blockedParts(parts), "must stay allowed: %v", parts)
+	}
+}
+
+// TestBashTool_GnokeyPasswordFlagIsRefusedByTheRealShell proves the block
+// holds where it matters: the embedded shell the bash tool runs, including
+// behind a pipe that would otherwise feed the password in.
+func TestBashTool_GnokeyPasswordFlagIsRefusedByTheRealShell(t *testing.T) {
+	workingDir := t.TempDir()
+	tool := newBashToolForTest(workingDir)
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+
+	for _, command := range []string{
+		"gnokey sign -insecure-password-stdin -tx-path tx.json alice",
+		"echo secret | gnokey sign -insecure-password-stdin -tx-path tx.json alice",
+	} {
+		resp := runBashTool(t, tool, ctx, BashParams{Description: "sign", Command: command})
+		require.Contains(t, resp.Content, "not allowed for security reasons", "command: %s", command)
+	}
+}

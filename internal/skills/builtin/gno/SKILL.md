@@ -150,9 +150,12 @@ gnokey query bank/balances/g1... -remote 127.0.0.1:26657                        
 
 Signing needs the key's password. Use the `gnokey` tool: it shows the user
 the exact command, takes the password in a masked prompt and hands it to
-gnokey; you never see it. Never ask for a password in chat and never put
-`-insecure-password-stdin` in a bash command. When the `gnokey` tool is
-absent (a non-interactive run), print the command for the user to run.
+gnokey; you never see it. Never ask for a password, in chat or through the
+question tool, and never try to sign through bash: no
+`-insecure-password-stdin` (bash refuses it), no pipes, heredocs,
+`/dev/stdin`, `expect` or `script`. If the `gnokey` tool is not in your
+tool list, you cannot sign in this run: reply with the exact `gnokey`
+command for the user to run in their own terminal, and stop there.
 
 Before a deploy: `gno fmt`, `gno lint` and `gno test` pass; the security
 review is clean; `gnokey list` shows the key; the path is under a namespace
