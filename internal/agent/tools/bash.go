@@ -46,6 +46,10 @@ type BashResponseMetadata struct {
 	WorkingDirectory string `json:"working_directory"`
 	Background       bool   `json:"background,omitempty"`
 	ShellID          string `json:"shell_id,omitempty"`
+	// ExitCode is the command's exit status once it has finished; the
+	// output text says it too ("Exit code N"), but readers such as the
+	// --verbose trace should not have to parse that.
+	ExitCode int `json:"exit_code,omitempty"`
 }
 
 const (
@@ -279,6 +283,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 						Description:      params.Description,
 						Background:       params.RunInBackground,
 						WorkingDirectory: bgShell.WorkingDir,
+						ExitCode:         exitCode,
 					}
 					if stdout == "" {
 						return fantasy.WithResponseMetadata(fantasy.NewTextResponse(BashNoOutput), metadata), nil
@@ -362,6 +367,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 					Description:      params.Description,
 					Background:       params.RunInBackground,
 					WorkingDirectory: bgShell.WorkingDir,
+					ExitCode:         exitCode,
 				}
 				if stdout == "" {
 					return fantasy.WithResponseMetadata(fantasy.NewTextResponse(BashNoOutput), metadata), nil

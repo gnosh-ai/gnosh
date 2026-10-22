@@ -1,24 +1,26 @@
 package format
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 )
 
 // ToolTrace prints the --verbose trace of a non-interactive run's tool
-// calls: a line for each call when it is made, and a second line, marked
-// "(failed)", when its result comes back as an error. A call is printed
-// once however often the message carrying it is republished. A nil
-// *ToolTrace traces nothing.
+// calls: a line for each call when it is made, and a second line, marked,
+// when its result says it went wrong: "(failed)" for a tool error, and
+// "(exit N)" for a command that exited non-zero. A call is printed once
+// however often the message carrying it is republished. A nil *ToolTrace
+// traces nothing.
 type ToolTrace struct {
 	out    io.Writer
 	lines  map[string]string // call ID -> "name summary"
-	failed map[string]bool
+	marked map[string]bool
 }
 
 // NewToolTrace returns a trace that writes to out.
 func NewToolTrace(out io.Writer) *ToolTrace {
-	return &ToolTrace{out: out, lines: map[string]string{}, failed: map[string]bool{}}
+	return &ToolTrace{out: out, lines: map[string]string{}, marked: map[string]bool{}}
 }
 
 // Call records a tool call whose input is complete, printing it the first
@@ -38,16 +40,32 @@ func (t *ToolTrace) Call(id, name, summary string) {
 	_, _ = fmt.Fprintf(t.out, "tool %s\n", line)
 }
 
-// Result records the result of a tool call, printing the call again,
-// marked "(failed)", the first time its result is an error.
-func (t *ToolTrace) Result(id string, isError bool) {
-	if t == nil || !isError || t.failed[id] {
+// Result records the result of a tool call, given whether it is a tool
+// error and its metadata, printing the call again, marked, the first time
+// a result says the call went wrong. A command's exit status comes from
+// the exit_code in its metadata, which the bash tool records.
+func (t *ToolTrace) Result(id string, isError bool, metadata string) {
+	if t == nil || t.marked[id] {
 		return
 	}
 	line, traced := t.lines[id]
 	if !traced {
 		return
 	}
-	t.failed[id] = true
-	_, _ = fmt.Fprintf(t.out, "tool %s (failed)\n", line)
+	var mark string
+	if isError {
+		mark = "(failed)"
+	} else {
+		var meta struct {
+			ExitCode int `json:"exit_code"`
+		}
+		if json.Unmarshal([]byte(metadata), &meta) == nil && meta.ExitCode != 0 {
+			mark = fmt.Sprintf("(exit %d)", meta.ExitCode)
+		}
+	}
+	if mark == "" {
+		return
+	}
+	t.marked[id] = true
+	_, _ = fmt.Fprintf(t.out, "tool %s %s\n", line, mark)
 }

@@ -405,7 +405,7 @@ func (s *runStream) handle(ev any, stopSpinner func()) (done bool, err error) {
 		// assistant message that made the call.
 		if msg.Role == proto.Tool {
 			for _, result := range msg.ToolResults() {
-				s.trace.Result(result.ToolCallID, result.IsError)
+				s.trace.Result(result.ToolCallID, result.IsError, result.Metadata)
 			}
 			return false, nil
 		}

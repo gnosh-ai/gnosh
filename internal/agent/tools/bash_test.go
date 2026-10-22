@@ -223,3 +223,19 @@ func TestTruncateOutputEmoji(t *testing.T) {
 	require.True(t, utf8.ValidString(out), "truncated output must stay valid UTF-8")
 	require.Contains(t, out, "lines truncated")
 }
+
+// A command's exit status is in the metadata, not only in the output text,
+// so the --verbose trace can mark a command that failed.
+func TestBashTool_RecordsTheExitCode(t *testing.T) {
+	workingDir := t.TempDir()
+	tool := newBashToolForTest(workingDir)
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+
+	for command, want := range map[string]int{"exit 3": 3, "echo fine": 0} {
+		resp := runBashTool(t, tool, ctx, BashParams{Description: "exit status", Command: command})
+		require.False(t, resp.IsError, "a command that exits non-zero is a result, not a tool error")
+		var meta BashResponseMetadata
+		require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+		require.Equal(t, want, meta.ExitCode, command)
+	}
+}

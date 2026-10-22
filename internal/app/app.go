@@ -460,7 +460,7 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 			// assistant message that made the call.
 			if msg.Role == message.Tool {
 				for _, result := range msg.ToolResults() {
-					trace.Result(result.ToolCallID, result.IsError)
+					trace.Result(result.ToolCallID, result.IsError, result.Metadata)
 				}
 				continue
 			}

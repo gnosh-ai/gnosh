@@ -16,18 +16,25 @@ func TestToolTrace(t *testing.T) {
 	trace.Call("c1", "bash", "go test ./...")
 	trace.Call("c1", "bash", "go test ./...") // republished: printed once
 	trace.Call("c2", "view", "main.go")
+	trace.Call("c3", "bash", "true")
 	trace.Call("", "ls", "") // no ID yet: nothing to key it by
-	trace.Result("c2", false)
-	trace.Result("c1", true)
-	trace.Result("c1", true) // republished: marked once
-	trace.Result("c9", true) // never traced: nothing to mark
+	trace.Result("c2", false, "")
+	trace.Result("c3", false, `{"exit_code":0}`)
+	trace.Result("c1", false, `{"output":"FAIL","exit_code":2}`)
+	trace.Result("c1", false, `{"exit_code":2}`) // republished: marked once
+	trace.Call("c4", "edit", "a.go")
+	trace.Result("c4", true, "")
+	trace.Result("c9", true, "") // never traced: nothing to mark
 
 	require.Equal(t, "tool bash go test ./...\n"+
 		"tool view main.go\n"+
-		"tool bash go test ./... (failed)\n", out.String(),
-		"one line per call, and a second only for a failure")
+		"tool bash true\n"+
+		"tool bash go test ./... (exit 2)\n"+
+		"tool edit a.go\n"+
+		"tool edit a.go (failed)\n", out.String(),
+		"one line per call, and a second only when it went wrong")
 
 	var none *ToolTrace
 	none.Call("c1", "bash", "x") // a nil trace is off, not a panic
-	none.Result("c1", true)
+	none.Result("c1", true, "")
 }
