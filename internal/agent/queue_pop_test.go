@@ -52,7 +52,7 @@ func TestPopQueuedPrompts_TakesUserPromptsKeepsContinuation(t *testing.T) {
 	mu.Unlock()
 
 	popped := a.PopQueuedPrompts(sessionID)
-	require.Equal(t, []string{"first prompt", "second prompt"}, popped,
+	require.Equal(t, []PoppedPrompt{{Prompt: "first prompt"}, {Prompt: "second prompt"}}, popped,
 		"popped prompts must be the user's, oldest first")
 	require.Empty(t, a.QueuedPromptsList(sessionID),
 		"the user's prompts must be out of the queue after the pop")
@@ -100,7 +100,7 @@ func TestPopQueuedPrompts_DoesNotRaceEnqueueCall(t *testing.T) {
 	}
 	mu.Unlock()
 
-	done := make(chan []string, 1)
+	done := make(chan []PoppedPrompt, 1)
 	go func() {
 		done <- a.PopQueuedPrompts(sessionID)
 	}()
@@ -131,7 +131,7 @@ func TestPopQueuedPrompts_LeavesPromptsACallerIsWaitingOn(t *testing.T) {
 	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "typed in the TUI"})
 	mu.Unlock()
 
-	require.Equal(t, []string{"typed in the TUI"}, a.PopQueuedPrompts(sessionID))
+	require.Equal(t, []PoppedPrompt{{Prompt: "typed in the TUI"}}, a.PopQueuedPrompts(sessionID))
 	queued, ok := a.messageQueue.Get(sessionID)
 	require.True(t, ok)
 	require.Len(t, queued, 1)
@@ -157,9 +157,9 @@ func TestCancel_DropsAQueuedHiddenContinuation(t *testing.T) {
 }
 
 // Up takes only what the user typed. A channel message (the user did not
-// write it, and its reply must go back to its channel) and a prompt with
-// attachments (only text fits in the editor) stay queued and run as sent.
-func TestPopQueuedPrompts_LeavesChannelMessagesAndAttachments(t *testing.T) {
+// write it, and its reply must go back to its channel) stays queued and runs
+// as sent.
+func TestPopQueuedPrompts_LeavesChannelMessages(t *testing.T) {
 	t.Parallel()
 
 	a := NewSessionAgent(SessionAgentOptions{}).(*sessionAgent)
@@ -168,13 +168,42 @@ func TestPopQueuedPrompts_LeavesChannelMessagesAndAttachments(t *testing.T) {
 	mu := a.sessionMu(sessionID)
 	mu.Lock()
 	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "<channel>hi</channel>", Channel: "signal"})
-	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "look at this", Attachments: []message.Attachment{{FilePath: "paste_1.txt", MimeType: "text/plain", Content: []byte("log")}}})
 	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "typed"})
 	mu.Unlock()
 
-	require.Equal(t, []string{"typed"}, a.PopQueuedPrompts(sessionID))
+	require.Equal(t, []PoppedPrompt{{Prompt: "typed"}}, a.PopQueuedPrompts(sessionID))
 	queued, _ := a.messageQueue.Get(sessionID)
-	require.Len(t, queued, 2)
+	require.Len(t, queued, 1)
 	require.Equal(t, "signal", queued[0].Channel)
-	require.Len(t, queued[1].Attachments, 1, "the attachment must still go with its prompt")
+}
+
+// A prompt with attachments is popped into the editor along with its
+// attachments, so editing it loses nothing it carried: the attachment comes
+// back with the text, and a paste-only prompt (no text) keeps its attachment
+// rather than being dropped.
+func TestPopQueuedPrompts_TakesAttachmentsWithTheirPrompts(t *testing.T) {
+	t.Parallel()
+
+	a := NewSessionAgent(SessionAgentOptions{}).(*sessionAgent)
+	const sessionID = "s1"
+	paste := message.Attachment{FilePath: "paste_1.txt", MimeType: "text/plain", Content: []byte("log")}
+
+	mu := a.sessionMu(sessionID)
+	mu.Lock()
+	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "look at this", Attachments: []message.Attachment{paste}})
+	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "", Attachments: []message.Attachment{{FilePath: "paste_2.txt", MimeType: "text/plain", Content: []byte("just a paste")}}})
+	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "typed"})
+	mu.Unlock()
+
+	popped := a.PopQueuedPrompts(sessionID)
+	require.Len(t, popped, 3, "every user prompt is editable: the ones with attachments too")
+	require.Equal(t, "look at this", popped[0].Prompt)
+	require.Equal(t, []message.Attachment{paste}, popped[0].Attachments,
+		"the attachment must come back with its prompt")
+	require.Equal(t, "", popped[1].Prompt,
+		"a paste-only prompt has no text, but it must not be lost")
+	require.Len(t, popped[1].Attachments, 1, "the paste-only prompt's attachment must be restored")
+	require.Equal(t, "typed", popped[2].Prompt)
+	require.Empty(t, a.QueuedPromptsList(sessionID),
+		"the user's prompts must be out of the queue after the pop")
 }

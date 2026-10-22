@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/message"
 )
 
@@ -668,6 +669,30 @@ func AttachmentsFromMessage(as []message.Attachment) []Attachment {
 		out[i] = AttachmentFromMessage(a)
 	}
 	return out
+}
+
+// PoppedPrompt is a queued prompt taken out of the session's queue for
+// editing, with the attachments it carried.
+type PoppedPrompt struct {
+	Prompt      string       `json:"prompt"`
+	Attachments []Attachment `json:"attachments,omitempty"`
+}
+
+// ToAgent converts a proto PoppedPrompt to an [agent.PoppedPrompt].
+func (p PoppedPrompt) ToAgent() agent.PoppedPrompt {
+	return agent.PoppedPrompt{
+		Prompt:      p.Prompt,
+		Attachments: AttachmentsToMessage(p.Attachments),
+	}
+}
+
+// PoppedPromptFromAgent converts an [agent.PoppedPrompt] to a proto
+// PoppedPrompt.
+func PoppedPromptFromAgent(p agent.PoppedPrompt) PoppedPrompt {
+	return PoppedPrompt{
+		Prompt:      p.Prompt,
+		Attachments: AttachmentsFromMessage(p.Attachments),
+	}
 }
 
 // MarshalJSON implements the [json.Marshaler] interface.

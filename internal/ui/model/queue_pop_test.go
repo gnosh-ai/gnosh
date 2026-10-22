@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/require"
 
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 )
 
@@ -209,6 +210,103 @@ func TestUpWithOnlyKeptPromptsQueuedStepsIntoHistory(t *testing.T) {
 	require.Equal(t, "earlier prompt", m.textarea.Value(),
 		"Up must not be a dead key, and must not offer a copy of what is still queued: sent again, it would run twice")
 	require.Equal(t, 0, m.promptHistory.index, "it steps into history, as with nothing queued")
+}
+
+// The pop takes the prompts' attachments back with them: a prompt the user
+// typed with a paste attachment in it must come back into the editor with
+// its attachment in the editor's attachment list, so the attachment row shows
+// it and Enter sends it along with the text.
+func TestUpPopBringsAttachmentsIntoTheEditor(t *testing.T) {
+	pinTTLs(t)
+
+	ws := &countingWorkspace{
+		ready:  true,
+		queued: []string{"look at this"},
+	}
+	ws.popAttachments = map[string][]message.Attachment{
+		"look at this": {{FileName: "paste_1.txt", FilePath: "paste_1.txt", MimeType: "text/plain", Content: []byte("log")}},
+	}
+	m := newBusyUI(ws)
+	warmCaches(m, true)
+	m.promptQueue = 1
+	m.promptQueueItems = []string{"look at this"}
+	m.promptQueueCheckedAt = time.Now()
+	ws.resetCounters()
+
+	_, cmd := m.Update(upKey())
+	require.NotNil(t, cmd)
+	runCmds(m, cmd)
+
+	require.Equal(t, "look at this", m.textarea.Value(),
+		"the prompt text must land in the editor")
+	require.Len(t, m.attachments.List(), 1,
+		"the prompt's attachment must be in the editor's attachment list, so the attachment row shows it")
+	require.Equal(t, "paste_1.txt", m.attachments.List()[0].FileName,
+		"the restored attachment must be the one the prompt carried")
+	require.Empty(t, ws.queued, "the prompt must be out of the queue")
+}
+
+// A popped prompt with no text but an attachment (a paste-only prompt) must
+// not be lost: its attachment is restored in the editor's attachment list.
+// The editor's text is left empty, so Enter sends the attachment alone.
+func TestUpPopRestoresPasteOnlyPromptAttachment(t *testing.T) {
+	pinTTLs(t)
+
+	ws := &countingWorkspace{
+		ready:  true,
+		queued: []string{""},
+	}
+	ws.popAttachments = map[string][]message.Attachment{
+		"": {{FileName: "paste_2.txt", FilePath: "paste_2.txt", MimeType: "text/plain", Content: []byte("just a paste")}},
+	}
+	m := newBusyUI(ws)
+	warmCaches(m, true)
+	m.promptQueue = 1
+	m.promptQueueItems = []string{""}
+	m.promptQueueCheckedAt = time.Now()
+	ws.resetCounters()
+
+	_, cmd := m.Update(upKey())
+	require.NotNil(t, cmd)
+	runCmds(m, cmd)
+
+	require.Empty(t, m.textarea.Value(),
+		"a paste-only prompt has no text; the editor stays empty")
+	require.Len(t, m.attachments.List(), 1,
+		"the paste-only prompt's attachment must be restored, not dropped")
+	require.Equal(t, "paste_2.txt", m.attachments.List()[0].FileName)
+	require.Empty(t, ws.queued, "the prompt must be out of the queue")
+}
+
+// When the session changes while the pop is in flight, the popped prompts go
+// back to their own session with their attachments, not just their text.
+func TestUpPopAfterASessionSwitchSendsAttachmentsBack(t *testing.T) {
+	pinTTLs(t)
+
+	ws := &countingWorkspace{
+		ready:  true,
+		queued: []string{"look at this"},
+	}
+	ws.popAttachments = map[string][]message.Attachment{
+		"look at this": {{FileName: "paste_1.txt", FilePath: "paste_1.txt", MimeType: "text/plain", Content: []byte("log")}},
+	}
+	m := newBusyUI(ws)
+	warmCaches(m, true)
+	m.promptQueue = 1
+	m.promptQueueItems = []string{"look at this"}
+	ws.resetCounters()
+
+	_, cmd := m.Update(upKey())
+	require.NotNil(t, cmd)
+	m.session = &session.Session{ID: "s2"}
+
+	runCmds(m, cmd)
+	require.Empty(t, m.textarea.Value(), "the other session's editor stays as it was")
+	require.Len(t, ws.runs, 1, "the popped prompt must be sent back to its own session")
+	require.Equal(t, "s1: look at this", ws.runs[0])
+	require.Len(t, ws.runAttachments, 1, "the send back must carry the prompt's attachments")
+	require.Equal(t, "paste_1.txt", ws.runAttachments[0][0].FileName,
+		"the attachment must go back with the prompt")
 }
 
 // After the pop the cursor sits at the end of the text, as after typing, so a
