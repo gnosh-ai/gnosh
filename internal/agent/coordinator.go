@@ -141,7 +141,7 @@ type Coordinator interface {
 	ListSettledMessages(ctx context.Context, sessionID string) ([]message.Message, error)
 	QueuedPrompts(sessionID string) int
 	QueuedPromptsList(sessionID string) []string
-	PopQueuedPrompts(sessionID string) []PoppedPrompt
+	PopQueuedPrompts(sessionID string) []message.PoppedPrompt
 	ClearQueue(sessionID string)
 	Summarize(context.Context, string) error
 	Model() Model
@@ -1528,7 +1528,7 @@ func (c *coordinator) QueuedPromptsList(sessionID string) []string {
 	return c.currentAgent().QueuedPromptsList(sessionID)
 }
 
-func (c *coordinator) PopQueuedPrompts(sessionID string) []PoppedPrompt {
+func (c *coordinator) PopQueuedPrompts(sessionID string) []message.PoppedPrompt {
 	return c.currentAgent().PopQueuedPrompts(sessionID)
 }
 

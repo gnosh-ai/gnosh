@@ -34,7 +34,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/workspace"
@@ -305,7 +304,7 @@ func (m *UI) applyPromptQueue(msg promptQueueMsg) []tea.Cmd {
 type promptQueuePopMsg struct {
 	forSession string
 	gen        uint64
-	prompts    []agent.PoppedPrompt
+	prompts    []message.PoppedPrompt
 }
 
 // dispatchPromptQueuePop pops the user's queued prompts off the Update
@@ -423,7 +422,7 @@ func (m *UI) applyPromptQueuePop(msg promptQueuePopMsg) []tea.Cmd {
 // sent from the editor, attachments included. One send keeps their order and
 // cannot lose the rest to an error in the first: in-process, AgentRun runs
 // the whole turn when the session is idle and returns that turn's own error.
-func (m *UI) resendPoppedPrompts(sessionID string, prompts []agent.PoppedPrompt) tea.Cmd {
+func (m *UI) resendPoppedPrompts(sessionID string, prompts []message.PoppedPrompt) tea.Cmd {
 	ws := m.com.Workspace
 	var parts []string
 	var attachments []message.Attachment

@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 
-	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/commands"
@@ -97,14 +96,14 @@ func (w *countingWorkspace) PermissionSetSkipRequests(skip bool) {
 
 func (w *countingWorkspace) AgentClearQueue(string) { w.clearQueueCalls++; w.queued = nil }
 
-func (w *countingWorkspace) AgentPopQueuedPrompts(string) []agent.PoppedPrompt {
+func (w *countingWorkspace) AgentPopQueuedPrompts(string) []message.PoppedPrompt {
 	w.popQueueCalls++
 	if w.keepOnPop {
 		return nil
 	}
-	prompts := make([]agent.PoppedPrompt, len(w.queued))
+	prompts := make([]message.PoppedPrompt, len(w.queued))
 	for i, p := range w.queued {
-		prompts[i] = agent.PoppedPrompt{Prompt: p, Attachments: w.popAttachments[p]}
+		prompts[i] = message.PoppedPrompt{Prompt: p, Attachments: w.popAttachments[p]}
 	}
 	w.queued = nil
 	return prompts

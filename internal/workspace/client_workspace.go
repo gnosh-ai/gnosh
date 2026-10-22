@@ -11,7 +11,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/app"
@@ -326,7 +325,7 @@ func (w *ClientWorkspace) AgentClearQueue(sessionID string) {
 	_ = w.client.ClearAgentSessionQueuedPrompts(context.Background(), w.workspaceID(), sessionID)
 }
 
-func (w *ClientWorkspace) AgentPopQueuedPrompts(sessionID string) []agent.PoppedPrompt {
+func (w *ClientWorkspace) AgentPopQueuedPrompts(sessionID string) []message.PoppedPrompt {
 	prompts, err := w.client.PopAgentSessionQueuedPrompts(context.Background(), w.workspaceID(), sessionID)
 	if err != nil {
 		// The server may have taken the prompts before the reply was

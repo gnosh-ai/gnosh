@@ -623,7 +623,7 @@ func (c *controllerV1) handlePostWorkspaceAgentSessionPromptPop(w http.ResponseW
 	}
 	wire := make([]proto.PoppedPrompt, len(prompts))
 	for i, p := range prompts {
-		wire[i] = proto.PoppedPromptFromAgent(p)
+		wire[i] = proto.PoppedPromptFromMessage(p)
 	}
 	jsonEncode(w, wire)
 }

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/message"
 )
 
@@ -678,17 +677,17 @@ type PoppedPrompt struct {
 	Attachments []Attachment `json:"attachments,omitempty"`
 }
 
-// ToAgent converts a proto PoppedPrompt to an [agent.PoppedPrompt].
-func (p PoppedPrompt) ToAgent() agent.PoppedPrompt {
-	return agent.PoppedPrompt{
+// ToMessage converts a proto PoppedPrompt to a [message.PoppedPrompt].
+func (p PoppedPrompt) ToMessage() message.PoppedPrompt {
+	return message.PoppedPrompt{
 		Prompt:      p.Prompt,
 		Attachments: AttachmentsToMessage(p.Attachments),
 	}
 }
 
-// PoppedPromptFromAgent converts an [agent.PoppedPrompt] to a proto
+// PoppedPromptFromMessage converts a [message.PoppedPrompt] to a proto
 // PoppedPrompt.
-func PoppedPromptFromAgent(p agent.PoppedPrompt) PoppedPrompt {
+func PoppedPromptFromMessage(p message.PoppedPrompt) PoppedPrompt {
 	return PoppedPrompt{
 		Prompt:      p.Prompt,
 		Attachments: AttachmentsFromMessage(p.Attachments),

@@ -52,7 +52,7 @@ func TestPopQueuedPrompts_TakesUserPromptsKeepsContinuation(t *testing.T) {
 	mu.Unlock()
 
 	popped := a.PopQueuedPrompts(sessionID)
-	require.Equal(t, []PoppedPrompt{{Prompt: "first prompt"}, {Prompt: "second prompt"}}, popped,
+	require.Equal(t, []message.PoppedPrompt{{Prompt: "first prompt"}, {Prompt: "second prompt"}}, popped,
 		"popped prompts must be the user's, oldest first")
 	require.Empty(t, a.QueuedPromptsList(sessionID),
 		"the user's prompts must be out of the queue after the pop")
@@ -100,7 +100,7 @@ func TestPopQueuedPrompts_DoesNotRaceEnqueueCall(t *testing.T) {
 	}
 	mu.Unlock()
 
-	done := make(chan []PoppedPrompt, 1)
+	done := make(chan []message.PoppedPrompt, 1)
 	go func() {
 		done <- a.PopQueuedPrompts(sessionID)
 	}()
@@ -131,7 +131,7 @@ func TestPopQueuedPrompts_LeavesPromptsACallerIsWaitingOn(t *testing.T) {
 	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "typed in the TUI"})
 	mu.Unlock()
 
-	require.Equal(t, []PoppedPrompt{{Prompt: "typed in the TUI"}}, a.PopQueuedPrompts(sessionID))
+	require.Equal(t, []message.PoppedPrompt{{Prompt: "typed in the TUI"}}, a.PopQueuedPrompts(sessionID))
 	queued, ok := a.messageQueue.Get(sessionID)
 	require.True(t, ok)
 	require.Len(t, queued, 1)
@@ -171,7 +171,7 @@ func TestPopQueuedPrompts_LeavesChannelMessages(t *testing.T) {
 	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "typed"})
 	mu.Unlock()
 
-	require.Equal(t, []PoppedPrompt{{Prompt: "typed"}}, a.PopQueuedPrompts(sessionID))
+	require.Equal(t, []message.PoppedPrompt{{Prompt: "typed"}}, a.PopQueuedPrompts(sessionID))
 	queued, _ := a.messageQueue.Get(sessionID)
 	require.Len(t, queued, 1)
 	require.Equal(t, "signal", queued[0].Channel)

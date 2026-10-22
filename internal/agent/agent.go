@@ -106,14 +106,6 @@ var (
 	orphanThinkTagRegex = regexp.MustCompile(`</?think>`)
 )
 
-// PoppedPrompt is a queued prompt that has been taken out of the session's
-// queue for editing: its text plus the attachments that came with it, so
-// editing one loses nothing it carried.
-type PoppedPrompt struct {
-	Prompt      string
-	Attachments []message.Attachment
-}
-
 type SessionAgentCall struct {
 	SessionID string
 	// RunID, when non-empty, is the caller-supplied correlator that
@@ -242,7 +234,7 @@ type SessionAgent interface {
 	ListSettledMessages(ctx context.Context, sessionID string) ([]message.Message, error)
 	QueuedPrompts(sessionID string) int
 	QueuedPromptsList(sessionID string) []string
-	PopQueuedPrompts(sessionID string) []PoppedPrompt
+	PopQueuedPrompts(sessionID string) []message.PoppedPrompt
 	ClearQueue(sessionID string)
 	Summarize(context.Context, string, fantasy.ProviderOptions, func(context.Context, *fantasy.ProviderError) error) error
 	Model() Model
@@ -2367,7 +2359,7 @@ func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
 //
 // What is popped is fire-and-forget (the TUI sends no RunID), so removing it
 // publishes nothing.
-func (a *sessionAgent) PopQueuedPrompts(sessionID string) []PoppedPrompt {
+func (a *sessionAgent) PopQueuedPrompts(sessionID string) []message.PoppedPrompt {
 	mu := a.sessionMu(sessionID)
 	mu.Lock()
 	defer mu.Unlock()
@@ -2375,14 +2367,14 @@ func (a *sessionAgent) PopQueuedPrompts(sessionID string) []PoppedPrompt {
 	if !ok {
 		return nil
 	}
-	var popped []PoppedPrompt
+	var popped []message.PoppedPrompt
 	var keep []SessionAgentCall
 	for _, call := range l {
 		if call.HiddenUserMessage || call.RunID != "" || call.Channel != "" {
 			keep = append(keep, call)
 			continue
 		}
-		popped = append(popped, PoppedPrompt{
+		popped = append(popped, message.PoppedPrompt{
 			Prompt:      call.Prompt,
 			Attachments: call.Attachments,
 		})

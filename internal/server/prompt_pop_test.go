@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/agenttest"
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/backend"
@@ -20,10 +19,10 @@ import (
 // from PopQueuedPrompts.
 type stubPopCoordinator struct {
 	agenttest.NopCoordinator
-	popped []agent.PoppedPrompt
+	popped []message.PoppedPrompt
 }
 
-func (s *stubPopCoordinator) PopQueuedPrompts(string) []agent.PoppedPrompt {
+func (s *stubPopCoordinator) PopQueuedPrompts(string) []message.PoppedPrompt {
 	out := s.popped
 	s.popped = nil
 	return out
@@ -40,7 +39,7 @@ func TestPromptPopReturnsAttachments(t *testing.T) {
 		MimeType: "text/plain",
 		Content:  []byte("log"),
 	}
-	coord := &stubPopCoordinator{popped: []agent.PoppedPrompt{
+	coord := &stubPopCoordinator{popped: []message.PoppedPrompt{
 		{Prompt: "look at this", Attachments: []message.Attachment{paste}},
 		{Prompt: "second prompt"},
 	}}

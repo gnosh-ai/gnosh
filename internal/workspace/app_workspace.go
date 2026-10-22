@@ -232,7 +232,7 @@ func (w *AppWorkspace) AgentClearQueue(sessionID string) {
 	}
 }
 
-func (w *AppWorkspace) AgentPopQueuedPrompts(sessionID string) []agent.PoppedPrompt {
+func (w *AppWorkspace) AgentPopQueuedPrompts(sessionID string) []message.PoppedPrompt {
 	if w.app.AgentCoordinator == nil {
 		return nil
 	}
