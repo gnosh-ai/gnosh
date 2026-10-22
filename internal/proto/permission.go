@@ -83,7 +83,7 @@ func (p *CreatePermissionRequest) UnmarshalJSON(data []byte) error {
 
 func unmarshalToolParams(toolName string, raw json.RawMessage) (any, error) {
 	switch toolName {
-	case BashToolName:
+	case BashToolName, GnokeyToolName:
 		var params BashPermissionsParams
 		if err := json.Unmarshal(raw, &params); err != nil {
 			return nil, err

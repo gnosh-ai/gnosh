@@ -468,7 +468,7 @@ func (p *Permissions) renderHeader(contentWidth int) string {
 
 	// Add tool-specific header info.
 	switch p.permission.ToolName {
-	case tools.BashToolName:
+	case tools.BashToolName, tools.GnokeyToolName:
 		if params, ok := p.permission.Params.(tools.BashPermissionsParams); ok {
 			lines = append(lines, p.renderKeyValue("Desc", params.Description, contentWidth))
 		}
@@ -539,7 +539,7 @@ func prettyName(name string) string {
 
 func (p *Permissions) renderContent(width int) string {
 	switch p.permission.ToolName {
-	case tools.BashToolName:
+	case tools.BashToolName, tools.GnokeyToolName:
 		return p.renderBashContent(width)
 	case tools.EditToolName:
 		return p.renderEditContent(width)

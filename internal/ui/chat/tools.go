@@ -232,6 +232,8 @@ func NewToolMessageItem(
 	switch toolCall.Name {
 	case tools.BashToolName:
 		item = NewBashToolMessageItem(sty, toolCall, result, canceled, workingDir)
+	case tools.GnokeyToolName:
+		item = NewGnokeyToolMessageItem(sty, toolCall, result, canceled, workingDir)
 	case tools.JobOutputToolName:
 		item = NewJobOutputToolMessageItem(sty, toolCall, result, canceled)
 	case tools.JobKillToolName:
@@ -1313,7 +1315,7 @@ func (t *baseToolMessageItem) formatToolForCopy() string {
 // formatParametersForCopy formats tool parameters for clipboard copying.
 func (t *baseToolMessageItem) formatParametersForCopy() string {
 	switch t.toolCall.Name {
-	case tools.BashToolName:
+	case tools.BashToolName, tools.GnokeyToolName:
 		var params tools.BashParams
 		if json.Unmarshal([]byte(t.toolCall.Input), &params) == nil {
 			cmd := strings.ReplaceAll(params.Command, "\n", " ")

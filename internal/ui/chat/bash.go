@@ -37,16 +37,32 @@ func NewBashToolMessageItem(
 	return &BashToolMessageItem{baseToolMessageItem: base}
 }
 
+// NewGnokeyToolMessageItem creates the item for a gnokey tool call. The
+// tool's inputs and result metadata have the bash tool's shape, so the
+// bash renderer draws it, under its own name.
+func NewGnokeyToolMessageItem(
+	sty *styles.Styles,
+	toolCall message.ToolCall,
+	result *message.ToolResult,
+	canceled bool,
+	workingDir string,
+) ToolMessageItem {
+	base := newBaseToolMessageItem(sty, toolCall, result, &BashToolRenderContext{workingDir: workingDir, name: "Gnokey"}, canceled)
+	return &BashToolMessageItem{baseToolMessageItem: base}
+}
+
 // BashToolRenderContext renders bash tool messages.
 type BashToolRenderContext struct {
 	workingDir string
+	// name heads the rendering; "" means Bash.
+	name string
 }
 
 // RenderTool implements the [ToolRenderer] interface.
 func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
 	cappedWidth := cappedMessageWidth(width)
 	if opts.IsPending() {
-		return pendingTool(sty, "Bash", opts.Anim, opts.Compact)
+		return pendingTool(sty, cmp.Or(b.name, "Bash"), opts.Anim, opts.Compact)
 	}
 
 	var params tools.BashParams
@@ -83,7 +99,7 @@ func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 	// truncated); expansion only controls the output body.
 	headerOpts := *opts
 	headerOpts.ExpandedContent = true
-	header := toolHeader(sty, opts.Status, "Bash", cappedWidth, &headerOpts, toolParams...)
+	header := toolHeader(sty, opts.Status, cmp.Or(b.name, "Bash"), cappedWidth, &headerOpts, toolParams...)
 	if opts.Compact {
 		return header
 	}

@@ -22,6 +22,7 @@ const MCPPrefix = "mcp_"
 var names = []string{
 	"agent",
 	"bash",
+	"gnokey",
 	"crash_info",
 	"crash_logs",
 	"job_output",

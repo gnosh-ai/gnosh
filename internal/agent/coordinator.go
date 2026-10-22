@@ -931,9 +931,13 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 		tools.NewWriteTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir()),
 	)
 
-	// Question tool is interactive-only and not available to sub-agents.
+	// The question tool, and the gnokey tool that asks the user for a
+	// key's password, need an interactive user; sub-agents have none.
 	if !isSubAgent && c.interactive {
-		allTools = append(allTools, tools.NewQuestionTool(c.questions))
+		allTools = append(allTools,
+			tools.NewQuestionTool(c.questions),
+			tools.NewGnokeyTool(c.permissions, c.questions, c.cfg.WorkingDir()),
+		)
 	}
 
 	// Add LSP tools if user has configured LSPs or auto_lsp is enabled (nil or true).

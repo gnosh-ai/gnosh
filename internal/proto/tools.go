@@ -25,6 +25,10 @@ type ToolResponse struct {
 
 const BashToolName = "bash"
 
+// GnokeyToolName is the gnokey tool's name. Its permission parameters are
+// the bash tool's, so a client decodes them as BashPermissionsParams.
+const GnokeyToolName = "gnokey"
+
 // BashParams represents the parameters for the bash tool.
 type BashParams struct {
 	Command string `json:"command"`
