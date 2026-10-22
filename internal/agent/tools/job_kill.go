@@ -39,7 +39,7 @@ func NewJobKillTool() fantasy.AgentTool {
 
 			bgShell, ok := bgManager.Get(params.ShellID)
 			if !ok {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("background shell not found: %s", params.ShellID)), nil
+				return jobNotFound(params.ShellID), nil
 			}
 
 			metadata := JobKillResponseMetadata{

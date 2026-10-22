@@ -37,6 +37,17 @@ type JobOutputResponseMetadata struct {
 // the model may choose to wait again. It is a var so tests can shorten it.
 var maxJobOutputWait = 5 * time.Minute
 
+// jobNotFound answers job_output or job_kill for an ID that names no
+// background job. A model that assumes a command it ran in the foreground
+// became a job, or guesses an ID, is told how jobs come about rather than
+// left to guess again from a bare "not found".
+func jobNotFound(id string) fantasy.ToolResponse {
+	return fantasy.NewTextErrorResponse(fmt.Sprintf("background shell not found: %s. "+
+		"Only a bash command still running when bash returns becomes a background job, "+
+		"with its ID (such as 001) in that bash result; a command that finished in time "+
+		"already returned its output there.", id))
+}
+
 func NewJobOutputTool(spillDir string) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		JobOutputToolName,
@@ -49,7 +60,7 @@ func NewJobOutputTool(spillDir string) fantasy.AgentTool {
 			bgManager := shell.GetBackgroundShellManager()
 			bgShell, ok := bgManager.Get(params.ShellID)
 			if !ok {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("background shell not found: %s", params.ShellID)), nil
+				return jobNotFound(params.ShellID), nil
 			}
 
 			if params.Wait {

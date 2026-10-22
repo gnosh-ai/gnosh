@@ -51,3 +51,26 @@ func TestJobOutputTool_WaitIsBounded(t *testing.T) {
 		t.Fatal("job_output with wait:true blocked well past the cap; the wait is unbounded")
 	}
 }
+
+// An agent on the AI box asked job_output for "shell_1" after its bash command
+// had finished in the foreground. The answer must say how jobs come about, so
+// it does not go on guessing IDs.
+func TestJobToolsExplainAnUnknownID(t *testing.T) {
+	t.Parallel()
+
+	for name, tool := range map[string]fantasy.AgentTool{
+		JobOutputToolName: NewJobOutputTool(t.TempDir()),
+		JobKillToolName:   NewJobKillTool(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			resp, err := tool.Run(context.Background(), fantasy.ToolCall{
+				ID: "test-call", Name: name, Input: `{"shell_id":"shell_1"}`,
+			})
+			require.NoError(t, err)
+			require.True(t, resp.IsError)
+			require.Contains(t, resp.Content, "background shell not found: shell_1")
+			require.Contains(t, resp.Content, "already returned its output")
+		})
+	}
+}
