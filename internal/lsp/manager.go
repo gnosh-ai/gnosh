@@ -178,6 +178,13 @@ func (s *Manager) startServer(name, filepath string, server *powernapconfig.Serv
 		if !handles(server, filepath, s.cfg.WorkingDir()) {
 			return
 		}
+		// A configured server skips the PATH lookup that auto-start does,
+		// since the user asked for it by name; it still has to respect the
+		// back-off after a failed start, or it is relaunched on every file
+		// event.
+		if s.recentlyUnavailable(name) {
+			return
+		}
 	} else if !s.canAutoStart(name, filepath, s.cfg.WorkingDir(), server) {
 		return
 	}
@@ -200,6 +207,12 @@ func (s *Manager) startServer(name, filepath string, server *powernapconfig.Serv
 	)
 	if err != nil {
 		slog.Error("Failed to create LSP client", "name", name, "error", err)
+		// Back off before trying again. Without this, a server that cannot
+		// start — most often because its binary is not installed — was
+		// relaunched, and failed, on every file event: 59 times in half an
+		// hour in one session working inside this repo, whose crush.json
+		// configures gopls.
+		s.markUnavailable(name)
 		return
 	}
 	// Only store non-nil clients. If another goroutine raced us,
