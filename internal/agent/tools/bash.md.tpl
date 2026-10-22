@@ -17,12 +17,12 @@ Common shell builtins and core utils available on Windows.
 
 <usage_notes>
 - Command required, working_dir optional (defaults to current directory)
-- IMPORTANT: Use Grep/Glob/Agent tools instead of 'find'/'grep'. Use View/LS tools instead of 'cat'/'head'/'tail'/'ls'
+- IMPORTANT: Work with files through the file tools, not shell commands: grep and glob to search (not grep, rg or find), view to read (not cat, head, tail or sed -n), ls to list, edit or multiedit to change a file and write to create one (not sed -i, awk, echo > or a heredoc). The file tools keep track of what you have read: a file changed through bash must be viewed again before edit will change it
 - Chain with ';' or '&&', avoid newlines except in quoted strings
 - Each command runs in independent shell (no state persistence between calls)
 - Prefer absolute paths over 'cd' (use 'cd' only if user explicitly requests)
 {{- if .RgAvailable }}
-- Ripgrep (`rg`) is available; prefer it over `grep` for faster, more intuitive searching
+- When a search has to run in the shell (piped into another command, say), use ripgrep (`rg`) rather than `grep`
 {{- end }}
 </usage_notes>
 
