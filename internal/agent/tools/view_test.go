@@ -133,7 +133,10 @@ func TestViewToolAllowsSmallSectionsOfLargeFiles(t *testing.T) {
 	require.Equal(t, "target line", meta.Content)
 }
 
-func TestViewToolBlocksOversizedReturnedSections(t *testing.T) {
+// A section past the size limit is cut there, not refused: with the
+// 2000-line default a log of wide lines passes 200KB long before its
+// last line, and failing the whole read left the agent nothing.
+func TestViewToolCutsOversizedSectionsAtTheSizeLimit(t *testing.T) {
 	t.Parallel()
 
 	workingDir := t.TempDir()
@@ -150,8 +153,19 @@ func TestViewToolBlocksOversizedReturnedSections(t *testing.T) {
 		FilePath: filePath,
 	})
 
-	require.True(t, resp.IsError)
-	require.Contains(t, resp.Content, "Content section is too large")
+	require.False(t, resp.IsError, resp.Content)
+	var meta ViewResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+	require.LessOrEqual(t, len(meta.Content), MaxViewSize)
+	shown := strings.Count(meta.Content, "\n") + 1
+	require.Less(t, shown, DefaultReadLimit)
+	require.Contains(t, resp.Content, fmt.Sprintf("Stopped after line %d", shown))
+	require.Contains(t, resp.Content, fmt.Sprintf("To read on, use offset %d", shown))
+
+	// Reading on from there picks up the next line.
+	resp = runViewTool(t, tool, ctx, ViewParams{FilePath: filePath, Offset: shown, Limit: 1})
+	require.False(t, resp.IsError, resp.Content)
+	require.Contains(t, resp.Content, fmt.Sprintf("%6d|aaa", shown+1))
 }
 
 func TestViewToolBlocksOversizedImages(t *testing.T) {
@@ -184,7 +198,15 @@ func TestReadTextFileEnforcesMaxContentSize(t *testing.T) {
 	}
 	require.NoError(t, os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0o644))
 
+	// Room for the first line only: the section stops after it, and
+	// says there is more.
 	content, hasMore, err := readTextFile(filePath, 0, len(lines), MaxLineLength)
+	require.NoError(t, err)
+	require.Equal(t, lines[0], content)
+	require.True(t, hasMore)
+
+	// A first line that does not fit on its own is the only error.
+	content, hasMore, err = readTextFile(filePath, 0, len(lines), MaxLineLength-1)
 	require.ErrorAs(t, err, &contentTooLargeError{})
 	require.Empty(t, content)
 	require.False(t, hasMore)

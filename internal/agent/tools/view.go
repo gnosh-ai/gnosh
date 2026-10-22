@@ -47,7 +47,7 @@ func viewDescription() string {
 type ViewParams struct {
 	FilePath string `json:"file_path" description:"The path to the file to read"`
 	Offset   int    `json:"offset,omitempty" description:"The line number to start reading from (0-based)"`
-	Limit    int    `json:"limit,omitempty" description:"The number of lines to read (defaults to 200)"`
+	Limit    int    `json:"limit,omitempty" description:"The number of lines to read (defaults to 2000)"`
 }
 
 type ViewPermissionsParams struct {
@@ -254,8 +254,15 @@ func NewViewTool(
 			output += addLineNumbers(content, params.Offset+1)
 
 			if hasMore {
-				output += fmt.Sprintf("\n\n(File has more lines. Use 'offset' parameter to read beyond line %d)",
-					params.Offset+len(strings.Split(content, "\n")))
+				shown := len(strings.Split(content, "\n"))
+				if shown < params.Limit {
+					// Cut short at the size limit, not at the line limit.
+					output += fmt.Sprintf("\n\n(Stopped after line %d: one read returns at most %dKB. To read on, use offset %d)",
+						params.Offset+shown, maxContentSize/1024, params.Offset+shown)
+				} else {
+					output += fmt.Sprintf("\n\n(File has more lines. Use 'offset' parameter to read beyond line %d)",
+						params.Offset+shown)
+				}
 			}
 			output += "\n</file>\n"
 			output += getDiagnostics(filePath, lspManager)
@@ -307,6 +314,12 @@ func addLineNumbers(content string, startLine int) string {
 	return strings.Join(result, "\n")
 }
 
+// readTextFile reads up to limit lines of filePath, starting after the
+// first offset lines. When the next line would take the section past
+// maxContentSize bytes (0 for no limit), it stops there and reports
+// hasMore, so a section shorter than limit with hasMore set was cut at
+// the size limit. Only a first line that does not fit on its own is an
+// error.
 func readTextFile(filePath string, offset, limit, maxContentSize int) (string, bool, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -347,7 +360,12 @@ func readTextFile(filePath string, offset, limit, maxContentSize int) (string, b
 			projectedSize++
 		}
 		if maxContentSize > 0 && projectedSize > maxContentSize {
-			return "", false, contentTooLargeError{Size: projectedSize, Max: maxContentSize}
+			if len(lines) == 0 {
+				return "", false, contentTooLargeError{Size: projectedSize, Max: maxContentSize}
+			}
+			// Return what fits, and say there is more: failing the
+			// whole read would leave the agent nothing to go on.
+			return strings.Join(lines, "\n"), true, nil
 		}
 		contentSize = projectedSize
 		lines = append(lines, lineText)
