@@ -23,13 +23,43 @@ option auto-lsp false`)
 // exposes it positively. "metrics false" must land as disable_metrics = true.
 func TestShellConfigOptionPositiveMetricsFalse(t *testing.T) {
 	store := loadCrushSh(t, `option metrics false`)
-	require.True(t, store.Config().Options.DisableMetrics, "metrics off => disable_metrics true")
+	opts := store.Config().Options
+	require.NotNil(t, opts.DisableMetrics)
+	require.True(t, *opts.DisableMetrics, "metrics off => disable_metrics true")
+	require.False(t, opts.MetricsOptedIn())
 }
 
-// The bare positive form defaults to true, which inverts to disable = false.
+// The bare positive form defaults to true, which inverts to disable = false:
+// the one way a config opts in to sending metrics.
 func TestShellConfigOptionPositiveMetricsBare(t *testing.T) {
 	store := loadCrushSh(t, `option metrics`)
-	require.False(t, store.Config().Options.DisableMetrics, "metrics on => disable_metrics false")
+	opts := store.Config().Options
+	require.NotNil(t, opts.DisableMetrics)
+	require.False(t, *opts.DisableMetrics, "metrics on => disable_metrics false")
+	require.True(t, opts.MetricsOptedIn())
+}
+
+// A config that says nothing about metrics or the catalog fetch sends no
+// metrics and fetches no catalog: upstream Crush does both by default, this
+// fork does neither.
+func TestShellConfigOptionsReachingCharmAreOffUnlessAsked(t *testing.T) {
+	store := loadCrushSh(t, `option debug true`)
+	opts := store.Config().Options
+	require.Nil(t, opts.DisableMetrics)
+	require.False(t, opts.MetricsOptedIn())
+	require.False(t, opts.ProviderAutoUpdate())
+}
+
+func TestShellConfigOptionProviderAutoUpdate(t *testing.T) {
+	// TestMain forces the fetch off through the environment, which outranks
+	// the config; an empty value leaves the decision to the config again.
+	t.Setenv("CRASH_DISABLE_PROVIDER_AUTO_UPDATE", "")
+
+	on := loadCrushSh(t, `option provider-auto-update true`).Config().Options
+	require.True(t, on.ProviderAutoUpdate(), "provider-auto-update true asks for the fetch")
+
+	off := loadCrushSh(t, `option provider-auto-update false`).Config().Options
+	require.False(t, off.ProviderAutoUpdate())
 }
 
 func TestShellConfigOptionUI(t *testing.T) {

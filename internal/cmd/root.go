@@ -958,17 +958,18 @@ func startDetachedServer(cmd *cobra.Command, hostURL *url.URL) error {
 	return nil
 }
 
+// shouldEnableMetrics reports whether to send usage metrics to Charm's
+// analytics. Upstream Crush sends them unless told not to; this fork sends
+// none unless asked. DO_NOT_TRACK=1 always wins, then
+// CRASH_DISABLE_METRICS when it holds a value, then option metrics.
 func shouldEnableMetrics(cfg *config.Config) bool {
-	if v, _ := strconv.ParseBool(env.Getenv("CRASH_DISABLE_METRICS")); v {
-		return false
-	}
 	if v, _ := strconv.ParseBool(os.Getenv("DO_NOT_TRACK")); v {
 		return false
 	}
-	if cfg.Options.DisableMetrics {
-		return false
+	if disable, ok := env.LookupBool("CRASH_DISABLE_METRICS"); ok {
+		return !disable
 	}
-	return true
+	return cfg.Options.MetricsOptedIn()
 }
 
 // stdinWait is how long a piped stdin may stay silent before crash run

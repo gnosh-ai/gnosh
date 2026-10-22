@@ -164,7 +164,7 @@ func Providers(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider, er
 	providerOnce.Do(func() {
 		var wg sync.WaitGroup
 		providers := csync.NewSlice[catwalk.Provider]()
-		autoupdate := !cfg.Options.DisableProviderAutoUpdate
+		autoupdate := cfg.Options.ProviderAutoUpdate()
 		customProvidersOnly := cfg.Options.DisableDefaultProviders
 
 		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)

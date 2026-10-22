@@ -2,6 +2,7 @@ package env
 
 import (
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -65,6 +66,23 @@ func LookupEnv(key string) (string, bool) {
 		return os.LookupEnv("CRUSH_" + name)
 	}
 	return "", false
+}
+
+// LookupBool reads key as a boolean through [LookupEnv]. set is false when
+// the variable is absent, empty or not a boolean, so a caller can tell "not
+// asked" from "asked for false". The program's switches that reach Charm's
+// servers rely on that: unset leaves them off, and only an explicit value
+// changes them.
+func LookupBool(key string) (value, set bool) {
+	s, ok := LookupEnv(key)
+	if !ok || s == "" {
+		return false, false
+	}
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		return false, false
+	}
+	return v, true
 }
 
 // Getenv is [LookupEnv] without the presence flag, like os.Getenv.

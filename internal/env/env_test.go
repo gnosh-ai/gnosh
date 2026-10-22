@@ -1,6 +1,7 @@
 package env
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -174,4 +175,45 @@ func TestLookupEnvFallsBackToTheNameBeforeTheRename(t *testing.T) {
 		t.Setenv("ENV_TEST_PLAIN", "plain")
 		require.Equal(t, "plain", Getenv("ENV_TEST_PLAIN"))
 	})
+}
+
+func TestLookupBool(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		value     *string
+		want, set bool
+	}{
+		{name: "unset", value: nil, want: false, set: false},
+		{name: "empty means unset", value: new(""), want: false, set: false},
+		{name: "not a boolean means unset", value: new("maybe"), want: false, set: false},
+		{name: "true", value: new("1"), want: true, set: true},
+		{name: "false is a value", value: new("0"), want: false, set: true},
+		{name: "false spelled out", value: new("false"), want: false, set: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("CRUSH_LOOKUP_BOOL_TEST", "")
+			os.Unsetenv("CRUSH_LOOKUP_BOOL_TEST")
+			t.Setenv("CRASH_LOOKUP_BOOL_TEST", "")
+			os.Unsetenv("CRASH_LOOKUP_BOOL_TEST")
+			if tt.value != nil {
+				t.Setenv("CRASH_LOOKUP_BOOL_TEST", *tt.value)
+			}
+			got, set := LookupBool("CRASH_LOOKUP_BOOL_TEST")
+			if got != tt.want || set != tt.set {
+				t.Fatalf("LookupBool = (%v, %v), want (%v, %v)", got, set, tt.want, tt.set)
+			}
+		})
+	}
+}
+
+// TestLookupBoolFallsBackToCrush keeps a setup that still exports the old
+// CRUSH_ name working, as LookupEnv does.
+func TestLookupBoolFallsBackToCrush(t *testing.T) {
+	t.Setenv("CRASH_LOOKUP_BOOL_FALLBACK", "")
+	os.Unsetenv("CRASH_LOOKUP_BOOL_FALLBACK")
+	t.Setenv("CRUSH_LOOKUP_BOOL_FALLBACK", "1")
+	got, set := LookupBool("CRASH_LOOKUP_BOOL_FALLBACK")
+	if !got || !set {
+		t.Fatalf("LookupBool = (%v, %v), want (true, true) from the CRUSH_ name", got, set)
+	}
 }

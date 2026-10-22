@@ -584,8 +584,8 @@
         },
         "disable_provider_auto_update": {
           "type": "boolean",
-          "description": "Disable providers auto-update",
-          "default": false
+          "description": "Disable fetching the provider catalog from Charm's servers (catwalk.charm.land and hyper.charm.land). Unset it is not fetched and the catalog built into Crash is used; set false to fetch it",
+          "default": true
         },
         "disable_default_providers": {
           "type": "boolean",
@@ -598,8 +598,8 @@
         },
         "disable_metrics": {
           "type": "boolean",
-          "description": "Disable sending metrics",
-          "default": false
+          "description": "Disable sending usage metrics to Charm's analytics (data.charm.land). Unset none are sent; set false to send them",
+          "default": true
         },
         "initialize_as": {
           "type": "string",

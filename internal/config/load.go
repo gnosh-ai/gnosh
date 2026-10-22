@@ -633,8 +633,10 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	// Project specific skills dirs.
 	c.Options.SkillsPaths = append(c.Options.SkillsPaths, ProjectSkillsDir(workingDir)...)
 
-	if str, ok := env.LookupEnv("CRASH_DISABLE_PROVIDER_AUTO_UPDATE"); ok {
-		c.Options.DisableProviderAutoUpdate, _ = strconv.ParseBool(str)
+	// Only an explicit value counts: unset or empty leaves the catalog fetch
+	// as the config has it, which is off unless asked for.
+	if disable, ok := env.LookupBool("CRASH_DISABLE_PROVIDER_AUTO_UPDATE"); ok {
+		c.Options.DisableProviderAutoUpdate = new(disable)
 	}
 
 	if str, ok := env.LookupEnv("CRASH_DISABLE_DEFAULT_PROVIDERS"); ok {

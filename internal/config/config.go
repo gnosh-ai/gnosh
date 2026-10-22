@@ -511,10 +511,10 @@ type Options struct {
 	// verbatim. After defaulting the stored value is always absolute.
 	DataDirectory             string       `json:"data_directory,omitempty" jsonschema:"description=Directory for storing application data. Relative paths are resolved against the working directory; absolute paths are used as-is.,default=.crush,example=.crush"`
 	DisabledTools             []string     `json:"disabled_tools,omitempty" jsonschema:"description=List of built-in tools to disable and hide from the agent,example=bash,example=sourcegraph"`
-	DisableProviderAutoUpdate bool         `json:"disable_provider_auto_update,omitempty" jsonschema:"description=Disable providers auto-update,default=false"`
+	DisableProviderAutoUpdate *bool        `json:"disable_provider_auto_update,omitempty" jsonschema:"description=Disable fetching the provider catalog from Charm's servers (catwalk.charm.land and hyper.charm.land). Unset it is not fetched and the catalog built into Crash is used; set false to fetch it,default=true"`
 	DisableDefaultProviders   bool         `json:"disable_default_providers,omitempty" jsonschema:"description=Ignore all default/embedded providers. When enabled\\, providers must be fully specified in the config file with base_url\\, models\\, and api_key - no merging with defaults occurs,default=false"`
 	Attribution               *Attribution `json:"attribution,omitempty" jsonschema:"description=Attribution settings for generated content"`
-	DisableMetrics            bool         `json:"disable_metrics,omitempty" jsonschema:"description=Disable sending metrics,default=false"`
+	DisableMetrics            *bool        `json:"disable_metrics,omitempty" jsonschema:"description=Disable sending usage metrics to Charm's analytics (data.charm.land). Unset none are sent; set false to send them,default=true"`
 	InitializeAs              string       `json:"initialize_as,omitempty" jsonschema:"description=Name of the context file to create/update during project initialization,default=AGENTS.md,example=AGENTS.md,example=CRUSH.md,example=CLAUDE.md,example=docs/LLMs.md"`
 	AutoLSP                   *bool        `json:"auto_lsp,omitempty" jsonschema:"description=Automatically setup LSPs based on root markers,default=true"`
 	Progress                  *bool        `json:"progress,omitempty" jsonschema:"description=Show indeterminate progress updates during long operations,default=true"`
@@ -538,6 +538,22 @@ func (o *Options) GetLoopMaxTurns() int {
 		return 0
 	}
 	return *o.LoopMaxTurns
+}
+
+// ProviderAutoUpdate reports whether the provider catalog is fetched from
+// Charm's servers. Upstream Crush fetches it unless told not to; this fork
+// uses the catalog built into the binary unless the user asks for the
+// fetch (option provider-auto-update true, or
+// CRASH_DISABLE_PROVIDER_AUTO_UPDATE=0).
+func (o *Options) ProviderAutoUpdate() bool {
+	return o != nil && o.DisableProviderAutoUpdate != nil && !*o.DisableProviderAutoUpdate
+}
+
+// MetricsOptedIn reports whether the config asks for usage metrics to be
+// sent to Charm (option metrics true). Upstream Crush sends them unless told
+// not to; this fork sends none unless asked.
+func (o *Options) MetricsOptedIn() bool {
+	return o != nil && o.DisableMetrics != nil && !*o.DisableMetrics
 }
 
 // GetMaxBackgroundJobs returns the running-job ceiling, always positive.

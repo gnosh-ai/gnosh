@@ -26,7 +26,7 @@ var prefixes = []string{"CRUSH_", "CRASH_"}
 // the catalog from Charm's servers (catwalk and Hyper): the network is no
 // part of a unit test, and Jae runs the program with that fetch off. A test
 // of the fetch itself opts back in with
-// t.Setenv("CRASH_DISABLE_PROVIDER_AUTO_UPDATE", "") and points it at a
+// t.Setenv("CRASH_DISABLE_PROVIDER_AUTO_UPDATE", "0") and points it at a
 // local server.
 func ClearConfigVars() {
 	for _, kv := range os.Environ() {

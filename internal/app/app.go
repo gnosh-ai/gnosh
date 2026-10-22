@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1061,10 +1060,19 @@ func (app *App) Shutdown() {
 	wg.Wait()
 }
 
+// updateCheckEnabled reports whether to ask GitHub for a newer release. The
+// check asks for upstream Crush's latest release, which says nothing about
+// this fork, and a source build's version reads as a prerelease, so it
+// would report an update on every start. It runs only when asked for with
+// CRASH_DISABLE_UPDATE_CHECK=0.
+func updateCheckEnabled() bool {
+	disable, ok := env.LookupBool("CRASH_DISABLE_UPDATE_CHECK")
+	return ok && !disable
+}
+
 // checkForUpdates checks for available updates.
 func (app *App) checkForUpdates(ctx context.Context) {
-	// CRASH_DISABLE_UPDATE_CHECK=1 keeps Crash from asking GitHub for the latest release.
-	if v, _ := strconv.ParseBool(env.Getenv("CRASH_DISABLE_UPDATE_CHECK")); v {
+	if !updateCheckEnabled() {
 		return
 	}
 	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)

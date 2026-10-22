@@ -44,7 +44,7 @@ func TestProviders_Integration_AutoUpdateDisabled(t *testing.T) {
 
 	cfg := &Config{
 		Options: &Options{
-			DisableProviderAutoUpdate: true,
+			DisableProviderAutoUpdate: new(true),
 		},
 	}
 
