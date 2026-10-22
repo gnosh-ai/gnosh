@@ -81,8 +81,26 @@ func TestPathsPreferCrashAndFallBackToCrush(t *testing.T) {
 		require.Equal(t, old, GlobalConfig(), "and the crush.json in it")
 		require.Equal(t, filepath.Join(xdg, "crush", "skills"), GlobalSkillsDirs()[0])
 
-		mkdir(t, xdg, "crash")
-		require.Equal(t, filepath.Join(xdg, "crash", "crash.json"), GlobalConfig(), "once the crash directory exists, it wins")
+		// A crash directory made for something else must not hide the
+		// crush one's config, hooks and skills.
+		mkdir(t, xdg, "crash", "commands")
+		require.Equal(t, old, GlobalConfig(), "a crash directory without a config does not take over")
+		require.Equal(t, filepath.Join(xdg, "crush", "skills"), GlobalSkillsDirs()[0])
+
+		newer := touch(t, xdg, "crash", "crash.json")
+		require.Equal(t, newer, GlobalConfig(), "once the crash directory holds a config, it wins")
+		require.Equal(t, filepath.Join(xdg, "crash", "skills"), GlobalSkillsDirs()[0])
+	})
+
+	t.Run("global config from a shell config alone", func(t *testing.T) {
+		xdg := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", xdg)
+		t.Setenv("CRUSH_GLOBAL_CONFIG", "") // set by TestMain for isolation
+		mkdir(t, xdg, "crush")
+		touch(t, xdg, "crush", "crushrc")
+		mkdir(t, xdg, "crash", "templates")
+		require.Equal(t, filepath.Join(xdg, "crush", "crash.json"), GlobalConfig(),
+			"a crush directory with only a crushrc is in use")
 	})
 
 	t.Run("global data", func(t *testing.T) {
@@ -93,6 +111,8 @@ func TestPathsPreferCrashAndFallBackToCrush(t *testing.T) {
 		mkdir(t, xdg, "crush")
 		old := touch(t, xdg, "crush", "crush.json")
 		require.Equal(t, old, GlobalConfigData(), "an existing setup's data directory is used")
+		mkdir(t, xdg, "crash", "logs")
+		require.Equal(t, old, GlobalConfigData(), "its OAuth tokens are not hidden by a bare crash directory")
 	})
 
 	t.Run("cache", func(t *testing.T) {

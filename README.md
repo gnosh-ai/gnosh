@@ -302,7 +302,11 @@ Crush is being renamed Crash, and its directories and files with it:
 `CRASH.md`. Wherever only the one from before the rename exists — say
 `~/.config/crush` or a project's `.crush/` — that one is used, so an existing
 setup and its sessions keep working without being moved; once the new one
-exists, it wins.
+exists, it wins. `~/.config/crash` and `~/.local/share/crash` count only once
+they hold a config file (`crash.json`, `crush.json`, `crashrc` or `crushrc`),
+so a `crash` folder made for something else doesn't hide the `crush` one in
+use. A project uses the closest `.crash/` or `.crush/` on the way up to its
+root.
 
 [xdg]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 

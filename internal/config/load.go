@@ -1225,13 +1225,45 @@ func GlobalConfig() string {
 	if dir := env.Getenv("CRASH_GLOBAL_CONFIG"); dir != "" {
 		return configFileIn(dir)
 	}
-	return configFileIn(appDir(home.Config()))
+	return configFileIn(appConfigDir(home.Config()))
 }
 
 // appDir is the program's directory under base: crash, or crush where only
 // that one exists.
 func appDir(base string) string {
 	return fsext.FirstExisting(filepath.Join(base, appName), filepath.Join(base, legacyAppName))
+}
+
+// appConfigDir is appDir for a directory that holds a config file, the
+// global config and global data directories: the one holding a config
+// file wins, crash before crush, and only where neither does is it
+// appDir's choice. A crash directory made for anything else (mkdir -p
+// ~/.config/crash/commands) must not take over from a crush one in use:
+// it would hide its config, and with it the hooks, MCP servers and
+// permissions, its shell config, templates, tools and skills, and in the
+// data directory the OAuth tokens.
+func appConfigDir(base string) string {
+	dir, legacy := filepath.Join(base, appName), filepath.Join(base, legacyAppName)
+	switch {
+	case hasConfigFile(dir):
+		return dir
+	case hasConfigFile(legacy):
+		return legacy
+	}
+	return appDir(base)
+}
+
+// hasConfigFile reports whether dir holds a JSON or shell config file under
+// either name.
+func hasConfigFile(dir string) bool {
+	for _, name := range []string{appName, legacyAppName} {
+		for _, file := range []string{name + ".json", name + "rc"} {
+			if _, err := os.Stat(filepath.Join(dir, file)); err == nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // configFileIn is the JSON config file in dir: crash.json, or crush.json
@@ -1291,7 +1323,7 @@ func GlobalConfigData() string {
 		return configFileIn(dir)
 	}
 	if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
-		return configFileIn(appDir(xdgDataHome))
+		return configFileIn(appConfigDir(xdgDataHome))
 	}
 
 	// return the path to the main data directory
@@ -1303,10 +1335,10 @@ func GlobalConfigData() string {
 			os.Getenv("LOCALAPPDATA"),
 			filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local"),
 		)
-		return configFileIn(appDir(localAppData))
+		return configFileIn(appConfigDir(localAppData))
 	}
 
-	return configFileIn(appDir(filepath.Join(home.Dir(), ".local", "share")))
+	return configFileIn(appConfigDir(filepath.Join(home.Dir(), ".local", "share")))
 }
 
 // GlobalWorkspaceDir returns the path to the global server workspace
@@ -1399,7 +1431,7 @@ func GlobalSkillsDirs() []string {
 	}
 
 	paths := []string{
-		filepath.Join(appDir(home.Config()), "skills"),
+		filepath.Join(appConfigDir(home.Config()), "skills"),
 		filepath.Join(home.Config(), "agents", "skills"),
 		// Per the Agent Skills spec, scan ~/.agents/skills
 		filepath.Join(home.Dir(), ".agents", "skills"),
@@ -1415,7 +1447,7 @@ func GlobalSkillsDirs() []string {
 		)
 		paths = append(
 			paths,
-			filepath.Join(appDir(appData), "skills"),
+			filepath.Join(appConfigDir(appData), "skills"),
 			filepath.Join(appData, "agents", "skills"),
 		)
 	}
