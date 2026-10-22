@@ -206,7 +206,8 @@ func TestUpWithOnlyKeptPromptsQueuedStepsIntoHistory(t *testing.T) {
 	require.NotNil(t, cmd)
 	runCmds(m, cmd)
 	require.Equal(t, 1, ws.popQueueCalls)
-	require.NotEmpty(t, m.textarea.Value(), "Up must not be a dead key")
+	require.Equal(t, "earlier prompt", m.textarea.Value(),
+		"Up must not be a dead key, and must not offer a copy of what is still queued: sent again, it would run twice")
 	require.Equal(t, 0, m.promptHistory.index, "it steps into history, as with nothing queued")
 }
 
