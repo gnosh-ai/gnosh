@@ -662,6 +662,15 @@
             10,
             200
           ]
+        },
+        "loop_max_turns": {
+          "type": "integer",
+          "description": "How many turns /loop may drive before it stops on its own. 0 or negative restores the default.",
+          "default": 25,
+          "examples": [
+            10,
+            200
+          ]
         }
       },
       "additionalProperties": false,
