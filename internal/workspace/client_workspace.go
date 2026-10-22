@@ -325,6 +325,14 @@ func (w *ClientWorkspace) AgentClearQueue(sessionID string) {
 	_ = w.client.ClearAgentSessionQueuedPrompts(context.Background(), w.workspaceID(), sessionID)
 }
 
+func (w *ClientWorkspace) AgentPopQueuedPrompts(sessionID string) []string {
+	prompts, err := w.client.PopAgentSessionQueuedPrompts(context.Background(), w.workspaceID(), sessionID)
+	if err != nil {
+		return nil
+	}
+	return prompts
+}
+
 func (w *ClientWorkspace) AgentSetMain(agentID string) error {
 	return w.client.SetMainAgent(context.Background(), w.workspaceID(), agentID)
 }

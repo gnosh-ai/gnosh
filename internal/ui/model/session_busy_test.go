@@ -45,6 +45,7 @@ type countingWorkspace struct {
 	agentBusyCalls  int
 	queuedCalls     int
 	queueListCalls  int
+	popQueueCalls   int
 	permCalls       int
 	permSetCalls    int
 	clearQueueCalls int
@@ -90,7 +91,14 @@ func (w *countingWorkspace) PermissionSetSkipRequests(skip bool) {
 }
 
 func (w *countingWorkspace) AgentClearQueue(string) { w.clearQueueCalls++; w.queued = nil }
-func (w *countingWorkspace) AgentCancel(string)     { w.cancelCalls++ }
+
+func (w *countingWorkspace) AgentPopQueuedPrompts(string) []string {
+	w.popQueueCalls++
+	prompts := append([]string(nil), w.queued...)
+	w.queued = nil
+	return prompts
+}
+func (w *countingWorkspace) AgentCancel(string) { w.cancelCalls++ }
 
 func (w *countingWorkspace) AgentModel() workspace.AgentModel {
 	w.modelCalls++
@@ -150,14 +158,15 @@ func (w *countingWorkspace) Config() *config.Config { return nil }
 // goroutine (which is also the render loop).
 func (w *countingWorkspace) syncProbes() int {
 	return w.readyCalls + w.agentBusyCalls +
-		w.queuedCalls + w.queueListCalls + w.permCalls +
+		w.queuedCalls + w.queueListCalls + w.popQueueCalls + w.permCalls +
 		w.modelCalls + w.lspStateCalls + w.lspDiagCalls +
 		w.mcpStateCalls
 }
 
 func (w *countingWorkspace) resetCounters() {
 	w.readyCalls, w.agentBusyCalls = 0, 0
-	w.queuedCalls, w.queueListCalls, w.permCalls = 0, 0, 0
+	w.queuedCalls, w.queueListCalls, w.popQueueCalls = 0, 0, 0
+	w.permCalls = 0
 	w.permSetCalls, w.clearQueueCalls, w.cancelCalls = 0, 0, 0
 	w.modelCalls, w.lspStateCalls, w.lspDiagCalls = 0, 0, 0
 	w.mcpStateCalls, w.mcpPendingCalls = 0, 0
@@ -221,7 +230,7 @@ func runCmds(m *UI, cmd tea.Cmd) {
 		for _, c := range msg {
 			runCmds(m, c)
 		}
-	case busyStateMsg, promptQueueMsg, agentRunSubmittedMsg, lspStatesMsg, agentModelChangedMsg, mcpStateChangedMsg:
+	case busyStateMsg, promptQueueMsg, promptQueuePopMsg, agentRunSubmittedMsg, lspStatesMsg, agentModelChangedMsg, mcpStateChangedMsg:
 		_, next := m.Update(msg)
 		runCmds(m, next)
 	}

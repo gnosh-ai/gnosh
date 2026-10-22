@@ -262,6 +262,21 @@ func (b *Backend) QueuedPromptsList(workspaceID, sessionID string) ([]string, er
 	return ws.AgentCoordinator.QueuedPromptsList(sessionID), nil
 }
 
+// PopQueuedPrompts takes the user-sent prompts out of the session's queue
+// and returns them, oldest first, leaving any hidden continuation queued.
+func (b *Backend) PopQueuedPrompts(workspaceID, sessionID string) ([]string, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	if ws.AgentCoordinator == nil {
+		return nil, nil
+	}
+
+	return ws.AgentCoordinator.PopQueuedPrompts(sessionID), nil
+}
+
 // GetDefaultSmallModel returns the default small model for a provider.
 func (b *Backend) GetDefaultSmallModel(workspaceID, providerID string) (config.SelectedModel, error) {
 	ws, err := b.GetWorkspace(workspaceID)

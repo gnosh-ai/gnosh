@@ -382,6 +382,16 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Fails(404, 500).
 			Handle(c.handlePostWorkspaceAgentSessionPromptClear),
 
+		apigen.Post("/v1/workspaces/{id}/agent/sessions/{sid}/prompts/pop").
+			Summary("Pop queued prompts").
+			Description("Takes the user-sent queued prompts out of the session's queue and returns them, oldest first, leaving any hidden agent continuation queued.").
+			Tags("agent").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Responds([]string{}).
+			Fails(404, 500).
+			Handle(c.handlePostWorkspaceAgentSessionPromptPop),
+
 		apigen.Post("/v1/workspaces/{id}/agent/sessions/{sid}/summarize").
 			Summary("Summarize session").
 			Tags("agent").

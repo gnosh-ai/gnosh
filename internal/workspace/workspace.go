@@ -163,6 +163,11 @@ type Workspace interface {
 	AgentReadyErr() error
 	AgentQueuedPrompts(sessionID string) int
 	AgentQueuedPromptsList(sessionID string) []string
+	// AgentPopQueuedPrompts takes the user-sent prompts out of the
+	// session's queue and returns them, oldest first, leaving any hidden
+	// agent continuation queued. The TUI's Up key uses it to move a queued
+	// prompt into the editor for editing.
+	AgentPopQueuedPrompts(sessionID string) []string
 	AgentClearQueue(sessionID string)
 	AgentSetMain(agentID string) error
 	AgentSummarize(ctx context.Context, sessionID string) error

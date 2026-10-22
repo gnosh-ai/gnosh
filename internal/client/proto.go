@@ -453,6 +453,25 @@ func (c *Client) ClearAgentSessionQueuedPrompts(ctx context.Context, id string, 
 	return nil
 }
 
+// PopAgentSessionQueuedPrompts takes the user-sent queued prompts out of a
+// session and returns them, oldest first, leaving any hidden agent
+// continuation queued.
+func (c *Client) PopAgentSessionQueuedPrompts(ctx context.Context, id string, sessionID string) ([]string, error) {
+	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/agent/sessions/%s/prompts/pop", id, sessionID), nil, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pop session agent queued prompts: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to pop session agent queued prompts: status code %d", rsp.StatusCode)
+	}
+	var prompts []string
+	if err := json.NewDecoder(rsp.Body).Decode(&prompts); err != nil {
+		return nil, fmt.Errorf("failed to decode popped queued prompts: %w", err)
+	}
+	return prompts, nil
+}
+
 // GetAgentInfo retrieves the agent status for a workspace.
 func (c *Client) GetAgentInfo(ctx context.Context, id string) (*proto.AgentInfo, error) {
 	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/agent", id), nil, nil)

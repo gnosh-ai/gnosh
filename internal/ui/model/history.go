@@ -51,6 +51,13 @@ func (m *UI) handleHistoryUp(msg tea.Msg) tea.Cmd {
 	prevHeight := m.textarea.Height()
 	// Navigate to older history entry from cursor position (0,0).
 	if m.textarea.Length() == 0 || m.isAtEditorStart() {
+		// A prompt queued while a turn is running is editable in place:
+		// pulling it (and any earlier queued prompts) out of the queue and
+		// into the editor means Enter sends one edited prompt instead of
+		// queueing a second one behind the first.
+		if m.textarea.Length() == 0 && m.promptQueue > 0 {
+			return m.dispatchPromptQueuePop()
+		}
 		if m.historyPrev() {
 			// we send this so that the textarea moves the view to the correct position
 			// without this the cursor will show up in the wrong place.

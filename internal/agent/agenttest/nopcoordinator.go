@@ -48,6 +48,7 @@ func (*NopCoordinator) ListSettledMessages(context.Context, string) ([]message.M
 
 func (*NopCoordinator) QueuedPrompts(string) int                      { return 0 }
 func (*NopCoordinator) QueuedPromptsList(string) []string             { return nil }
+func (*NopCoordinator) PopQueuedPrompts(string) []string              { return nil }
 func (*NopCoordinator) ClearQueue(string)                             {}
 func (*NopCoordinator) Summarize(context.Context, string) error       { return nil }
 func (*NopCoordinator) Model() agent.Model                            { return agent.Model{} }

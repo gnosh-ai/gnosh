@@ -232,6 +232,13 @@ func (w *AppWorkspace) AgentClearQueue(sessionID string) {
 	}
 }
 
+func (w *AppWorkspace) AgentPopQueuedPrompts(sessionID string) []string {
+	if w.app.AgentCoordinator == nil {
+		return nil
+	}
+	return w.app.AgentCoordinator.PopQueuedPrompts(sessionID)
+}
+
 func (w *AppWorkspace) AgentSetMain(agentID string) error {
 	if w.app.AgentCoordinator == nil {
 		return errors.New("agent coordinator not initialized")

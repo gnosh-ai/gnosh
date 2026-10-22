@@ -26,6 +26,7 @@ package model
 
 import (
 	"slices"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -291,6 +292,77 @@ func (m *UI) applyPromptQueue(msg promptQueueMsg) []tea.Cmd {
 		m.renderPills()
 	}
 	return nil
+}
+
+// promptQueuePopMsg delivers the user's queued prompts, popped off-thread,
+// so Up can move them into the editor for editing.
+type promptQueuePopMsg struct {
+	forSession string
+	gen        uint64
+	prompts    []string
+}
+
+// dispatchPromptQueuePop pops the user's queued prompts off the Update
+// goroutine, delivering a promptQueuePopMsg. The pop removes them from the
+// session's queue (leaving any hidden continuation), so the pill stops
+// showing them as soon as they land in the editor. It returns nil while
+// another queue fetch is in flight (their results would race the pop) or
+// when there is nothing to pop.
+func (m *UI) dispatchPromptQueuePop() tea.Cmd {
+	if m.promptQueueInFlight || m.com == nil || m.com.Workspace == nil {
+		return nil
+	}
+	if !m.hasSession() || m.promptQueue == 0 {
+		return nil
+	}
+	m.promptQueueInFlight = true
+	ws := m.com.Workspace
+	sessionID := m.session.ID
+	gen := m.promptQueueGen
+	return func() tea.Msg {
+		return promptQueuePopMsg{
+			forSession: sessionID,
+			gen:        gen,
+			prompts:    ws.AgentPopQueuedPrompts(sessionID),
+		}
+	}
+}
+
+// applyPromptQueuePop stores the popped prompts in the editor, oldest first
+// separated by blank lines, and clears the memoized queue so the pill stops
+// showing them. Runs on the Update goroutine.
+func (m *UI) applyPromptQueuePop(msg promptQueuePopMsg) []tea.Cmd {
+	m.promptQueueInFlight = false
+	if msg.forSession != m.currentSessionID() || msg.gen != m.promptQueueGen {
+		// The pop raced a session switch or a newer queue transition.
+		// The prompts are out of the queue already; refetch so the pill
+		// reflects whatever is left rather than staying blank.
+		if cmd := m.dispatchPromptQueueRefresh(); cmd != nil {
+			return []tea.Cmd{cmd}
+		}
+		return nil
+	}
+	if len(msg.prompts) == 0 {
+		// A refresh landed in flight and its result clobbered the local
+		// queue, so the pop had nothing left to take. Restore it.
+		if cmd := m.dispatchPromptQueueRefresh(); cmd != nil {
+			return []tea.Cmd{cmd}
+		}
+		return nil
+	}
+	prevHeight := m.textarea.Height()
+	m.textarea.Reset()
+	m.textarea.InsertString(strings.Join(msg.prompts, "\n\n"))
+	m.textarea.MoveToBegin()
+	m.syncBangModeFromTextarea()
+	m.promptHistory.index = -1
+	m.promptHistory.draft = ""
+	m.promptQueueItems = nil
+	m.promptQueue = 0
+	m.promptQueueCheckedAt = time.Now()
+	m.invalidatePromptQueue()
+	m.updateLayoutAndSize()
+	return []tea.Cmd{m.updateTextareaWithPrevHeight(nil, prevHeight)}
 }
 
 // staleWorkspaceRefreshCmds is the TTL backstop, called at the tail of

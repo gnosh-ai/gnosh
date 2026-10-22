@@ -610,6 +610,20 @@ func (c *controllerV1) handlePostWorkspaceAgentSessionPromptClear(w http.Respons
 	w.WriteHeader(http.StatusOK)
 }
 
+// handlePostWorkspaceAgentSessionPromptPop takes the user-sent queued
+// prompts out of the session's queue and returns them, oldest first,
+// leaving any hidden continuation queued.
+func (c *controllerV1) handlePostWorkspaceAgentSessionPromptPop(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	sid := r.PathValue("sid")
+	prompts, err := c.backend.PopQueuedPrompts(id, sid)
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	jsonEncode(w, prompts)
+}
+
 // handlePostWorkspaceAgentSessionSummarize summarizes a session.
 func (c *controllerV1) handlePostWorkspaceAgentSessionSummarize(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

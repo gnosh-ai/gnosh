@@ -890,6 +890,8 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.applyBusyState(msg)...)
 	case promptQueueMsg:
 		cmds = append(cmds, m.applyPromptQueue(msg)...)
+	case promptQueuePopMsg:
+		cmds = append(cmds, m.applyPromptQueuePop(msg)...)
 	case lspStatesMsg:
 		if cmd := m.applyLSPStates(msg); cmd != nil {
 			cmds = append(cmds, cmd)

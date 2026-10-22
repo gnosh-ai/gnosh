@@ -227,6 +227,7 @@ type SessionAgent interface {
 	ListSettledMessages(ctx context.Context, sessionID string) ([]message.Message, error)
 	QueuedPrompts(sessionID string) int
 	QueuedPromptsList(sessionID string) []string
+	PopQueuedPrompts(sessionID string) []string
 	ClearQueue(sessionID string)
 	Summarize(context.Context, string, fantasy.ProviderOptions, func(context.Context, *fantasy.ProviderError) error) error
 	Model() Model
@@ -2201,10 +2202,13 @@ func (a *sessionAgent) Cancel(sessionID string) {
 }
 
 func (a *sessionAgent) ClearQueue(sessionID string) {
+	mu := a.sessionMu(sessionID)
+	mu.Lock()
 	if a.QueuedPrompts(sessionID) > 0 {
 		slog.Debug("Clearing queued prompts", "session_id", sessionID)
 		a.clearQueueAndNotify(sessionID)
 	}
+	mu.Unlock()
 }
 
 func (a *sessionAgent) CancelAll() {
@@ -2242,24 +2246,66 @@ func (a *sessionAgent) IsSessionBusy(sessionID string) bool {
 	return busy
 }
 
-func (a *sessionAgent) QueuedPrompts(sessionID string) int {
-	l, ok := a.messageQueue.Get(sessionID)
-	if !ok {
-		return 0
-	}
-	return len(l)
-}
-
-func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
+// queuedUserCalls returns the session's queued calls minus the agent's own
+// hidden continuations (loop detection and Stop-hook follow-ups), which the
+// queue handoff re-queues at the end of a turn. User-sent prompts are what
+// the queue pill and the editor's Up key present, so both count and list
+// only those.
+func (a *sessionAgent) queuedUserCalls(sessionID string) []SessionAgentCall {
 	l, ok := a.messageQueue.Get(sessionID)
 	if !ok {
 		return nil
 	}
-	prompts := make([]string, len(l))
-	for i, call := range l {
-		prompts[i] = call.Prompt
+	var user []SessionAgentCall
+	for _, call := range l {
+		if !call.HiddenUserMessage {
+			user = append(user, call)
+		}
+	}
+	return user
+}
+
+func (a *sessionAgent) QueuedPrompts(sessionID string) int {
+	return len(a.queuedUserCalls(sessionID))
+}
+
+func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
+	user := a.queuedUserCalls(sessionID)
+	prompts := make([]string, 0, len(user))
+	for _, call := range user {
+		prompts = append(prompts, call.Prompt)
 	}
 	return prompts
+}
+
+// PopQueuedPrompts takes the user-sent prompts out of the session's queue,
+// oldest first, leaving any hidden continuation queued for the turn-end
+// handoff to pick up. A queued prompt removed this way without running
+// publishes nothing: it carries no RunID (TUI prompts are fire-and-forget),
+// so no caller waits on a terminal event for it.
+func (a *sessionAgent) PopQueuedPrompts(sessionID string) []string {
+	mu := a.sessionMu(sessionID)
+	mu.Lock()
+	defer mu.Unlock()
+	l, ok := a.messageQueue.Get(sessionID)
+	if !ok {
+		return nil
+	}
+	var popped []string
+	var keep []SessionAgentCall
+	for _, call := range l {
+		if call.HiddenUserMessage {
+			keep = append(keep, call)
+			continue
+		}
+		popped = append(popped, call.Prompt)
+	}
+	if len(keep) == 0 {
+		a.messageQueue.Del(sessionID)
+	} else {
+		a.messageQueue.Set(sessionID, keep)
+	}
+	return popped
 }
 
 func (a *sessionAgent) SetModels(large Model, small Model) {
