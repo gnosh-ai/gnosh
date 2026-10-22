@@ -168,6 +168,14 @@ real program never produces. Before saying a change works:
 - **Comments**: End comments in periods unless comments are at the end of the
   line.
 
+## Starting a Test
+
+Before writing a test, find one in the repository that does something
+similar and start from it: search the `_test.go` files for the type or call
+you need (`grep -rn "KeyPressMsg{" internal/ui --include='*_test.go'` shows how
+TUI tests press keys: `tea.KeyPressMsg{Code: tea.KeyUp}`). Read a library's
+source only when the repository has no example.
+
 ## Testing with Mock Providers
 
 When writing tests that involve provider configurations, use the mock
