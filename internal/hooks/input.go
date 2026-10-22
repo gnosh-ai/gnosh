@@ -167,8 +167,60 @@ func parseStdout(stdout string) HookResult {
 	if err != nil {
 		result.Error = err.Error()
 	}
-	result.UpdatedInput = rawToString(parsed.UpdatedInput)
+	if updated, patchErr := parseUpdatedInput(parsed.UpdatedInput); patchErr != nil {
+		setParseError(&result, patchErr)
+	} else {
+		result.UpdatedInput = updated
+	}
 	return result
+}
+
+// parseUpdatedInput accepts a native updated_input that is a JSON object
+// (nested, or stringified as a backward-compat fallback) and returns it
+// as the opaque patch string. Anything else that is actually present is
+// an error: it would be silently dropped at aggregation time, so a hook
+// that set out to rewrite the tool input would look like one that did
+// not.
+func parseUpdatedInput(raw json.RawMessage) (string, error) {
+	s := rawToString(raw)
+	if s == "" {
+		return "", nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(s), &obj); err != nil {
+		return "", fmt.Errorf(
+			"updated_input must be a JSON object, got %s", jsonTypeName(raw),
+		)
+	}
+	return s, nil
+}
+
+// jsonTypeName reports which kind of JSON value a raw message holds, for
+// error messages.
+func jsonTypeName(raw json.RawMessage) string {
+	switch {
+	case len(raw) == 0 || string(raw) == "null":
+		return "null"
+	case raw[0] == '"':
+		return "a string"
+	case raw[0] == '[':
+		return "an array"
+	case raw[0] == '{':
+		return "an object"
+	default:
+		return "a number or boolean"
+	}
+}
+
+// setParseError records a parse error on the result without clobbering
+// one already set (an unknown decision and a bad updated_input should
+// both surface).
+func setParseError(result *HookResult, err error) {
+	if result.Error == "" {
+		result.Error = err.Error()
+	} else {
+		result.Error += "; " + err.Error()
+	}
 }
 
 // parseContext accepts either a single string or an array of strings and
@@ -227,7 +279,12 @@ func parseClaudeCodeOutput(data json.RawMessage) HookResult {
 
 	// Marshal updatedInput back to a string for our opaque format.
 	if len(hso.UpdatedInput) > 0 && string(hso.UpdatedInput) != "null" {
-		result.UpdatedInput = string(hso.UpdatedInput)
+		updated, patchErr := parseUpdatedInput(hso.UpdatedInput)
+		if patchErr != nil {
+			setParseError(&result, patchErr)
+		} else {
+			result.UpdatedInput = updated
+		}
 	}
 
 	return result

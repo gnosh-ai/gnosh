@@ -104,3 +104,81 @@ func TestRunStopHonoursClaudeCodeBlock(t *testing.T) {
 	require.Equal(t, DecisionDeny, result.Decision)
 	require.Equal(t, "3 tests failing", result.Reason)
 }
+
+// A tool-input rewrite that is not an object would be dropped at
+// aggregation time with only a log line: the hook set out to rewrite the
+// input and looked like one that did not. It must surface as a failed
+// hook instead, the same way an unrecognised decision does.
+func TestParseStdoutUpdatedInputNonObjectIsAnError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("native stringified", func(t *testing.T) {
+		t.Parallel()
+		r := parseStdout(`{"decision":"allow","updated_input":"just a string"}`)
+		require.Equal(t, DecisionAllow, r.Decision, "a failed rewrite stays non-blocking")
+		require.Empty(t, r.UpdatedInput)
+		require.Contains(t, r.Error, "updated_input must be a JSON object")
+	})
+
+	t.Run("native bare string", func(t *testing.T) {
+		t.Parallel()
+		r := parseStdout(`{"decision":"allow","updated_input":"not-an-object"}`)
+		require.Contains(t, r.Error, "updated_input must be a JSON object")
+	})
+
+	t.Run("native array", func(t *testing.T) {
+		t.Parallel()
+		r := parseStdout(`{"decision":"allow","updated_input":["a","b"]}`)
+		require.Contains(t, r.Error, "updated_input must be a JSON object")
+	})
+
+	t.Run("native number", func(t *testing.T) {
+		t.Parallel()
+		r := parseStdout(`{"decision":"allow","updated_input":42}`)
+		require.Contains(t, r.Error, "updated_input must be a JSON object")
+	})
+
+	t.Run("claude code format", func(t *testing.T) {
+		t.Parallel()
+		r := parseStdout(`{"hookSpecificOutput":{"permissionDecision":"allow","updatedInput":"just a string"}}`)
+		require.Equal(t, DecisionAllow, r.Decision)
+		require.Empty(t, r.UpdatedInput)
+		require.Contains(t, r.Error, "updated_input must be a JSON object")
+	})
+
+	t.Run("unknown decision and bad rewrite both surface", func(t *testing.T) {
+		t.Parallel()
+		r := parseStdout(`{"decision":"Deny","updated_input":"oops"}`)
+		require.Contains(t, r.Error, `unknown decision "Deny"`)
+		require.Contains(t, r.Error, "updated_input must be a JSON object")
+	})
+}
+
+// A good rewrite must not be flagged, and both object and stringified
+// object forms stay valid.
+func TestParseStdoutUpdatedInputObjectHasNoError(t *testing.T) {
+	t.Parallel()
+
+	for _, out := range []string{
+		`{"decision":"allow","updated_input":{"command":"ls"}}`,
+		`{"decision":"allow","updated_input":"{\"command\":\"ls\"}"}`,
+		`{"hookSpecificOutput":{"permissionDecision":"allow","updatedInput":{"command":"ls"}}}`,
+		`{"hookSpecificOutput":{"permissionDecision":"allow","updatedInput":null}}`,
+	} {
+		r := parseStdout(out)
+		require.Empty(t, r.Error, "%s is a valid answer", out)
+	}
+}
+
+// End to end: the bad rewrite reaches the UI as a failed hook.
+func TestRunnerSurfacesNonObjectUpdatedInput(t *testing.T) {
+	t.Parallel()
+
+	r := preRunner(t, config.HookConfig{
+		Command: `echo '{"decision":"allow","updated_input":"oops"}'`,
+	})
+	result, err := r.Run(context.Background(), EventPreToolUse, "sess", "bash", `{"command":"ls"}`)
+	require.NoError(t, err)
+	require.Equal(t, DecisionAllow, result.Decision)
+	require.Contains(t, result.Hooks[0].Error, "updated_input must be a JSON object")
+}
