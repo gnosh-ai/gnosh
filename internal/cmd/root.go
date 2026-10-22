@@ -58,12 +58,10 @@ func init() {
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
 	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", server.DefaultHost(), "Connect to a specific Crash server host (for advanced users)")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
-	rootCmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
+	addYoloFlags(rootCmd)
 	rootCmd.PersistentFlags().StringSlice("channels", nil, "MCP servers to enable as channels (repeatable), e.g. --channels server:webhook")
 	_ = rootCmd.PersistentFlags().MarkHidden("channels")
-	rootCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
-	rootCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
-	rootCmd.MarkFlagsMutuallyExclusive("session", "continue")
+	addSessionFlags(rootCmd)
 
 	rootCmd.AddCommand(
 		promptCmd,
@@ -110,7 +108,7 @@ crash --session {session-id}
 crash --continue
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		sessionID, _ := cmd.Flags().GetString("session")
+		sessionID := sessionFlag(cmd)
 		continueLast, _ := cmd.Flags().GetBool("continue")
 
 		ws, cleanup, err := setupWorkspaceWithProgressBar(cmd)
@@ -267,11 +265,44 @@ func setupWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
 	return setupLocalWorkspace(cmd)
 }
 
+// addYoloFlags adds --yolo and Claude Code's name for it,
+// --dangerously-skip-permissions; read them with yoloFlag.
+func addYoloFlags(cmd *cobra.Command) {
+	cmd.Flags().BoolP("yolo", "y", false, "Automatically accept all permissions (dangerous mode)")
+	cmd.Flags().Bool("dangerously-skip-permissions", false, "Same as --yolo, by Claude Code's name for it")
+}
+
+// yoloFlag reports whether every permission is to be accepted.
+func yoloFlag(cmd *cobra.Command) bool {
+	yolo, _ := cmd.Flags().GetBool("yolo")
+	skip, _ := cmd.Flags().GetBool("dangerously-skip-permissions")
+	return yolo || skip
+}
+
+// addSessionFlags adds --session, Claude Code's name for it (-r/--resume),
+// and --continue; read the session with sessionFlag.
+func addSessionFlags(cmd *cobra.Command) {
+	cmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
+	cmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it")
+	cmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
+	cmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
+}
+
+// sessionFlag is the ID of the session to continue, from --session or
+// --resume.
+func sessionFlag(cmd *cobra.Command) string {
+	id, _ := cmd.Flags().GetString("session")
+	if id == "" {
+		id, _ = cmd.Flags().GetString("resume")
+	}
+	return id
+}
+
 // setupLocalWorkspace creates an in-process app.App and wraps it in an
 // AppWorkspace.
 func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
 	debug, _ := cmd.Flags().GetBool("debug")
-	yolo, _ := cmd.Flags().GetBool("yolo")
+	yolo := yoloFlag(cmd)
 	channels, _ := cmd.Flags().GetStringSlice("channels")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 	ctx := cmd.Context()
@@ -398,7 +429,7 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 	}
 
 	debug, _ := cmd.Flags().GetBool("debug")
-	yolo, _ := cmd.Flags().GetBool("yolo")
+	yolo := yoloFlag(cmd)
 	channels, _ := cmd.Flags().GetStringSlice("channels")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 
