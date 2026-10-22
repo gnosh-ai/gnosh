@@ -86,7 +86,7 @@ var rootCmd = &cobra.Command{
 # Run in interactive mode
 crash
 
-# Run non-interactively
+# Run non-interactively (Claude Code's -p works too: crash -p "...")
 crash run "Guess my 5 favorite Pokémon"
 
 # Run a non-interactively with pipes and redirection
@@ -184,6 +184,17 @@ func printSessionResume(model *ui.UI, banner config.ExitBanner) {
 const defaultVersionTemplate = `{{with .DisplayName}}{{printf "%s " .}}{{end}}{{printf "version %s" .Version}}
 `
 
+// printAsRun maps Claude Code's way of asking one question without the
+// TUI, -p/--print, onto crash run: `crash -p "question"`, with any flags
+// after it, runs as `crash run "question"`. Only a leading -p/--print is
+// rewritten, the form Claude Code users type.
+func printAsRun(args []string) ([]string, bool) {
+	if len(args) == 0 || (args[0] != "-p" && args[0] != "--print") {
+		return args, false
+	}
+	return append([]string{"run"}, args[1:]...), true
+}
+
 func Execute() {
 	// FIXME: config.Load uses slog internally during provider resolution,
 	// but the file-based logger isn't set up until after config is loaded
@@ -207,6 +218,9 @@ func Execute() {
 		w.Forward = &b
 		_, _ = w.WriteString(heartbit.String())
 		rootCmd.SetVersionTemplate(b.String() + "\n" + defaultVersionTemplate)
+	}
+	if args, ok := printAsRun(os.Args[1:]); ok {
+		rootCmd.SetArgs(args)
 	}
 	if err := fang.Execute(
 		context.Background(),

@@ -44,3 +44,24 @@ func TestClaudeCodeFlagNames(t *testing.T) {
 	_, err := parse("--resume", "abc", "--continue")
 	require.Error(t, err, "--resume and --continue are exclusive, as --session and --continue are")
 }
+
+// Claude Code's -p/--print, one question without the TUI, is crash run.
+func TestPrintAsRun(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		args, want []string
+		rewritten  bool
+	}{
+		{[]string{"-p", "what is this?"}, []string{"run", "what is this?"}, true},
+		{[]string{"--print", "--model", "qwen", "hi"}, []string{"run", "--model", "qwen", "hi"}, true},
+		{[]string{"-p"}, []string{"run"}, true},
+		{[]string{"run", "hi"}, []string{"run", "hi"}, false},
+		{[]string{"-s", "abc"}, []string{"-s", "abc"}, false},
+		{nil, nil, false},
+	} {
+		got, ok := printAsRun(tc.args)
+		require.Equal(t, tc.rewritten, ok, tc.args)
+		require.Equal(t, tc.want, got, tc.args)
+	}
+}
