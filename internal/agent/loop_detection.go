@@ -41,6 +41,40 @@ func repeatedToolCalls(steps []fantasy.StepResult, windowSize, maxRepeats int) (
 	return nil, false
 }
 
+// loopStopCondition is the StopWhen condition that stops a turn once the
+// agent keeps making the same tool calls, handing the repeated calls to
+// found. It only stops a turn that would otherwise go on. One whose last
+// step ends it anyway is over: with an answer, which a nudge to change
+// approach would replace, or with a call that halted the turn, such as a
+// permission the user denied, which the nudge would resume.
+func loopStopCondition(found func([]fantasy.ToolCallContent)) fantasy.StopCondition {
+	return func(steps []fantasy.StepResult) bool {
+		if len(steps) == 0 || !stepContinuesTurn(steps[len(steps)-1]) {
+			return false
+		}
+		repeated, ok := repeatedToolCalls(steps, loopDetectionWindowSize, loopDetectionMaxRepeats)
+		if ok {
+			found(repeated)
+		}
+		return ok
+	}
+}
+
+// stepContinuesTurn reports whether the model is asked again after step,
+// by the same test the agent loop applies: the step made tool calls,
+// finished for them, and none of their results halted the turn.
+func stepContinuesTurn(step fantasy.StepResult) bool {
+	if len(step.Content.ToolCalls()) == 0 || step.FinishReason != fantasy.FinishReasonToolCalls {
+		return false
+	}
+	for _, result := range step.Content.ToolResults() {
+		if result.StopTurn {
+			return false
+		}
+	}
+	return true
+}
+
 // loopContinuation is the follow-up queued for a turn that was stopped
 // because the agent kept making the same tool calls and getting the same
 // results. Ending the turn there left nothing to show for it: a sub-agent

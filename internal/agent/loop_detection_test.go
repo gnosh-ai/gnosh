@@ -203,3 +203,57 @@ func TestGetToolInteractionSignature(t *testing.T) {
 		}
 	})
 }
+
+// The loop detector only stops a turn that would otherwise go on. Six
+// repeats in the window used to flag the step that ended the turn too,
+// replacing a final answer with a nudge, or resuming a turn halted by a
+// permission the user denied.
+func TestLoopStopCondition(t *testing.T) {
+	t.Parallel()
+
+	toolStep := func(input string, stopTurn bool) fantasy.StepResult {
+		callID := "call_" + input
+		step := makeStep(
+			[]fantasy.ToolCallContent{{ToolCallID: callID, ToolName: "view", Input: input}},
+			[]fantasy.ToolResultContent{{
+				ToolCallID: callID,
+				ToolName:   "view",
+				Result:     fantasy.ToolResultOutputContentText{Text: "same lines"},
+				StopTurn:   stopTurn,
+			}},
+		)
+		step.FinishReason = fantasy.FinishReasonToolCalls
+		return step
+	}
+	// Nine steps, six of them the same call with the same result.
+	firstNine := func() []fantasy.StepResult {
+		var steps []fantasy.StepResult
+		for range 6 {
+			steps = append(steps, toolStep(`{"file_path":"a.go"}`, false))
+		}
+		for i := range 3 {
+			steps = append(steps, toolStep(fmt.Sprintf(`{"file_path":"%d.go"}`, i), false))
+		}
+		return steps
+	}
+	run := func(last fantasy.StepResult) (bool, []fantasy.ToolCallContent) {
+		var found []fantasy.ToolCallContent
+		stop := loopStopCondition(func(repeated []fantasy.ToolCallContent) { found = repeated })
+		return stop(append(firstNine(), last)), found
+	}
+
+	stopped, found := run(toolStep(`{"file_path":"b.go"}`, false))
+	if !stopped || len(found) != 1 || found[0].Input != `{"file_path":"a.go"}` {
+		t.Fatalf("a turn that would go on must be stopped for the repeated call, got %v %v", stopped, found)
+	}
+
+	answer := makeEmptyStep()
+	answer.FinishReason = fantasy.FinishReasonStop
+	if stopped, found := run(answer); stopped || found != nil {
+		t.Fatal("a final answer ends the turn; it must not be taken for a loop")
+	}
+
+	if stopped, found := run(toolStep(`{"file_path":"b.go"}`, true)); stopped || found != nil {
+		t.Fatal("a call that halted the turn, such as a denied permission, must not be resumed")
+	}
+}

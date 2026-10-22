@@ -1203,13 +1203,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				}
 				return false
 			},
-			func(steps []fantasy.StepResult) bool {
-				repeated, ok := repeatedToolCalls(steps, loopDetectionWindowSize, loopDetectionMaxRepeats)
-				if ok {
-					loopCalls = repeated
-				}
-				return ok
-			},
+			loopStopCondition(func(repeated []fantasy.ToolCallContent) {
+				loopCalls = repeated
+			}),
 		},
 	})
 
