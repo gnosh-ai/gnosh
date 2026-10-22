@@ -46,11 +46,16 @@ Thumbs.db
 .direnv/
 
 **/.crush/**
+**/.crash/**
 
 /crush
+/crash
+/crash-darwin-arm64
+/crush-darwin-arm64
 /tmp/
 
 manpages/
 completions/crush.*sh
+completions/crash.*sh
 .prettierignore
 .task
