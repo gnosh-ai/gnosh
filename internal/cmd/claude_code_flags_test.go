@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,25 +47,18 @@ func TestClaudeCodeFlagNames(t *testing.T) {
 
 // Claude Code users run `claude -p --dangerously-skip-permissions "question"`
 // and `claude -p -r <session-id> "question"`; after the -p rewrite these
-// must parse on the run command.
+// must parse on the run command. Each case parses a fresh command: flags
+// marked as set by one parse would otherwise leak into the next, and make
+// the exclusivity check pass whatever the flags.
 func TestRunAcceptsClaudeCodeFlags(t *testing.T) {
 	t.Parallel()
 
-	resetRunFlags := func() {
-		runCmd.Flags().VisitAll(func(f *pflag.Flag) {
-			switch f.Value.Type() {
-			case "bool":
-				_ = f.Value.Set("false")
-			default:
-				_ = f.Value.Set(f.DefValue)
-			}
-		})
-	}
-
-	parseRun := func(args ...string) (*cobra.Command, error) {
-		resetRunFlags()
-		runCmd.SetArgs(args)
-		return runCmd, runCmd.ParseFlags(args)
+	parseRun := func(t *testing.T, args ...string) (*cobra.Command, error) {
+		t.Helper()
+		cmd := &cobra.Command{Use: "run"}
+		addRunFlags(cmd)
+		require.NoError(t, cmd.ParseFlags(args))
+		return cmd, cmd.ValidateFlagGroups()
 	}
 
 	for _, tc := range []struct {
@@ -87,20 +79,35 @@ func TestRunAcceptsClaudeCodeFlags(t *testing.T) {
 		{"existing-verbose", []string{"-v", "hi"}, "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cmd, err := parseRun(tc.args...)
-			require.NoError(t, err, tc.name)
-			require.Equal(t, tc.session, sessionFlag(cmd), tc.name)
-			require.Equal(t, tc.yolo, yoloFlag(cmd), tc.name)
+			t.Parallel()
+			cmd, err := parseRun(t, tc.args...)
+			require.NoError(t, err)
+			require.Equal(t, tc.session, sessionFlag(cmd))
+			require.Equal(t, tc.yolo, yoloFlag(cmd))
 		})
 	}
 
-	// -r and --continue are mutually exclusive, as -s and --continue are.
-	{
-		resetRunFlags()
-		runCmd.SetArgs([]string{"-r", "abc", "-C", "hi"})
-		require.NoError(t, runCmd.ParseFlags([]string{"-r", "abc", "-C", "hi"}))
-		require.Error(t, runCmd.ValidateFlagGroups(), "-r and -C are exclusive")
-	}
+	_, err := parseRun(t, "-r", "abc", "-C", "hi")
+	require.Error(t, err, "-r and -C are exclusive, as -s and -C are")
+	_, err = parseRun(t, "-r", "abc", "-s", "def", "hi")
+	require.Error(t, err, "-r and -s are exclusive")
+}
+
+// crash run accepts the yolo flags for Claude Code's sake but keeps them
+// from the workspace: a yolo workspace it created on a shared server would
+// hand yolo to a TUI that joined it later. The TUI's own --yolo still
+// reaches its workspace.
+func TestRunKeepsYoloFromTheWorkspace(t *testing.T) {
+	require.NoError(t, runCmd.Flags().Set("dangerously-skip-permissions", "true"))
+	t.Cleanup(func() { _ = runCmd.Flags().Set("dangerously-skip-permissions", "false") })
+	require.True(t, yoloFlag(runCmd))
+	require.False(t, workspaceYolo(runCmd))
+	require.Contains(t, runCmd.Flags().Lookup("yolo").Usage, "changes nothing")
+
+	root := &cobra.Command{Use: "crash"}
+	addYoloFlags(root)
+	require.NoError(t, root.ParseFlags([]string{"--yolo"}))
+	require.True(t, workspaceYolo(root))
 }
 
 // Claude Code's -p/--print, one question without the TUI, is crash run.

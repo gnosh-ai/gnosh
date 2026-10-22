@@ -184,16 +184,27 @@ func runOutputFlags(quiet, verbose bool) (hideSpinner, traceTools bool) {
 }
 
 func init() {
-	runCmd.Flags().BoolP("quiet", "q", false, "Hide spinner")
-	runCmd.Flags().BoolP("verbose", "v", false, "Show logs and a line per tool call on stderr")
-	runCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
-	runCmd.Flags().String("small-model", "", "Small model to use. If not provided, uses the default small model for the provider")
-	runCmd.Flags().String("reasoning-effort", "", "Reasoning effort for the model (e.g. low, medium, high). Levels depend on the model; unsupported values are rejected with the accepted values listed")
-	runCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
-	runCmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it")
-	runCmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
-	runCmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
-	addYoloFlags(runCmd)
+	addRunFlags(runCmd)
+}
+
+// addRunFlags adds crash run's flags to cmd.
+func addRunFlags(cmd *cobra.Command) {
+	cmd.Flags().BoolP("quiet", "q", false, "Hide spinner")
+	cmd.Flags().BoolP("verbose", "v", false, "Show logs and a line per tool call on stderr")
+	cmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
+	cmd.Flags().String("small-model", "", "Small model to use. If not provided, uses the default small model for the provider")
+	cmd.Flags().String("reasoning-effort", "", "Reasoning effort for the model (e.g. low, medium, high). Levels depend on the model; unsupported values are rejected with the accepted values listed")
+	cmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
+	cmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it")
+	cmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
+	cmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
+	// The yolo flags are accepted so that Claude Code's
+	// `-p --dangerously-skip-permissions` works, and change nothing: run
+	// already accepts its own session's permission requests, and keeps
+	// the flags from the workspace (see workspaceYolo).
+	addYoloFlags(cmd)
+	cmd.Flags().Lookup("yolo").Usage = "Accepted for Claude Code's sake; changes nothing, as crash run already accepts its session's permission requests"
+	cmd.Flags().Lookup("dangerously-skip-permissions").Usage = "Same as --yolo"
 }
 
 // runNonInteractive executes the agent via the server and streams output

@@ -293,6 +293,15 @@ func yoloFlag(cmd *cobra.Command) bool {
 	return yolo || skip
 }
 
+// workspaceYolo reports whether the workspace cmd sets up accepts every
+// permission request. crash run takes the yolo flags but keeps them to
+// itself: it already accepts its own session's requests, and a yolo
+// workspace it created on a shared server would hand yolo to a TUI that
+// joined it later, since the first client's flags win.
+func workspaceYolo(cmd *cobra.Command) bool {
+	return cmd.Name() != "run" && yoloFlag(cmd)
+}
+
 // addSessionFlags adds --session, Claude Code's name for it (-r/--resume),
 // and --continue; read the session with sessionFlag.
 func addSessionFlags(cmd *cobra.Command) {
@@ -316,7 +325,7 @@ func sessionFlag(cmd *cobra.Command) string {
 // AppWorkspace.
 func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
 	debug, _ := cmd.Flags().GetBool("debug")
-	yolo := yoloFlag(cmd)
+	yolo := workspaceYolo(cmd)
 	channels, _ := cmd.Flags().GetStringSlice("channels")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 	ctx := cmd.Context()
@@ -443,7 +452,7 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 	}
 
 	debug, _ := cmd.Flags().GetBool("debug")
-	yolo := yoloFlag(cmd)
+	yolo := workspaceYolo(cmd)
 	channels, _ := cmd.Flags().GetStringSlice("channels")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 
