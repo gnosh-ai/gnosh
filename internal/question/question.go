@@ -45,6 +45,10 @@ type Question struct {
 	Text        string   `json:"question"`
 	Description string   `json:"description,omitempty"`
 	Choices     []Choice `json:"choices,omitempty"`
+	// Secret marks a free-text question whose answer is typed blind, such
+	// as a password: the UI masks it, and the asking tool keeps it from the
+	// model. Only tools set it; the question tool does not expose it.
+	Secret bool `json:"secret,omitempty"`
 }
 
 // Answer carries the user's response to a single Question.
@@ -103,6 +107,9 @@ func (q Question) Validate() error {
 	}
 	if len(q.Description) > MaxDescriptionLength {
 		return fmt.Errorf("%s: description exceeds %d characters (got %d)", label, MaxDescriptionLength, len(q.Description))
+	}
+	if q.Secret && q.Type != TypeFreeText {
+		return fmt.Errorf("%s: only a free_text question can be secret", label)
 	}
 	switch q.Type {
 	case TypeYesNo, TypeFreeText:

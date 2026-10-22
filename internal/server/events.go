@@ -455,6 +455,7 @@ func questionsToProto(qs []question.Question) []proto.QuestionItem {
 			Question:    q.Text,
 			Description: q.Description,
 			Choices:     choices,
+			Secret:      q.Secret,
 		}
 	}
 	return out

@@ -228,6 +228,9 @@ type QuestionItem struct {
 	Question    string           `json:"question"`
 	Description string           `json:"description,omitempty"`
 	Choices     []QuestionChoice `json:"choices,omitempty"`
+	// Secret is a free-text question answered blind (a password); the
+	// client masks the input.
+	Secret bool `json:"secret,omitempty"`
 }
 
 // QuestionChoice is a selectable option.

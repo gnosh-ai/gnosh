@@ -1503,6 +1503,7 @@ func protoQuestionsToDomain(qs []proto.QuestionItem) []question.Question {
 			Text:        q.Question,
 			Description: q.Description,
 			Choices:     choices,
+			Secret:      q.Secret,
 		}
 	}
 	return out

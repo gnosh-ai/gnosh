@@ -83,7 +83,11 @@ func NewQuestionForm(sty *styles.Styles, batch question.Request) *QuestionForm {
 		case question.TypeMultiChoice:
 			comps[i] = NewMultiChoice(sty, req)
 		case question.TypeFreeText:
-			comps[i] = NewFreeText(sty, req)
+			if req.Secret {
+				comps[i] = NewSecret(sty, req)
+			} else {
+				comps[i] = NewFreeText(sty, req)
+			}
 		}
 		if req.Label != "" {
 			labels[i] = req.Label
