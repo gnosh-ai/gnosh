@@ -321,7 +321,7 @@ func TestReadBuiltinFile(t *testing.T) {
 		}, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, resp.Content)
-		require.Contains(t, resp.Content, "Crush Configuration")
+		require.Contains(t, resp.Content, "Crash Configuration")
 	})
 
 	t.Run("not found", func(t *testing.T) {

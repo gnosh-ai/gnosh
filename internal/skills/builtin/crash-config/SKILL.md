@@ -218,9 +218,10 @@ option ui exit-banner compact
 
 ## Hooks runtime
 
-Hooks are user-defined shell commands that fire on agent events. Currently only
-`PreToolUse` is supported, which runs before a tool executes. This behavior is
-the same however the hook is defined (`hook add` or JSON).
+Hooks are user-defined shell commands that fire on agent events: `PreToolUse`
+before a tool runs, `PostToolUse` after one succeeds, and `Stop` when the agent
+is about to finish its turn. This behavior is the same however the hook is
+defined (`hook add` or JSON). The crash-hooks skill has the full reference.
 
 ### How hooks work
 
@@ -230,8 +231,8 @@ the same however the hook is defined (`hook add` or JSON).
 3. The hook receives JSON on **stdin** and hook-specific **environment
    variables**.
 
-Event names are case-insensitive and accept snake_case: `PreToolUse`,
-`pretooluse`, `pre_tool_use`, `PRE_TOOL_USE` all work.
+Event names are matched exactly: `pretooluse` or `pre_tool_use` is a config
+error, not a spelling of `PreToolUse`, and Crash refuses to start on it.
 
 ### Hook input (stdin)
 
@@ -257,7 +258,7 @@ Event names are case-insensitive and accept snake_case: `PreToolUse`,
 | `CRASH_TOOL_INPUT_COMMAND`   | Value of `command` from tool input (if present)   |
 | `CRASH_TOOL_INPUT_FILE_PATH` | Value of `file_path` from tool input (if present) |
 
-Each is also set under its `CRASH_` name (`CRASH_EVENT`, ...), the name after
+Each is also set under its `CRUSH_` name (`CRUSH_EVENT`, ...), from before
 the rename; either works.
 
 ### Hook output
@@ -271,7 +272,8 @@ the rename; either works.
 - `decision`: `allow` to explicitly allow, `deny` to block, `none` (or omit).
 - `reason`: explanation (used when denying).
 - `context`: extra context appended to the tool result.
-- `updated_input`: replacement JSON for the tool input; last non-empty wins.
+- `updated_input`: a patch merged into the tool input (keys you give replace
+  theirs; keys you leave out are kept).
 
 **Exit code 2** — the tool call is blocked; stderr is the deny reason.
 
@@ -282,7 +284,7 @@ the rename; either works.
 - **Deny wins over allow** — any deny blocks the call.
 - **Allow wins over none** — a lone allow lets it proceed.
 - Deny reasons and context strings are concatenated (newline-separated).
-- For `updated_input`, the last non-empty value wins.
+- `updated_input` patches merge in config order; later ones win on the same key.
 
 ### Claude Code compatibility
 
