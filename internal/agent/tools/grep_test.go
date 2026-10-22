@@ -1,11 +1,15 @@
 package tools
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
+	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -453,6 +457,57 @@ func TestColumnMatch(t *testing.T) {
 			require.Equal(t, 14, match.charNum)
 			require.Equal(t, "I wanna grep THIS particular word", match.lineText)
 			require.Equal(t, "testdata/grep.txt", filepath.ToSlash(filepath.Clean(match.path)))
+		})
+	}
+}
+
+// A search for code as written, with its brackets unescaped, finds nothing;
+// the result must say why instead of reading as "no such code".
+func TestGrepExplainsRegexOperatorsOnNoMatch(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	src := "package server\n\nfunc (s *Server) Start() {}\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "server.go"), []byte(src), 0o644))
+	tool := NewGrepTool(dir, config.ToolGrep{})
+
+	grep := func(t *testing.T, params GrepParams) string {
+		t.Helper()
+		input, err := json.Marshal(params)
+		require.NoError(t, err)
+		resp, err := tool.Run(t.Context(), fantasy.ToolCall{ID: "grep-call", Name: GrepToolName, Input: string(input)})
+		require.NoError(t, err)
+		require.False(t, resp.IsError, resp.Content)
+		return resp.Content
+	}
+	const hint = "( ) [ ] { } are operators"
+
+	for _, tc := range []struct {
+		name     string
+		params   GrepParams
+		found    bool
+		wantHint bool
+	}{
+		{"unescaped parentheses miss, with the reason", GrepParams{Pattern: `func (s \*Server)`}, false, true},
+		{"escaped, the same search finds it", GrepParams{Pattern: `func \(s \*Server\)`}, true, false},
+		{"as literal text, it finds it", GrepParams{Pattern: `func (s *Server)`, LiteralText: true}, true, false},
+		{"a plain miss has no hint", GrepParams{Pattern: `NoSuchThing`}, false, false},
+		{"an escaped miss has no hint", GrepParams{Pattern: `func \(s \*Client\)`}, false, false},
+		{"a literal miss has no hint", GrepParams{Pattern: `func (c *Client)`, LiteralText: true}, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			out := grep(t, tc.params)
+			if tc.found {
+				require.Contains(t, out, "Found 1 matches")
+			} else {
+				require.True(t, strings.HasPrefix(out, "No files found"), out)
+			}
+			if tc.wantHint {
+				require.Contains(t, out, hint)
+			} else {
+				require.NotContains(t, out, hint)
+			}
 		})
 	}
 }

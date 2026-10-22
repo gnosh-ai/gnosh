@@ -121,6 +121,24 @@ func escapeRegexPattern(pattern string) string {
 	return escaped
 }
 
+// regexOperatorHint explains an empty result whose pattern holds unescaped
+// brackets: the usual cause is a search for code as written, such as
+// `func (s *Server)`, where the regex reads the parentheses as a group and
+// matches something else. A bare "No files found" there reads as "no such
+// code", and a model moves on believing it.
+func regexOperatorHint(pattern string) string {
+	for i := 0; i < len(pattern); i++ {
+		switch pattern[i] {
+		case '\\':
+			i++ // an escaped character is already literal
+		case '(', ')', '[', ']', '{', '}':
+			return "\n\nThe pattern is a regular expression, where ( ) [ ] { } are operators, not text. " +
+				"To match them as written, escape them with a backslash or set literal_text to true."
+		}
+	}
+	return ""
+}
+
 func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		GrepToolName,
@@ -148,6 +166,9 @@ func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 			var output strings.Builder
 			if len(matches) == 0 {
 				output.WriteString("No files found")
+				if !params.LiteralText {
+					output.WriteString(regexOperatorHint(params.Pattern))
+				}
 			} else {
 				fmt.Fprintf(&output, "Found %d matches\n", len(matches))
 
