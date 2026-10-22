@@ -4,9 +4,10 @@ import (
 	"cmp"
 	"encoding/binary"
 	"fmt"
-	"github.com/charmbracelet/crush/internal/agent"
 	"hash/fnv"
 	"strings"
+
+	"github.com/charmbracelet/crush/internal/agent"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"

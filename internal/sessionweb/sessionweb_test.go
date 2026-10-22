@@ -21,9 +21,11 @@ type memStore struct {
 }
 
 func (m *memStore) ListSessions(context.Context) ([]session.Session, error) { return m.sessions, nil }
+
 func (m *memStore) ListMessages(_ context.Context, id string) ([]message.Message, error) {
 	return m.messages[id], nil
 }
+
 func (m *memStore) GetMessage(_ context.Context, id string) (message.Message, error) {
 	for _, msgs := range m.messages {
 		for _, msg := range msgs {
@@ -34,6 +36,7 @@ func (m *memStore) GetMessage(_ context.Context, id string) (message.Message, er
 	}
 	return message.Message{}, ErrNotFound
 }
+
 func (m *memStore) UpdateMessage(_ context.Context, msg message.Message) error {
 	msgs := m.messages[msg.SessionID]
 	for i := range msgs {
@@ -44,6 +47,7 @@ func (m *memStore) UpdateMessage(_ context.Context, msg message.Message) error {
 	}
 	return ErrNotFound
 }
+
 func (m *memStore) DeleteMessage(_ context.Context, id string) error {
 	for sid, msgs := range m.messages {
 		for i := range msgs {
@@ -55,6 +59,7 @@ func (m *memStore) DeleteMessage(_ context.Context, id string) error {
 	}
 	return ErrNotFound
 }
+
 func (m *memStore) CreateMessage(_ context.Context, sid string, p message.CreateMessageParams) (message.Message, error) {
 	m.next++
 	msg := message.Message{ID: fmt.Sprintf("m%d", m.next), SessionID: sid, Role: p.Role, Parts: p.Parts}

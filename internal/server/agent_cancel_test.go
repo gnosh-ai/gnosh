@@ -77,9 +77,11 @@ func (s *runCoordinator) IsBusy() bool { return s.busy }
 func (s *runCoordinator) IsSessionBusy(string) bool {
 	return false
 }
+
 func (s *runCoordinator) Summarize(context.Context, string) error {
 	return nil
 }
+
 func (s *runCoordinator) SetMainAgent(agentName string) error {
 	s.lastMainAgentSet.Store(agentName)
 	return s.setMainAgentErr

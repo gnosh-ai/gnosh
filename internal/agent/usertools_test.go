@@ -16,6 +16,7 @@ type userToolFake struct{ name, desc string }
 func (f userToolFake) Info() fantasy.ToolInfo {
 	return fantasy.ToolInfo{Name: f.name, Description: f.desc}
 }
+
 func (f userToolFake) Run(context.Context, fantasy.ToolCall) (fantasy.ToolResponse, error) {
 	return fantasy.ToolResponse{}, nil
 }
