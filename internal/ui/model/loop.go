@@ -107,6 +107,7 @@ type loopStop string
 const (
 	loopStopDone      loopStop = "the model reported the task finished"
 	loopStopCancelled loopStop = "the turn was cancelled"
+	loopStopHalted    loopStop = "the turn was stopped (a permission denied, a question cancelled or a hook's halt)"
 	loopStopError     loopStop = "the turn failed"
 	loopStopExhausted loopStop = "the loop_max_turns cap was reached"
 	loopStopJudged    loopStop = "the agent judged there is a reason to stop; its reply says why"
@@ -123,6 +124,10 @@ func loopDecide(st loopState, rc notify.RunComplete) (loopStop, bool) {
 	switch {
 	case rc.Cancelled:
 		return loopStopCancelled, false
+	case rc.Halted:
+		// The user said no, or a hook did: the next continuation would
+		// only retry what was just refused.
+		return loopStopHalted, false
 	case rc.Error != "":
 		return loopStopError, false
 	case loopReportedDone(rc.Text):

@@ -82,6 +82,9 @@ type RunComplete struct {
 	Text      string `json:"text,omitempty"`
 	Error     string `json:"error,omitempty"`
 	Cancelled bool   `json:"cancelled,omitempty"`
+	// Halted mirrors notify.RunComplete.Halted: a tool result (a denied
+	// permission, a cancelled question, a hook's halt) ended the turn.
+	Halted bool `json:"halted,omitempty"`
 }
 
 // SkillInfo describes a visible skill exposed to a frontend.

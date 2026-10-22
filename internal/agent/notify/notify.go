@@ -74,6 +74,11 @@ type Notification struct {
 // by RunID lets a client correlate a SendMessage call with its
 // terminal event even when the session is busy and other turns are
 // finishing on the same session.
+//
+// Halted is true when a tool result ended the turn: the user denied a
+// permission or cancelled a question, or a hook halted it. The turn is
+// over without error or cancellation, but at someone's "no", so a
+// driver such as /loop must not just send the next prompt.
 type RunComplete struct {
 	SessionID string
 	RunID     string
@@ -81,4 +86,5 @@ type RunComplete struct {
 	Text      string
 	Error     string
 	Cancelled bool
+	Halted    bool
 }

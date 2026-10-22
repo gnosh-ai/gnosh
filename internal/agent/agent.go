@@ -791,6 +791,10 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// message of the turn is the value reachable through this
 	// pointer when the defer runs.
 	var currentAssistant *message.Message
+	// haltedByTool records that a tool result ended the turn (a denied
+	// permission, a cancelled question, a hook's halt), for the terminal
+	// RunComplete's Halted.
+	var haltedByTool bool
 	// Drain any debounced message updates before returning. message.Service
 	// already flushes synchronously on terminal updates, but a defer here
 	// guarantees the contract at every Run exit (success, error, panic
@@ -818,7 +822,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		if skipRunComplete {
 			return
 		}
-		complete := notify.RunComplete{SessionID: call.SessionID, RunID: call.RunID}
+		complete := notify.RunComplete{SessionID: call.SessionID, RunID: call.RunID, Halted: haltedByTool}
 		if currentAssistant != nil {
 			complete.MessageID = currentAssistant.ID
 			complete.Text = currentAssistant.Content().String()
@@ -1172,6 +1176,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				for _, tr := range stepResult.Content.ToolResults() {
 					if tr.StopTurn {
 						finishReason = message.FinishReasonEndTurn
+						haltedByTool = true
 						break
 					}
 				}
@@ -1455,7 +1460,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	firstQueuedMessage.Accepted = a.BeginAccepted(call.SessionID)
 	mu.Unlock()
 	if outerOwesRunComplete {
-		complete := notify.RunComplete{SessionID: call.SessionID, RunID: call.RunID}
+		complete := notify.RunComplete{SessionID: call.SessionID, RunID: call.RunID, Halted: haltedByTool}
 		if currentAssistant != nil {
 			complete.MessageID = currentAssistant.ID
 			complete.Text = currentAssistant.Content().String()

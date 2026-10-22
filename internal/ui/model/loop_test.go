@@ -41,6 +41,10 @@ func TestLoopDecide_StopsOnCancelAndError(t *testing.T) {
 	stop, cont = loopDecide(running(), notify.RunComplete{SessionID: "s1", Error: "boom"})
 	require.False(t, cont)
 	require.Equal(t, loopStopError, stop, "a failed turn must not be retried forever")
+
+	stop, cont = loopDecide(running(), notify.RunComplete{SessionID: "s1", Halted: true})
+	require.False(t, cont)
+	require.Equal(t, loopStopHalted, stop, "a denied permission must not be answered with the next prompt")
 }
 
 func TestLoopDecide_HasNoCapByDefault(t *testing.T) {

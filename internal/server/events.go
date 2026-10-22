@@ -150,6 +150,7 @@ func wrapEvent(ev any) *pubsub.Payload {
 				Text:      e.Payload.Text,
 				Error:     e.Payload.Error,
 				Cancelled: e.Payload.Cancelled,
+				Halted:    e.Payload.Halted,
 			},
 		})
 	case pubsub.Event[proto.ConfigChanged]:
