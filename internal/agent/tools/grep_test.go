@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -30,17 +31,16 @@ func setRipgrepForTest(t *testing.T, path string) {
 	}
 }
 
-// fakeRipgrepScript writes an executable script that stands in for rg. The
-// script prints whatever the given output bytes contain and exits with the
-// given code.
-func fakeRipgrepScript(t *testing.T, exitCode int, output string) string {
+// fakeRipgrep writes an executable stand-in for rg that prints stdout and
+// stderr as given and exits with code.
+func fakeRipgrep(t *testing.T, stdout, stderr string, code int) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "rg")
-	script := "#!/bin/sh\n"
-	if output != "" {
-		script += "printf '%s' " + fmt.Sprintf("%q", output) + "\n"
-	}
-	script += fmt.Sprintf("exit %d\n", exitCode)
+	dir := t.TempDir()
+	out, errOut := filepath.Join(dir, "stdout"), filepath.Join(dir, "stderr")
+	require.NoError(t, os.WriteFile(out, []byte(stdout), 0o644))
+	require.NoError(t, os.WriteFile(errOut, []byte(stderr), 0o644))
+	path := filepath.Join(dir, "rg")
+	script := fmt.Sprintf("#!/bin/sh\ncat %q\ncat %q >&2\nexit %d\n", out, errOut, code)
 	require.NoError(t, os.WriteFile(path, []byte(script), 0o755))
 	return path
 }
@@ -586,8 +586,7 @@ func TestSearchFilesReportsRipgrepFailure(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644))
 
-	path := fakeRipgrepScript(t, 2, "")
-	setRipgrepForTest(t, path)
+	setRipgrepForTest(t, fakeRipgrep(t, "", "", 2))
 
 	_, _, err := searchFiles(t.Context(), "hello", dir, "", 100)
 	require.Error(t, err)
@@ -601,4 +600,53 @@ func TestSearchFilesReportsMissingPath(t *testing.T) {
 	missing := filepath.Join(dir, "no-such-dir")
 	_, _, err := searchFiles(t.Context(), "hello", missing, "", 100)
 	require.Error(t, err)
+}
+
+// ripgrep exits 2 when it could not read some file, even when the search
+// otherwise ran and found matches; those matches are still the answer.
+func TestSearchFilesKeepsMatchesWhenRipgrepCouldNotReadAFile(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "a.txt")
+	require.NoError(t, os.WriteFile(file, []byte("hello world\n"), 0o644))
+	stdout := fmt.Sprintf(`{"type":"match","data":{"path":{"text":%q},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}`, file) +
+		"\n" + `{"type":"summary","data":{}}` + "\n"
+	setRipgrepForTest(t, fakeRipgrep(t, stdout, "rg: "+dir+"/locked: Permission denied (os error 13)\n", 2))
+
+	matches, _, err := searchFiles(t.Context(), "hello", dir, "", 100)
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	require.Equal(t, file, matches[0].path)
+}
+
+// A search ripgrep never ran, such as one for a pattern it rejects, fails
+// with ripgrep's own message, not a bare exit status.
+func TestSearchFilesReportsRipgrepsMessage(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644))
+	setRipgrepForTest(t, fakeRipgrep(t, "", "rg: regex parse error:\n    (?:func (s)\n    ^\nerror: unclosed group\n", 2))
+
+	_, _, err := searchFiles(t.Context(), "func (s", dir, "", 100)
+	require.ErrorContains(t, err, "unclosed group")
+}
+
+// The same against the real ripgrep, where it is installed: the package's
+// other tests run without it.
+func TestSearchFilesWithTheRealRipgrep(t *testing.T) {
+	rg, err := exec.LookPath("rg")
+	if err != nil {
+		t.Skip("rg is not installed")
+	}
+	setRipgrepForTest(t, rg)
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("func (s *Server) Start()\n"), 0o644))
+
+	_, _, err = searchFiles(t.Context(), "func (s", dir, "", 100)
+	require.ErrorContains(t, err, "unclosed group", "a pattern ripgrep rejects is reported with its message")
+
+	matches, _, err := searchFiles(t.Context(), `func \(s`, dir, "", 100)
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+
+	_, _, err = searchFiles(t.Context(), "x", filepath.Join(dir, "missing"), "", 100)
+	require.Error(t, err, "a missing path is an error, not an empty result")
 }

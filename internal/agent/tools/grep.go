@@ -214,6 +214,12 @@ func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 }
 
 func searchFiles(ctx context.Context, pattern, rootPath, include string, limit int) ([]grepMatch, bool, error) {
+	// A path that does not exist is an error, not an empty result: neither
+	// engine says so plainly (ripgrep reports it as a failed search, the Go
+	// walker not at all).
+	if _, err := os.Stat(rootPath); err != nil {
+		return nil, false, err
+	}
 	matches, err := searchWithRipgrep(ctx, pattern, rootPath, include)
 	if err != nil {
 		// Fall back to the Go walker only when ripgrep is not installed.
@@ -263,12 +269,31 @@ func searchWithRipgrep(ctx context.Context, pattern, path, include string) ([]gr
 
 	output, err := cmd.Output()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			return []grepMatch{}, nil
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			return nil, err
+		}
+		// Exit 1 means no match. Exit 2 means an error occurred, which
+		// includes a file that could not be read during a search that
+		// otherwise ran: its output then ends with a summary, and the
+		// matches it found are the answer, as they were when the Go walker,
+		// which skips such files, stood in for every failure. With no
+		// output at all the search never ran (a pattern it rejects, say),
+		// and its message is the error.
+		if exitErr.ExitCode() == 1 || (exitErr.ExitCode() == 2 && len(bytes.TrimSpace(output)) > 0) {
+			return parseRipgrepMatches(output), nil
+		}
+		if msg := strings.TrimSpace(string(exitErr.Stderr)); msg != "" {
+			return nil, fmt.Errorf("ripgrep: %s", ansi.Truncate(msg, 1000, "…"))
 		}
 		return nil, err
 	}
+	return parseRipgrepMatches(output), nil
+}
 
+// parseRipgrepMatches reads the matches out of ripgrep's --json output,
+// keeping the first match on each line.
+func parseRipgrepMatches(output []byte) []grepMatch {
 	var matches []grepMatch
 	for line := range bytes.SplitSeq(bytes.TrimSpace(output), []byte{'\n'}) {
 		if len(line) == 0 {
@@ -297,7 +322,7 @@ func searchWithRipgrep(ctx context.Context, pattern, path, include string) ([]gr
 			break
 		}
 	}
-	return matches, nil
+	return matches
 }
 
 type ripgrepMatch struct {
@@ -318,14 +343,6 @@ type ripgrepMatch struct {
 
 func searchFilesWithRegex(pattern, rootPath, include string) ([]grepMatch, error) {
 	matches := []grepMatch{}
-
-	// A path that does not exist is a real error: report it rather than
-	// silently returning no matches. filepath.Walk swallows the error for
-	// a missing root and would otherwise leave the caller thinking the
-	// search simply found nothing.
-	if _, err := os.Stat(rootPath); err != nil {
-		return nil, err
-	}
 
 	// Use cached regex compilation
 	regex, err := searchRegexCache.get(pattern)
