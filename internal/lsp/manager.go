@@ -42,6 +42,7 @@ type Manager struct {
 func NewManager(cfg *config.ConfigStore) *Manager {
 	manager := powernapconfig.NewManager()
 	manager.LoadDefaults()
+	config.AddExtraLSPServers(manager)
 
 	// Merge user-configured LSPs into the manager.
 	for name, clientConfig := range cfg.Config().LSP {

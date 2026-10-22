@@ -684,6 +684,7 @@ func lspDefaultsManager() *powernapConfig.Manager {
 		// would be a build-time bug; treat the manager as usable either
 		// way so a transient error never wedges config loading.
 		_ = m.LoadDefaults()
+		AddExtraLSPServers(m)
 		powernapDefaults = m
 	})
 	return powernapDefaults
