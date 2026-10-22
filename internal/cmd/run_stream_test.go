@@ -571,3 +571,27 @@ func TestRunStream_HookWarningIsNotAFailure(t *testing.T) {
 	require.True(t, done)
 	require.ErrorContains(t, err, "agent error: boom")
 }
+
+// In client/server mode too, a sub-agent's tool calls are traced, indented
+// under the run's own, and calls from unrelated sessions are not.
+func TestRunStream_TracesSubAgentCalls(t *testing.T) {
+	t.Parallel()
+
+	var trace bytes.Buffer
+	s := &runStream{
+		sessionID: "S", out: &bytes.Buffer{}, read: map[string]int{},
+		trace: format.NewToolTrace(&trace),
+		isSub: func(id string) bool { return id == "child" },
+	}
+	call := func(session, id, name, input string) {
+		_, err := s.handle(pubsub.Event[proto.Message]{Payload: proto.Message{
+			ID: id, SessionID: session, Role: proto.Assistant,
+			Parts: []proto.ContentPart{proto.ToolCall{ID: id, Name: name, Input: input, Finished: true}},
+		}}, nil)
+		require.NoError(t, err)
+	}
+	call("S", "c1", "agent", `{"prompt":"Find the queue"}`)
+	call("child", "c2", "grep", `{"pattern":"messageQueue"}`)
+	call("other", "c3", "view", `{"file_path":"/x.go"}`)
+	require.Equal(t, "tool agent Find the queue\n  tool grep messageQueue\n", trace.String())
+}

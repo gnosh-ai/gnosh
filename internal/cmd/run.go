@@ -219,6 +219,56 @@ func addRunFlags(cmd *cobra.Command) {
 	cmd.Flags().Lookup("dangerously-skip-permissions").Usage = "Same as --yolo"
 }
 
+// traceToolCalls traces the tool calls and results a message carries:
+// the calls an assistant message made, and the results that come back in
+// a tool message of their own. sub indents a sub-agent's calls.
+func (s *runStream) traceToolCalls(msg proto.Message, sub bool) {
+	switch msg.Role {
+	case proto.Tool:
+		for _, result := range msg.ToolResults() {
+			s.trace.Result(result.ToolCallID, result.IsError, result.Metadata)
+		}
+	case proto.Assistant:
+		for _, call := range msg.ToolCalls() {
+			if !call.Finished {
+				continue
+			}
+			if sub {
+				s.trace.SubCall(call.ID, call.Name, toolCallSummary(call))
+			} else {
+				s.trace.Call(call.ID, call.Name, toolCallSummary(call))
+			}
+		}
+	}
+}
+
+// subSessionCheck returns a check, asking the server once per session,
+// of whether a session was made under rootID by a sub-agent of it or of
+// one of its sub-agents. It looks at most eight levels up, so a cycle in
+// bad data cannot keep it walking.
+func subSessionCheck(ctx context.Context, c *client.Client, workspaceID, rootID string) func(string) bool {
+	known := map[string]bool{}
+	return func(id string) bool {
+		if sub, ok := known[id]; ok {
+			return sub
+		}
+		sub := false
+		for at, level := id, 0; level < 8; level++ {
+			sess, err := c.GetSession(ctx, workspaceID, at)
+			if err != nil || sess.ParentSessionID == "" {
+				break
+			}
+			if sess.ParentSessionID == rootID {
+				sub = true
+				break
+			}
+			at = sess.ParentSessionID
+		}
+		known[id] = sub
+		return sub
+	}
+}
+
 // ours reports whether an agent event belongs to this run. Async events
 // from an unrelated workspace run share the channel, so a foreign failure
 // must not abort us:
@@ -357,6 +407,7 @@ func runNonInteractive(
 		out:       output.w,
 		errOut:    os.Stderr,
 		trace:     newToolTrace(traceTools),
+		isSub:     subSessionCheck(ctx, c, ws.ID, sess.ID),
 		read:      make(map[string]int),
 	}
 
@@ -426,7 +477,10 @@ type runStream struct {
 	// errOut receives hook warnings; nil drops them.
 	errOut io.Writer
 	// trace prints the --verbose tool trace; nil when not tracing.
-	trace   *format.ToolTrace
+	trace *format.ToolTrace
+	// isSub reports whether a session was made under the run's, by a
+	// sub-agent, whose tool calls the trace shows too; nil shows none.
+	isSub   func(sessionID string) bool
 	read    map[string]int
 	printed bool
 }
@@ -447,23 +501,16 @@ func (s *runStream) handle(ev any, stopSpinner func()) (done bool, err error) {
 	case pubsub.Event[proto.Message]:
 		msg := e.Payload
 		if msg.SessionID != s.sessionID {
-			return false, nil
-		}
-		// A tool's result arrives in a message of its own, after the
-		// assistant message that made the call.
-		if msg.Role == proto.Tool {
-			for _, result := range msg.ToolResults() {
-				s.trace.Result(result.ToolCallID, result.IsError, result.Metadata)
+			// A sub-agent works in a session of its own, under the run's:
+			// trace its tool calls too, indented.
+			if s.trace != nil && s.isSub != nil && s.isSub(msg.SessionID) {
+				s.traceToolCalls(msg, true)
 			}
 			return false, nil
 		}
+		s.traceToolCalls(msg, false)
 		if msg.Role != proto.Assistant {
 			return false, nil
-		}
-		for _, call := range msg.ToolCalls() {
-			if call.Finished {
-				s.trace.Call(call.ID, call.Name, toolCallSummary(call))
-			}
 		}
 		if len(msg.Parts) == 0 {
 			return false, nil
