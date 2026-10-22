@@ -5,17 +5,17 @@
 
 > [!TIP]
 >
-> Crush can configure itself via a builtin config skill. That is to say,
-> can generally just tell Crush want you want to configure using natural
+> Crash can configure itself via a builtin config skill. That is to say,
+> can generally just tell Crash want you want to configure using natural
 > language.
 >
-> If you're migrating from the old JSON format, you can also ask Crush to
+> If you're migrating from the old JSON format, you can also ask Crash to
 > convert the config for you.
 
-Crush is configured with Bash via a set of Crush-specific builtin commands. By
-default, global config lives at `~/.config/crush/crushrc` on Unix-like systems
-and `%USERPROFILE%\.config\crush\crushrc` on Windows. It works like a `.bashrc`:
-it runs when Crush starts and configures the agent.
+Crash is configured with Bash via a set of Crash-specific builtin commands. By
+default, global config lives at `~/.config/crash/crashrc` on Unix-like systems
+and `%USERPROFILE%\.config\crash\crashrc` on Windows. It works like a `.bashrc`:
+it runs when Crash starts and configures the agent.
 
 ```bash
 # Add Ollama.
@@ -57,9 +57,9 @@ provider add my-secret-provider \
 
 Two reasons:
 
-1. Crush ships with a first-class Bash interpreter, so we get the logic for
+1. Crash ships with a first-class Bash interpreter, so we get the logic for
    free.
-2. Ultimately, Crush needs to be able to configure itself, and command-based
+2. Ultimately, Crash needs to be able to configure itself, and command-based
    config allows both users and the agent to use the same tools.
 
 ## What about JSON?
@@ -70,42 +70,48 @@ be receiving new features. For more see [Legacy JSON](#legacy-json).
 ## Config versioning
 
 Not breaking the config API is really important to us! That said, you can
-target specific Crush versions with `$CRUSH_VERSION`:
+target specific Crash versions with `$CRASH_VERSION`:
 
 ```bash
-if [[ $CRUSH_VERSION == "0.85.*" ]]; then
+if [[ $CRASH_VERSION == "0.85.*" ]]; then
     option debug true
 fi
 ```
 
 ## Security
 
-Just like `crush.json`, `crushrc` is a trusted file. Guard it carefully and
+Just like `crash.json`, `crashrc` is a trusted file. Guard it carefully and
 don't download random configs without reading them first.
 
 ## Where config lives
 
-Crush looks for config in the following places, with lower numbers taking
+Crash looks for config in the following places, with lower numbers taking
 precedence:
 
 | Priority | Unix-like                        | Windows                           |
 | -------- | -------------------------------- | --------------------------------- |
-| 1        | `./.crushrc`                     | `.\.crushrc`                      |
-| 2        | `./crushrc`                      | `.\crushrc`                       |
-| 3        | `$XDG_CONFIG_HOME/crush/crushrc` | `%XDG_CONFIG_HOME%\crush\crushrc` |
+| 1        | `./.crashrc`                     | `.\.crashrc`                      |
+| 2        | `./crashrc`                      | `.\crashrc`                       |
+| 3        | `$XDG_CONFIG_HOME/crash/crashrc` | `%XDG_CONFIG_HOME%\crash\crashrc` |
 
-Legacy JSON uses `.crush.json` / `crush.json` in the same directories as the
+Legacy JSON uses `.crash.json` / `crash.json` in the same directories as the
 above. Everything found is merged, with project settings overriding global ones
-and `crushrc` overriding JSON in the same directory. If a folder has both, they
-merge and Crush logs a warning.
+and `crashrc` overriding JSON in the same directory. If a folder has both, they
+merge and Crash logs a warning.
 
-Data directories (`~/.local/share/crush` on Unix-like systems and
-`%LOCALAPPDATA%\crush` on Windows) contain machine-owned JSON state. Crush does
-not discover or execute a `crushrc` from those locations.
+Data directories (`~/.local/share/crash` on Unix-like systems and
+`%LOCALAPPDATA%\crash` on Windows) contain machine-owned JSON state. Crash does
+not discover or execute a `crashrc` from those locations.
+
+Crash was called Crush, and every crush name still works: `crushrc`,
+`crush.json`, `~/.config/crush`, `~/.local/share/crush`, a project's `.crush/`
+with its `crush.db`, and `CRUSH_*` variables. Where a crash one and a crush one
+both exist, the crash one wins; `~/.config/crash` and `~/.local/share/crash`
+take over only once they hold a config file.
 
 > [!NOTE]
-> Crush also stores state data in `$XDG_DATA_HOME/crush`
-> (`%LOCALAPPDATA%\crush` on Windows). This is application state, and should
+> Crash also stores state data in `$XDG_DATA_HOME/crash`
+> (`%LOCALAPPDATA%\crash` on Windows). This is application state, and should
 > not be edited by hand.
 
 ## Command Reference
@@ -122,7 +128,7 @@ Available Commands:
   lsp           Manage language servers
   hook          Manage hooks
   permissions   Configure tool permissions
-  option        Configure general Crush behavior
+  option        Configure general Crash behavior
 ```
 
 ### provider
@@ -192,7 +198,7 @@ Usage:
 ### model
 
 Manage custom models and the large/small model slots. Model references use the
-same `<provider>/<id>` form printed by `crush models`.
+same `<provider>/<id>` form printed by `crash models`.
 
 ```text
 Usage:
@@ -456,7 +462,7 @@ permissions deny bash
 
 ### option
 
-Configure general Crush behavior, paths, attribution, and the terminal UI.
+Configure general Crash behavior, paths, attribution, and the terminal UI.
 Boolean values are optional and default to `true`.
 
 ```text
@@ -477,11 +483,11 @@ Boolean Keys:
   auto-summarize                 automatically summarize long conversations
   provider-auto-update           update the provider catalog automatically
   default-providers              include built-in providers
-  attribution-generated-with     add the Generated with Crush line
+  attribution-generated-with     add the Generated with Crash line
 
 String Keys:
   data-directory string            directory for project data and state
-  initialize-as string             context filename created by crush init
+  initialize-as string             context filename created by crash init
   notifications string             notification style: auto, native, osc, bell,
                                    or disabled
   attribution-trailer-style string attribution trailer: none, co-authored-by,
@@ -545,7 +551,7 @@ Available Keys:
                                 always, or never
   exit-banner default|compact|none
                                 control the post-session banner: default shows
-                                the Crush logo, compact shows only the resume
+                                the Crash logo, compact shows only the resume
                                 hint, none hides it entirely
   completions-max-depth int     maximum directory depth shown by completions
   completions-max-items int     maximum items returned to completions
@@ -564,7 +570,7 @@ option ui completions-max-items 200
 
 > [!IMPORTANT]
 > These skill paths load by default — you do NOT need `skill-path`
-> for them: `.agents/skills`, `.crush/skills`, `.claude/skills`,
+> for them: `.agents/skills`, `.crash/skills`, `.claude/skills`,
 > `.cursor/skills`.
 
 > [!NOTE]
@@ -579,9 +585,9 @@ option ui completions-max-items 200
 Because it's Bash, a shared base config is just a `source`:
 
 ```bash
-# Unix-like: ~/.config/crush/crushrc
-# Windows:   %USERPROFILE%\.config\crush\crushrc
-source ~/team/crush-base.sh    # sets up providers, a few skills
+# Unix-like: ~/.config/crash/crashrc
+# Windows:   %USERPROFILE%\.config\crash\crashrc
+source ~/team/crash-base.sh    # sets up providers, a few skills
 
 # …but on this machine, drop a skill path the base added and add my own.
 option reset skill-path
@@ -593,7 +599,7 @@ script or pulled in via `source`. Later lines win, just like a shell.
 
 ## Legacy JSON
 
-`crush.json` is the original format and is now deprecated. We plan to support
+`crash.json` is the original format and is now deprecated. We plan to support
 it for the forseeable future, but new configuration options will only be added
 to Bash-based config.
 
@@ -613,11 +619,11 @@ to Bash-based config.
 For a full reference, See the [JSON schema](../../schema.json).
 
 In JSON, only selected string fields (API keys, URLs, MCP/LSP commands and args,
-headers) are shell-expanded at load time. In `crushrc` there's no such list —
+headers) are shell-expanded at load time. In `crashrc` there's no such list —
 it's all just Bash.
 
 Both formats are trusted code: they run with your shell privileges before the UI
-appears. Don't launch Crush in a directory whose config you haven't read.
+appears. Don't launch Crash in a directory whose config you haven't read.
 
 ---
 
