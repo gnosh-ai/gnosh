@@ -111,6 +111,24 @@ internal/
   simplifications)
 - **Dev**: `task dev` (runs with profiling enabled)
 
+## Test Against the Real Flow
+
+Passing tests do not prove a change works: a test can pass on an input the
+real program never produces. Before saying a change works:
+
+1. Build test inputs from what the real system produces. Find where the data
+   really comes from (who calls this code, and with what) and copy that,
+   instead of hand-building an input the new code happens to handle. For
+   example, tool results reach `crash run` in their own tool-role messages,
+   not inside the assistant message that made the call.
+2. Run the real thing once, the way a user would: `go build -o /tmp/crash .`
+   and run it (`/tmp/crash run "..." < /dev/null`, or the TUI), and look at
+   the result. A change to how Crash calls an outside program (ripgrep, git,
+   an LSP) is checked against that program, not a stub of it.
+3. Re-read the diff for side effects: what else does it now allow, skip or
+   break? Give anything that touches permissions, hooks, safety checks or
+   error handling a second look.
+
 ## Code Style Guidelines
 
 - **Imports**: Use `goimports` formatting, group stdlib, external, internal
