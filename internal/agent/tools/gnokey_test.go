@@ -338,3 +338,22 @@ func TestGnokeyTool_RejectsABadCommandBeforeAnything(t *testing.T) {
 	require.True(t, resp.IsError)
 	require.Contains(t, resp.Content, "run it themselves")
 }
+
+// TestGnokeySessionCommandsKeepTheirSubcommandOrder pins where the password
+// flag lands in a `maketx session <kind>` command. gnokey parses flags per
+// subcommand, so the flag has to sit after "session" and before the kind;
+// putting it after the kind, or at the end, is a flag gnokey's parser never
+// sees. The order below was run against a local chain and created a session.
+func TestGnokeySessionCommandsKeepTheirSubcommandOrder(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"create", "revoke", "revokeall"} {
+		cmd, err := parseGnokeyCommand("maketx session " + kind + " -pubkey gpub1x -gas-fee 1000000ugnot -chainid dev owner")
+		require.NoError(t, err)
+		require.True(t, cmd.signs, "a session command signs, so it needs the password")
+		require.Equal(t, "owner", cmd.key)
+		argv := cmd.argv()
+		require.Equal(t, []string{"maketx", "session", passwordStdinFlag, kind}, argv[:4],
+			"the flag belongs after the subcommand gnokey parses it for")
+		require.NotContains(t, cmd.display(), passwordStdinFlag)
+	}
+}
