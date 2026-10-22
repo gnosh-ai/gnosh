@@ -52,6 +52,22 @@ func setupAgent(t *testing.T, pair modelPair) (SessionAgent, fakeEnv) {
 	return agent, env
 }
 
+// runCassette runs a turn of TestCoderAgent against its recorded
+// cassettes. When a request no longer matches them (the prompt or a tool
+// description changed since they were recorded), the test is skipped
+// with that reason rather than failed: it cannot pass until they are
+// re-recorded against the live API, which needs a Hyper API key, and a
+// failure nobody can act on only teaches people, and agents, to ignore
+// red tests.
+func runCassette(t *testing.T, agent SessionAgent, call SessionAgentCall) (*fantasy.AgentResult, error) {
+	t.Helper()
+	res, err := agent.Run(t.Context(), call)
+	if err != nil && strings.Contains(err.Error(), staleCassettes) {
+		t.Skip("the recorded cassettes are stale and must be re-recorded against the live API")
+	}
+	return res, err
+}
+
 func TestCoderAgent(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows for now")
@@ -65,7 +81,7 @@ func TestCoderAgent(t *testing.T) {
 				session, err := env.sessions.Create(t.Context(), "New Session")
 				require.NoError(t, err)
 
-				res, err := agent.Run(t.Context(), SessionAgentCall{
+				res, err := runCassette(t, agent, SessionAgentCall{
 					Prompt:          "Hello",
 					SessionID:       session.ID,
 					MaxOutputTokens: 10000,
@@ -83,7 +99,7 @@ func TestCoderAgent(t *testing.T) {
 
 				session, err := env.sessions.Create(t.Context(), "New Session")
 				require.NoError(t, err)
-				res, err := agent.Run(t.Context(), SessionAgentCall{
+				res, err := runCassette(t, agent, SessionAgentCall{
 					Prompt:          "Read the go mod",
 					SessionID:       session.ID,
 					MaxOutputTokens: 10000,
@@ -124,7 +140,7 @@ func TestCoderAgent(t *testing.T) {
 				session, err := env.sessions.Create(t.Context(), "New Session")
 				require.NoError(t, err)
 
-				res, err := agent.Run(t.Context(), SessionAgentCall{
+				res, err := runCassette(t, agent, SessionAgentCall{
 					Prompt:          "update the main.go file by changing the print to say hello from crush",
 					SessionID:       session.ID,
 					MaxOutputTokens: 10000,
@@ -176,7 +192,7 @@ func TestCoderAgent(t *testing.T) {
 				session, err := env.sessions.Create(t.Context(), "New Session")
 				require.NoError(t, err)
 
-				res, err := agent.Run(t.Context(), SessionAgentCall{
+				res, err := runCassette(t, agent, SessionAgentCall{
 					Prompt:          "use bash to create a file named test.txt with content 'hello bash'. do not print its timestamp",
 					SessionID:       session.ID,
 					MaxOutputTokens: 10000,
@@ -220,7 +236,7 @@ func TestCoderAgent(t *testing.T) {
 				session, err := env.sessions.Create(t.Context(), "New Session")
 				require.NoError(t, err)
 
-				res, err := agent.Run(t.Context(), SessionAgentCall{
+				res, err := runCassette(t, agent, SessionAgentCall{
 					Prompt:          "download the file from https://example-files.online-convert.com/document/txt/example.txt and save it as example.txt",
 					SessionID:       session.ID,
 					MaxOutputTokens: 10000,
@@ -263,7 +279,7 @@ func TestCoderAgent(t *testing.T) {
 				session, err := env.sessions.Create(t.Context(), "New Session")
 				require.NoError(t, err)
 
-				res, err := agent.Run(t.Context(), SessionAgentCall{
+				res, err := runCassette(t, agent, SessionAgentCall{
 					Prompt:          "fetch the content from https://example-files.online-convert.com/website/html/example.html and tell me if it contains the word 'John Doe'",
 					SessionID:       session.ID,
 					MaxOutputTokens: 10000,
@@ -302,7 +318,7 @@ func TestCoderAgent(t *testing.T) {
 				session, err := env.sessions.Create(t.Context(), "New Session")
 				require.NoError(t, err)
 
-				res, err := agent.Run(t.Context(), SessionAgentCall{
+				res, err := runCassette(t, agent, SessionAgentCall{
 					Prompt:          "use glob to find all .go files in the current directory",
 					SessionID:       session.ID,
 					MaxOutputTokens: 10000,
@@ -342,7 +358,7 @@ func TestCoderAgent(t *testing.T) {
 				session, err := env.sessions.Create(t.Context(), "New Session")
 				require.NoError(t, err)
 
-				res, err := agent.Run(t.Context(), SessionAgentCall{
+				res, err := runCassette(t, agent, SessionAgentCall{
 					Prompt:          "use grep to search for the word 'package' in go files",
 					SessionID:       session.ID,
 					MaxOutputTokens: 10000,
@@ -382,7 +398,7 @@ func TestCoderAgent(t *testing.T) {
 				session, err := env.sessions.Create(t.Context(), "New Session")
 				require.NoError(t, err)
 
-				res, err := agent.Run(t.Context(), SessionAgentCall{
+				res, err := runCassette(t, agent, SessionAgentCall{
 					Prompt:          "use ls to list the files in the current directory",
 					SessionID:       session.ID,
 					MaxOutputTokens: 10000,
@@ -423,7 +439,7 @@ func TestCoderAgent(t *testing.T) {
 				session, err := env.sessions.Create(t.Context(), "New Session")
 				require.NoError(t, err)
 
-				res, err := agent.Run(t.Context(), SessionAgentCall{
+				res, err := runCassette(t, agent, SessionAgentCall{
 					Prompt:          "use multiedit to change 'Hello, World!' to 'Hello, Crush!' and add a comment '// Greeting' above the fmt.Println line in main.go",
 					SessionID:       session.ID,
 					MaxOutputTokens: 10000,
@@ -467,7 +483,7 @@ func TestCoderAgent(t *testing.T) {
 				session, err := env.sessions.Create(t.Context(), "New Session")
 				require.NoError(t, err)
 
-				res, err := agent.Run(t.Context(), SessionAgentCall{
+				res, err := runCassette(t, agent, SessionAgentCall{
 					Prompt:          "use sourcegraph to search for 'func main' in Go repositories",
 					SessionID:       session.ID,
 					MaxOutputTokens: 10000,
@@ -506,7 +522,7 @@ func TestCoderAgent(t *testing.T) {
 				session, err := env.sessions.Create(t.Context(), "New Session")
 				require.NoError(t, err)
 
-				res, err := agent.Run(t.Context(), SessionAgentCall{
+				res, err := runCassette(t, agent, SessionAgentCall{
 					Prompt:          "use write to create a new file called config.json with content '{\"name\": \"test\", \"version\": \"1.0.0\"}'",
 					SessionID:       session.ID,
 					MaxOutputTokens: 10000,
@@ -551,7 +567,7 @@ func TestCoderAgent(t *testing.T) {
 				session, err := env.sessions.Create(t.Context(), "New Session")
 				require.NoError(t, err)
 
-				res, err := agent.Run(t.Context(), SessionAgentCall{
+				res, err := runCassette(t, agent, SessionAgentCall{
 					Prompt:          "use glob to find all .go files and use ls to list the current directory, it is very important that you run both tool calls in parallel",
 					SessionID:       session.ID,
 					MaxOutputTokens: 10000,

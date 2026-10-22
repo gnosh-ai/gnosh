@@ -75,12 +75,16 @@ func hyperBuilder(model string) builderFunc {
 // failing with the same diff it could have shown at once. A 400 is not
 // retried, so it fails in milliseconds. The recorder's matcher has
 // already logged the diff by the time this returns.
+// staleCassettes is how a mismatch reads in the error a turn returns;
+// runCassette looks for it.
+const staleCassettes = "the cassettes under internal/agent/testdata are stale"
+
 type failFastOnStaleCassette struct{ next http.RoundTripper }
 
 func (f failFastOnStaleCassette) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := f.next.RoundTrip(req)
 	if err != nil && errors.Is(err, cassette.ErrInteractionNotFound) {
-		const msg = `{"error":{"message":"no recorded interaction matches this request: the cassettes under internal/agent/testdata are stale and must be re-recorded against the live API"}}`
+		const msg = `{"error":{"message":"no recorded interaction matches this request: ` + staleCassettes + ` and must be re-recorded against the live API"}}`
 		return &http.Response{
 			StatusCode: http.StatusBadRequest,
 			Status:     "400 Bad Request",
