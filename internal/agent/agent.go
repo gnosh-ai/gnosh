@@ -920,6 +920,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 
 	var stepMessages []fantasy.Message
 	var shouldSummarize bool
+	// The tool calls the agent was caught repeating, when that is what
+	// stopped the run; see loopContinuation.
+	var loopCalls []fantasy.ToolCallContent
 	sanitizedToolCalls := make(map[string]bool)
 	// Full names of tool calls that completed without error this turn.
 	// Written only from the streaming callbacks (which run sequentially)
@@ -1201,7 +1204,11 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				return false
 			},
 			func(steps []fantasy.StepResult) bool {
-				return hasRepeatedToolCalls(steps, loopDetectionWindowSize, loopDetectionMaxRepeats)
+				repeated, ok := repeatedToolCalls(steps, loopDetectionWindowSize, loopDetectionMaxRepeats)
+				if ok {
+					loopCalls = repeated
+				}
+				return ok
 			},
 		},
 	})
@@ -1310,27 +1317,37 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		}
 	}
 
-	// Stop hooks get the last word on whether the turn is really over.
-	// One that denies re-queues this same call (same RunID) with the
-	// hook's reason as the prompt, so the queue handoff below puts the
-	// agent back to work instead of ending the turn. Skipped when
-	// summarization already queued a continuation of its own.
-	stopHookContinued := false
+	// A turn stopped because the agent kept repeating itself is not over:
+	// it re-queues this same call (same RunID), telling the agent what it
+	// was doing, so the queue handoff below puts it back to work. Stop
+	// hooks get the last word on whether a turn that did finish is really
+	// over; one that denies re-queues the call the same way, with the
+	// hook's reason as the prompt. Neither applies when summarization
+	// already queued a continuation of its own.
+	continued := false
 	if !shouldSummarize && currentAssistant != nil {
-		if next, blocked := a.stopHookContinuation(ctx, call, currentAssistant.Content().String()); blocked {
-			stopHookContinued = true
+		if loopCalls != nil {
+			slog.Warn("Agent repeated the same tool calls; telling it to change approach",
+				"session_id", call.SessionID,
+				"tool", loopCalls[0].ToolName,
+			)
+			a.queueContinuation(loopContinuation(call, loopCalls))
+			continued = true
+		} else if next, blocked := a.stopHookContinuation(ctx, call, currentAssistant.Content().String()); blocked {
 			a.queueContinuation(next)
+			continued = true
 		}
 	}
 
 	// Route the finished turn's response back to the channel it came
 	// from, unless the turn was cut short for summarization with work
 	// still pending — the queued continuation carries the channel and
-	// replies when it actually finishes. A turn a Stop hook refused to
-	// end is likewise not finished, so its continuation replies instead.
-	// Runs before the busy state is released so a follow-up push queued
-	// behind this turn cannot overtake its reply.
-	if currentAssistant != nil && !stopHookContinued && (!shouldSummarize || len(currentAssistant.ToolCalls()) == 0) {
+	// replies when it actually finishes. A turn continued for repeating
+	// itself, or that a Stop hook refused to end, is likewise not
+	// finished, so its continuation replies instead. Runs before the busy
+	// state is released so a follow-up push queued behind this turn
+	// cannot overtake its reply.
+	if currentAssistant != nil && !continued && (!shouldSummarize || len(currentAssistant.ToolCalls()) == 0) {
 		a.sendChannelReply(ctx, call, currentAssistant.Content().String(), completedToolCalls)
 	}
 
@@ -1343,7 +1360,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 
 	// Send notification that agent has finished its turn (skip for
 	// nested/non-interactive sessions).
-	if !call.NonInteractive && !stopHookContinued && a.notify != nil {
+	if !call.NonInteractive && !continued && a.notify != nil {
 		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 			SessionID:    call.SessionID,
 			SessionTitle: currentSession.Title,

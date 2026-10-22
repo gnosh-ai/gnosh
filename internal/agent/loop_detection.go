@@ -3,7 +3,9 @@ package agent
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
+	"strings"
 
 	"charm.land/fantasy"
 )
@@ -13,12 +15,13 @@ const (
 	loopDetectionMaxRepeats = 5
 )
 
-// hasRepeatedToolCalls checks whether the agent is stuck in a loop by looking
-// at recent steps. It examines the last windowSize steps and returns true if
-// any tool-call signature appears more than maxRepeats times.
-func hasRepeatedToolCalls(steps []fantasy.StepResult, windowSize, maxRepeats int) bool {
+// repeatedToolCalls checks whether the agent is stuck in a loop by looking
+// at recent steps. It examines the last windowSize steps and, if any
+// tool-call signature appears more than maxRepeats times, returns the tool
+// calls of the step being repeated.
+func repeatedToolCalls(steps []fantasy.StepResult, windowSize, maxRepeats int) ([]fantasy.ToolCallContent, bool) {
 	if len(steps) < windowSize {
-		return false
+		return nil, false
 	}
 
 	window := steps[len(steps)-windowSize:]
@@ -31,11 +34,53 @@ func hasRepeatedToolCalls(steps []fantasy.StepResult, windowSize, maxRepeats int
 		}
 		counts[sig]++
 		if counts[sig] > maxRepeats {
-			return true
+			return step.Content.ToolCalls(), true
 		}
 	}
 
-	return false
+	return nil, false
+}
+
+// loopContinuation is the follow-up queued for a turn that was stopped
+// because the agent kept making the same tool calls and getting the same
+// results. Ending the turn there left nothing to show for it: a sub-agent
+// on the AI box re-read the same eight lines of a file six times running,
+// was stopped, and handed its parent no output at all after 45 minutes of
+// work. Told what it is doing, the agent can use what it already has or
+// change approach.
+//
+// Like a Stop hook continuation, it is this same call with its prompt
+// replaced, so it keeps the turn's RunID: the turn is not over. There is
+// deliberately no cap on how often it happens, as with Stop hooks; each
+// time, the loop detector needs a fresh window of steps before it can
+// fire again, and the user can always cancel.
+func loopContinuation(call SessionAgentCall, repeated []fantasy.ToolCallContent) SessionAgentCall {
+	next := call
+	next.Prompt = loopNudgePrompt(repeated)
+	// Generated, not typed: keep it out of the transcript the user reads.
+	next.HiddenUserMessage = true
+	// Attachments belong to the user's original prompt and were already
+	// delivered on this turn.
+	next.Attachments = nil
+	// A pending Stop hook checkpoint question is no longer the latest
+	// prompt, so a stop marker in the answer to this one must not count.
+	next.stopHookReflecting = false
+	return next
+}
+
+func loopNudgePrompt(repeated []fantasy.ToolCallContent) string {
+	var calls strings.Builder
+	for _, tc := range repeated {
+		fmt.Fprintf(&calls, "- %s %s\n", tc.ToolName, compactReason(tc.Input))
+	}
+	return fmt.Sprintf(
+		"You have made the same tool call %d times in your last %d steps and got "+
+			"the same result every time:\n\n%s\n"+
+			"Making it again will not tell you anything new, so do not repeat it. "+
+			"Use what it already returned: if that is enough, give your answer now; "+
+			"if not, take a different approach.",
+		loopDetectionMaxRepeats+1, loopDetectionWindowSize, calls.String(),
+	)
 }
 
 // getToolInteractionSignature computes a hash signature for the tool
