@@ -715,6 +715,24 @@ disable-model-invocation: true
 
 Skills with `disable-model-invocation` won't appear in the model's available skills list but can still be invoked manually by users.
 
+### Gno and gno.land
+
+Crash knows [Gno](https://gno.land). A builtin `gno` skill teaches the agent
+the language, the toolchain (`gno test`, `gno lint`, `gnodev`), the networks,
+and how to deploy and call realms; it loads itself when a task touches `.gno`
+files, `gnomod.toml`, gnokey or gnodev.
+
+Transactions are signed with a key's password, which the model must never
+see. The `gnokey` tool runs gnokey for the agent: it shows you the exact
+command, then asks for the password in a masked prompt whose answer goes
+straight to gnokey's standard input. Queries need no password. Key
+management (`gnokey add` and friends) stays in your own terminal. A
+non-interactive run (`crash run`) has no one to type a password, so the tool
+is absent there and the agent prints the command for you instead.
+
+Install [gnopls](https://github.com/gnoverse/gnopls) and Crash starts it for
+`.gno` files on its own, like the other language servers it knows.
+
 ### Desktop notifications
 
 Crash sends desktop notifications when a tool call requires permission and when
