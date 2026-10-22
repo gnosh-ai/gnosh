@@ -140,3 +140,38 @@ func TestMapEnv_EnvFormat(t *testing.T) {
 	require.True(t, found["equals"], "Should handle values with equals signs")
 	require.True(t, found["spaces"], "Should handle values with spaces")
 }
+
+// While Crush is renamed Crash, a CRASH_ setting falls back to the CRUSH_
+// one it replaces, and wins when both are set.
+func TestLookupEnvFallsBackToTheNameBeforeTheRename(t *testing.T) {
+	t.Run("only the old name", func(t *testing.T) {
+		t.Setenv("CRUSH_ENV_TEST_SETTING", "old")
+		v, ok := LookupEnv("CRASH_ENV_TEST_SETTING")
+		require.True(t, ok)
+		require.Equal(t, "old", v)
+		require.Equal(t, "old", Getenv("CRASH_ENV_TEST_SETTING"))
+	})
+	t.Run("both names, the new one wins", func(t *testing.T) {
+		t.Setenv("CRUSH_ENV_TEST_SETTING", "old")
+		t.Setenv("CRASH_ENV_TEST_SETTING", "new")
+		require.Equal(t, "new", Getenv("CRASH_ENV_TEST_SETTING"))
+	})
+	t.Run("the new name set empty still wins", func(t *testing.T) {
+		t.Setenv("CRUSH_ENV_TEST_SETTING", "1")
+		t.Setenv("CRASH_ENV_TEST_SETTING", "")
+		v, ok := LookupEnv("CRASH_ENV_TEST_SETTING")
+		require.True(t, ok)
+		require.Empty(t, v)
+	})
+	t.Run("neither name", func(t *testing.T) {
+		_, ok := LookupEnv("CRASH_ENV_TEST_UNSET")
+		require.False(t, ok)
+	})
+	t.Run("other names have no fallback", func(t *testing.T) {
+		t.Setenv("CRUSH_ENV_TEST_OTHER", "x")
+		_, ok := LookupEnv("ENV_TEST_OTHER")
+		require.False(t, ok)
+		t.Setenv("ENV_TEST_PLAIN", "plain")
+		require.Equal(t, "plain", Getenv("ENV_TEST_PLAIN"))
+	})
+}

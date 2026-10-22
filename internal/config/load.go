@@ -195,32 +195,34 @@ func mustMarshalConfig(cfg *Config) []byte {
 	return data
 }
 
+// PushPopCrushEnv lets a CRASH_ or CRUSH_ prefixed variable stand in for
+// the unprefixed one while providers are configured, so that, e.g.,
+// CRASH_OPENAI_API_KEY overrides OPENAI_API_KEY for this program alone.
+// CRASH_, the name after the rename, wins over CRUSH_. The returned func
+// restores the previous values.
 func PushPopCrushEnv() func() {
-	var found []string
-	for _, ev := range os.Environ() {
-		if strings.HasPrefix(ev, "CRUSH_") {
-			pair := strings.SplitN(ev, "=", 2)
-			if len(pair) != 2 {
+	overrides := make(map[string]string)
+	for _, prefix := range []string{"CRUSH_", "CRASH_"} { // the later prefix wins
+		for _, ev := range os.Environ() {
+			name, value, ok := strings.Cut(ev, "=")
+			if !ok {
 				continue
 			}
-			found = append(found, strings.TrimPrefix(pair[0], "CRUSH_"))
+			if rest, ok := strings.CutPrefix(name, prefix); ok && rest != "" {
+				overrides[rest] = value
+			}
 		}
 	}
 	backups := make(map[string]string)
-	for _, ev := range found {
-		backups[ev] = os.Getenv(ev)
+	for name, value := range overrides {
+		backups[name] = os.Getenv(name)
+		os.Setenv(name, value)
 	}
-
-	for _, ev := range found {
-		os.Setenv(ev, os.Getenv("CRUSH_"+ev))
-	}
-
-	restore := func() {
+	return func() {
 		for k, v := range backups {
 			os.Setenv(k, v)
 		}
 	}
-	return restore
 }
 
 func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env env.Env, resolver VariableResolver, knownProviders []catwalk.Provider) error {
@@ -632,11 +634,11 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	// Project specific skills dirs.
 	c.Options.SkillsPaths = append(c.Options.SkillsPaths, ProjectSkillsDir(workingDir)...)
 
-	if str, ok := os.LookupEnv("CRUSH_DISABLE_PROVIDER_AUTO_UPDATE"); ok {
+	if str, ok := env.LookupEnv("CRASH_DISABLE_PROVIDER_AUTO_UPDATE"); ok {
 		c.Options.DisableProviderAutoUpdate, _ = strconv.ParseBool(str)
 	}
 
-	if str, ok := os.LookupEnv("CRUSH_DISABLE_DEFAULT_PROVIDERS"); ok {
+	if str, ok := env.LookupEnv("CRASH_DISABLE_DEFAULT_PROVIDERS"); ok {
 		c.Options.DisableDefaultProviders, _ = strconv.ParseBool(str)
 	}
 
@@ -1211,7 +1213,7 @@ func migrateDisableNotifications() {
 
 // GlobalConfig returns the global configuration file path for the application.
 func GlobalConfig() string {
-	if crushGlobal := os.Getenv("CRUSH_GLOBAL_CONFIG"); crushGlobal != "" {
+	if crushGlobal := env.Getenv("CRASH_GLOBAL_CONFIG"); crushGlobal != "" {
 		return filepath.Join(crushGlobal, fmt.Sprintf("%s.json", appName))
 	}
 	return filepath.Join(home.Config(), appName, fmt.Sprintf("%s.json", appName))
@@ -1234,7 +1236,7 @@ func isShellConfig(path string) bool {
 // GlobalCacheDir returns the path to the global cache directory for the
 // application.
 func GlobalCacheDir() string {
-	if crushCache := os.Getenv("CRUSH_CACHE_DIR"); crushCache != "" {
+	if crushCache := env.Getenv("CRASH_CACHE_DIR"); crushCache != "" {
 		return crushCache
 	}
 	if xdgCacheHome := os.Getenv("XDG_CACHE_HOME"); xdgCacheHome != "" {
@@ -1258,7 +1260,7 @@ func ProjectConfigs(cwd string) []string {
 // GlobalConfigData returns the path to the main data directory for the application.
 // this config is used when the app overrides configurations instead of updating the global config.
 func GlobalConfigData() string {
-	if crushData := os.Getenv("CRUSH_GLOBAL_DATA"); crushData != "" {
+	if crushData := env.Getenv("CRASH_GLOBAL_DATA"); crushData != "" {
 		return filepath.Join(crushData, fmt.Sprintf("%s.json", appName))
 	}
 	if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
@@ -1364,7 +1366,7 @@ func projectBoundary(dir string) string {
 // Skills in these directories are auto-discovered and their files can be read
 // without permission prompts.
 func GlobalSkillsDirs() []string {
-	if crushSkills := os.Getenv("CRUSH_SKILLS_DIR"); crushSkills != "" {
+	if crushSkills := env.Getenv("CRASH_SKILLS_DIR"); crushSkills != "" {
 		return []string{crushSkills}
 	}
 

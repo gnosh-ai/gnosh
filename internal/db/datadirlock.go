@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/env"
 	"github.com/charmbracelet/crush/internal/lock"
 	"github.com/charmbracelet/crush/internal/version"
 )
@@ -45,7 +46,7 @@ type dataDirLock struct {
 // includes whatever owner info that process wrote.
 //
 // Acquisition is skipped (returning a no-op lock) when
-// CRUSH_SKIP_DATADIR_LOCK is set to a truthy value. This is intended
+// CRASH_SKIP_DATADIR_LOCK is set to a truthy value. This is intended
 // as an escape hatch for hostile filesystems that do not implement
 // advisory locking; it should not be used in normal operation.
 func acquireDataDirLock(dataDir string) (*dataDirLock, error) {
@@ -81,7 +82,7 @@ func acquireDataDirLock(dataDir string) (*dataDirLock, error) {
 
 // skipDataDirLock reports whether the data-dir lock should be bypassed.
 func skipDataDirLock() bool {
-	v, _ := strconv.ParseBool(os.Getenv("CRUSH_SKIP_DATADIR_LOCK"))
+	v, _ := strconv.ParseBool(env.Getenv("CRASH_SKIP_DATADIR_LOCK"))
 	return v
 }
 

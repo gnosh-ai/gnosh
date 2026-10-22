@@ -69,6 +69,9 @@ the input/output contract is identical regardless of language.
 | `CRUSH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
 | `CRUSH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` if an earlier `Stop` hook is why the turn is still running |
 
+Each is also set under its `CRASH_` name (`CRASH_EVENT`, ...), the name after
+the rename; either works.
+
 **JSON on stdin:**
 
 ```json

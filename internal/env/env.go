@@ -2,6 +2,7 @@ package env
 
 import (
 	"os"
+	"strings"
 )
 
 type Env interface {
@@ -50,4 +51,24 @@ func NewFromMap(m map[string]string) Env {
 		m = make(map[string]string)
 	}
 	return &mapEnv{m: m}
+}
+
+// LookupEnv is os.LookupEnv for the program's own settings while it is
+// renamed from Crush to Crash: a CRASH_ name that is not set falls back to
+// the CRUSH_ name it replaces, so existing setups keep working, and the
+// CRASH_ name wins when both are set. Other names are looked up as given.
+func LookupEnv(key string) (string, bool) {
+	if v, ok := os.LookupEnv(key); ok {
+		return v, true
+	}
+	if name, ok := strings.CutPrefix(key, "CRASH_"); ok {
+		return os.LookupEnv("CRUSH_" + name)
+	}
+	return "", false
+}
+
+// Getenv is [LookupEnv] without the presence flag, like os.Getenv.
+func Getenv(key string) string {
+	v, _ := LookupEnv(key)
+	return v
 }

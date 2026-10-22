@@ -188,17 +188,22 @@ func TestBuildEnv(t *testing.T) {
 		}
 	}
 
-	require.Equal(t, EventPreToolUse, envMap["CRUSH_EVENT"])
-	require.Equal(t, "bash", envMap["CRUSH_TOOL_NAME"])
-	require.Equal(t, "sess-1", envMap["CRUSH_SESSION_ID"])
-	require.Equal(t, "/work", envMap["CRUSH_CWD"])
-	require.Equal(t, "/project", envMap["CRUSH_PROJECT_DIR"])
-	require.Equal(t, "ls", envMap["CRUSH_TOOL_INPUT_COMMAND"])
-	require.Equal(t, "/tmp/f.txt", envMap["CRUSH_TOOL_INPUT_FILE_PATH"])
+	// Each variable is set under its CRASH_ name and under the CRUSH_ name
+	// that hooks written before the rename read.
+	for _, prefix := range []string{"CRASH_", "CRUSH_"} {
+		require.Equal(t, EventPreToolUse, envMap[prefix+"EVENT"])
+		require.Equal(t, "bash", envMap[prefix+"TOOL_NAME"])
+		require.Equal(t, "sess-1", envMap[prefix+"SESSION_ID"])
+		require.Equal(t, "/work", envMap[prefix+"CWD"])
+		require.Equal(t, "/project", envMap[prefix+"PROJECT_DIR"])
+		require.Equal(t, "ls", envMap[prefix+"TOOL_INPUT_COMMAND"])
+		require.Equal(t, "/tmp/f.txt", envMap[prefix+"TOOL_INPUT_FILE_PATH"])
+	}
 
 	// Shared Crush markers must be present so hook-authored scripts can
 	// detect they're running under Crush the same way bash-tool-invoked
 	// scripts can.
+	require.Equal(t, "1", envMap["CRASH"])
 	require.Equal(t, "1", envMap["CRUSH"])
 	require.Equal(t, "crush", envMap["AGENT"])
 	require.Equal(t, "crush", envMap["AI_AGENT"])

@@ -304,8 +304,11 @@ considered deprecated. See: [the config docs](./docs/config/) for details.
 > [!TIP]
 > You can override the user and data config locations by setting:
 >
-> - `CRUSH_GLOBAL_CONFIG`
-> - `CRUSH_GLOBAL_DATA`
+> - `CRASH_GLOBAL_CONFIG`
+> - `CRASH_GLOBAL_DATA`
+>
+> Every `CRUSH_` environment variable in this document also works under its
+> `CRASH_` name, the name after the rename; when both are set, `CRASH_` wins.
 
 As an additional note, Crush also stores ephemeral data, such as application
 state, in one additional location. This is state and should not be edited by

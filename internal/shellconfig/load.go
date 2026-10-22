@@ -41,9 +41,10 @@ func LoadShellConfig(ctx context.Context, path string, src []byte) ([]byte, erro
 
 	cwd := filepath.Dir(path)
 
-	// Expose the running Crush version so scripts can feature-detect, e.g.
-	// [[ "$CRUSH_VERSION" == "devel" ]] or branch on the release.
-	env := append(os.Environ(), "CRUSH_VERSION="+version.Version)
+	// Expose the running version so scripts can feature-detect, e.g.
+	// [[ "$CRASH_VERSION" == "devel" ]] or branch on the release; scripts
+	// written before the rename read it as CRUSH_VERSION.
+	env := append(os.Environ(), "CRASH_VERSION="+version.Version, "CRUSH_VERSION="+version.Version)
 
 	err := shell.Run(runCtx, shell.RunOptions{
 		Command: string(src),

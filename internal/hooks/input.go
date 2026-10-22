@@ -86,7 +86,7 @@ func BuildStopEnv(sessionID, cwd, projectDir string, stopHookActive bool) []stri
 	if stopHookActive {
 		active = "1"
 	}
-	return append(env, fmt.Sprintf("CRUSH_STOP_HOOK_ACTIVE=%s", active))
+	return append(env, hookVar("STOP_HOOK_ACTIVE", active)...)
 }
 
 // BuildEnv constructs the environment variable slice for a hook command.
@@ -94,26 +94,29 @@ func BuildStopEnv(sessionID, cwd, projectDir string, stopHookActive bool) []stri
 func BuildEnv(eventName, toolName, sessionID, cwd, projectDir, toolInputJSON string) []string {
 	env := os.Environ()
 	env = append(env, shell.CrushEnvMarkers()...)
-	env = append(
-		env,
-		fmt.Sprintf("CRUSH_EVENT=%s", eventName),
-		fmt.Sprintf("CRUSH_TOOL_NAME=%s", toolName),
-		fmt.Sprintf("CRUSH_SESSION_ID=%s", sessionID),
-		fmt.Sprintf("CRUSH_CWD=%s", cwd),
-		fmt.Sprintf("CRUSH_PROJECT_DIR=%s", projectDir),
-	)
+	env = append(env, hookVar("EVENT", eventName)...)
+	env = append(env, hookVar("TOOL_NAME", toolName)...)
+	env = append(env, hookVar("SESSION_ID", sessionID)...)
+	env = append(env, hookVar("CWD", cwd)...)
+	env = append(env, hookVar("PROJECT_DIR", projectDir)...)
 
 	// Extract tool-specific env vars from the JSON input.
 	if toolInputJSON != "" {
 		if cmd := gjson.Get(toolInputJSON, "command"); cmd.Exists() {
-			env = append(env, fmt.Sprintf("CRUSH_TOOL_INPUT_COMMAND=%s", cmd.String()))
+			env = append(env, hookVar("TOOL_INPUT_COMMAND", cmd.String())...)
 		}
 		if fp := gjson.Get(toolInputJSON, "file_path"); fp.Exists() {
-			env = append(env, fmt.Sprintf("CRUSH_TOOL_INPUT_FILE_PATH=%s", fp.String()))
+			env = append(env, hookVar("TOOL_INPUT_FILE_PATH", fp.String())...)
 		}
 	}
 
 	return env
+}
+
+// hookVar sets a hook's environment variable under its CRASH_ name and
+// under the CRUSH_ name that hooks written before the rename read.
+func hookVar(name, value string) []string {
+	return []string{"CRASH_" + name + "=" + value, "CRUSH_" + name + "=" + value}
 }
 
 // parseStdout parses the JSON output from a hook command's stdout.

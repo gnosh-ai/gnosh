@@ -305,6 +305,11 @@ The available environment variables are:
 | `CRUSH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
 | `CRUSH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` when the turn is only still running because an earlier `Stop` hook blocked it, else `0`. |
 
+Crush is being renamed Crash, so every `CRUSH_` variable above is also set
+under its `CRASH_` name (`CRASH_EVENT`, `CRASH_TOOL_NAME`, and so on), and
+`CRASH=1` beside `CRUSH=1`. Either works; the `CRUSH_` names stay for hooks
+written before the rename.
+
 The `CRUSH`, `AGENT`, and `AI_AGENT` markers are also set by the `bash`
 tool, so a script can detect "am I running under Crush?" the same way in
 either context.

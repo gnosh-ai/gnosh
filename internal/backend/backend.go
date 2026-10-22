@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -19,6 +18,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/db"
+	"github.com/charmbracelet/crush/internal/env"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/util"
@@ -57,7 +57,7 @@ var DefaultCreateGrace = 30 * time.Second
 // new client can attach to — or create a workspace on — a server that is
 // already tearing down, and then observe its coder agent as "offline".
 // Any workspace create within the window cancels the pending shutdown.
-// Overridable via CRUSH_SERVER_IDLE_TIMEOUT (seconds; 0 restores the
+// Overridable via CRASH_SERVER_IDLE_TIMEOUT (seconds; 0 restores the
 // old shut-down-immediately behavior).
 var DefaultIdleShutdownDelay = 60 * time.Second
 
@@ -68,7 +68,7 @@ var DefaultIdleShutdownDelay = 60 * time.Second
 // timeout) into a permanently lost workspace: the client's reconnect comes
 // back milliseconds later to an ID the server no longer knows. A client
 // that released its claim first (a clean exit) skips the grace. Overridable
-// via CRUSH_SERVER_DETACH_GRACE (seconds; 0 restores immediate teardown).
+// via CRASH_SERVER_DETACH_GRACE (seconds; 0 restores immediate teardown).
 var DefaultDetachGrace = 10 * time.Second
 
 // ShutdownFunc is called when the backend needs to trigger a server
@@ -282,16 +282,16 @@ func New(ctx context.Context, cfg *config.ConfigStore, shutdownFn ShutdownFunc) 
 		shutdownFn:  shutdownFn,
 		createGrace: DefaultCreateGrace,
 		lingerDelay: idleShutdownDelayFromEnv(),
-		detachGrace: durationFromEnv("CRUSH_SERVER_DETACH_GRACE", DefaultDetachGrace),
+		detachGrace: durationFromEnv("CRASH_SERVER_DETACH_GRACE", DefaultDetachGrace),
 	}
 	b.startChannelRouter()
 	return b
 }
 
 // idleShutdownDelayFromEnv returns the idle-shutdown delay, honoring a
-// CRUSH_SERVER_IDLE_TIMEOUT override (in seconds; 0 disables lingering).
+// CRASH_SERVER_IDLE_TIMEOUT override (in seconds; 0 disables lingering).
 func idleShutdownDelayFromEnv() time.Duration {
-	return durationFromEnv("CRUSH_SERVER_IDLE_TIMEOUT", DefaultIdleShutdownDelay)
+	return durationFromEnv("CRASH_SERVER_IDLE_TIMEOUT", DefaultIdleShutdownDelay)
 }
 
 // durationFromEnv reads a whole number of seconds from the named
@@ -299,7 +299,7 @@ func idleShutdownDelayFromEnv() time.Duration {
 // unparseable. Zero is a meaningful value for both lifecycle windows it
 // configures, so it is accepted.
 func durationFromEnv(name string, def time.Duration) time.Duration {
-	if v := os.Getenv(name); v != "" {
+	if v := env.Getenv(name); v != "" {
 		if secs, err := strconv.Atoi(v); err == nil && secs >= 0 {
 			return time.Duration(secs) * time.Second
 		}

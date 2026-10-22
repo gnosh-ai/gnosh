@@ -251,6 +251,9 @@ Event names are case-insensitive and accept snake_case: `PreToolUse`,
 | `CRUSH_TOOL_INPUT_COMMAND`   | Value of `command` from tool input (if present)   |
 | `CRUSH_TOOL_INPUT_FILE_PATH` | Value of `file_path` from tool input (if present) |
 
+Each is also set under its `CRASH_` name (`CRASH_EVENT`, ...), the name after
+the rename; either works.
+
 ### Hook output
 
 **Exit code 0** — hook succeeded. Stdout is parsed as JSON:

@@ -308,22 +308,27 @@ fi`
 	require.Contains(t, providers, "anthropic")
 }
 
-// TestLoadShellConfig_CrushVersionEnv verifies that CRUSH_VERSION is exposed
-// to the script so it can feature-detect the running Crush version.
+// TestLoadShellConfig_CrushVersionEnv verifies that the running version is
+// exposed to the script so it can feature-detect it, as CRASH_VERSION and as
+// CRUSH_VERSION, its name before the rename.
 func TestLoadShellConfig_CrushVersionEnv(t *testing.T) {
-	dir := t.TempDir()
-	script := `provider add openai --api-key "$CRUSH_VERSION"`
-	path := filepath.Join(dir, "crushrc")
+	for _, name := range []string{"CRASH_VERSION", "CRUSH_VERSION"} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			script := `provider add openai --api-key "$` + name + `"`
+			path := filepath.Join(dir, "crushrc")
 
-	jsonBytes, err := LoadShellConfig(t.Context(), path, []byte(script))
-	require.NoError(t, err)
+			jsonBytes, err := LoadShellConfig(t.Context(), path, []byte(script))
+			require.NoError(t, err)
 
-	var result map[string]any
-	require.NoError(t, json.Unmarshal(jsonBytes, &result))
+			var result map[string]any
+			require.NoError(t, json.Unmarshal(jsonBytes, &result))
 
-	providers := result["providers"].(map[string]any)
-	openai := providers["openai"].(map[string]any)
-	require.Equal(t, version.Version, openai["api_key"])
+			providers := result["providers"].(map[string]any)
+			openai := providers["openai"].(map[string]any)
+			require.Equal(t, version.Version, openai["api_key"])
+		})
+	}
 }
 
 // TestLoadShellConfig_CommandSubstitution verifies that $(...) works in config values.

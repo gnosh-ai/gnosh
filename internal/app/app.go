@@ -24,6 +24,7 @@ import (
 	"github.com/charmbracelet/crush/internal/clipboard"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/db"
+	"github.com/charmbracelet/crush/internal/env"
 	"github.com/charmbracelet/crush/internal/event"
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/format"
@@ -955,8 +956,8 @@ func (app *App) Shutdown() {
 
 // checkForUpdates checks for available updates.
 func (app *App) checkForUpdates(ctx context.Context) {
-	// CRUSH_DISABLE_UPDATE_CHECK=1 keeps Crush from asking GitHub for the latest release.
-	if v, _ := strconv.ParseBool(os.Getenv("CRUSH_DISABLE_UPDATE_CHECK")); v {
+	// CRASH_DISABLE_UPDATE_CHECK=1 keeps Crash from asking GitHub for the latest release.
+	if v, _ := strconv.ParseBool(env.Getenv("CRASH_DISABLE_UPDATE_CHECK")); v {
 		return
 	}
 	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
