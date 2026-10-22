@@ -28,22 +28,22 @@ var logoutCmd = &cobra.Command{
 	Aliases: []string{"signout"},
 	Use:     "logout [platform]",
 	Short:   "Logout " + version.Name + " from a platform",
-	Long: `Logout Crush from a specified platform, removing stored credentials.
+	Long: `Logout Crash from a specified platform, removing stored credentials.
 The platform should be provided as an argument.
 If no argument is given, a list of logged-in platforms will be shown.
 Available platforms are: hyper, copilot, openai (chatgpt), grok (xai).`,
 	Example: `
 # Sign out from Charm Hyper
-crush logout hyper
+crash logout hyper
 
 # Sign out from GitHub Copilot
-crush logout copilot
+crash logout copilot
 
 # Sign out from your ChatGPT (OpenAI) account
-crush logout openai
+crash logout openai
 
 # Sign out from your Grok (xAI) account
-crush logout grok
+crash logout grok
   `,
 	ValidArgs: []cobra.Completion{
 		"hyper",
