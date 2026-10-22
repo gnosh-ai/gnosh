@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/crush/internal/event"
 	"github.com/charmbracelet/crush/internal/format"
 	"github.com/charmbracelet/crush/internal/herdr"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/session"
@@ -135,7 +136,7 @@ crash run --continue "Follow up on your last response"
 			if enabled, ok := config.ParseThinkingCommand(prompt); ok {
 				return setThinking(clientWs, enabled, cmd.OutOrStdout())
 			}
-			return runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, reasoningEffort, quiet || verbose, sessionID, useLast)
+			return runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, reasoningEffort, quiet, verbose, sessionID, useLast)
 		}
 
 		ws, cleanup, err := setupLocalWorkspace(cmd)
@@ -167,13 +168,13 @@ crash run --continue "Follow up on your last response"
 		if enabled, ok := config.ParseThinkingCommand(prompt); ok {
 			return setThinking(ws, enabled, cmd.OutOrStdout())
 		}
-		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, largeModel, smallModel, reasoningEffort, quiet || verbose, sessionID, useLast)
+		return appWs.App().RunNonInteractive(ctx, os.Stdout, prompt, largeModel, smallModel, reasoningEffort, quiet, verbose, sessionID, useLast)
 	},
 }
 
 func init() {
 	runCmd.Flags().BoolP("quiet", "q", false, "Hide spinner")
-	runCmd.Flags().BoolP("verbose", "v", false, "Show logs")
+	runCmd.Flags().BoolP("verbose", "v", false, "Show logs and a line per tool call on stderr")
 	runCmd.Flags().StringP("model", "m", "", "Model to use. Accepts 'model' or 'provider/model' to disambiguate models with the same name across providers")
 	runCmd.Flags().String("small-model", "", "Small model to use. If not provided, uses the default small model for the provider")
 	runCmd.Flags().String("reasoning-effort", "", "Reasoning effort for the model (e.g. low, medium, high). Levels depend on the model; unsupported values are rejected with the accepted values listed")
@@ -189,7 +190,7 @@ func runNonInteractive(
 	c *client.Client,
 	ws *proto.Workspace,
 	prompt, largeModel, smallModel, reasoningEffort string,
-	hideSpinner bool,
+	hideSpinner, traceTools bool,
 	continueSessionID string,
 	useLast bool,
 ) error {
@@ -297,10 +298,11 @@ func runNonInteractive(
 	}
 
 	stream := &runStream{
-		sessionID: sess.ID,
-		runID:     runID,
-		out:       os.Stdout,
-		read:      make(map[string]int),
+		sessionID:  sess.ID,
+		runID:      runID,
+		out:        os.Stdout,
+		traceTools: traceTools,
+		read:       make(map[string]int),
 	}
 
 	// Start herdr integration when running inside a herdr pane.
@@ -363,11 +365,16 @@ func runNonInteractive(
 // and live message streaming, which is still correct for the
 // single-turn case.
 type runStream struct {
-	sessionID string
-	runID     string
-	out       io.Writer
-	read      map[string]int
-	printed   bool
+	sessionID  string
+	runID      string
+	out        io.Writer
+	traceTools bool
+	// errOut receives the --verbose tool trace; defaults to os.Stderr
+	// when nil (tests inject a buffer to avoid racing os.Stderr).
+	errOut        io.Writer
+	read          map[string]int
+	printed       bool
+	seenToolCalls map[string]bool
 }
 
 // handle processes one SSE event. Returns done=true when the run
@@ -385,7 +392,26 @@ func (s *runStream) handle(ev any, stopSpinner func()) (done bool, err error) {
 	switch e := ev.(type) {
 	case pubsub.Event[proto.Message]:
 		msg := e.Payload
-		if msg.SessionID != s.sessionID || msg.Role != proto.Assistant || len(msg.Parts) == 0 {
+		if msg.SessionID != s.sessionID || msg.Role != proto.Assistant {
+			return false, nil
+		}
+		if s.traceTools {
+			if s.seenToolCalls == nil {
+				s.seenToolCalls = make(map[string]bool)
+			}
+			for _, call := range msg.ToolCalls() {
+				if !call.Finished || call.ID == "" || s.seenToolCalls[call.ID] {
+					continue
+				}
+				s.seenToolCalls[call.ID] = true
+				traceOut := s.errOut
+				if traceOut == nil {
+					traceOut = os.Stderr
+				}
+				_, _ = fmt.Fprintf(traceOut, "tool %s %s\n", call.Name, toolCallSummary(call))
+			}
+		}
+		if len(msg.Parts) == 0 {
 			return false, nil
 		}
 		if s.runID != "" {
@@ -483,6 +509,14 @@ func (s *runStream) handle(ev any, stopSpinner func()) (done bool, err error) {
 		return true, fmt.Errorf("agent error: %w", e.Payload.Error)
 	}
 	return false, nil
+}
+
+// toolCallSummary renders a short, single-line summary of a tool
+// call's input for the non-interactive --verbose trace. The shared
+// field precedence and truncation live in [message.ToolCall.Summary];
+// this wrapper adapts it to the proto package's call type.
+func toolCallSummary(call proto.ToolCall) string {
+	return message.ToolCall{ID: call.ID, Name: call.Name, Input: call.Input}.Summary()
 }
 
 // waitForAgent polls GetAgentInfo until the agent is ready, with a

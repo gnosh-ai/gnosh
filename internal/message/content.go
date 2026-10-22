@@ -117,6 +117,39 @@ type ToolCall struct {
 
 func (ToolCall) isPart() {}
 
+// Summary renders a short, single-line summary of the call's input for
+// user-facing traces such as the non-interactive --verbose log: the
+// command for bash, the URL or path for file tools, the pattern for
+// searches, the symbol for LSP calls, and a flattened, truncated form
+// of the raw input for everything else. It returns "" when the input
+// carries nothing worth showing.
+func (c ToolCall) Summary() string {
+	var input map[string]any
+	if err := json.Unmarshal([]byte(c.Input), &input); err != nil {
+		input = nil
+	}
+
+	var summary string
+	for _, key := range []string{"command", "url", "file_path", "path", "pattern", "symbol", "query"} {
+		if v, ok := input[key].(string); ok && v != "" {
+			summary = v
+			break
+		}
+	}
+
+	if summary == "" {
+		if c.Input == "" || c.Input == "{}" {
+			return ""
+		}
+		summary = strings.ReplaceAll(c.Input, "\\n", " ")
+	}
+	summary = strings.TrimSpace(summary)
+	if runes := []rune(summary); len(runes) > 120 {
+		summary = string(runes[:117]) + "..."
+	}
+	return summary
+}
+
 type ToolResult struct {
 	ToolCallID string `json:"tool_call_id"`
 	Name       string `json:"name"`

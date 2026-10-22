@@ -415,3 +415,64 @@ func TestRunStream_NoRunIDFallsBackToSessionID(t *testing.T) {
 	require.True(t, done)
 	require.Equal(t, "DONE", buf.String())
 }
+
+// TestRunStream_TracesToolCallsToStderr verifies the --verbose tool
+// trace: each finished tool call is printed exactly once to the trace
+// writer (name + input summary) even though the streaming message is
+// republished on every delta; unfinished (still-streaming) tool calls
+// are not traced; and stdout keeps only the answer text.
+func TestRunStream_TracesToolCallsToStderr(t *testing.T) {
+	t.Parallel()
+
+	out := &bytes.Buffer{}
+	errOut := &bytes.Buffer{}
+	s := &runStream{sessionID: "S", out: out, errOut: errOut, traceTools: true, read: map[string]int{}}
+
+	bashCall := proto.ToolCall{ID: "c1", Name: "bash", Input: `{"command":"go test ./..."}`, Finished: true}
+	viewStreaming := proto.ToolCall{ID: "c2", Name: "view", Input: `{"file_path":"/tmp/a.go"`}
+	viewFinished := proto.ToolCall{ID: "c2", Name: "view", Input: `{"file_path":"/tmp/a.go"}`, Finished: true}
+
+	// First publish: bash finished, view still streaming.
+	_, err := s.handle(pubsub.Event[proto.Message]{Payload: proto.Message{
+		ID: "m1", SessionID: "S", Role: proto.Assistant,
+		Parts: []proto.ContentPart{bashCall, viewStreaming},
+	}}, nil)
+	require.NoError(t, err)
+	require.Equal(t, "tool bash go test ./...\n", errOut.String(),
+		"finished bash call traced on first publish; streaming view call must not be traced")
+
+	// Second publish of the same message: view finished and final
+	// text starts streaming.
+	done, err := s.handle(pubsub.Event[proto.Message]{Payload: proto.Message{
+		ID: "m1", SessionID: "S", Role: proto.Assistant,
+		Parts: []proto.ContentPart{bashCall, viewFinished, proto.TextContent{Text: "the answer"}},
+	}}, nil)
+	require.NoError(t, err)
+	require.False(t, done)
+
+	// Each tool call traced exactly once, in first-seen order.
+	require.Equal(t, "tool bash go test ./...\ntool view /tmp/a.go\n", errOut.String())
+	// Stdout carries only the answer.
+	require.Equal(t, "the answer", out.String())
+}
+
+// TestRunStream_TraceDisabledLeavesTraceQuiet verifies that without
+// --verbose the tool trace is silent and stdout is unchanged.
+func TestRunStream_TraceDisabledLeavesTraceQuiet(t *testing.T) {
+	t.Parallel()
+
+	out := &bytes.Buffer{}
+	errOut := &bytes.Buffer{}
+	s := &runStream{sessionID: "S", out: out, errOut: errOut, read: map[string]int{}}
+
+	bashCall := proto.ToolCall{ID: "c1", Name: "bash", Input: `{"command":"go test ./..."}`, Finished: true}
+
+	_, err := s.handle(pubsub.Event[proto.Message]{Payload: proto.Message{
+		ID: "m1", SessionID: "S", Role: proto.Assistant,
+		Parts: []proto.ContentPart{bashCall, proto.TextContent{Text: "the answer"}},
+	}}, nil)
+	require.NoError(t, err)
+
+	require.Empty(t, errOut.String())
+	require.Equal(t, "the answer", out.String())
+}

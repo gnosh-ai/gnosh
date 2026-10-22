@@ -284,7 +284,7 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 
 // RunNonInteractive runs the application in non-interactive mode with the
 // given prompt, printing to stdout.
-func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner bool, continueSessionID string, useLast bool) error {
+func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner, traceTools bool, continueSessionID string, useLast bool) error {
 	slog.Info("Running in non-interactive mode")
 
 	// Re-initialize the coder agent without interactive-only tools.
@@ -416,6 +416,10 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 
 	messageEvents := app.Messages.Subscribe(ctx)
 	messageReadBytes := make(map[string]int)
+	// seenToolCalls tracks tool calls already traced to stderr so each
+	// call is printed exactly once, no matter how many times the message
+	// it belongs to is republished.
+	seenToolCalls := make(map[string]bool)
 	var printed bool
 
 	defer func() {
@@ -449,36 +453,60 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 
 		case event := <-messageEvents:
 			msg := event.Payload
-			if msg.SessionID == sess.ID && msg.Role == message.Assistant && len(msg.Parts) > 0 {
-				stopSpinner()
-
-				content := msg.Content().String()
-				readBytes := messageReadBytes[msg.ID]
-
-				if len(content) < readBytes {
-					slog.Error("Non-interactive: message content is shorter than read bytes", "message_length", len(content), "read_bytes", readBytes)
-					return fmt.Errorf("message content is shorter than read bytes: %d < %d", len(content), readBytes)
-				}
-
-				part := content[readBytes:]
-				// Trim leading whitespace. Sometimes the LLM includes leading
-				// formatting and indentation, which we don't want here.
-				if readBytes == 0 {
-					part = strings.TrimLeft(part, " \t")
-				}
-				// Ignore initial whitespace-only messages.
-				if printed || strings.TrimSpace(part) != "" {
-					printed = true
-					fmt.Fprint(output, part)
-				}
-				messageReadBytes[msg.ID] = len(content)
+			if msg.SessionID != sess.ID || msg.Role != message.Assistant {
+				continue
 			}
+
+			if traceTools {
+				for _, call := range msg.ToolCalls() {
+					if !call.Finished || call.ID == "" || seenToolCalls[call.ID] {
+						continue
+					}
+					seenToolCalls[call.ID] = true
+					_, _ = fmt.Fprintf(os.Stderr, "tool %s %s\n", call.Name, toolCallSummary(call))
+				}
+			}
+
+			if len(msg.Parts) == 0 {
+				continue
+			}
+
+			stopSpinner()
+
+			content := msg.Content().String()
+			readBytes := messageReadBytes[msg.ID]
+
+			if len(content) < readBytes {
+				slog.Error("Non-interactive: message content is shorter than read bytes", "message_length", len(content), "read_bytes", readBytes)
+				return fmt.Errorf("message content is shorter than read bytes: %d < %d", len(content), readBytes)
+			}
+
+			part := content[readBytes:]
+			// Trim leading whitespace. Sometimes the LLM includes leading
+			// formatting and indentation, which we don't want here.
+			if readBytes == 0 {
+				part = strings.TrimLeft(part, " \t")
+			}
+			// Ignore initial whitespace-only messages.
+			if printed || strings.TrimSpace(part) != "" {
+				printed = true
+				fmt.Fprint(output, part)
+			}
+			messageReadBytes[msg.ID] = len(content)
 
 		case <-ctx.Done():
 			stopSpinner()
 			return ctx.Err()
 		}
 	}
+}
+
+// toolCallSummary renders a short, single-line summary of a tool
+// call's input for the non-interactive --verbose trace. The shared
+// field precedence and truncation live in [ToolCall.Summary]; this
+// wrapper adapts it to the message package's call type.
+func toolCallSummary(call message.ToolCall) string {
+	return call.Summary()
 }
 
 func (app *App) UpdateAgentModel(ctx context.Context) error {

@@ -173,3 +173,79 @@ func TestResetStreamedContentEmpty(t *testing.T) {
 	msg.ResetStreamedContent()
 	require.Empty(t, msg.Parts)
 }
+
+func TestToolCallSummary(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		call  ToolCall
+		want  string
+		check func(t *testing.T, got string)
+	}{
+		{
+			name: "bash command",
+			call: ToolCall{ID: "c1", Name: "bash", Input: `{"command":"go test ./...","description":"run tests"}`},
+			want: "go test ./...",
+		},
+		{
+			name: "file path",
+			call: ToolCall{ID: "c2", Name: "view", Input: `{"file_path":"/tmp/a/b.go","offset":10}`},
+			want: "/tmp/a/b.go",
+		},
+		{
+			name: "path",
+			call: ToolCall{ID: "c3", Name: "ls", Input: `{"path":"/src"}`},
+			want: "/src",
+		},
+		{
+			name: "grep pattern",
+			call: ToolCall{ID: "c4", Name: "grep", Input: `{"pattern":"foo"}`},
+			want: "foo",
+		},
+		{
+			name: "url",
+			call: ToolCall{ID: "c5", Name: "fetch", Input: `{"url":"https://example.com/a?b=c"}`},
+			want: "https://example.com/a?b=c",
+		},
+		{
+			name: "symbol",
+			call: ToolCall{ID: "c6", Name: "lsp_definition", Input: `{"symbol":"RunNonInteractive"}`},
+			want: "RunNonInteractive",
+		},
+		{
+			name: "empty input",
+			call: ToolCall{ID: "c7", Name: "crush_info"},
+			want: "",
+		},
+		{
+			name: "empty object",
+			call: ToolCall{ID: "c8", Name: "ls", Input: `{}`},
+			want: "",
+		},
+		{
+			name: "no known field falls back to flattened input",
+			call: ToolCall{ID: "c10", Name: "mcp_tool", Input: `{"a":1,\n"b":"x"}`},
+			want: `{"a":1, "b":"x"}`,
+		},
+		{
+			name: "long input truncated",
+			call: ToolCall{ID: "c11", Name: "bash", Input: `{"command":"` + strings.Repeat("x", 200) + `"}`},
+			check: func(t *testing.T, got string) {
+				require.True(t, len([]rune(got)) == 120, "expected 120 runes, got %d", len([]rune(got)))
+				require.True(t, strings.HasSuffix(got, "..."), "expected ellipsis suffix, got %q", got)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.call.Summary()
+			if tt.check != nil {
+				tt.check(t, got)
+				return
+			}
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
