@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/stretchr/testify/require"
 )
@@ -182,4 +183,33 @@ func testNConsumers(t *testing.T, n int) {
 		})
 	}
 	wg.Wait()
+}
+
+// TestToolCallStatusSuffix verifies the outcome marker used by the
+// non-interactive --verbose trace: a call whose tool result is an
+// error is "(failed)", a call with a clean result is "(ok)", and a
+// call with no result yet gets no marker.
+func TestToolCallStatusSuffix(t *testing.T) {
+	t.Parallel()
+
+	base := message.Message{
+		ID:        "m1",
+		SessionID: "S",
+		Role:      message.Assistant,
+		Parts: []message.ContentPart{
+			message.ToolCall{ID: "c1", Name: "bash", Input: `{"command":"go test ./..."}`, Finished: true},
+			message.ToolCall{ID: "c2", Name: "view", Input: `{"file_path":"/tmp/a.go"}`, Finished: true},
+			message.ToolCall{ID: "c3", Name: "glob", Input: `{"pattern":"*.go"}`, Finished: true},
+		},
+	}
+	require.Equal(t, "", toolCallStatusSuffix(base, "c1"), "no result yet must stay unmarked")
+
+	withResults := base
+	withResults.Parts = append(withResults.Parts,
+		message.ToolResult{ToolCallID: "c1", Name: "bash", Content: "FAIL", IsError: true},
+		message.ToolResult{ToolCallID: "c2", Name: "view", Content: "1: package main"},
+	)
+	require.Equal(t, " (failed)", toolCallStatusSuffix(withResults, "c1"), "errored result must be marked failed")
+	require.Equal(t, " (ok)", toolCallStatusSuffix(withResults, "c2"), "clean result must be marked ok")
+	require.Equal(t, "", toolCallStatusSuffix(withResults, "c3"), "call without a result must stay unmarked")
 }

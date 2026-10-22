@@ -152,7 +152,19 @@ type ToolCall struct {
 	Input    string `json:"input"`
 	Type     string `json:"type,omitempty"`
 	Finished bool   `json:"finished,omitempty"`
+	// Status is the outcome of the call once its result has arrived:
+	// "failed" when the tool reported an error, "ok" when it succeeded,
+	// and "" while no result is known yet.
+	Status ToolStatus `json:"status,omitempty"`
 }
+
+// ToolStatus is the outcome of a tool call.
+type ToolStatus string
+
+const (
+	ToolStatusOK     ToolStatus = "ok"
+	ToolStatusFailed ToolStatus = "failed"
+)
 
 func (ToolCall) isPart() {}
 
@@ -416,13 +428,8 @@ func (m *Message) FinishToolCall(toolCallID string) {
 	for i, part := range m.Parts {
 		if c, ok := part.(ToolCall); ok {
 			if c.ID == toolCallID {
-				m.Parts[i] = ToolCall{
-					ID:       c.ID,
-					Name:     c.Name,
-					Input:    c.Input,
-					Type:     c.Type,
-					Finished: true,
-				}
+				c.Finished = true
+				m.Parts[i] = c
 				return
 			}
 		}

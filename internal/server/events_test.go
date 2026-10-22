@@ -313,3 +313,33 @@ func TestMessageToProtoPrismModel(t *testing.T) {
 }
 
 func ptrFloat(v float64) *float64 { return &v }
+
+// TestMessageToProto_MarksToolCallStatusFromResults verifies that
+// messageToProto marks each tool call with its outcome: a call whose
+// tool result part carries IsError is "failed", a call with a
+// non-error result is "ok", and a call with no result yet is "". The
+// --verbose tool trace in `crash run` relies on this marker to show
+// where a long run hit errors.
+func TestMessageToProto_MarksToolCallStatusFromResults(t *testing.T) {
+	t.Parallel()
+
+	src := message.Message{
+		ID:        "m1",
+		SessionID: "S",
+		Role:      message.Assistant,
+		Parts: []message.ContentPart{
+			message.ToolCall{ID: "c1", Name: "bash", Input: `{"command":"go test ./..."}`, Finished: true},
+			message.ToolCall{ID: "c2", Name: "view", Input: `{"file_path":"/tmp/a.go"}`, Finished: true},
+			message.ToolCall{ID: "c3", Name: "glob", Input: `{"pattern":"*.go"}`, Finished: true},
+			message.ToolResult{ToolCallID: "c1", Name: "bash", Content: "FAIL", IsError: true},
+			message.ToolResult{ToolCallID: "c2", Name: "view", Content: "1: package main"},
+		},
+	}
+
+	got := messageToProto(src)
+	calls := got.ToolCalls()
+	require.Len(t, calls, 3)
+	require.Equal(t, proto.ToolStatusFailed, calls[0].Status, "errored result must mark the call failed")
+	require.Equal(t, proto.ToolStatusOK, calls[1].Status, "clean result must mark the call ok")
+	require.Empty(t, calls[2].Status, "call without a result yet must stay unmarked")
+}

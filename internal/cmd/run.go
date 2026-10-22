@@ -380,10 +380,17 @@ type runStream struct {
 	traceTools bool
 	// errOut receives the --verbose tool trace; defaults to os.Stderr
 	// when nil (tests inject a buffer to avoid racing os.Stderr).
-	errOut        io.Writer
-	read          map[string]int
-	printed       bool
+	errOut  io.Writer
+	read    map[string]int
+	printed bool
+	// seenToolCalls tracks finished tool calls already traced to stderr,
+	// so each call is traced at most twice: once when it finishes (before
+	// the result has arrived) and once more when the result arrives with
+	// a non-empty outcome marker.
 	seenToolCalls map[string]bool
+	// toolStatuses holds the last outcome marker printed for each
+	// traced call; empty while the result has not arrived yet.
+	toolStatuses map[string]string
 }
 
 // handle processes one SSE event. Returns done=true when the run
@@ -407,17 +414,32 @@ func (s *runStream) handle(ev any, stopSpinner func()) (done bool, err error) {
 		if s.traceTools {
 			if s.seenToolCalls == nil {
 				s.seenToolCalls = make(map[string]bool)
+				s.toolStatuses = make(map[string]string)
 			}
 			for _, call := range msg.ToolCalls() {
-				if !call.Finished || call.ID == "" || s.seenToolCalls[call.ID] {
+				if !call.Finished || call.ID == "" {
 					continue
 				}
+				suffix := toolCallStatusSuffix(msg, call.ID)
+				// Each call is traced at most twice: once when it
+				// finishes (before the result has arrived) and once
+				// more when the result arrives with a non-empty
+				// outcome marker.
+				if s.seenToolCalls[call.ID] {
+					// Re-trace only when the outcome was learned
+					// after the first print and has not been marked
+					// yet.
+					if s.toolStatuses[call.ID] != "" || suffix == "" {
+						continue
+					}
+				}
 				s.seenToolCalls[call.ID] = true
+				s.toolStatuses[call.ID] = suffix
 				traceOut := s.errOut
 				if traceOut == nil {
 					traceOut = os.Stderr
 				}
-				_, _ = fmt.Fprintf(traceOut, "tool %s %s\n", call.Name, toolCallSummary(call))
+				_, _ = fmt.Fprintf(traceOut, "tool %s %s%s\n", call.Name, toolCallSummary(call), suffix)
 			}
 		}
 		if len(msg.Parts) == 0 {
@@ -526,6 +548,22 @@ func (s *runStream) handle(ev any, stopSpinner func()) (done bool, err error) {
 // this wrapper adapts it to the proto package's call type.
 func toolCallSummary(call proto.ToolCall) string {
 	return message.ToolCall{ID: call.ID, Name: call.Name, Input: call.Input}.Summary()
+}
+
+// toolCallStatusSuffix renders the per-call outcome marker for the
+// --verbose trace: "(failed)" when the tool result for the call is an
+// error, "(ok)" when it is not, and "" while no result has arrived yet.
+func toolCallStatusSuffix(msg proto.Message, toolCallID string) string {
+	for _, result := range msg.ToolResults() {
+		if result.ToolCallID != toolCallID {
+			continue
+		}
+		if result.IsError {
+			return " (failed)"
+		}
+		return " (ok)"
+	}
+	return ""
 }
 
 // waitForAgent polls GetAgentInfo until the agent is ready, with a
