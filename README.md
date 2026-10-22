@@ -41,11 +41,20 @@ shows you the exact command, then asks for the password in a masked prompt.
 What you type goes straight to gnokey's standard input and is scrubbed from
 its output. The model never sees it, and it is not saved with the session.
 
-There is no way around the prompt. The shell tool refuses gnokey's
-password-on-stdin flag, and key management (`gnokey add`, `delete`, `export`
-and the rest) stays in your own terminal. A run with no one to type a
-password, such as `crash run`, has no signing tool at all, so the agent hands
-you the command to run yourself.
+That prompt is the only route to a signature, and the agent cannot step
+around it:
+
+- The shell tool refuses gnokey's password-on-stdin flag, so the agent
+  cannot feed a password in by another door.
+- Key management (`gnokey add`, `delete`, `export` and the rest) is refused
+  outright and stays in your own terminal.
+- A run with nobody there to type, such as `crash run`, has no signing tool
+  at all, so the agent prints the command for you to run yourself.
+
+So every signature is one you saw and typed for. To let something sign
+without you, give it a [session account](#built-for-gnoland) instead: you
+authorize it once, at the prompt, and the chain holds it to its limits from
+then on.
 
 ### Untrusted text stays untrusted
 
