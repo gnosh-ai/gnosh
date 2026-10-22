@@ -25,12 +25,15 @@ package model
 // Update, no model mutation inside commands).
 
 import (
+	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/workspace"
 )
 
@@ -331,28 +334,35 @@ func (m *UI) dispatchPromptQueuePop() tea.Cmd {
 // applyPromptQueuePop stores the popped prompts in the editor, oldest first
 // separated by blank lines, and clears the memoized queue so the pill stops
 // showing them. Runs on the Update goroutine.
+//
+// The popped prompts are already out of the agent's queue, so this never
+// drops them: a newer queue generation only means the pill's own fetch is
+// stale, not the pop, and anything typed since Up was pressed is kept after
+// them.
 func (m *UI) applyPromptQueuePop(msg promptQueuePopMsg) []tea.Cmd {
 	m.promptQueueInFlight = false
-	if msg.forSession != m.currentSessionID() || msg.gen != m.promptQueueGen {
-		// The pop raced a session switch or a newer queue transition.
-		// The prompts are out of the queue already; refetch so the pill
-		// reflects whatever is left rather than staying blank.
+	if len(msg.prompts) == 0 {
+		// Nothing was left to take: the turn ended and ran them first,
+		// or a refresh had already emptied the local count. Refetch so
+		// the pill shows what is really queued.
 		if cmd := m.dispatchPromptQueueRefresh(); cmd != nil {
 			return []tea.Cmd{cmd}
 		}
 		return nil
 	}
-	if len(msg.prompts) == 0 {
-		// A refresh landed in flight and its result clobbered the local
-		// queue, so the pop had nothing left to take. Restore it.
-		if cmd := m.dispatchPromptQueueRefresh(); cmd != nil {
-			return []tea.Cmd{cmd}
-		}
-		return nil
+	if msg.forSession != m.currentSessionID() {
+		// The session changed while the pop was in flight. This editor
+		// now belongs to another session, so send the prompts back to
+		// the one they came from, where they run as they would have.
+		return []tea.Cmd{m.resendPoppedPrompts(msg.forSession, msg.prompts)}
+	}
+	text := strings.Join(msg.prompts, "\n\n")
+	if typed := m.textarea.Value(); typed != "" {
+		text += "\n\n" + typed
 	}
 	prevHeight := m.textarea.Height()
 	m.textarea.Reset()
-	m.textarea.InsertString(strings.Join(msg.prompts, "\n\n"))
+	m.textarea.InsertString(text)
 	m.textarea.MoveToBegin()
 	m.syncBangModeFromTextarea()
 	m.promptHistory.index = -1
@@ -362,7 +372,27 @@ func (m *UI) applyPromptQueuePop(msg promptQueuePopMsg) []tea.Cmd {
 	m.promptQueueCheckedAt = time.Now()
 	m.invalidatePromptQueue()
 	m.updateLayoutAndSize()
-	return []tea.Cmd{m.updateTextareaWithPrevHeight(nil, prevHeight)}
+	cmds := []tea.Cmd{m.updateTextareaWithPrevHeight(nil, prevHeight)}
+	// The pop leaves a prompt that a caller is waiting on, and one may
+	// have been queued since; refetch so the pill shows those.
+	if cmd := m.dispatchPromptQueueRefresh(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	return cmds
+}
+
+// resendPoppedPrompts sends prompts popped from sessionID's queue back to
+// that session, in order, off the Update goroutine.
+func (m *UI) resendPoppedPrompts(sessionID string, prompts []string) tea.Cmd {
+	ws := m.com.Workspace
+	return func() tea.Msg {
+		for _, prompt := range prompts {
+			if err := ws.AgentRun(context.Background(), sessionID, prompt); err != nil {
+				return util.ReportError(fmt.Errorf("could not send a queued prompt back to its session: %w", err))()
+			}
+		}
+		return nil
+	}
 }
 
 // staleWorkspaceRefreshCmds is the TTL backstop, called at the tail of

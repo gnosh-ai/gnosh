@@ -1607,13 +1607,21 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	a.activeRequests.Del(sessionID)
 	cancel()
 
-	// Process any messages that were queued while summarizing.
+	// Process any messages that were queued while summarizing. The
+	// read-modify-write holds the session's dispatch mutex, as every other
+	// queue writer does (enqueueCall, PopQueuedPrompts, the turn-end
+	// handoff), so a prompt queued or popped meanwhile is neither lost nor
+	// put back. Run takes the same mutex, so it is released first.
+	mu := a.sessionMu(sessionID)
+	mu.Lock()
 	queuedMessages, ok := a.messageQueue.Get(sessionID)
 	if !ok || len(queuedMessages) == 0 {
+		mu.Unlock()
 		return nil
 	}
 	firstQueuedMessage := queuedMessages[0]
 	a.messageQueue.Set(sessionID, queuedMessages[1:])
+	mu.Unlock()
 	_, qErr := a.Run(ctx, firstQueuedMessage)
 	return qErr
 }
@@ -2195,7 +2203,7 @@ func (a *sessionAgent) Cancel(sessionID string) {
 		a.cancelMark.Set(sessionID, max(existing, mark))
 	}
 
-	if a.QueuedPrompts(sessionID) > 0 {
+	if a.hasQueuedCalls(sessionID) {
 		slog.Debug("Clearing queued prompts", "session_id", sessionID)
 		a.clearQueueAndNotify(sessionID)
 	}
@@ -2204,11 +2212,21 @@ func (a *sessionAgent) Cancel(sessionID string) {
 func (a *sessionAgent) ClearQueue(sessionID string) {
 	mu := a.sessionMu(sessionID)
 	mu.Lock()
-	if a.QueuedPrompts(sessionID) > 0 {
+	if a.hasQueuedCalls(sessionID) {
 		slog.Debug("Clearing queued prompts", "session_id", sessionID)
 		a.clearQueueAndNotify(sessionID)
 	}
 	mu.Unlock()
+}
+
+// hasQueuedCalls reports whether anything at all is queued for the session,
+// the agent's own hidden continuations included. Cancel and ClearQueue go by
+// this rather than QueuedPrompts, which counts only what the user sent: an
+// Esc must also drop a queued Stop-hook or loop-detector follow-up, or the
+// agent would carry on after the user stopped it.
+func (a *sessionAgent) hasQueuedCalls(sessionID string) bool {
+	l, ok := a.messageQueue.Get(sessionID)
+	return ok && len(l) > 0
 }
 
 func (a *sessionAgent) CancelAll() {
@@ -2280,9 +2298,11 @@ func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
 
 // PopQueuedPrompts takes the user-sent prompts out of the session's queue,
 // oldest first, leaving any hidden continuation queued for the turn-end
-// handoff to pick up. A queued prompt removed this way without running
-// publishes nothing: it carries no RunID (TUI prompts are fire-and-forget),
-// so no caller waits on a terminal event for it.
+// handoff to pick up. A prompt that carries a RunID stays queued too: a
+// caller such as `crash run` is waiting for its RunComplete, and taking the
+// prompt away without running it would leave that caller hanging. What is
+// popped is fire-and-forget (the TUI sends no RunID), so removing it
+// publishes nothing.
 func (a *sessionAgent) PopQueuedPrompts(sessionID string) []string {
 	mu := a.sessionMu(sessionID)
 	mu.Lock()
@@ -2294,7 +2314,7 @@ func (a *sessionAgent) PopQueuedPrompts(sessionID string) []string {
 	var popped []string
 	var keep []SessionAgentCall
 	for _, call := range l {
-		if call.HiddenUserMessage {
+		if call.HiddenUserMessage || call.RunID != "" {
 			keep = append(keep, call)
 			continue
 		}

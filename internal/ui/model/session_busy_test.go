@@ -35,6 +35,7 @@ type countingWorkspace struct {
 	agentBusy      bool
 	yolo           bool
 	queued         []string
+	runs           []string // "session: prompt" per AgentRun
 	model          workspace.AgentModel
 	lspStates      map[string]workspace.LSPClientInfo
 	lspDiags       map[string]lsp.DiagnosticCounts
@@ -99,6 +100,11 @@ func (w *countingWorkspace) AgentPopQueuedPrompts(string) []string {
 	return prompts
 }
 func (w *countingWorkspace) AgentCancel(string) { w.cancelCalls++ }
+
+func (w *countingWorkspace) AgentRun(_ context.Context, sessionID, prompt string, _ ...message.Attachment) error {
+	w.runs = append(w.runs, sessionID+": "+prompt)
+	return nil
+}
 
 func (w *countingWorkspace) AgentModel() workspace.AgentModel {
 	w.modelCalls++

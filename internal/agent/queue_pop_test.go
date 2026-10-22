@@ -112,3 +112,44 @@ func TestPopQueuedPrompts_DoesNotRaceEnqueueCall(t *testing.T) {
 	require.Equal(t, 40, len(popped)+a.QueuedPrompts(sessionID),
 		"the pop and the concurrent appends must account for every prompt; a lost entry is a silently dropped prompt")
 }
+
+// A prompt that carries a RunID belongs to a caller waiting on its
+// RunComplete (`crash run` against a shared server, say). Up must leave it
+// queued: popping it into an editor would drop it without that caller ever
+// hearing back, and the caller would hang.
+func TestPopQueuedPrompts_LeavesPromptsACallerIsWaitingOn(t *testing.T) {
+	t.Parallel()
+
+	a := NewSessionAgent(SessionAgentOptions{}).(*sessionAgent)
+	const sessionID = "s1"
+
+	mu := a.sessionMu(sessionID)
+	mu.Lock()
+	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "from crash run", RunID: "run-1"})
+	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "typed in the TUI"})
+	mu.Unlock()
+
+	require.Equal(t, []string{"typed in the TUI"}, a.PopQueuedPrompts(sessionID))
+	queued, ok := a.messageQueue.Get(sessionID)
+	require.True(t, ok)
+	require.Len(t, queued, 1)
+	require.Equal(t, "run-1", queued[0].RunID, "the waited-on prompt must still run")
+}
+
+// QueuedPrompts leaves the agent's hidden continuations out of the count, but
+// Cancel must still drop them: otherwise a Stop hook's queued follow-up would
+// run after the user pressed Esc to stop the agent.
+func TestCancel_DropsAQueuedHiddenContinuation(t *testing.T) {
+	t.Parallel()
+
+	a := NewSessionAgent(SessionAgentOptions{}).(*sessionAgent)
+	const sessionID = "s1"
+
+	a.queueContinuation(SessionAgentCall{SessionID: sessionID, Prompt: "stop hook follow-up", HiddenUserMessage: true})
+	require.Zero(t, a.QueuedPrompts(sessionID), "the user sees nothing queued")
+
+	a.Cancel(sessionID)
+
+	queued, _ := a.messageQueue.Get(sessionID)
+	require.Empty(t, queued, "the follow-up must not survive the cancel")
+}

@@ -6,6 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/require"
+
+	"github.com/charmbracelet/crush/internal/session"
 )
 
 // upKey returns the Up arrow keystroke bound to editor history recall.
@@ -127,4 +129,65 @@ func TestUpWithoutQueueStillStepsThroughHistory(t *testing.T) {
 	m.handleHistoryUp(nil)
 	require.Equal(t, 1, m.promptHistory.index)
 	require.Equal(t, "older", m.textarea.Value())
+}
+
+// The pop takes the prompts out of the agent's queue before its result
+// lands, so the result must never be thrown away. A queue transition in the
+// meantime (the turn ending, another refresh) only makes the pill's own
+// fetch stale; the popped prompts still belong in the editor.
+func TestUpPopLandsEvenWhenThePillWentStale(t *testing.T) {
+	pinTTLs(t)
+
+	ws := &countingWorkspace{ready: true, queued: []string{"queued one"}}
+	m := newBusyUI(ws)
+	warmCaches(m, true)
+	m.promptQueue = 1
+	m.promptQueueItems = []string{"queued one"}
+
+	_, cmd := m.Update(upKey())
+	require.NotNil(t, cmd)
+	m.invalidatePromptQueue() // a queue transition while the pop is in flight
+
+	runCmds(m, cmd)
+	require.Equal(t, "queued one", m.textarea.Value(), "a popped prompt must not be lost")
+}
+
+// Text typed while the pop is in flight stays in the editor, after the
+// popped prompts, instead of being wiped by them.
+func TestUpPopKeepsTextTypedMeanwhile(t *testing.T) {
+	pinTTLs(t)
+
+	ws := &countingWorkspace{ready: true, queued: []string{"queued one"}}
+	m := newBusyUI(ws)
+	warmCaches(m, true)
+	m.promptQueue = 1
+	m.promptQueueItems = []string{"queued one"}
+
+	_, cmd := m.Update(upKey())
+	require.NotNil(t, cmd)
+	m.textarea.SetValue("typed meanwhile")
+
+	runCmds(m, cmd)
+	require.Equal(t, "queued one\n\ntyped meanwhile", m.textarea.Value())
+}
+
+// When the session changes while the pop is in flight, the editor belongs to
+// another session, so the popped prompts go back to the session they came
+// from, in order, rather than being lost or sent to the wrong session.
+func TestUpPopAfterASessionSwitchSendsThePromptsBack(t *testing.T) {
+	pinTTLs(t)
+
+	ws := &countingWorkspace{ready: true, queued: []string{"queued one", "queued two"}}
+	m := newBusyUI(ws)
+	warmCaches(m, true)
+	m.promptQueue = 2
+	m.promptQueueItems = []string{"queued one", "queued two"}
+
+	_, cmd := m.Update(upKey())
+	require.NotNil(t, cmd)
+	m.session = &session.Session{ID: "s2"}
+
+	runCmds(m, cmd)
+	require.Empty(t, m.textarea.Value(), "the other session's editor stays as it was")
+	require.Equal(t, []string{"s1: queued one", "s1: queued two"}, ws.runs)
 }
