@@ -19,6 +19,8 @@ const (
 	EventPreToolUse = config.EventPreToolUse
 	// EventPostToolUse fires right after a tool call succeeds.
 	EventPostToolUse = config.EventPostToolUse
+	// EventPostToolUseFailure fires right after a tool call fails.
+	EventPostToolUseFailure = config.EventPostToolUseFailure
 	// EventStop fires when the agent is about to finish its turn.
 	EventStop = config.EventStop
 )

@@ -910,6 +910,9 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	if postToolHooks := c.cfg.Config().Hooks[hooks.EventPostToolUse]; len(postToolHooks) > 0 {
 		toolHooks.post = hooks.NewRunner(postToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
 	}
+	if failureHooks := c.cfg.Config().Hooks[hooks.EventPostToolUseFailure]; len(failureHooks) > 0 {
+		toolHooks.postFailure = hooks.NewRunner(failureHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
+	}
 
 	allTools = append(
 		allTools,

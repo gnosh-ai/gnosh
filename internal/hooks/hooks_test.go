@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -567,7 +569,7 @@ func TestRunPostToolUse(t *testing.T) {
 	require.NoError(t, cfg.ValidateHooks(), "a PostToolUse hook may carry a matcher")
 	r := NewRunner(cfg.Hooks[EventPostToolUse], t.TempDir(), t.TempDir())
 
-	result, err := r.RunPostToolUse(context.Background(), "sess", "bash", `{"command":"ls"}`, "out", "")
+	result, err := r.RunPostToolUse(context.Background(), "sess", "bash", `{"command":"ls"}`, "out", "", 0)
 	require.NoError(t, err)
 	require.Equal(t, DecisionNone, result.Decision)
 	require.Empty(t, result.UpdatedInput)
@@ -575,12 +577,12 @@ func TestRunPostToolUse(t *testing.T) {
 	require.False(t, result.Hooks[0].InputRewrite)
 	require.Equal(t, EventPostToolUse, result.Hooks[0].Event)
 
-	result, err = r.RunPostToolUse(context.Background(), "sess", "edit", `{}`, "out", "")
+	result, err = r.RunPostToolUse(context.Background(), "sess", "edit", `{}`, "out", "", 0)
 	require.NoError(t, err)
 	require.Zero(t, result.HookCount, "the matcher keeps it to bash")
 
 	deny := NewRunner([]config.HookConfig{{Command: `echo "fix the lint" >&2; exit 2`}}, t.TempDir(), t.TempDir())
-	result, err = deny.RunPostToolUse(context.Background(), "sess", "edit", `{}`, "out", "")
+	result, err = deny.RunPostToolUse(context.Background(), "sess", "edit", `{}`, "out", "", 0)
 	require.NoError(t, err)
 	require.Equal(t, DecisionDeny, result.Decision)
 	require.Equal(t, "fix the lint", result.Reason)
@@ -931,4 +933,32 @@ func TestMatcherMatchesALegacyToolName(t *testing.T) {
 	r := NewRunner([]config.HookConfig{{Command: "true", Matcher: "^crush_logs$"}}, t.TempDir(), t.TempDir())
 	require.Len(t, r.matchingHooks("crash_logs"), 1)
 	require.Empty(t, r.matchingHooks("bash"))
+}
+
+// A PostToolUseFailure hook gets the failed call and its error, as in
+// Claude Code, and a block is feedback, as for PostToolUse.
+func TestRunPostToolUseFailure(t *testing.T) {
+	t.Parallel()
+
+	payload := filepath.Join(t.TempDir(), "payload.json")
+	r := NewRunner([]config.HookConfig{{Command: "cat > " + payload + `; echo "check the path" >&2; exit 2`}}, t.TempDir(), t.TempDir())
+	result, err := r.RunPostToolUseFailure(context.Background(), "sess", "view", `{"file_path":"x.go"}`, "file not found: x.go", false, 1500*time.Millisecond)
+	require.NoError(t, err)
+	require.Equal(t, DecisionDeny, result.Decision)
+	require.Equal(t, "check the path", result.Reason)
+	require.Equal(t, EventPostToolUseFailure, result.Hooks[0].Event)
+
+	data, err := os.ReadFile(payload)
+	require.NoError(t, err)
+	var got struct {
+		Event      string `json:"hook_event_name"`
+		ToolName   string `json:"tool_name"`
+		Error      string `json:"error"`
+		DurationMS int64  `json:"duration_ms"`
+	}
+	require.NoError(t, json.Unmarshal(data, &got))
+	require.Equal(t, EventPostToolUseFailure, got.Event)
+	require.Equal(t, "view", got.ToolName)
+	require.Equal(t, "file not found: x.go", got.Error)
+	require.Equal(t, int64(1500), got.DurationMS)
 }

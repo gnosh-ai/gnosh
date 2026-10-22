@@ -48,6 +48,14 @@ type Payload struct {
 	// returned, as a ToolResponse object. Named for parity with Claude
 	// Code's PostToolUse hook input.
 	ToolResponse *ToolResponse `json:"tool_response,omitempty"`
+	// Error is set on an EventPostToolUseFailure payload: the error the
+	// tool call returned, as the agent reads it. IsInterrupt says the call
+	// failed because the turn was cancelled.
+	Error       string `json:"error,omitempty"`
+	IsInterrupt bool   `json:"is_interrupt,omitempty"`
+	// DurationMS is how long a tool call that has run took, on
+	// PostToolUse and PostToolUseFailure payloads.
+	DurationMS int64 `json:"duration_ms,omitempty"`
 }
 
 // ToolResponse is what a tool call returned, as a PostToolUse hook sees

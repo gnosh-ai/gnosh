@@ -106,12 +106,37 @@ func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolIn
 // the result. Halt still ends the turn. There is nothing left to
 // approve or rewrite, so an allow counts as no opinion and UpdatedInput
 // is always cleared, on the aggregate and on each hook.
-func (r *Runner) RunPostToolUse(ctx context.Context, sessionID, toolName, toolInputJSON, output, metadata string) (AggregateResult, error) {
+func (r *Runner) RunPostToolUse(ctx context.Context, sessionID, toolName, toolInputJSON, output, metadata string, took time.Duration) (AggregateResult, error) {
 	id := toolUseID(ctx)
 	envVars := append(BuildEnv(EventPostToolUse, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
 	p := postPayload(sessionID, r.cwd, toolName, toolInputJSON, output, metadata)
 	p.ToolUseID = id
+	p.DurationMS = took.Milliseconds()
 	agg, err := r.run(ctx, r.matchingHooks(toolName), EventPostToolUse, toolName, toolInputJSON, envVars, marshalPayload(p))
+	return afterTheCall(agg), err
+}
+
+// RunPostToolUseFailure executes the PostToolUseFailure hooks whose
+// matcher matches toolName, once that tool call has failed with errText,
+// the error the agent reads. As with RunPostToolUse, a block is feedback
+// on a call that already ran, Halt ends the turn, and there is nothing
+// left to approve or rewrite.
+func (r *Runner) RunPostToolUseFailure(ctx context.Context, sessionID, toolName, toolInputJSON, errText string, interrupted bool, took time.Duration) (AggregateResult, error) {
+	id := toolUseID(ctx)
+	envVars := append(BuildEnv(EventPostToolUseFailure, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
+	p := toolPayload(EventPostToolUseFailure, sessionID, r.cwd, toolName, toolInputJSON)
+	p.ToolUseID = id
+	p.Error = errText
+	p.IsInterrupt = interrupted
+	p.DurationMS = took.Milliseconds()
+	agg, err := r.run(ctx, r.matchingHooks(toolName), EventPostToolUseFailure, toolName, toolInputJSON, envVars, marshalPayload(p))
+	return afterTheCall(agg), err
+}
+
+// afterTheCall clears from a hook result what means nothing once a tool
+// call has run: an allow counts as no opinion, and an input rewrite is
+// dropped, on the aggregate and on each hook.
+func afterTheCall(agg AggregateResult) AggregateResult {
 	if agg.Decision == DecisionAllow {
 		agg.Decision = DecisionNone
 	}
@@ -119,7 +144,7 @@ func (r *Runner) RunPostToolUse(ctx context.Context, sessionID, toolName, toolIn
 	for i := range agg.Hooks {
 		agg.Hooks[i].InputRewrite = false
 	}
-	return agg, err
+	return agg
 }
 
 // RunStop executes every configured hook for the Stop event, which fires

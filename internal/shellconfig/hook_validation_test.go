@@ -41,11 +41,13 @@ func TestHookAddAcceptsKnownEvents(t *testing.T) {
 
 	result := loadScript(t, `hook add PreToolUse --command "echo pre"
 hook add PostToolUse --command "echo post" --matcher "^edit$"
+hook add PostToolUseFailure --command "echo failed" --matcher "^edit$"
 hook add Stop --command "echo stop"`)
 
 	hooks := result["hooks"].(map[string]any)
 	require.Len(t, hooks["PreToolUse"].([]any), 1)
 	require.Len(t, hooks["PostToolUse"].([]any), 1)
+	require.Len(t, hooks["PostToolUseFailure"].([]any), 1)
 	require.Len(t, hooks["Stop"].([]any), 1)
 }
 

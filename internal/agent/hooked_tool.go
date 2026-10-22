@@ -23,8 +23,9 @@ import (
 // toolHooks holds what hookedTool needs to run the hooks configured
 // around tool calls.
 type toolHooks struct {
-	pre  *hooks.Runner // PreToolUse hooks; nil when none are configured.
-	post *hooks.Runner // PostToolUse hooks; nil when none are configured.
+	pre         *hooks.Runner // PreToolUse hooks; nil when none are configured.
+	post        *hooks.Runner // PostToolUse hooks; nil when none are configured.
+	postFailure *hooks.Runner // PostToolUseFailure hooks; nil when none are configured.
 	// files and workingDir let a PostToolUse hook rewrite the file a call
 	// just wrote (a formatter, most likely) without the agent's next edit
 	// of it being refused as stale. files may be nil, as in tests.
@@ -49,7 +50,7 @@ func newHookedTool(inner fantasy.AgentTool, th toolHooks) *hookedTool {
 // hooks, the top-level invocation of the sub-agent tool itself is wrapped
 // on the caller's side.
 func wrapToolsWithHooks(tools []fantasy.AgentTool, th toolHooks, isSubAgent bool) []fantasy.AgentTool {
-	if (th.pre == nil && th.post == nil) || isSubAgent {
+	if (th.pre == nil && th.post == nil && th.postFailure == nil) || isSubAgent {
 		return tools
 	}
 	out := make([]fantasy.AgentTool, len(tools))
@@ -108,14 +109,15 @@ func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 		ctx = permission.WithHookApproval(ctx, call.ID)
 	}
 
+	start := time.Now()
 	resp, err := h.inner.Run(ctx, call)
 	if err != nil {
 		return resp, err
 	}
 
-	// The PostToolUse hooks see what the tool returned, before anything
-	// is added to it.
-	post, notes := h.runPostToolUse(ctx, sessionID, call, resp)
+	// The PostToolUse or PostToolUseFailure hooks see what the tool
+	// returned, before anything is added to it.
+	post, notes := h.runPostToolUse(ctx, sessionID, call, resp, time.Since(start))
 	if result.Context != "" {
 		notes = append([]string{result.Context}, notes...)
 	}
@@ -133,30 +135,44 @@ func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 	return resp, nil
 }
 
-// runPostToolUse runs the PostToolUse hooks for a call that succeeded,
-// handing them what the tool returned. It returns their result and what
-// the agent should read after the tool's output: a block's reason, any
-// context, and a note when a hook changed the file the call just wrote.
-// A call that failed does not fire them, as in Claude Code.
-func (h *hookedTool) runPostToolUse(ctx context.Context, sessionID string, call fantasy.ToolCall, resp fantasy.ToolResponse) (hooks.AggregateResult, []string) {
-	if h.hooks.post == nil || resp.IsError {
+// runPostToolUse runs the hooks that follow a call: PostToolUse for one
+// that succeeded, handed what the tool returned, or PostToolUseFailure for
+// one that failed, handed its error, as in Claude Code. It returns their
+// result and what the agent should read after the tool's output: a
+// block's reason, any context, and a note when a hook changed the file
+// the call just wrote.
+func (h *hookedTool) runPostToolUse(ctx context.Context, sessionID string, call fantasy.ToolCall, resp fantasy.ToolResponse, took time.Duration) (hooks.AggregateResult, []string) {
+	var (
+		event   string
+		result  hooks.AggregateResult
+		err     error
+		written string
+		before  fileState
+	)
+	switch {
+	case !resp.IsError && h.hooks.post != nil:
+		event = hooks.EventPostToolUse
+		written = h.writtenFile(call)
+		before = statFile(written)
+		result, err = h.hooks.post.RunPostToolUse(ctx, sessionID, call.Name, call.Input, resp.Content, resp.Metadata, took)
+	case resp.IsError && h.hooks.postFailure != nil:
+		event = hooks.EventPostToolUseFailure
+		result, err = h.hooks.postFailure.RunPostToolUseFailure(ctx, sessionID, call.Name, call.Input, resp.Content, ctx.Err() != nil, took)
+	default:
 		return hooks.AggregateResult{}, nil
 	}
-	written := h.writtenFile(call)
-	before := statFile(written)
-	result, err := h.hooks.post.RunPostToolUse(ctx, sessionID, call.Name, call.Input, resp.Content, resp.Metadata)
 	if err != nil {
-		slog.Warn("PostToolUse hook execution error", "tool", call.Name, "error", err)
+		slog.Warn("Hook execution error after a tool call", "event", event, "tool", call.Name, "error", err)
 	}
 
 	var notes []string
 	reason := cmp.Or(result.Reason, "no reason given")
 	switch {
 	case result.Halt:
-		notes = append(notes, "Turn halted by a PostToolUse hook. Reason: "+reason)
+		notes = append(notes, "Turn halted by a "+event+" hook. Reason: "+reason)
 	case result.Decision == hooks.DecisionDeny:
 		// The call has run; a block is the hook's feedback on it.
-		notes = append(notes, "PostToolUse hook feedback: "+reason)
+		notes = append(notes, event+" hook feedback: "+reason)
 	}
 	if result.Context != "" {
 		notes = append(notes, result.Context)

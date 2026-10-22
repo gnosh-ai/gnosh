@@ -255,3 +255,34 @@ func TestToolHooksShareTheToolUseID(t *testing.T) {
 		require.Equal(t, "call-42", payload.ToolUseID, name)
 	}
 }
+
+// A failed call fires the PostToolUseFailure hooks, not the PostToolUse
+// ones, and what they say is added to the error the agent reads.
+func TestPostToolUseFailureFeedback(t *testing.T) {
+	t.Parallel()
+
+	payload := filepath.Join(t.TempDir(), "payload.json")
+	cfg := &config.Config{Hooks: map[string][]config.HookConfig{
+		hooks.EventPostToolUseFailure: {{Command: "cat > " + payload + `; echo "view it before you edit it" >&2; exit 2`, Matcher: "^edit$"}},
+	}}
+	require.NoError(t, cfg.ValidateHooks())
+	failure := hooks.NewRunner(cfg.Hooks[hooks.EventPostToolUseFailure], t.TempDir(), t.TempDir())
+
+	inner := &fakeTool{name: "edit", resp: fantasy.NewTextErrorResponse("old_string not found in file")}
+	tool := newHookedTool(inner, toolHooks{post: newPostRunner(t, "touch "+payload+".post"), postFailure: failure})
+	resp, err := tool.Run(sessionCtx(t), fantasy.ToolCall{ID: "c1", Name: "edit", Input: `{"file_path":"a.go"}`})
+	require.NoError(t, err)
+	require.True(t, resp.IsError)
+	require.Equal(t, "old_string not found in file\nPostToolUseFailure hook feedback: view it before you edit it", resp.Content)
+	require.NoFileExists(t, payload+".post", "PostToolUse does not fire for a failed call")
+
+	data, err := os.ReadFile(payload)
+	require.NoError(t, err)
+	var got struct {
+		Event string `json:"hook_event_name"`
+		Error string `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(data, &got))
+	require.Equal(t, hooks.EventPostToolUseFailure, got.Event)
+	require.Equal(t, "old_string not found in file", got.Error)
+}

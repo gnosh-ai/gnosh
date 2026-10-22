@@ -17,14 +17,16 @@ need to author correct hooks.
 ## Supported Events
 
 `PreToolUse` fires before every tool call. `PostToolUse` fires after a tool
-call succeeds. `Stop` fires when the agent is about to finish its turn.
+call succeeds, and `PostToolUseFailure` after one fails. `Stop` fires when the
+agent is about to finish its turn.
 
 Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
 `PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Crash refuses
 to start on an event name it doesn't fire, rather than accepting a hook that
 would look configured and silently never run.
 
-A `matcher` only makes sense for `PreToolUse` and `PostToolUse`. There is no
+A `matcher` only makes sense for `PreToolUse`, `PostToolUse` and
+`PostToolUseFailure`. There is no
 tool in play when a turn ends, so a `matcher` on a `Stop` hook is a config error
 too, and every configured `Stop` hook runs.
 
@@ -138,7 +140,9 @@ policy violation).
 blocked or rewritten. Exit `2` (or `"decision": "block"`/`"deny"`) hands your
 reason to the model as feedback after the tool's output; `context` (or
 Claude Code's `additionalContext`) is appended the same way; exit `49` ends the
-turn. A failed call does not fire `PostToolUse`.
+turn. A failed call does not fire `PostToolUse`; it fires `PostToolUseFailure`,
+which works the same way and gets `"error"` (the error the model reads) instead
+of `tool_response`. Both get `duration_ms`.
 
 ## Aggregation (Multiple Hooks)
 

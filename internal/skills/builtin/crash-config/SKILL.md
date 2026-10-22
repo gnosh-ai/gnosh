@@ -219,7 +219,8 @@ option ui exit-banner compact
 ## Hooks runtime
 
 Hooks are user-defined shell commands that fire on agent events: `PreToolUse`
-before a tool runs, `PostToolUse` after one succeeds, and `Stop` when the agent
+before a tool runs, `PostToolUse` after one succeeds, `PostToolUseFailure` after
+one fails, and `Stop` when the agent
 is about to finish its turn. This behavior is the same however the hook is
 defined (`hook add` or JSON). The crash-hooks skill has the full reference.
 

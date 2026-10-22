@@ -1039,7 +1039,7 @@ func hookDetail(sty *styles.Styles, hi hooks.HookInfo) string {
 	case "deny":
 		// A PostToolUse hook blocks after the call has run: what it
 		// sends the agent is feedback, not a denial.
-		if hi.Event == hooks.EventPostToolUse {
+		if hi.Event == hooks.EventPostToolUse || hi.Event == hooks.EventPostToolUseFailure {
 			return strings.TrimSpace(sty.Tool.HookDenied.Render(feedbackMessage) + " " + sty.Tool.HookDeniedReason.Render(hi.Reason))
 		}
 		if hi.Reason != "" {

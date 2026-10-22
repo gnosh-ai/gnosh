@@ -245,6 +245,16 @@ the same.
 
 **Scope**: like `PreToolUse`, only the **top-level agent's** tool calls.
 
+### PostToolUseFailure
+
+This hook fires right after a tool call fails: the tool returned an error the
+model reads, such as an `edit` whose `old_string` was not found. It works like
+`PostToolUse`: it is matched against the tool name, the call has already run,
+exit code `2` (or `"decision": "block"`) hands your reason to the model after
+the error, `context` is appended the same way, and exit `49` ends the turn. Use
+it to log failures or to add a hint, say "view the file first", when a tool
+keeps failing.
+
 ### Stop
 
 This hook fires when the agent is about to finish its turn. Use it to refuse the
@@ -813,6 +823,25 @@ The PreToolUse payload, plus what the tool returned:
     "output": "ok  	example.com/pkg	0.012s",
     "metadata": { "exit_code": 0 },
   },
+}
+```
+
+### Stdin payload — PostToolUseFailure
+
+The PreToolUse payload, plus why the call failed:
+
+```jsonc
+{
+  // ...PreToolUse fields...
+
+  // string. The error the tool returned, as the model reads it.
+  "error": "old_string not found in file",
+
+  // boolean. True when the call failed because the turn was cancelled.
+  "is_interrupt": false,
+
+  // number. How long the call took. PostToolUse payloads carry it too.
+  "duration_ms": 12,
 }
 ```
 
