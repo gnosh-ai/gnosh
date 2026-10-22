@@ -32,6 +32,9 @@ type Manager struct {
 	callback    func(name string, client *Client)
 	now         func() time.Time
 	lookPath    func(string) (string, error)
+	// missingWarned holds the configured servers already reported as not
+	// installed, so the warning is given once rather than on every retry.
+	missingWarned sync.Map
 }
 
 // NewManager creates a new LSP manager service.
@@ -185,6 +188,19 @@ func (s *Manager) startServer(name, filepath string, server *powernapconfig.Serv
 		if s.recentlyUnavailable(name) {
 			return
 		}
+		// A configured server whose program is not installed cannot start.
+		// Say so once, instead of launching it and logging a failure on
+		// every retry (four ERRORs in six minutes on the AI box, which has
+		// no gopls); installing it later is noticed on a later file event.
+		if _, err := s.lookPath(server.Command); err != nil {
+			if _, warned := s.missingWarned.LoadOrStore(name, true); !warned {
+				slog.Warn("LSP server is configured but its program is not installed; code intelligence for it is off until it is",
+					"name", name, "command", server.Command)
+			}
+			s.markUnavailable(name)
+			return
+		}
+		s.missingWarned.Delete(name)
 	} else if !s.canAutoStart(name, filepath, s.cfg.WorkingDir(), server) {
 		return
 	}

@@ -185,3 +185,53 @@ func TestStartServerBacksOffWhenAutoStartedServerFails(t *testing.T) {
 	require.True(t, m.recentlyUnavailable("fakels"),
 		"a server that passed the PATH check but failed to start must still back off")
 }
+
+// A configured server whose program is not installed is reported and not
+// launched; after the back-off its program is looked for again, and once
+// it is found, a later disappearance would be reported again.
+func TestStartServerReportsAMissingConfiguredProgram(t *testing.T) {
+	t.Parallel()
+
+	const command = "crash-test-no-such-lsp-binary"
+	base := time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC)
+	now := base
+	var installed bool
+	var lookups int
+	cfg := &config.Config{
+		Options: &config.Options{},
+		LSP:     config.LSPs{"gopls": {Command: command}},
+	}
+	m := &Manager{
+		clients:     csync.NewMap[string, *Client](),
+		unavailable: csync.NewMap[string, time.Time](),
+		cfg:         config.NewTestStore(cfg),
+		callback:    func(string, *Client) {},
+		now:         func() time.Time { return now },
+		lookPath: func(string) (string, error) {
+			lookups++
+			if installed {
+				return "/usr/bin/" + command, nil
+			}
+			return "", exec.ErrNotFound
+		},
+	}
+	server := &powernapconfig.ServerConfig{Command: command, FileTypes: []string{"go"}}
+
+	m.startServer("gopls", "main.go", server)
+	_, warned := m.missingWarned.Load("gopls")
+	require.True(t, warned, "the missing program is reported")
+	require.True(t, m.recentlyUnavailable("gopls"))
+	_, stored := m.clients.Get("gopls")
+	require.False(t, stored)
+
+	now = base.Add(time.Second)
+	m.startServer("gopls", "main.go", server)
+	require.Equal(t, 1, lookups, "inside the back-off nothing is looked up or launched")
+
+	now = base.Add(unavailableRetryDelay + time.Second)
+	installed = true
+	m.startServer("gopls", "main.go", server)
+	require.Equal(t, 2, lookups, "after the back-off the program is looked for again")
+	_, warned = m.missingWarned.Load("gopls")
+	require.False(t, warned, "found, so a later disappearance is reported again")
+}
