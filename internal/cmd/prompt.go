@@ -164,7 +164,7 @@ func exportToolDescriptions(cmd *cobra.Command, infos []fantasy.ToolInfo) error 
 		if _, err := os.Stat(path); err == nil {
 			continue
 		}
-		if err := os.WriteFile(path, []byte(strings.TrimSpace(t.Description)+"\n"), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(agent.ExportedDescriptionFile(t.Description)), 0o644); err != nil {
 			return err
 		}
 		written++
@@ -176,7 +176,7 @@ func exportToolDescriptions(cmd *cobra.Command, infos []fantasy.ToolInfo) error 
 			return err
 		}
 	}
-	_, err := fmt.Fprintf(cmd.OutOrStdout(), "Wrote %d description files to %s (existing ones kept); edit them, or list tools to drop in %s. Crush uses them from the next start.\n", written, dir, disabled)
+	_, err := fmt.Fprintf(cmd.OutOrStdout(), "Wrote %d description files to %s (existing ones kept); edit them, or list tools to drop in %s. A file is used from the next start once you edit it; until then the current built-in description is.\n", written, dir, disabled)
 	return err
 }
 

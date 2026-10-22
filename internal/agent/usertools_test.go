@@ -4,9 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"charm.land/fantasy"
+	"github.com/stretchr/testify/require"
 )
 
 type userToolFake struct{ name, desc string }
@@ -55,4 +57,31 @@ func TestApplyUserTools(t *testing.T) {
 	if _, used := UserToolDescription("bash"); !used {
 		t.Fatal("UserToolDescription must report bash as overridden")
 	}
+}
+
+// An export is a starting point for editing. Until it is edited it must not
+// replace the built-in description, which can change after the export was
+// taken; once edited, the user's text is used, without the export's mark.
+func TestApplyUserTools_UneditedExportFollowsTheBuiltIn(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CRUSH_GLOBAL_CONFIG", filepath.Join(dir, "crush.json"))
+	require.NoError(t, os.MkdirAll(UserToolsDir(), 0o755))
+	path := filepath.Join(UserToolsDir(), "bash.md")
+	exported := ExportedDescriptionFile("Assisted-by: Crush:gpt-oss-120b")
+	require.NoError(t, os.WriteFile(path, []byte(exported), 0o644))
+
+	tools := []fantasy.AgentTool{userToolFake{"bash", "Assisted-by: Crush:qwen3.8-27b"}}
+	got := applyUserTools(tools)
+	require.Equal(t, "Assisted-by: Crush:qwen3.8-27b", got[0].Info().Description,
+		"an unedited export must follow the built-in, not freeze it")
+	_, used := UserToolDescription("bash")
+	require.False(t, used)
+
+	edited := strings.Replace(exported, "gpt-oss-120b", "my own words", 1)
+	require.NoError(t, os.WriteFile(path, []byte(edited), 0o644))
+	got = applyUserTools(tools)
+	require.Equal(t, "Assisted-by: Crush:my own words", got[0].Info().Description,
+		"an edited export is used, without its mark")
+	_, used = UserToolDescription("bash")
+	require.True(t, used)
 }
