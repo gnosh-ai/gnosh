@@ -149,16 +149,38 @@ func expandPath(path string, store *config.ConfigStore) string {
 	return path
 }
 
-// loadContextFiles loads and deduplicates context files from a list of paths.
-func loadContextFiles(paths []string, store *config.ConfigStore) map[string][]ContextFile {
-	files := map[string][]ContextFile{}
+// loadContextFiles loads the context files at paths, in the order the
+// paths are given, each file once. A path listed again in another case
+// (CRASH.md, crash.md) is skipped, and so is a file already loaded under
+// another name: a symlink such as CLAUDE.md -> AGENTS.md, or CRUSH.md ->
+// CRASH.md after the rename, would otherwise put the same text in the
+// prompt twice. The order is fixed because the system prompt is rebuilt
+// (on a model switch, a config reload), and a model server's prompt
+// cache reuses only the part of a conversation before the first change:
+// files reshuffled by map order made the whole conversation be read
+// again.
+func loadContextFiles(paths []string, store *config.ConfigStore) []ContextFile {
+	var files []ContextFile
+	seenPaths := map[string]bool{}
+	seenFiles := map[string]bool{}
 	for _, pth := range paths {
 		expanded := expandPath(pth, store)
 		pathKey := strings.ToLower(expanded)
-		if _, ok := files[pathKey]; ok {
+		if seenPaths[pathKey] {
 			continue
 		}
-		files[pathKey] = processContextPath(expanded, store)
+		seenPaths[pathKey] = true
+		for _, file := range processContextPath(expanded, store) {
+			real, err := filepath.EvalSymlinks(file.Path)
+			if err != nil {
+				real = file.Path
+			}
+			if seenFiles[real] {
+				continue
+			}
+			seenFiles[real] = true
+			files = append(files, file)
+		}
 	}
 	return files
 }
@@ -224,12 +246,8 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 		}
 	}
 
-	for _, files := range contextFiles {
-		data.ContextFiles = append(data.ContextFiles, files...)
-	}
-	for _, files := range globalContextFiles {
-		data.GlobalContextFiles = append(data.GlobalContextFiles, files...)
-	}
+	data.ContextFiles = contextFiles
+	data.GlobalContextFiles = globalContextFiles
 	return data, nil
 }
 
