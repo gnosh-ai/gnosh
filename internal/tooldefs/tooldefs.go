@@ -40,6 +40,7 @@ var names = []string{
 	"lsp_replace_symbol",
 	"fetch",
 	"agentic_fetch",
+	"x402_fetch",
 	"glob",
 	"grep",
 	"ls",

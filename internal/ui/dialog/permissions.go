@@ -498,6 +498,13 @@ func (p *Permissions) renderHeader(contentWidth int) string {
 		if params, ok := p.permission.Params.(tools.LSPermissionsParams); ok {
 			lines = append(lines, p.renderKeyValue("Directory", fsext.PrettyPath(params.Path), contentWidth))
 		}
+	case tools.X402FetchToolName:
+		if params, ok := p.permission.Params.(tools.X402FetchPermissionsParams); ok {
+			lines = append(lines, p.renderKeyValue("Key", params.Key, contentWidth))
+			if params.Master != "" {
+				lines = append(lines, p.renderKeyValue("Pays for", params.Master, contentWidth))
+			}
+		}
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
@@ -555,6 +562,8 @@ func (p *Permissions) renderContent(width int) string {
 		return p.renderFetchContent(width)
 	case tools.AgenticFetchToolName:
 		return p.renderAgenticFetchContent(width)
+	case tools.X402FetchToolName:
+		return p.renderX402FetchContent(width)
 	case tools.ViewToolName:
 		return p.renderViewContent(width)
 	case tools.LSToolName:
@@ -675,6 +684,23 @@ func (p *Permissions) renderAgenticFetchContent(width int) string {
 		content = fmt.Sprintf("Prompt: %s", params.Prompt)
 	}
 
+	return p.renderContentPanel(content, width)
+}
+
+// renderX402FetchContent shows what may be bought. The price is not known
+// until the seller names it, so the password prompt that follows shows that,
+// and nothing is paid without it.
+func (p *Permissions) renderX402FetchContent(width int) string {
+	params, ok := p.permission.Params.(tools.X402FetchPermissionsParams)
+	if !ok {
+		return ""
+	}
+
+	content := params.URL
+	if params.Description != "" {
+		content = params.Description + "\n\n" + content
+	}
+	content += "\n\nIf it charges, you will see the price and type the key's password before anything is paid."
 	return p.renderContentPanel(content, width)
 }
 

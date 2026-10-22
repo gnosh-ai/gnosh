@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -124,11 +125,11 @@ func NewFetchTool(permissions permission.Service, workingDir string, client *htt
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf(
-					"Request failed with status code: %d %s",
-					resp.StatusCode,
-					http.StatusText(resp.StatusCode),
-				)), nil
+				msg := fmt.Sprintf("Request failed with status code: %d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+				if resp.StatusCode == http.StatusPaymentRequired {
+					msg += x402Terms(resp.Header)
+				}
+				return fantasy.NewTextErrorResponse(msg), nil
 			}
 
 			body, err := io.ReadAll(io.LimitReader(resp.Body, MaxFetchSize))
@@ -136,61 +137,69 @@ func NewFetchTool(permissions permission.Service, workingDir string, client *htt
 				return fantasy.NewTextErrorResponse("Failed to read response body: " + err.Error()), nil
 			}
 
-			content := string(body)
-
-			validUTF8 := utf8.ValidString(content)
-			if !validUTF8 {
-				return fantasy.NewTextErrorResponse("Response content is not valid UTF-8"), nil
-			}
-			contentType := resp.Header.Get("Content-Type")
-
-			switch format {
-			case "text":
-				if strings.Contains(contentType, "text/html") {
-					text, err := extractTextFromHTML(content)
-					if err != nil {
-						return fantasy.NewTextErrorResponse("Failed to extract text from HTML: " + err.Error()), nil
-					}
-					content = text
-				}
-
-			case "markdown":
-				if strings.Contains(contentType, "text/html") {
-					markdown, err := convertHTMLToMarkdown(content)
-					if err != nil {
-						return fantasy.NewTextErrorResponse("Failed to convert HTML to Markdown: " + err.Error()), nil
-					}
-					content = markdown
-				}
-
-				content = "```\n" + content + "\n```"
-
-			case "html":
-				// return only the body of the HTML document
-				if strings.Contains(contentType, "text/html") {
-					doc, err := goquery.NewDocumentFromReader(strings.NewReader(content))
-					if err != nil {
-						return fantasy.NewTextErrorResponse("Failed to parse HTML: " + err.Error()), nil
-					}
-					body, err := doc.Find("body").Html()
-					if err != nil {
-						return fantasy.NewTextErrorResponse("Failed to extract body from HTML: " + err.Error()), nil
-					}
-					if body == "" {
-						return fantasy.NewTextErrorResponse("No body content found in HTML"), nil
-					}
-					content = "<html>\n<body>\n" + body + "\n</body>\n</html>"
-				}
-			}
-			// truncate content if it exceeds max read size
-			if int64(len(content)) >= MaxFetchSize {
-				content = content[:MaxFetchSize]
-				content += fmt.Sprintf("\n\n[Content truncated to %d bytes]", MaxFetchSize)
+			content, err := formatFetched(body, resp.Header.Get("Content-Type"), format)
+			if err != nil {
+				return fantasy.NewTextErrorResponse(err.Error()), nil
 			}
 
 			return fantasy.NewTextResponse(content), nil
 		},
 	)
+}
+
+// formatFetched renders body, a response with the given content type, the way
+// fetch returns it in format: text, markdown or html. It refuses a body that
+// is not UTF-8 and truncates one at MaxFetchSize.
+func formatFetched(body []byte, contentType, format string) (string, error) {
+	content := string(body)
+	if !utf8.ValidString(content) {
+		return "", errors.New("response content is not valid UTF-8")
+	}
+
+	switch format {
+	case "text":
+		if strings.Contains(contentType, "text/html") {
+			text, err := extractTextFromHTML(content)
+			if err != nil {
+				return "", errors.New("failed to extract text from HTML: " + err.Error())
+			}
+			content = text
+		}
+
+	case "markdown":
+		if strings.Contains(contentType, "text/html") {
+			markdown, err := convertHTMLToMarkdown(content)
+			if err != nil {
+				return "", errors.New("failed to convert HTML to Markdown: " + err.Error())
+			}
+			content = markdown
+		}
+
+		content = "```\n" + content + "\n```"
+
+	case "html":
+		// return only the body of the HTML document
+		if strings.Contains(contentType, "text/html") {
+			doc, err := goquery.NewDocumentFromReader(strings.NewReader(content))
+			if err != nil {
+				return "", errors.New("failed to parse HTML: " + err.Error())
+			}
+			body, err := doc.Find("body").Html()
+			if err != nil {
+				return "", errors.New("failed to extract body from HTML: " + err.Error())
+			}
+			if body == "" {
+				return "", errors.New("no body content found in HTML")
+			}
+			content = "<html>\n<body>\n" + body + "\n</body>\n</html>"
+		}
+	}
+	// truncate content if it exceeds max read size
+	if int64(len(content)) >= MaxFetchSize {
+		content = content[:MaxFetchSize]
+		content += fmt.Sprintf("\n\n[Content truncated to %d bytes]", MaxFetchSize)
+	}
+	return content, nil
 }
 
 func extractTextFromHTML(html string) (string, error) {

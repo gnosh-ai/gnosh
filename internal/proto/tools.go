@@ -99,6 +99,14 @@ type FetchPermissionsParams = tools.FetchPermissionsParams
 // AgenticFetchToolName is the name of the agentic_fetch tool.
 const AgenticFetchToolName = tools.AgenticFetchToolName
 
+// X402FetchToolName is the name of the x402_fetch tool, which pays for what
+// it fetches.
+const X402FetchToolName = tools.X402FetchToolName
+
+// X402FetchPermissionsParams represents the permission parameters for the
+// x402_fetch tool.
+type X402FetchPermissionsParams = tools.X402FetchPermissionsParams
+
 // AgenticFetchPermissionsParams represents the permission parameters for the
 // agentic_fetch tool.
 type AgenticFetchPermissionsParams = tools.AgenticFetchPermissionsParams

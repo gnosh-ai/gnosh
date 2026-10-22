@@ -256,6 +256,8 @@ func NewToolMessageItem(
 		item = NewDownloadToolMessageItem(sty, toolCall, result, canceled)
 	case tools.FetchToolName:
 		item = NewFetchToolMessageItem(sty, toolCall, result, canceled)
+	case tools.X402FetchToolName:
+		item = NewX402FetchToolMessageItem(sty, toolCall, result, canceled)
 	case tools.SourcegraphToolName:
 		item = NewSourcegraphToolMessageItem(sty, toolCall, result, canceled)
 	case tools.DiagnosticsToolName:
@@ -1382,6 +1384,15 @@ func (t *baseToolMessageItem) formatParametersForCopy() string {
 		var params tools.WebFetchParams
 		if json.Unmarshal([]byte(t.toolCall.Input), &params) == nil {
 			return fmt.Sprintf("**URL:** %s", params.URL)
+		}
+	case tools.X402FetchToolName:
+		var params tools.X402FetchParams
+		if json.Unmarshal([]byte(t.toolCall.Input), &params) == nil {
+			parts := []string{fmt.Sprintf("**URL:** %s", params.URL), fmt.Sprintf("**Key:** %s", params.Key)}
+			if params.Master != "" {
+				parts = append(parts, fmt.Sprintf("**Pays for:** %s", params.Master))
+			}
+			return strings.Join(parts, "\n")
 		}
 	case tools.GrepToolName:
 		var params tools.GrepParams

@@ -157,6 +157,22 @@ func TestPermissionRequestParamsTypeAssertable(t *testing.T) {
 				require.Equal(t, "summarize this page", v.Prompt)
 			},
 		},
+		{
+			name:     "x402_fetch",
+			toolName: tools.X402FetchToolName,
+			params: tools.X402FetchPermissionsParams{
+				URL:    "https://x402-demo.onyx.testnets.gno.land/weather",
+				Key:    "buyer",
+				Master: "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5",
+			},
+			assert: func(t *testing.T, got any) {
+				v, ok := got.(tools.X402FetchPermissionsParams)
+				require.True(t, ok, "params must decode as tools.X402FetchPermissionsParams, got %T", got)
+				require.Equal(t, "https://x402-demo.onyx.testnets.gno.land/weather", v.URL)
+				require.Equal(t, "buyer", v.Key)
+				require.Equal(t, "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5", v.Master)
+			},
+		},
 	}
 
 	for _, tc := range tests {
