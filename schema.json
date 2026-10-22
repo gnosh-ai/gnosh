@@ -22,7 +22,7 @@
         },
         "generated_with": {
           "type": "boolean",
-          "description": "Add Generated with Crush line to commit messages and issues and PRs",
+          "description": "Add Generated with Crash line to commit messages and issues and PRs",
           "default": true
         }
       },
@@ -354,7 +354,7 @@
         },
         "sessionless": {
           "type": "boolean",
-          "description": "Mark a sessionless MCP server (no Mcp-Session-Id) so Crush skips the subscriptions/listen stream it would otherwise reject. Leave unset to auto-detect known sessionless servers (e.g. GitHub MCP)",
+          "description": "Mark a sessionless MCP server (no Mcp-Session-Id) so Crash skips the subscriptions/listen stream it would otherwise reject. Leave unset to auto-detect known sessionless servers (e.g. GitHub MCP)",
           "default": false
         },
         "headers": {
@@ -638,7 +638,7 @@
           "items": {
             "type": "string",
             "examples": [
-              "crush-config"
+              "crash-config"
             ]
           },
           "type": "array",
@@ -930,7 +930,7 @@
             "compact",
             "none"
           ],
-          "description": "Exit banner style after quitting Crush",
+          "description": "Exit banner style after quitting Crash",
           "default": "default"
         }
       },
