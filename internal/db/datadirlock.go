@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/env"
@@ -16,12 +16,18 @@ import (
 )
 
 // ErrDataDirLocked is returned by Connect when the data directory is
-// already in use by another crush process.
-var ErrDataDirLocked = errors.New("data directory already in use by another crush process")
+// already in use by another crash process.
+var ErrDataDirLocked = errors.New("data directory already in use by another crash process")
 
-// dataDirLockFile is the name of the lock file inside the data
-// directory. It lives next to crush.db so users can `ls` and find it.
-const dataDirLockFile = "crush.lock"
+// dataDirLockFile is the lock file inside the data directory. It lives
+// next to the database so users can `ls` and find it, and is named for
+// it: crash.lock beside crash.db, crush.lock beside the crush.db from
+// before the rename. A process from before the rename locks crush.lock
+// for crush.db, so a newer one sharing that database must lock the same
+// file, or both would open it at once.
+func dataDirLockFile(dataDir string) string {
+	return strings.TrimSuffix(FileName(dataDir), ".db") + ".lock"
+}
 
 // dataDirOwnerInfo is the JSON payload written into the lock file by
 // the process that currently owns it. It is purely informational; the
@@ -40,8 +46,8 @@ type dataDirLock struct {
 	release func()
 }
 
-// acquireDataDirLock takes an exclusive non-blocking lock on
-// {dataDir}/crush.lock. If the lock is already held by another
+// acquireDataDirLock takes an exclusive non-blocking lock on the data
+// directory's lock file (see dataDirLockFile). If the lock is already held by another
 // process, it returns ErrDataDirLocked wrapped with a diagnostic that
 // includes whatever owner info that process wrote.
 //
@@ -54,7 +60,7 @@ func acquireDataDirLock(dataDir string) (*dataDirLock, error) {
 		return &dataDirLock{release: func() {}}, nil
 	}
 
-	path := filepath.Join(dataDir, dataDirLockFile)
+	path := dataDirLockFile(dataDir)
 	release, err := lock.TryFile(path)
 	if err != nil {
 		if errors.Is(err, lock.ErrContended) {

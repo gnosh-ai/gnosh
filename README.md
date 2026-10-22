@@ -936,8 +936,9 @@ your explicit model fields win on conflicts.
 
 ## Logging
 
-Sometimes you need to look at logs. Luckily, Crush logs all sorts of
-stuff. Logs are stored in `./.crush/logs/crush.log` relative to the project.
+Sometimes you need to look at logs. Luckily, Crash logs all sorts of
+stuff. Logs are stored in `./.crash/logs/crash.log` relative to the project
+(or `./.crush/logs/crush.log` in a project from before the rename).
 
 The CLI also contains some helper commands to make perusing recent logs easier:
 

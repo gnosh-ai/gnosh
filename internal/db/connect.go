@@ -90,7 +90,7 @@ func Connect(ctx context.Context, dataDir string, opts ...ConnectOption) (*sql.D
 		opt(&cfg)
 	}
 
-	dbPath := filepath.Join(dataDir, "crush.db")
+	dbPath := FileName(dataDir)
 
 	// Resolve to an absolute path so that different relative paths to
 	// the same file share a single connection.
@@ -175,7 +175,7 @@ func Connect(ctx context.Context, dataDir string, opts ...ConnectOption) (*sql.D
 // data directory. When the count reaches zero the underlying connection
 // is closed and removed from the pool.
 func Release(dataDir string) error {
-	dbPath := filepath.Join(dataDir, "crush.db")
+	dbPath := FileName(dataDir)
 	absPath, err := filepath.Abs(dbPath)
 	if err != nil {
 		absPath = dbPath
@@ -245,4 +245,19 @@ func initGoose() error {
 	})
 
 	return gooseInitErr
+}
+
+// FileName returns the database file in dataDir: crash.db, or the crush.db
+// from before the rename to Crash where only that one exists, so that an
+// existing data directory keeps its sessions.
+func FileName(dataDir string) string {
+	db := filepath.Join(dataDir, "crash.db")
+	if _, err := os.Stat(db); err == nil {
+		return db
+	}
+	legacy := filepath.Join(dataDir, "crush.db")
+	if _, err := os.Stat(legacy); err == nil {
+		return legacy
+	}
+	return db
 }

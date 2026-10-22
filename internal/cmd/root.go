@@ -364,7 +364,7 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 		return nil, nil, err
 	}
 
-	logFile := filepath.Join(cfg.Options.DataDirectory, "logs", "crush.log")
+	logFile := config.LogFile(filepath.Join(cfg.Options.DataDirectory, "logs"))
 	crushlog.Setup(logFile, debug)
 
 	// Discover skills once before app.New. Local mode hosts a single
@@ -488,7 +488,7 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 	}
 
 	if ws.Config != nil {
-		logFile := filepath.Join(ws.Config.Options.DataDirectory, "logs", "crush.log")
+		logFile := config.LogFile(filepath.Join(ws.Config.Options.DataDirectory, "logs"))
 		crushlog.Setup(logFile, debug)
 	}
 
@@ -561,7 +561,7 @@ func ensureServer(cmd *cobra.Command, hostURL *url.URL) error {
 	// server log file. crushlog.Setup uses sync.Once internally, so the
 	// later call from connectToServer becomes a no-op.
 	debug, _ := cmd.Flags().GetBool("debug")
-	logFile := filepath.Join(config.GlobalCacheDir(), "server-"+safeHostName(hostURL), "crush.log")
+	logFile := config.LogFile(filepath.Join(config.GlobalCacheDir(), "server-"+safeHostName(hostURL)))
 	crushlog.Setup(logFile, debug)
 
 	switch hostURL.Scheme {

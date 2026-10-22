@@ -1222,6 +1222,13 @@ func projectDataDir(workingDir string) string {
 	)
 }
 
+// LogFile returns the log file for logDir, a data directory's logs or a
+// server's cache directory: crash.log, or the crush.log from before the
+// rename to Crash where only that one exists.
+func LogFile(logDir string) string {
+	return fsext.FirstExisting(filepath.Join(logDir, appName+".log"), filepath.Join(logDir, legacyAppName+".log"))
+}
+
 // GlobalConfig returns the global configuration file path for the application.
 func GlobalConfig() string {
 	if dir := env.Getenv("CRASH_GLOBAL_CONFIG"); dir != "" {

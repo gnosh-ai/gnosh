@@ -900,7 +900,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 		}
 	}
 
-	logFile := filepath.Join(c.cfg.Config().Options.DataDirectory, "logs", "crush.log")
+	logFile := config.LogFile(filepath.Join(c.cfg.Config().Options.DataDirectory, "logs"))
 
 	// Build runners for the hooks configured around tool calls.
 	toolHooks := toolHooks{files: c.filetracker, workingDir: c.cfg.WorkingDir()}

@@ -55,7 +55,7 @@ var logsCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to load configuration: %v", err)
 		}
-		logsFile := filepath.Join(cfg.Config().Options.DataDirectory, "logs", "crush.log")
+		logsFile := config.LogFile(filepath.Join(cfg.Config().Options.DataDirectory, "logs"))
 		_, err = os.Stat(logsFile)
 		if os.IsNotExist(err) {
 			log.Warn("Looks like you are not in a Crash project. No logs found.")

@@ -244,7 +244,9 @@ func runStats(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// crawlForStats crawls a directory recursively looking for .crush/crush.db files.
+// crawlForStats crawls a directory recursively looking for session
+// databases: .crash/crash.db, or the .crush/ and crush.db names from
+// before the rename.
 func crawlForStats(ctx context.Context, rootDir string) ([]ProjectStats, error) {
 	var dbPaths []struct {
 		dbPath     string
@@ -261,9 +263,7 @@ func crawlForStats(ctx context.Context, rootDir string) ([]ProjectStats, error) 
 			return filepath.SkipDir
 		}
 
-		// Look for the .crash/crush.db pattern, or .crush/crush.db from
-		// before the rename.
-		if !d.IsDir() && d.Name() == "crush.db" {
+		if !d.IsDir() && (d.Name() == "crash.db" || d.Name() == "crush.db") {
 			dir := filepath.Dir(path)
 			if base := filepath.Base(dir); base == ".crash" || base == ".crush" {
 				projectDir := filepath.Dir(dir)
@@ -328,7 +328,7 @@ func gatherStatsFromProjects(ctx context.Context) ([]ProjectStats, error) {
 	}
 
 	for _, p := range projectList.Projects {
-		dbPath := filepath.Join(p.DataDir, "crush.db")
+		dbPath := db.FileName(p.DataDir)
 		if _, err := os.Stat(dbPath); err == nil {
 			dbPaths = append(dbPaths, struct {
 				dbPath     string

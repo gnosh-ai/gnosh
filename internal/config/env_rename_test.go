@@ -157,3 +157,16 @@ func TestPathsPreferCrashAndFallBackToCrush(t *testing.T) {
 		require.Greater(t, slices.Index(paths, newer), slices.Index(paths, old), "crash.json is merged later, so it wins")
 	})
 }
+
+// A log directory's log is crash.log, or the crush.log from before the
+// rename where only that one exists.
+func TestLogFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.Equal(t, filepath.Join(dir, "crash.log"), LogFile(dir))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "crush.log"), nil, 0o644))
+	require.Equal(t, filepath.Join(dir, "crush.log"), LogFile(dir), "an existing log keeps growing")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "crash.log"), nil, 0o644))
+	require.Equal(t, filepath.Join(dir, "crash.log"), LogFile(dir))
+}

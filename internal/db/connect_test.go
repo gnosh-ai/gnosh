@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -64,7 +65,7 @@ func TestConnect_FailsWhenDataDirLocked(t *testing.T) {
 	t.Cleanup(ResetPool)
 
 	dataDir := t.TempDir()
-	lockPath := filepath.Join(dataDir, dataDirLockFile)
+	lockPath := dataDirLockFile(dataDir)
 
 	release, err := lock.TryFile(lockPath)
 	require.NoError(t, err, "expected to take the data-dir lock for the first time")
@@ -81,7 +82,7 @@ func TestConnect_SucceedsAfterContenderReleases(t *testing.T) {
 	t.Cleanup(ResetPool)
 
 	dataDir := t.TempDir()
-	lockPath := filepath.Join(dataDir, dataDirLockFile)
+	lockPath := dataDirLockFile(dataDir)
 
 	release, err := lock.TryFile(lockPath)
 	require.NoError(t, err)
@@ -104,7 +105,7 @@ func TestConnect_LockReleasedOnFinalRelease(t *testing.T) {
 	t.Cleanup(ResetPool)
 
 	dataDir := t.TempDir()
-	lockPath := filepath.Join(dataDir, dataDirLockFile)
+	lockPath := dataDirLockFile(dataDir)
 
 	conn, err := Connect(context.Background(), dataDir, WithDataDirLock(true))
 	require.NoError(t, err)
@@ -134,7 +135,7 @@ func TestConnect_SharedPoolDoesNotReacquireLock(t *testing.T) {
 	t.Cleanup(ResetPool)
 
 	dataDir := t.TempDir()
-	lockPath := filepath.Join(dataDir, dataDirLockFile)
+	lockPath := dataDirLockFile(dataDir)
 
 	_, err := Connect(context.Background(), dataDir, WithDataDirLock(true))
 	require.NoError(t, err)
@@ -156,7 +157,7 @@ func TestConnect_SkipLockEnvBypassesAcquisition(t *testing.T) {
 	t.Cleanup(ResetPool)
 
 	dataDir := t.TempDir()
-	lockPath := filepath.Join(dataDir, dataDirLockFile)
+	lockPath := dataDirLockFile(dataDir)
 
 	release, err := lock.TryFile(lockPath)
 	require.NoError(t, err)
@@ -178,7 +179,7 @@ func TestConnect_DefaultIgnoresContendedLock(t *testing.T) {
 	t.Cleanup(ResetPool)
 
 	dataDir := t.TempDir()
-	lockPath := filepath.Join(dataDir, dataDirLockFile)
+	lockPath := dataDirLockFile(dataDir)
 
 	release, err := lock.TryFile(lockPath)
 	require.NoError(t, err, "expected to take the data-dir lock for the first time")
@@ -198,7 +199,7 @@ func TestConnect_ServerPathFailsWhenDataDirLocked(t *testing.T) {
 	t.Cleanup(ResetPool)
 
 	dataDir := t.TempDir()
-	lockPath := filepath.Join(dataDir, dataDirLockFile)
+	lockPath := dataDirLockFile(dataDir)
 
 	release, err := lock.TryFile(lockPath)
 	require.NoError(t, err, "expected to take the data-dir lock for the first time")
@@ -207,4 +208,33 @@ func TestConnect_ServerPathFailsWhenDataDirLocked(t *testing.T) {
 	_, err = Connect(context.Background(), dataDir, WithDataDirLock(true))
 	require.Error(t, err, "server-path Connect must refuse to open a locked data dir")
 	require.ErrorIs(t, err, ErrDataDirLocked)
+}
+
+// A new data directory gets crash.db and crash.lock; one that already
+// holds the crush.db from before the rename keeps it, and locks
+// crush.lock as an older process sharing it does, so the two cannot open
+// it at once.
+func TestDataFileNames(t *testing.T) {
+	t.Cleanup(ResetPool)
+
+	fresh := t.TempDir()
+	conn, err := Connect(context.Background(), fresh)
+	require.NoError(t, err)
+	require.NoError(t, conn.PingContext(context.Background()))
+	require.FileExists(t, filepath.Join(fresh, "crash.db"))
+	require.NoFileExists(t, filepath.Join(fresh, "crush.db"))
+	require.Equal(t, filepath.Join(fresh, "crash.lock"), dataDirLockFile(fresh))
+	require.NoError(t, Release(fresh))
+
+	// An existing database from before the rename is opened, not
+	// replaced by a new, empty crash.db beside it.
+	old := t.TempDir()
+	require.NoError(t, os.Rename(filepath.Join(fresh, "crash.db"), filepath.Join(old, "crush.db")))
+	conn, err = Connect(context.Background(), old)
+	require.NoError(t, err)
+	require.NoError(t, conn.PingContext(context.Background()))
+	require.NoFileExists(t, filepath.Join(old, "crash.db"))
+	require.Equal(t, filepath.Join(old, "crush.db"), FileName(old))
+	require.Equal(t, filepath.Join(old, "crush.lock"), dataDirLockFile(old))
+	require.NoError(t, Release(old))
 }
