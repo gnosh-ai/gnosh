@@ -183,13 +183,13 @@ func TestStopHookContinuation_MarkerOutsideACheckpointIsIgnored(t *testing.T) {
 func TestStopMarkerPresent(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, stopMarkerPresent("reason\n"+StopMarker))
-	require.True(t, stopMarkerPresent("reason\n  "+StopMarker+"  \n"), "surrounding whitespace is fine")
-	require.True(t, stopMarkerPresent("reason\n`"+StopMarker+"`"), "some models wrap it in backticks")
-	require.False(t, stopMarkerPresent("I could write "+StopMarker+" but I won't"),
+	require.True(t, HasStopMarker("reason\n"+StopMarker))
+	require.True(t, HasStopMarker("reason\n  "+StopMarker+"  \n"), "surrounding whitespace is fine")
+	require.True(t, HasStopMarker("reason\n`"+StopMarker+"`"), "some models wrap it in backticks")
+	require.False(t, HasStopMarker("I could write "+StopMarker+" but I won't"),
 		"a mention in prose is not a decision")
-	require.False(t, stopMarkerPresent("no marker here"))
-	require.False(t, stopMarkerPresent(""))
+	require.False(t, HasStopMarker("no marker here"))
+	require.False(t, HasStopMarker(""))
 }
 
 func TestStripStopMarker(t *testing.T) {
@@ -292,7 +292,7 @@ func TestLegacyStopMarker(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "<!-- CRASH_STOP -->", StopMarker)
-	require.True(t, stopMarkerPresent("reason\n<!-- CRUSH_STOP -->"))
+	require.True(t, HasStopMarker("reason\n<!-- CRUSH_STOP -->"))
 	require.Equal(t, "reason", StripStopMarker("reason\n<!-- CRUSH_STOP -->"))
 	require.Equal(t, "reason", StripStopMarker("reason\n"+StopMarker))
 }

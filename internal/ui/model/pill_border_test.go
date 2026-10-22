@@ -107,12 +107,18 @@ func TestEffectiveFocusedSectionFallsThrough(t *testing.T) {
 func TestLoopPillShowsWhileTheLoopRuns(t *testing.T) {
 	u := newTestUI()
 	u.session = &session.Session{ID: "s1"}
-	u.loop = loopState{active: true, sessionID: "s1", remaining: 7}
+	u.loop = loopState{active: true, sessionID: "s1", turns: 7}
 	u.updateLayoutAndSize()
 	u.renderPills()
 
-	if !strings.Contains(u.pillsView, "Loop 7 left") {
+	if !strings.Contains(u.pillsView, "Loop turn 7") {
 		t.Fatalf("expected the loop pill in the pills view:\n%s", u.pillsView)
+	}
+
+	u.loop.maxTurns = 10
+	u.renderPills()
+	if !strings.Contains(u.pillsView, "Loop 3 left") {
+		t.Fatalf("under a loop_max_turns cap the pill counts down:\n%s", u.pillsView)
 	}
 }
 
@@ -129,14 +135,14 @@ func TestNoLoopPillWhenIdle(t *testing.T) {
 	}
 }
 
-// TestLoopPillSurvivesTheFinalTurn pins the window where the loop is still
-// running but its budget has already been spent: advanceLoop decrements when
-// it sends a continuation, so the last turn runs with zero remaining. The
+// TestLoopPillSurvivesTheFinalTurn pins the window where a capped loop is
+// still running but its budget has already been spent: a turn is counted when
+// its continuation is sent, so the last turn runs with zero remaining. The
 // layout reserves a pills row for the active loop, so the pill has to fill it.
 func TestLoopPillSurvivesTheFinalTurn(t *testing.T) {
 	u := newTestUI()
 	u.session = &session.Session{ID: "s1"}
-	u.loop = loopState{active: true, sessionID: "s1", remaining: 0}
+	u.loop = loopState{active: true, sessionID: "s1", turns: 5, maxTurns: 5}
 	u.updateLayoutAndSize()
 	u.renderPills()
 

@@ -522,23 +522,20 @@ type Options struct {
 	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=crash-config"`
 	RequestTimeout            *int         `json:"request_timeout,omitempty" jsonschema:"description=Timeout in seconds for each LLM API request. Streaming responses are aborted only after this much inactivity\\, so slow but active streams are never killed. 0 disables it\\, negative values are invalid.,default=60,example=120,example=300,example=0"`
 	MaxBackgroundJobs         *int         `json:"max_background_jobs,omitempty" jsonschema:"description=How many background shell jobs may run at once. Jobs that have finished never count against it. 0 or negative restores the default.,default=50,example=10,example=200"`
-	LoopMaxTurns              *int         `json:"loop_max_turns,omitempty" jsonschema:"description=How many turns /loop may drive before it stops on its own. 0 or negative restores the default.,default=25,example=10,example=200"`
+	LoopMaxTurns              *int         `json:"loop_max_turns,omitempty" jsonschema:"description=An optional hard cap on how many turns /loop may drive. Unset (or 0 or negative) means no cap: every 25 turns the agent is asked whether it has a genuine reason to stop and otherwise keeps going.,example=200"`
 }
 
 // DefaultMaxBackgroundJobs is how many background shell jobs may run at once
 // when the user has not set max_background_jobs.
 const DefaultMaxBackgroundJobs = 50
 
-// DefaultLoopMaxTurns bounds /loop when the user has not set loop_max_turns.
-// A loop drives turns on its own, so it always stops by itself eventually:
-// the cap is what makes a model that never reports the task finished cost a
-// known number of turns instead of running until someone notices.
-const DefaultLoopMaxTurns = 25
-
-// GetLoopMaxTurns returns how many turns /loop may drive, always positive.
+// GetLoopMaxTurns returns the user's hard cap on the turns /loop may drive,
+// or 0 for none, the default. Without a cap the loop stops when the agent
+// reports the task finished, or judges at one of its periodic checkpoints
+// that there is a genuine reason to stop, or when the user presses Esc.
 func (o *Options) GetLoopMaxTurns() int {
 	if o == nil || o.LoopMaxTurns == nil || *o.LoopMaxTurns <= 0 {
-		return DefaultLoopMaxTurns
+		return 0
 	}
 	return *o.LoopMaxTurns
 }

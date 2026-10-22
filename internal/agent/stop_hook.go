@@ -71,7 +71,7 @@ func (a *sessionAgent) stopHookContinuation(
 	// the turn. The hook is not consulted again: it would only repeat
 	// the objection the agent has just weighed. The marker counts only at
 	// a checkpoint, so the rest of the time the hook stays in charge.
-	if call.stopHookReflecting && stopMarkerPresent(lastAssistantMessage) {
+	if call.stopHookReflecting && HasStopMarker(lastAssistantMessage) {
 		slog.Info("Agent judged at a Stop hook checkpoint that it should stop",
 			"session_id", call.SessionID,
 			"attempts", call.stopHookDepth,
@@ -173,11 +173,11 @@ func stopHookReflectionPrompt(attempts int, reason string) string {
 	)
 }
 
-// stopMarkerPresent reports whether text contains StopMarker on a line by
+// HasStopMarker reports whether text contains StopMarker on a line by
 // itself. Line-scoped, like the plan markers, so an agent merely
 // mentioning the marker in prose does not end the turn; a line wrapped in
 // inline-code backticks still counts, since some models add them.
-func stopMarkerPresent(text string) bool {
+func HasStopMarker(text string) bool {
 	for line := range strings.SplitSeq(text, "\n") {
 		if stopMarkerLine(line) {
 			return true
@@ -193,7 +193,7 @@ func stopMarkerLine(line string) bool {
 
 // StripStopMarker removes lines consisting solely of StopMarker, so the
 // sentinel never shows in rendered output. Mentions inside prose are left
-// alone, matching stopMarkerPresent.
+// alone, matching HasStopMarker.
 func StripStopMarker(text string) string {
 	if !strings.Contains(text, StopMarker) && !strings.Contains(text, legacyStopMarker) {
 		return text

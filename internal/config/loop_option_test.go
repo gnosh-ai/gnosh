@@ -9,13 +9,13 @@ import (
 func TestGetLoopMaxTurns(t *testing.T) {
 	t.Parallel()
 
-	// Unset, nil receiver, and nonsense values all mean the default, so a
-	// loop always has a positive cap to count down from.
+	// Unset, nil receiver, and nonsense values all mean no cap: by default
+	// a loop stops on its own only when the agent says so, never on a count.
 	var nilOpts *Options
-	require.Equal(t, DefaultLoopMaxTurns, nilOpts.GetLoopMaxTurns())
-	require.Equal(t, DefaultLoopMaxTurns, (&Options{}).GetLoopMaxTurns())
+	require.Zero(t, nilOpts.GetLoopMaxTurns())
+	require.Zero(t, (&Options{}).GetLoopMaxTurns())
 	for _, bad := range []int{0, -1, -100} {
-		require.Equal(t, DefaultLoopMaxTurns, (&Options{LoopMaxTurns: &bad}).GetLoopMaxTurns(),
+		require.Zero(t, (&Options{LoopMaxTurns: &bad}).GetLoopMaxTurns(),
 			"a non-positive cap would stop the loop before its first turn")
 	}
 

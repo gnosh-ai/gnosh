@@ -665,10 +665,8 @@
         },
         "loop_max_turns": {
           "type": "integer",
-          "description": "How many turns /loop may drive before it stops on its own. 0 or negative restores the default.",
-          "default": 25,
+          "description": "An optional hard cap on how many turns /loop may drive. Unset (or 0 or negative) means no cap: every 25 turns the agent is asked whether it has a genuine reason to stop and otherwise keeps going.",
           "examples": [
-            10,
             200
           ]
         }

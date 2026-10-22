@@ -61,14 +61,23 @@ func queuePill(queue int, t *styles.Styles) string {
 	return t.Pills.Focused.Render(content)
 }
 
-// loopPill shows that /loop is driving this session and how many turns it
-// may still take. A loop starts turns on its own, so without this the only
-// signs of it are the turns themselves.
-func loopPill(remaining int, t *styles.Styles) string {
-	// No guard on remaining: it is decremented when a continuation is sent,
-	// so the final turn runs with zero left. Returning nothing there would
-	// blank a pills row that the layout has already reserved.
-	text := t.Pills.QueueLabel.Render(fmt.Sprintf("Loop %d left", max(remaining, 0)))
+// loopPill shows that /loop is driving this session: which turn it is on,
+// or, under a loop_max_turns cap, how many turns it may still take. A loop
+// starts turns on its own, so without this the only signs of it are the
+// turns themselves.
+func loopPill(st loopState, t *styles.Styles) string {
+	label := fmt.Sprintf("Loop turn %d", st.turns)
+	switch {
+	case st.maxTurns > 0:
+		// No guard at zero: a turn is counted when its continuation is
+		// sent, so the final turn runs with zero left. Returning nothing
+		// there would blank a pills row the layout has already reserved.
+		label = fmt.Sprintf("Loop %d left", max(st.maxTurns-st.turns, 0))
+	case st.turns == 0:
+		// Armed while the user's own turn runs; its end sends the first.
+		label = "Loop on"
+	}
+	text := t.Pills.QueueLabel.Render(label)
 	return t.Pills.Focused.Render("\u21bb " + text)
 }
 
@@ -338,7 +347,7 @@ func (m *UI) renderPills() {
 		pills = append(pills, queuePill(m.promptQueue, t))
 	}
 	if hasLoop {
-		pills = append(pills, loopPill(m.loop.remaining, t))
+		pills = append(pills, loopPill(m.loop, t))
 	}
 
 	var expandedList string

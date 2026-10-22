@@ -6,13 +6,13 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
 func running() loopState {
-	return loopState{active: true, sessionID: "s1", remaining: 5}
+	return loopState{active: true, sessionID: "s1", turns: 3}
 }
 
 func TestLoopDecide_ContinuesOnAPlainTurn(t *testing.T) {
@@ -40,13 +40,45 @@ func TestLoopDecide_StopsOnCancelAndError(t *testing.T) {
 	require.Equal(t, loopStopError, stop, "a failed turn must not be retried forever")
 }
 
-func TestLoopDecide_StopsWhenCapReached(t *testing.T) {
+func TestLoopDecide_HasNoCapByDefault(t *testing.T) {
 	t.Parallel()
 	st := running()
-	st.remaining = 0
+	st.turns = 1000
+	stop, cont := loopDecide(st, notify.RunComplete{SessionID: "s1", Text: "more to do"})
+	require.True(t, cont, "a loop must not give up on a count the user never set")
+	require.Empty(t, string(stop))
+}
+
+func TestLoopDecide_StopsAtTheUsersCap(t *testing.T) {
+	t.Parallel()
+	st := running()
+	st.maxTurns = 3
 	stop, cont := loopDecide(st, notify.RunComplete{SessionID: "s1", Text: "more to do"})
 	require.False(t, cont)
-	require.Equal(t, loopStopExhausted, stop, "the cap must bound a model that never reports done")
+	require.Equal(t, loopStopExhausted, stop, "loop_max_turns must still bound a loop when set")
+
+	st.turns = 2
+	_, cont = loopDecide(st, notify.RunComplete{SessionID: "s1", Text: "more to do"})
+	require.True(t, cont, "and only once that many turns have been sent")
+}
+
+func TestLoopDecide_StopMarkerEndsTheLoopOnlyAtACheckpoint(t *testing.T) {
+	t.Parallel()
+	reply := "The tests need a database this box does not have.\n" + agent.StopMarker
+
+	stop, cont := loopDecide(running(), notify.RunComplete{SessionID: "s1", Text: reply})
+	require.True(t, cont, "outside a checkpoint the marker is not an answer to anything")
+	require.Empty(t, string(stop))
+
+	st := running()
+	st.reflecting = true
+	stop, cont = loopDecide(st, notify.RunComplete{SessionID: "s1", Text: reply})
+	require.False(t, cont, "asked whether to stop, the agent may say yes")
+	require.Equal(t, loopStopJudged, stop)
+
+	stop, cont = loopDecide(st, notify.RunComplete{SessionID: "s1", Text: "No reason to stop; next I fix the parser."})
+	require.True(t, cont, "and without the marker it keeps going")
+	require.Empty(t, string(stop))
 }
 
 func TestLoopDecide_IgnoresOtherSessionsAndIdleLoop(t *testing.T) {
@@ -112,7 +144,8 @@ func TestStartLoop_WhileATurnIsRunningOnlyArms(t *testing.T) {
 	require.NotNil(t, cmd)
 	require.True(t, m.loop.active, "the loop is armed")
 	require.Equal(t, "s1", m.loop.sessionID)
-	require.Equal(t, config.DefaultLoopMaxTurns, m.loop.remaining)
+	require.Zero(t, m.loop.turns, "the running turn is the user's, not the loop's")
+	require.Zero(t, m.loop.maxTurns, "no cap unless loop_max_turns sets one")
 	// Reaching sendMessageInternal here would panic on the nil workspace:
 	// the running turn's RunComplete is what drives the first continuation.
 }
@@ -120,7 +153,7 @@ func TestStartLoop_WhileATurnIsRunningOnlyArms(t *testing.T) {
 func TestAdvanceLoop_StopsAndClearsWhenTheModelReportsDone(t *testing.T) {
 	t.Parallel()
 
-	m := &UI{loop: loopState{active: true, sessionID: "s1", remaining: 5}}
+	m := &UI{loop: loopState{active: true, sessionID: "s1", turns: 5}}
 	cmd := m.advanceLoop(notify.RunComplete{SessionID: "s1", Text: "finished\nLOOP_DONE"})
 
 	require.NotNil(t, cmd, "the user is told the loop ended")
@@ -130,7 +163,7 @@ func TestAdvanceLoop_StopsAndClearsWhenTheModelReportsDone(t *testing.T) {
 func TestAdvanceLoop_StopsAndClearsAtTheCap(t *testing.T) {
 	t.Parallel()
 
-	m := &UI{loop: loopState{active: true, sessionID: "s1", remaining: 0}}
+	m := &UI{loop: loopState{active: true, sessionID: "s1", turns: 4, maxTurns: 4}}
 	cmd := m.advanceLoop(notify.RunComplete{SessionID: "s1", Text: "still going"})
 
 	require.NotNil(t, cmd)
@@ -140,12 +173,12 @@ func TestAdvanceLoop_StopsAndClearsAtTheCap(t *testing.T) {
 func TestAdvanceLoop_LeavesAnotherSessionsLoopAlone(t *testing.T) {
 	t.Parallel()
 
-	m := &UI{loop: loopState{active: true, sessionID: "s1", remaining: 5}}
+	m := &UI{loop: loopState{active: true, sessionID: "s1", turns: 5}}
 	cmd := m.advanceLoop(notify.RunComplete{SessionID: "s2", Text: "LOOP_DONE"})
 
 	require.Nil(t, cmd, "another session's turn says nothing")
 	require.True(t, m.loop.active, "and must not disarm this loop")
-	require.Equal(t, 5, m.loop.remaining)
+	require.Equal(t, 5, m.loop.turns)
 }
 
 func TestStopLoop_IsQuietWhenNoLoopIsRunning(t *testing.T) {
@@ -154,7 +187,7 @@ func TestStopLoop_IsQuietWhenNoLoopIsRunning(t *testing.T) {
 	m := &UI{}
 	require.Nil(t, m.stopLoop("cancelled"), "Esc on an idle session says nothing about loops")
 
-	m.loop = loopState{active: true, sessionID: "s1", remaining: 3}
+	m.loop = loopState{active: true, sessionID: "s1", turns: 3}
 	require.NotNil(t, m.stopLoop("cancelled"))
 	require.False(t, m.loop.active)
 }
@@ -169,7 +202,7 @@ func TestAdvanceLoop_SendsTheNextContinuationHidden(t *testing.T) {
 
 	u, ws := newPlanUI(t, "sess-1")
 	ws.agentReady = true
-	u.loop = loopState{active: true, sessionID: "sess-1", remaining: 3}
+	u.loop = loopState{active: true, sessionID: "sess-1", turns: 3}
 
 	cmd := u.advanceLoop(notify.RunComplete{SessionID: "sess-1", Text: "wrote a.txt, still more to do"})
 	require.NotNil(t, cmd, "an unfinished turn must drive the next one")
@@ -178,7 +211,47 @@ func TestAdvanceLoop_SendsTheNextContinuationHidden(t *testing.T) {
 	require.Equal(t, []string{loopPrompt}, ws.runPrompts, "exactly one continuation, and it is the loop's")
 	require.Equal(t, []bool{true}, ws.runHidden, "continuations stay in model history, not in the chat")
 	require.True(t, u.loop.active, "the loop keeps running")
-	require.Equal(t, 2, u.loop.remaining, "and spends one turn of its budget")
+	require.Equal(t, 4, u.loop.turns, "and counts the turn")
+}
+
+// TestAdvanceLoop_AsksAtEachCheckpoint covers what replaced the old iteration
+// cap: every loopReflectEvery turns the continuation is the question whether
+// there is a genuine reason to stop, and the turn after it is ordinary again.
+func TestAdvanceLoop_AsksAtEachCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	u, ws := newPlanUI(t, "sess-1")
+	ws.agentReady = true
+	u.loop = loopState{active: true, sessionID: "sess-1", turns: loopReflectEvery}
+
+	drainCmd(u.advanceLoop(notify.RunComplete{SessionID: "sess-1", Text: "still more to do"}))
+	require.Equal(t, []string{loopReflectionPrompt(loopReflectEvery)}, ws.runPrompts,
+		"the checkpoint asks instead of just continuing")
+	require.Contains(t, ws.runPrompts[0], agent.StopMarker, "and says how to answer yes")
+	require.Equal(t, []bool{true}, ws.runHidden)
+	require.True(t, u.loop.reflecting)
+
+	drainCmd(u.advanceLoop(notify.RunComplete{SessionID: "sess-1", Text: "No reason to stop. Fixed the parser."}))
+	require.Equal(t, loopPrompt, ws.runPrompts[1], "a no means the loop goes on as before")
+	require.False(t, u.loop.reflecting, "and the next reply is no longer an answer to the question")
+	require.True(t, u.loop.active)
+}
+
+// TestAdvanceLoop_EndsWhenTheAgentJudgesItShouldStop pairs with the test
+// above: at a checkpoint, a reply carrying StopMarker ends the loop and sends
+// nothing further.
+func TestAdvanceLoop_EndsWhenTheAgentJudgesItShouldStop(t *testing.T) {
+	t.Parallel()
+
+	u, ws := newPlanUI(t, "sess-1")
+	ws.agentReady = true
+	u.loop = loopState{active: true, sessionID: "sess-1", turns: loopReflectEvery + 1, reflecting: true}
+
+	cmd := u.advanceLoop(notify.RunComplete{SessionID: "sess-1", Text: "This needs your API key.\n" + agent.StopMarker})
+	require.NotNil(t, cmd, "the user is told why the loop ended")
+	drainCmd(cmd)
+	require.Empty(t, ws.runPrompts, "no further turn after the agent judged it should stop")
+	require.False(t, u.loop.active)
 }
 
 // TestAdvanceLoop_SendsNothingOnceTheModelIsDone pairs with the test above:
@@ -188,7 +261,7 @@ func TestAdvanceLoop_SendsNothingOnceTheModelIsDone(t *testing.T) {
 
 	u, ws := newPlanUI(t, "sess-1")
 	ws.agentReady = true
-	u.loop = loopState{active: true, sessionID: "sess-1", remaining: 3}
+	u.loop = loopState{active: true, sessionID: "sess-1", turns: 3}
 
 	drainCmd(u.advanceLoop(notify.RunComplete{SessionID: "sess-1", Text: "all three files exist\nLOOP_DONE"}))
 
@@ -242,4 +315,5 @@ func TestStartLoop_OnAnIdleSessionSendsTheFirstContinuation(t *testing.T) {
 	require.True(t, u.loop.active, "the loop is armed")
 	require.Equal(t, []string{loopPrompt}, ws.runPrompts, "and starts itself straight away")
 	require.Equal(t, []bool{true}, ws.runHidden, "hidden, like every other continuation")
+	require.Equal(t, 1, u.loop.turns, "and that first turn counts")
 }

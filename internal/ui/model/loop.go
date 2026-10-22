@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
@@ -20,7 +21,37 @@ const (
 	// filled with one identical prompt per iteration.
 	loopPrompt = "Continue working on the task until it is complete. " +
 		"When, and only when, the whole task is finished, reply with exactly " + loopDoneSentinel + " on its own line."
+
+	// loopReflectEvery is how many turns a loop runs between checkpoints.
+	//
+	// There is deliberately no cap by default. A task can genuinely need any
+	// number of turns, and ending the loop on a counter would throw away
+	// exactly the persistence /loop exists to add. Instead, at each
+	// checkpoint the agent itself judges whether there is a real reason to
+	// stop; if there is not, it keeps working. Esc always stops it, and
+	// loop_max_turns sets a hard cap for a user who wants one.
+	loopReflectEvery = 25
 )
+
+// loopReflectionPrompt is sent in place of loopPrompt every loopReflectEvery
+// turns. It asks the agent to judge whether there is a genuine reason to stop,
+// and tells it how to say so; absent such a reason it is told plainly to keep
+// going. The marker is the Stop hook's, which the chat already hides.
+func loopReflectionPrompt(turns int) string {
+	return fmt.Sprintf(
+		"This loop has now run %d turns without the task being reported finished. "+
+			"Before continuing, step back and judge honestly whether there is a "+
+			"genuine reason to stop — for example: the task cannot be done as "+
+			"asked; it is blocked on something only the user can provide or "+
+			"decide; a check it needs cannot pass in this environment; or you "+
+			"are repeating the same attempts without making progress.\n\n"+
+			"If there is such a reason, explain it clearly for the user, then end "+
+			"your reply with this line on its own:\n%s\n\n"+
+			"If the whole task is in fact finished, reply with exactly %s on its own line.\n\n"+
+			"Otherwise, do not stop: keep working on the task. Taking many turns is fine.",
+		turns, agent.StopMarker, loopDoneSentinel,
+	)
+}
 
 // loopState is the /loop driver. A turn ending publishes RunComplete, and
 // while the loop is active that event sends the next continue prompt, so the
@@ -33,7 +64,13 @@ const (
 type loopState struct {
 	active    bool
 	sessionID string
-	remaining int
+	// turns counts the continue prompts sent so far.
+	turns int
+	// maxTurns is the user's own cap from loop_max_turns; 0 means none.
+	maxTurns int
+	// reflecting marks that the latest continue prompt was the checkpoint
+	// question: only the reply to it may end the loop with StopMarker.
+	reflecting bool
 }
 
 // loopStop explains why a running loop ended; the empty string means it is
@@ -44,7 +81,8 @@ const (
 	loopStopDone      loopStop = "the model reported the task finished"
 	loopStopCancelled loopStop = "the turn was cancelled"
 	loopStopError     loopStop = "the turn failed"
-	loopStopExhausted loopStop = "the iteration cap was reached"
+	loopStopExhausted loopStop = "the loop_max_turns cap was reached"
+	loopStopJudged    loopStop = "the agent judged there is a reason to stop; its reply says why"
 )
 
 // loopDecide reports whether the loop should send another continue prompt
@@ -62,7 +100,9 @@ func loopDecide(st loopState, rc notify.RunComplete) (loopStop, bool) {
 		return loopStopError, false
 	case loopReportedDone(rc.Text):
 		return loopStopDone, false
-	case st.remaining <= 0:
+	case st.reflecting && agent.HasStopMarker(rc.Text):
+		return loopStopJudged, false
+	case st.maxTurns > 0 && st.turns >= st.maxTurns:
 		return loopStopExhausted, false
 	}
 	return "", true
@@ -90,8 +130,12 @@ func (m *UI) startLoop() tea.Cmd {
 		return util.ReportWarn("Start a session before looping")
 	}
 	maxTurns := m.com.Config().Options.GetLoopMaxTurns()
-	m.loop = loopState{active: true, sessionID: m.session.ID, remaining: maxTurns}
-	started := util.ReportInfo(fmt.Sprintf("Loop on: continuing until %s (max %d turns). Esc stops it.", loopDoneSentinel, maxTurns))
+	m.loop = loopState{active: true, sessionID: m.session.ID, maxTurns: maxTurns}
+	limit := fmt.Sprintf("checking in every %d turns", loopReflectEvery)
+	if maxTurns > 0 {
+		limit = fmt.Sprintf("max %d turns", maxTurns)
+	}
+	started := util.ReportInfo(fmt.Sprintf("Loop on: continuing until %s (%s). Esc stops it.", loopDoneSentinel, limit))
 
 	// A turn already running will publish RunComplete, and that drives the
 	// next continuation. Sending one here as well would put two in flight
@@ -100,6 +144,7 @@ func (m *UI) startLoop() tea.Cmd {
 	if m.isAgentBusy() {
 		return started
 	}
+	m.loop.turns++
 	return tea.Sequence(started, m.sendMessageInternal(loopPrompt, true))
 }
 
@@ -115,11 +160,17 @@ func (m *UI) stopLoop(reason string) tea.Cmd {
 
 // advanceLoop runs on every finished turn: it sends the next continue prompt
 // while the loop should keep going, and otherwise ends the loop and says why.
+// Every loopReflectEvery turns the prompt is the checkpoint question instead.
 func (m *UI) advanceLoop(rc notify.RunComplete) tea.Cmd {
 	stop, cont := loopDecide(m.loop, rc)
 	if cont {
-		m.loop.remaining--
-		return m.sendMessageInternal(loopPrompt, true)
+		prompt := loopPrompt
+		m.loop.reflecting = m.loop.turns > 0 && m.loop.turns%loopReflectEvery == 0
+		if m.loop.reflecting {
+			prompt = loopReflectionPrompt(m.loop.turns)
+		}
+		m.loop.turns++
+		return m.sendMessageInternal(prompt, true)
 	}
 	if stop == "" {
 		return nil
