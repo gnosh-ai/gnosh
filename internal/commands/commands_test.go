@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/stretchr/testify/require"
 )
@@ -52,6 +53,48 @@ func TestLoadAll_MixedSources(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, cmds, 1)
 	require.Equal(t, "user:cmd", cmds[0].ID)
+}
+
+// A command found in two sources shows once, from the first.
+func TestLoadAll_FirstOfTheSameNameWins(t *testing.T) {
+	t.Parallel()
+
+	first, second := t.TempDir(), t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(first, "cmd.md"), []byte("new"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(second, "cmd.md"), []byte("old"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(second, "other.md"), []byte("other"), 0o644))
+
+	cmds, err := loadAll([]commandSource{
+		{path: first, prefix: userCommandPrefix},
+		{path: second, prefix: userCommandPrefix},
+	})
+	require.NoError(t, err)
+	require.Len(t, cmds, 2)
+	require.Equal(t, "user:cmd", cmds[0].ID)
+	require.Equal(t, "new", cmds[0].Content)
+	require.Equal(t, "user:other", cmds[1].ID)
+}
+
+// A commands directory under the crash name must not hide the commands in
+// the crush one.
+func TestBuildCommandSources_ReadsBothNames(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	for name, cmd := range map[string]string{"crash": "new.md", "crush": "old.md"} {
+		dir := filepath.Join(xdg, name, "commands")
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, cmd), []byte(name), 0o644))
+	}
+
+	cfg := &config.Config{Options: &config.Options{DataDirectory: t.TempDir()}}
+	cmds, err := loadAll(buildCommandSources(cfg))
+	require.NoError(t, err)
+	var ids []string
+	for _, cmd := range cmds {
+		ids = append(ids, cmd.ID)
+	}
+	require.Contains(t, ids, "user:new")
+	require.Contains(t, ids, "user:old")
 }
 
 func TestFromSkillCatalog_UserInvocableOnly(t *testing.T) {

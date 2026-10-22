@@ -11,7 +11,6 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/home"
 	"github.com/charmbracelet/crush/internal/skills"
 )
@@ -119,38 +118,39 @@ func LoadMCPPrompts() ([]MCPPrompt, error) {
 	return commands, nil
 }
 
+// buildCommandSources lists where commands are read from. The crash and
+// crush user directories are both read, crash first: picking whichever
+// exists let a commands directory made under the new name hide every
+// command in the old one.
 func buildCommandSources(cfg *config.Config) []commandSource {
 	return []commandSource{
-		{
-			path: fsext.FirstExisting(
-				filepath.Join(home.Config(), "crash", "commands"),
-				filepath.Join(home.Config(), "crush", "commands"),
-			),
-			prefix: userCommandPrefix,
-		},
-		{
-			path: fsext.FirstExisting(
-				filepath.Join(home.Dir(), ".crash", "commands"),
-				filepath.Join(home.Dir(), ".crush", "commands"),
-			),
-			prefix: userCommandPrefix,
-		},
-		{
-			path:   filepath.Join(cfg.Options.DataDirectory, "commands"),
-			prefix: projectCommandPrefix,
-		},
+		{path: filepath.Join(home.Config(), "crash", "commands"), prefix: userCommandPrefix},
+		{path: filepath.Join(home.Config(), "crush", "commands"), prefix: userCommandPrefix},
+		{path: filepath.Join(home.Dir(), ".crash", "commands"), prefix: userCommandPrefix},
+		{path: filepath.Join(home.Dir(), ".crush", "commands"), prefix: userCommandPrefix},
+		{path: filepath.Join(cfg.Options.DataDirectory, "commands"), prefix: projectCommandPrefix},
 	}
 }
 
+// loadAll loads every source's commands in order. A command found again
+// under the same name, as after copying crush's commands into crash's, is
+// shown once: the first one wins.
 func loadAll(sources []commandSource) ([]CustomCommand, error) {
 	var commands []CustomCommand
-
+	seen := make(map[string]bool)
 	for _, source := range sources {
-		if cmds, err := loadFromSource(source); err == nil {
-			commands = append(commands, cmds...)
+		cmds, err := loadFromSource(source)
+		if err != nil {
+			continue
+		}
+		for _, cmd := range cmds {
+			if seen[cmd.ID] {
+				continue
+			}
+			seen[cmd.ID] = true
+			commands = append(commands, cmd)
 		}
 	}
-
 	return commands, nil
 }
 
