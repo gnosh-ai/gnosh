@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/fsext"
+	"github.com/charmbracelet/crush/internal/home"
 	powernapconfig "github.com/charmbracelet/x/powernap/pkg/config"
 	powernap "github.com/charmbracelet/x/powernap/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
@@ -73,6 +74,20 @@ func NewManager(cfg *config.ConfigStore) *Manager {
 		now:         time.Now,
 		lookPath:    exec.LookPath,
 	}
+}
+
+// resolvedCommand is the program a configured server's command runs, as
+// the client resolves it to launch it: variables expanded, then a leading
+// ~ for the home directory. Looking up the command as written reported
+// "~/go/bin/gopls" and "$HOME/go/bin/gopls" as not installed, so they were
+// never launched. A command that does not resolve is returned as it is;
+// the client reports why when it tries to start it.
+func (s *Manager) resolvedCommand(command string) string {
+	resolved, err := s.cfg.Resolver().ResolveValue(command)
+	if err != nil {
+		return command
+	}
+	return home.Long(resolved)
 }
 
 // Clients returns the map of LSP clients.
@@ -192,7 +207,7 @@ func (s *Manager) startServer(name, filepath string, server *powernapconfig.Serv
 		// Say so once, instead of launching it and logging a failure on
 		// every retry (four ERRORs in six minutes on the AI box, which has
 		// no gopls); installing it later is noticed on a later file event.
-		if _, err := s.lookPath(server.Command); err != nil {
+		if _, err := s.lookPath(s.resolvedCommand(server.Command)); err != nil {
 			if _, warned := s.missingWarned.LoadOrStore(name, true); !warned {
 				slog.Warn("LSP server is configured but its program is not installed; code intelligence for it is off until it is",
 					"name", name, "command", server.Command)

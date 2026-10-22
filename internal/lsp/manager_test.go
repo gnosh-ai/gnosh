@@ -2,12 +2,15 @@ package lsp
 
 import (
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/home"
 	powernapconfig "github.com/charmbracelet/x/powernap/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -234,4 +237,36 @@ func TestStartServerReportsAMissingConfiguredProgram(t *testing.T) {
 	require.Equal(t, 2, lookups, "after the back-off the program is looked for again")
 	_, warned = m.missingWarned.Load("gopls")
 	require.False(t, warned, "found, so a later disappearance is reported again")
+}
+
+// A configured command is looked up as the client will run it: with its
+// variables expanded and a leading ~ for the home directory. Looked up as
+// written, "~/go/bin/gopls" was reported missing and never launched.
+func TestStartServerLooksUpTheConfiguredCommandAsItWillRun(t *testing.T) {
+	t.Parallel()
+
+	for command, want := range map[string]string{
+		"~/go/bin/gopls":     filepath.Join(home.Dir(), "go", "bin", "gopls"),
+		"$HOME/go/bin/gopls": filepath.Join(os.Getenv("HOME"), "go", "bin", "gopls"),
+		"gopls":              "gopls",
+	} {
+		var looked string
+		cfg := &config.Config{
+			Options: &config.Options{},
+			LSP:     config.LSPs{"gopls": {Command: command}},
+		}
+		m := &Manager{
+			clients:     csync.NewMap[string, *Client](),
+			unavailable: csync.NewMap[string, time.Time](),
+			cfg:         config.NewTestStore(cfg),
+			callback:    func(string, *Client) {},
+			now:         time.Now,
+			lookPath: func(name string) (string, error) {
+				looked = name
+				return "", exec.ErrNotFound
+			},
+		}
+		m.startServer("gopls", "main.go", &powernapconfig.ServerConfig{Command: command, FileTypes: []string{"go"}})
+		require.Equal(t, want, looked, command)
+	}
 }
