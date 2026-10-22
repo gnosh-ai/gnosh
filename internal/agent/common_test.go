@@ -92,13 +92,29 @@ func (f failFastOnStaleCassette) RoundTrip(req *http.Request) (*http.Response, e
 	return resp, err
 }
 
+// testEnv is the environment for a test, working in a directory of its
+// own. It used a fixed directory under /tmp/crush-test, shared by every
+// user and every run: once one user's run of the suite had created it,
+// another user's runs of these tests failed with "permission denied" (the
+// AI box's self-improvement agent hit that in every run, because the
+// suite is verified there as root), and two runs at once removed each
+// other's files.
 func testEnv(t *testing.T) fakeEnv {
+	return newTestEnv(t, t.TempDir())
+}
+
+// cassetteEnv is testEnv in the fixed directory the recorded cassettes
+// were made in: the working directory is part of every recorded request,
+// so it must be the same when the cassettes are replayed.
+func cassetteEnv(t *testing.T) fakeEnv {
 	workingDir := filepath.Join("/tmp/crush-test/", t.Name())
 	os.RemoveAll(workingDir)
+	require.NoError(t, os.MkdirAll(workingDir, 0o755))
+	t.Cleanup(func() { os.RemoveAll(workingDir) })
+	return newTestEnv(t, workingDir)
+}
 
-	err := os.MkdirAll(workingDir, 0o755)
-	require.NoError(t, err)
-
+func newTestEnv(t *testing.T, workingDir string) fakeEnv {
 	conn, err := db.Connect(t.Context(), t.TempDir())
 	require.NoError(t, err)
 
@@ -111,10 +127,7 @@ func testEnv(t *testing.T) fakeEnv {
 	filetrackerService := filetracker.NewService(q)
 	lspClients := csync.NewMap[string, *lsp.Client]()
 
-	t.Cleanup(func() {
-		conn.Close()
-		os.RemoveAll(workingDir)
-	})
+	t.Cleanup(func() { conn.Close() })
 
 	return fakeEnv{
 		workingDir,

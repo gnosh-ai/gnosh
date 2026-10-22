@@ -44,7 +44,7 @@ func getModels(t *testing.T, r *vcr.Recorder, pair modelPair) (fantasy.LanguageM
 func setupAgent(t *testing.T, pair modelPair) (SessionAgent, fakeEnv) {
 	r := vcr.NewRecorder(t)
 	large, small := getModels(t, r, pair)
-	env := testEnv(t)
+	env := cassetteEnv(t)
 
 	createSimpleGoProject(t, env.workingDir)
 	agent, err := coderAgent(r, env, large, small)
