@@ -1,0 +1,67 @@
+// Package tooldefs names Crush's built-in tools.
+//
+// The list lives here, in a package that imports nothing, because two
+// places need to agree on it and neither can own it: internal/config
+// validates the tool names a config file uses, and internal/shellconfig
+// validates the ones a crushrc writes — and config imports shellconfig,
+// so shellconfig cannot import config back.
+//
+// Duplicating 29 strings behind a drift-guard test was the alternative.
+// A shared list makes the drift impossible instead of merely detectable.
+package tooldefs
+
+import "slices"
+
+// MCPPrefix is the prefix every MCP-provided tool name carries
+// ("mcp_<server>_<tool>"). Those names are discovered when a server
+// connects, so config-time checks can only recognise the shape.
+const MCPPrefix = "mcp_"
+
+// names is the built-in tool set the agent can be given. Returned by
+// value from Names so a caller cannot reach in and change it.
+var names = []string{
+	"agent",
+	"bash",
+	"crush_info",
+	"crush_logs",
+	"job_output",
+	"job_kill",
+	"download",
+	"edit",
+	"multiedit",
+	"lsp_diagnostics",
+	"lsp_references",
+	"lsp_restart",
+	"lsp_symbols",
+	"lsp_definition",
+	"lsp_call_hierarchy",
+	"lsp_rename",
+	"lsp_replace_symbol",
+	"fetch",
+	"agentic_fetch",
+	"glob",
+	"grep",
+	"ls",
+	"question",
+	"sourcegraph",
+	"todos",
+	"view",
+	"write",
+	"list_mcp_resources",
+	"read_mcp_resource",
+}
+
+// Names returns the built-in tool names.
+func Names() []string {
+	return slices.Clone(names)
+}
+
+// IsKnown reports whether name is a built-in tool.
+func IsKnown(name string) bool {
+	return slices.Contains(names, name)
+}
+
+// IsMCPToolName reports whether name has the shape of an MCP tool name.
+func IsMCPToolName(name string) bool {
+	return len(name) > len(MCPPrefix) && name[:len(MCPPrefix)] == MCPPrefix
+}

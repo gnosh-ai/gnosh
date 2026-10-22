@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
+	"strings"
 )
 
 // handleMCP implements the `mcp` builtin.
@@ -60,6 +62,15 @@ var mcpAddFlags = []flagSpec{
 	{name: "--oauth-callback-port", jsonKey: "oauth_callback_port", kind: flagInt, op: opSet},
 }
 
+// knownMCPTypes are the connection types `mcp add` accepts. Spelled out
+// because internal/config imports this package and cannot be imported
+// back; TestKnownMCPTypesMatchConfig keeps the lists in step.
+var knownMCPTypes = []string{"stdio", "sse", "http"}
+
+// KnownMCPTypesForTest exposes the accepted types for that cross-package
+// check.
+func KnownMCPTypesForTest() []string { return slices.Clone(knownMCPTypes) }
+
 func mcpAdd(b *ConfigBuilder, args []string, stderr io.Writer) error {
 	if len(args) < 3 {
 		return usage(stderr, "usage: mcp add <name> --type stdio|sse|http [--command CMD] [--args ARG ...] [--env KEY VALUE ...] [--url URL] [--header KEY VALUE ...] [--timeout N] [--disabled true|false] [--disabled-tools TOOL ...] [--enabled-tools TOOL ...] [--sessionless true|false] [--oauth true|false] [--oauth-client-id ID] [--oauth-client-secret SECRET] [--oauth-callback-port PORT]")
@@ -75,6 +86,15 @@ func mcpAdd(b *ConfigBuilder, args []string, stderr io.Writer) error {
 
 	if err := applyFlags(mcpAddFlags, args, 3, m, "mcp add", stderr); err != nil {
 		return err
+	}
+
+	// The loader refuses to start on a type it cannot open, so catch it
+	// on the line that is wrong rather than at the next launch.
+	if t, ok := m["type"].(string); ok && !slices.Contains(knownMCPTypes, t) {
+		return usage(stderr, fmt.Sprintf(
+			"mcp add: unknown type %q (expected %s)",
+			t, strings.Join(knownMCPTypes, ", "),
+		))
 	}
 
 	slog.Debug("MCP recorded", "name", name)

@@ -447,32 +447,98 @@ func TestValidateHooksEmptyCommand(t *testing.T) {
 	require.Contains(t, err.Error(), "command is required")
 }
 
-func TestValidateHooksNormalizesEventNames(t *testing.T) {
+// Event names are matched exactly. The old loader folded case and
+// stripped underscores so "pre_tool_use" still worked; that forgiveness
+// is gone, because it rescued small typos while leaving every other
+// misspelling as a key nothing reads — a hook that looks configured and
+// silently never runs.
+func TestValidateHooksRejectsUnknownEventNames(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name  string
 		input string
 	}{
-		{"canonical", "PreToolUse"},
 		{"lowercase", "pretooluse"},
 		{"snake_case", "pre_tool_use"},
 		{"upper_snake", "PRE_TOOL_USE"},
 		{"mixed_case", "preToolUse"},
+		{"kebab_case", "pre-tool-use"},
+		{"near_miss", "PreToolUsage"},
+		{"lowercase_stop", "stop"},
+		{"not_an_event", "PostToolUse"},
+		{"nonsense", "banana"},
+		{"empty", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			cfg := &config.Config{
 				Hooks: map[string][]config.HookConfig{
-					tt.input: {
-						{Command: "true"},
-					},
+					tt.input: {{Command: "true"}},
+				},
+			}
+			err := cfg.ValidateHooks()
+			require.Error(t, err, "an event name Crush does not fire must be a load error")
+			require.Contains(t, err.Error(), "unknown event name")
+			require.Contains(t, err.Error(), EventPreToolUse,
+				"the error must list the names that do work")
+			require.Contains(t, err.Error(), EventStop)
+		})
+	}
+}
+
+func TestValidateHooksAcceptsKnownEventNames(t *testing.T) {
+	t.Parallel()
+
+	for _, event := range config.KnownHookEvents() {
+		t.Run(event, func(t *testing.T) {
+			t.Parallel()
+			cfg := &config.Config{
+				Hooks: map[string][]config.HookConfig{
+					event: {{Command: "true"}},
 				},
 			}
 			require.NoError(t, cfg.ValidateHooks())
-			require.Len(t, cfg.Hooks[EventPreToolUse], 1)
+			require.Len(t, cfg.Hooks[event], 1,
+				"a valid event name must be left exactly as written")
 		})
+	}
+}
+
+// A Stop hook fires when the turn ends, with no tool in play, so a
+// matcher could never match anything. Rejecting it keeps it from
+// becoming another silently dead setting.
+func TestValidateHooksRejectsMatcherOnStop(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Hooks: map[string][]config.HookConfig{
+			EventStop: {{Command: "true", Matcher: "^bash$"}},
+		},
+	}
+	err := cfg.ValidateHooks()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "matcher is not supported")
+	require.Contains(t, err.Error(), EventStop)
+}
+
+func TestValidateHooksReportsTheOffendingEventFirst(t *testing.T) {
+	t.Parallel()
+
+	// Two bad events in one config: iteration is sorted so the message
+	// is the same on every run rather than whichever key Go hands back.
+	cfg := &config.Config{
+		Hooks: map[string][]config.HookConfig{
+			"Zebra": {{Command: "true"}},
+			"Alpha": {{Command: "true"}},
+		},
+	}
+	for range 10 {
+		err := cfg.ValidateHooks()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), `hook "Alpha"`,
+			"map iteration order must not leak into the error message")
 	}
 }
 

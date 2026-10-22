@@ -26,6 +26,17 @@ type Payload struct {
 	CWD       string          `json:"cwd"`
 	ToolName  string          `json:"tool_name"`
 	ToolInput json.RawMessage `json:"tool_input"`
+
+	// StopHookActive is set on an EventStop payload when the turn is
+	// only still running because an earlier Stop hook blocked it. A
+	// hook that wants to fire once and then let the turn end should
+	// return success while this is true. Named for parity with Claude
+	// Code's Stop hook input.
+	StopHookActive bool `json:"stop_hook_active,omitempty"`
+	// LastAssistantMessage carries the text of the assistant message
+	// the turn is about to end on, so a Stop hook can judge the answer
+	// without reading the session back out of the database.
+	LastAssistantMessage string `json:"last_assistant_message,omitempty"`
 }
 
 // BuildPayload constructs the JSON stdin payload for a hook command.
@@ -46,6 +57,36 @@ func BuildPayload(eventName, sessionID, cwd, toolName, toolInputJSON string) []b
 		return []byte("{}")
 	}
 	return data
+}
+
+// BuildStopPayload constructs the JSON stdin payload for an EventStop
+// hook. There is no tool in play, so tool_name is empty and tool_input
+// is an empty object.
+func BuildStopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActive bool) []byte {
+	p := Payload{
+		Event:                EventStop,
+		SessionID:            sessionID,
+		CWD:                  cwd,
+		ToolInput:            json.RawMessage("{}"),
+		StopHookActive:       stopHookActive,
+		LastAssistantMessage: lastAssistantMessage,
+	}
+	data, err := json.Marshal(p)
+	if err != nil {
+		return []byte("{}")
+	}
+	return data
+}
+
+// BuildStopEnv constructs the environment variable slice for an
+// EventStop hook command.
+func BuildStopEnv(sessionID, cwd, projectDir string, stopHookActive bool) []string {
+	env := BuildEnv(EventStop, "", sessionID, cwd, projectDir, "")
+	active := "0"
+	if stopHookActive {
+		active = "1"
+	}
+	return append(env, fmt.Sprintf("CRUSH_STOP_HOOK_ACTIVE=%s", active))
 }
 
 // BuildEnv constructs the environment variable slice for a hook command.
@@ -118,7 +159,11 @@ func parseStdout(stdout string) HookResult {
 		Reason:  parsed.Reason,
 		Context: parseContext(parsed.Context),
 	}
-	result.Decision = parseDecision(parsed.Decision)
+	decision, err := parseDecision(parsed.Decision)
+	result.Decision = decision
+	if err != nil {
+		result.Error = err.Error()
+	}
 	result.UpdatedInput = rawToString(parsed.UpdatedInput)
 	return result
 }
@@ -167,10 +212,14 @@ func parseClaudeCodeOutput(data json.RawMessage) HookResult {
 		return HookResult{Decision: DecisionNone}
 	}
 
+	decision, err := parseDecision(hso.PermissionDecision)
 	result := HookResult{
-		Decision: parseDecision(hso.PermissionDecision),
+		Decision: decision,
 		Reason:   hso.PermissionDecisionReason,
 		Context:  hso.AdditionalContext,
+	}
+	if err != nil {
+		result.Error = err.Error()
 	}
 
 	// Marshal updatedInput back to a string for our opaque format.
@@ -199,13 +248,44 @@ func rawToString(raw json.RawMessage) string {
 	return string(raw)
 }
 
-func parseDecision(s string) Decision {
-	switch strings.ToLower(s) {
-	case "allow":
-		return DecisionAllow
-	case "deny":
-		return DecisionDeny
-	default:
-		return DecisionNone
+// decisionWords is every decision value a hook may return, and what it
+// means. Two vocabularies are accepted because the docs promise both
+// Crush's own and Claude Code compatibility:
+//
+//   - Crush's top-level "decision": "allow", "deny".
+//   - Claude Code's top-level "decision": "approve", "block". Claude Code
+//     Stop hooks keep the agent working with {"decision": "block"}.
+//   - Claude Code's hookSpecificOutput.permissionDecision: "allow",
+//     "deny", "ask". "ask" means show the normal permission prompt, which
+//     is exactly what DecisionNone already does here.
+//
+// Matching is exact, as it is for event names.
+var decisionWords = map[string]Decision{
+	"allow":   DecisionAllow,
+	"approve": DecisionAllow,
+	"deny":    DecisionDeny,
+	"block":   DecisionDeny,
+	"ask":     DecisionNone,
+}
+
+// parseDecision maps a hook's decision value to a Decision. An empty
+// value means the hook expressed no opinion.
+//
+// Anything else is an error, not "no opinion". Reading an unrecognised
+// word as no opinion is how Claude Code's own {"decision": "block"} was
+// silently ignored — a hook that set out to stop a tool call let it run,
+// and a Stop hook that set out to keep the agent working let the turn
+// end. The hook stays non-blocking, as every failed hook is, but the
+// error surfaces as "Failed" on the tool line, or as a warning for a
+// Stop hook.
+func parseDecision(s string) (Decision, error) {
+	if s == "" {
+		return DecisionNone, nil
 	}
+	if d, ok := decisionWords[s]; ok {
+		return d, nil
+	}
+	return DecisionNone, fmt.Errorf(
+		"unknown decision %q; expected allow, deny, approve, block or ask", s,
+	)
 }

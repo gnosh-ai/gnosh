@@ -301,6 +301,16 @@ func IsInterrupt(err error) bool {
 }
 
 // ExitCode extracts the exit code from an error
+// IsExitStatus reports whether err is a command's own exit status — that
+// is, the command ran and chose to exit non-zero. Any other error means
+// the shell could not run the command at all (a script that does not
+// exist, say), and then the reason is in the error rather than on the
+// command's stderr, which it never got the chance to write.
+func IsExitStatus(err error) bool {
+	_, ok := errors.AsType[interp.ExitStatus](err)
+	return ok
+}
+
 func ExitCode(err error) int {
 	if err == nil {
 		return 0

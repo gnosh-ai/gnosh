@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
+	"strings"
 )
 
 // handleHook implements the `hook` builtin.
@@ -37,6 +39,23 @@ func handleHook(ctx context.Context, args []string, stdin io.Reader, stdout, std
 	}
 }
 
+// knownHookEvents are the event names `hook add` accepts. They are
+// spelled out here because internal/config imports this package and so
+// cannot be imported back; TestKnownHookEventsMatchConfig keeps this
+// list and config.KnownHookEvents in step.
+//
+// Checking here matters because the loader rejects an unknown event
+// name outright: without this, `hook add pre_tool_use ...` would write a
+// crushrc that Crush then refuses to start with — a startup failure
+// caused by a command Crush itself offers. Better to fail on the line
+// that is wrong.
+var knownHookEvents = []string{"PreToolUse", "Stop"}
+
+// eventsSupportingMatcher are the events whose hooks fire against a
+// named tool. A matcher on any other event matches nothing, so the
+// loader rejects it; reject it here too.
+var eventsSupportingMatcher = []string{"PreToolUse"}
+
 // hookAddFlags is the declarative flag surface for `hook add`.
 var hookAddFlags = []flagSpec{
 	{name: "--command", jsonKey: "command", kind: flagString, op: opSet},
@@ -50,6 +69,12 @@ func hookAdd(b *ConfigBuilder, args []string, stderr io.Writer) error {
 		return usage(stderr, "usage: hook add <event> --command CMD [--name NAME] [--matcher REGEX] [--timeout N]")
 	}
 	event := args[2]
+	if !slices.Contains(knownHookEvents, event) {
+		return usage(stderr, fmt.Sprintf(
+			"hook add: unknown event %q (expected %s)",
+			event, strings.Join(knownHookEvents, " or "),
+		))
+	}
 	slog.Info("Hook defined in shell config", "event", event)
 	h := map[string]any{}
 
@@ -59,6 +84,13 @@ func hookAdd(b *ConfigBuilder, args []string, stderr io.Writer) error {
 
 	if _, ok := h["command"]; !ok {
 		return usage(stderr, "hook add: --command is required")
+	}
+
+	if _, ok := h["matcher"]; ok && !slices.Contains(eventsSupportingMatcher, event) {
+		return usage(stderr, fmt.Sprintf(
+			"hook add: --matcher is not supported for %s; there is no tool to match",
+			event,
+		))
 	}
 
 	hooks := b.section("hooks")
@@ -109,3 +141,12 @@ func hookRemove(b *ConfigBuilder, args []string, stderr io.Writer) error {
 	slog.Info("Hook removed in shell config", "event", event, "name", name)
 	return nil
 }
+
+// KnownHookEventsForTest exposes the accepted event names so a test in
+// the external test package can check them against config's list; see
+// TestKnownHookEventsMatchConfig.
+func KnownHookEventsForTest() []string { return slices.Clone(knownHookEvents) }
+
+// EventsSupportingMatcherForTest exposes the events that accept a
+// matcher, for the same cross-package check.
+func EventsSupportingMatcherForTest() []string { return slices.Clone(eventsSupportingMatcher) }

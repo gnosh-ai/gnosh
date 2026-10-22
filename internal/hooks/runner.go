@@ -3,6 +3,7 @@ package hooks
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -88,7 +89,39 @@ func (r *Runner) Hooks() []config.HookConfig {
 // Run executes all matching hooks for the given event and tool, returning
 // an aggregated result.
 func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolInputJSON string) (AggregateResult, error) {
-	matching := r.matchingHooks(toolName)
+	envVars := BuildEnv(eventName, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON)
+	payload := BuildPayload(eventName, sessionID, r.cwd, toolName, toolInputJSON)
+	return r.run(ctx, r.matchingHooks(toolName), eventName, toolName, toolInputJSON, envVars, payload)
+}
+
+// RunStop executes every configured hook for the Stop event, which fires
+// when the agent is about to finish its turn. Matchers do not apply —
+// there is no tool to match, and ValidateHooks rejects a matcher on a
+// Stop hook — so every hook the runner holds is executed.
+//
+// A DecisionDeny result means a hook refused to let the turn end; the
+// caller should put the agent back to work with the aggregated Reason.
+// Halt means the opposite: end the turn now and do not let any further
+// hook continue it. UpdatedInput is meaningless without a tool call and
+// is always cleared.
+func (r *Runner) RunStop(ctx context.Context, sessionID, lastAssistantMessage string, stopHookActive bool) (AggregateResult, error) {
+	envVars := BuildStopEnv(sessionID, r.cwd, r.projectDir, stopHookActive)
+	payload := BuildStopPayload(sessionID, r.cwd, lastAssistantMessage, stopHookActive)
+	agg, err := r.run(ctx, r.Hooks(), EventStop, "", "", envVars, payload)
+	agg.UpdatedInput = ""
+	return agg, err
+}
+
+// run executes the given hooks concurrently and aggregates their
+// results. Callers choose which hooks apply and build the stdin payload
+// and environment for the event.
+func (r *Runner) run(
+	ctx context.Context,
+	matching []config.HookConfig,
+	eventName, toolName, toolInputJSON string,
+	envVars []string,
+	payload []byte,
+) (AggregateResult, error) {
 	if len(matching) == 0 {
 		return AggregateResult{Decision: DecisionNone}, nil
 	}
@@ -103,9 +136,6 @@ func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolIn
 		seen[h.Command] = true
 		deduped = append(deduped, h)
 	}
-
-	envVars := BuildEnv(eventName, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON)
-	payload := BuildPayload(eventName, sessionID, r.cwd, toolName, toolInputJSON)
 
 	results := make([]HookResult, len(deduped))
 	var wg sync.WaitGroup
@@ -129,6 +159,7 @@ func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolIn
 			Halt:         results[i].Halt,
 			Reason:       results[i].Reason,
 			InputRewrite: results[i].UpdatedInput != "",
+			Error:        results[i].Error,
 		}
 	}
 	slog.Info(
@@ -203,18 +234,25 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, envVa
 			)
 			// The goroutine may still be writing to stdout/stderr; do
 			// not read either buffer below this point.
-			return HookResult{Decision: DecisionNone}
+			return HookResult{
+				Decision: DecisionNone,
+				Error:    fmt.Sprintf("timed out after %s and did not stop", timeout),
+			}
 		}
 	}
 
 	if shell.IsInterrupt(err) {
-		// Distinguish timeout from parent cancellation.
+		// Distinguish timeout from parent cancellation. A cancelled turn
+		// is the user's doing, not a hook failure, so it carries no Error.
 		if parentCtx.Err() != nil {
 			slog.Debug("Hook cancelled by parent context", "command", hook.Command)
-		} else {
-			slog.Warn("Hook timed out", "command", hook.Command, "timeout", timeout)
+			return HookResult{Decision: DecisionNone}
 		}
-		return HookResult{Decision: DecisionNone}
+		slog.Warn("Hook timed out", "command", hook.Command, "timeout", timeout)
+		return HookResult{
+			Decision: DecisionNone,
+			Error:    fmt.Sprintf("timed out after %s", timeout),
+		}
 	}
 
 	if err != nil {
@@ -243,14 +281,25 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, envVa
 			}
 		default:
 			// Other non-zero exits are non-blocking errors.
+			stderrText := strings.TrimSpace(stderr.String())
 			slog.Warn(
 				"Hook failed with non-blocking error",
 				"command", hook.Command,
 				"exit_code", exitCode,
-				"stderr", strings.TrimSpace(stderr.String()),
+				"stderr", stderrText,
 				"error", err,
 			)
-			return HookResult{Decision: DecisionNone}
+			detail := stderrText
+			if detail == "" && !shell.IsExitStatus(err) {
+				// The shell never ran the hook — most often the script
+				// path is wrong — so it wrote nothing to stderr and the
+				// reason is in the error itself.
+				detail = err.Error()
+			}
+			return HookResult{
+				Decision: DecisionNone,
+				Error:    hookFailureMessage(exitCode, detail),
+			}
 		}
 	}
 
@@ -262,4 +311,28 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, envVa
 		"decision", result.Decision.String(),
 	)
 	return result
+}
+
+// maxHookErrorLen bounds the stderr carried into a hook's Error, which is
+// shown on a single line in the TUI. The full stderr is in the log.
+const maxHookErrorLen = 200
+
+// hookFailureMessage summarises a non-blocking hook failure for display:
+// the exit code, what it usually means, and the first line of stderr.
+func hookFailureMessage(exitCode int, stderrText string) string {
+	msg := fmt.Sprintf("exit %d", exitCode)
+	switch exitCode {
+	case 126:
+		msg += " (not executable)"
+	case 127:
+		msg += " (command not found)"
+	}
+	if first, _, _ := strings.Cut(stderrText, "\n"); first != "" {
+		// Truncate by rune, not byte, so a cut never splits a character.
+		if r := []rune(first); len(r) > maxHookErrorLen {
+			first = string(r[:maxHookErrorLen]) + "…"
+		}
+		msg += ": " + first
+	}
+	return msg
 }

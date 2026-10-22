@@ -4,7 +4,9 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"maps"
 	"os"
@@ -64,25 +66,19 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 	}
 
 	// Load workspace config last so it has highest priority.
-	if wsData, err := readFile(store.workspacePath); err == nil && len(wsData) > 0 {
-		if !json.Valid(wsData) {
-			return nil, fmt.Errorf("invalid JSON in config file %s", store.workspacePath)
-		}
-		merged, mergeErr := loadFromBytes(append([][]byte{mustMarshalConfig(cfg)}, wsData))
-		if mergeErr == nil {
-			// Preserve defaults that setDefaults already applied.
-			dataDir := cfg.Options.DataDirectory
-			*cfg = *merged
-			cfg.setDefaults(workingDir, dataDir)
-			store.config = cfg
-			store.loadedPaths = append(store.loadedPaths, store.workspacePath)
-		}
+	merged, err := mergeWorkspaceConfig(cfg, store.workspacePath, workingDir)
+	if err != nil {
+		return nil, err
+	}
+	if merged {
+		store.config = cfg
+		store.loadedPaths = append(store.loadedPaths, store.workspacePath)
 	}
 
-	// Validate hooks after all config merging is complete so workspace
-	// hooks also get their matcher regexes compiled.
-	if err := cfg.ValidateHooks(); err != nil {
-		return nil, fmt.Errorf("invalid hook configuration: %w", err)
+	// Validate after all config merging is complete, so the checks see
+	// the same config the session will actually run with.
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
 
 	if !isInsideWorktree() {
@@ -663,6 +659,11 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	}
 
 	c.Options.InitializeAs = cmp.Or(c.Options.InitializeAs, defaultInitializeAs)
+
+	// Last, so the orphaned-OAuth-entry prune above still sees an entry
+	// that carries nothing but a token as empty: stamping a default type
+	// on it first would make it look like a configured stdio server.
+	c.setMCPDefaults()
 }
 
 // powernapDefaults caches the powernap default LSP server catalog. The
@@ -1427,40 +1428,197 @@ func ProjectSkillsDir(workingDir string) []string {
 
 func isAppleTerminal() bool { return os.Getenv("TERM_PROGRAM") == "Apple_Terminal" }
 
-// normalizeHookEvent maps user-provided event names to their canonical
-// form. Matching is case-insensitive and accepts snake_case variants
-// (e.g. "pre_tool_use" → "PreToolUse").
-func normalizeHookEvent(name string) string {
-	switch strings.ToLower(strings.ReplaceAll(name, "_", "")) {
-	case "pretooluse":
-		return "PreToolUse"
-	default:
-		return name
+// mergeWorkspaceConfig merges the workspace config file at path into
+// cfg and reports whether it was merged. A file that is simply absent is
+// not an error; anything else is.
+//
+// Both the initial load and the on-disk reload go through this, so the
+// workspace file is read, checked and merged exactly one way. It used to
+// be open-coded in both, and both quietly dropped the whole file when
+// the merge failed: a workspace config with a valid-JSON-but-wrong-shape
+// entry was discarded in silence, and the session ran on as though the
+// file were not there.
+func mergeWorkspaceConfig(cfg *Config, path, workingDir string) (bool, error) {
+	wsData, err := readFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to read config file %s: %w", path, err)
+	}
+	if len(wsData) == 0 {
+		return false, nil
+	}
+	if !json.Valid(wsData) {
+		return false, fmt.Errorf("invalid JSON in config file %s", path)
+	}
+	merged, err := loadFromBytes(append([][]byte{mustMarshalConfig(cfg)}, wsData))
+	if err != nil {
+		return false, fmt.Errorf("failed to merge config file %s: %w", path, err)
+	}
+	// Preserve the defaults setDefaults already applied.
+	dataDir := cfg.Options.DataDirectory
+	*cfg = *merged
+	cfg.setDefaults(workingDir, dataDir)
+	return true, nil
+}
+
+// setMCPDefaults applies the stdio default to any MCP server that does
+// not name a connection type.
+//
+// The schema has always documented `default=stdio` and the crushrc
+// `mcp add` builtin already writes it, so a hand-written config omitting
+// the field — the shape most MCP server snippets are copied in — should
+// mean the same thing rather than being refused.
+func (c *Config) setMCPDefaults() {
+	for name, m := range c.MCP {
+		if m.Type == "" {
+			m.Type = MCPStdio
+			c.MCP[name] = m
+		}
 	}
 }
 
-// ValidateHooks normalizes event names and checks that every configured
-// hook has a command and a syntactically valid matcher regex. Matcher
-// compilation used for matching is owned by hooks.Runner; this function
-// only validates up front so the user sees config errors at load time
-// rather than on the first tool call.
-func (c *Config) ValidateHooks() error {
-	// Normalize event name keys.
-	for event, eventHooks := range c.Hooks {
-		canonical := normalizeHookEvent(event)
-		if canonical != event {
-			c.Hooks[canonical] = append(c.Hooks[canonical], eventHooks...)
-			delete(c.Hooks, event)
+// ValidateMCPs checks that every enabled MCP server names a connection
+// type Crush can actually open. Without this the mistake surfaces late
+// and obscurely: the server is accepted at load, and the transport layer
+// fails at connect time with "unsupported mcp type: X", long after the
+// line that caused it.
+//
+// An omitted type is not an error — setMCPDefaults has already made it
+// stdio, which is what the schema documents and what `mcp add` writes.
+//
+// Disabled servers are skipped. A server that is switched off is not
+// asked to connect, so holding up startup over its transport would be
+// like validating commented-out config; it is checked when re-enabled.
+func (c *Config) ValidateMCPs() error {
+	for _, name := range slices.Sorted(maps.Keys(c.MCP)) {
+		m := c.MCP[name]
+		if m.Disabled || IsKnownMCPType(m.Type) {
+			continue
+		}
+		known := make([]string, 0, len(knownMCPTypes))
+		for _, t := range KnownMCPTypes() {
+			known = append(known, string(t))
+		}
+		return fmt.Errorf(
+			"mcp %q: unknown type %q; known types are %s",
+			name, m.Type, strings.Join(known, ", "),
+		)
+	}
+	return nil
+}
+
+// ValidateTools checks that every tool named in options.disabled_tools
+// and permissions.allowed_tools is one Crush can act on.
+//
+// Both lists are matched by exact name against the built-in tool set, so
+// a misspelling is not a near miss, it is a no-op: a disabled_tools entry
+// that matches nothing leaves the tool enabled while the config says it
+// is off, and an allowed_tools entry that matches nothing keeps prompting
+// for a tool the user believes they pre-approved.
+//
+// allowed_tools additionally accepts any MCP tool name (the "mcp_"
+// prefix). Those are discovered when a server connects, so at config
+// time only the shape can be checked.
+func (c *Config) ValidateTools() error {
+	if c.Options != nil {
+		for _, name := range c.Options.DisabledTools {
+			if IsKnownToolName(name) {
+				continue
+			}
+			return fmt.Errorf(
+				"options.disabled_tools: %q is not a built-in tool; known tools are %s",
+				name, strings.Join(KnownToolNames(), ", "),
+			)
 		}
 	}
+	if c.Permissions != nil {
+		for _, name := range c.Permissions.AllowedTools {
+			if IsKnownToolName(name) || strings.HasPrefix(name, MCPToolPrefix) {
+				continue
+			}
+			return fmt.Errorf(
+				"permissions.allowed_tools: %q is not a built-in tool and is not an MCP tool (%s...); known tools are %s",
+				name, MCPToolPrefix, strings.Join(KnownToolNames(), ", "),
+			)
+		}
+	}
+	return nil
+}
 
-	for event, eventHooks := range c.Hooks {
-		for i, h := range eventHooks {
+// Validate runs every whole-config check and returns the first failure.
+//
+// Both the initial load and the on-disk reload call this one function, so
+// a check added here applies at both seams. Adding a validator to only
+// one of them is how a config that can't be loaded becomes a config that
+// can still be reloaded into a running session.
+func (c *Config) Validate() error {
+	if err := c.ValidateHooks(); err != nil {
+		return fmt.Errorf("invalid hook configuration: %w", err)
+	}
+	if err := c.ValidateModels(); err != nil {
+		return fmt.Errorf("invalid model configuration: %w", err)
+	}
+	if err := c.ValidateMCPs(); err != nil {
+		return fmt.Errorf("invalid mcp configuration: %w", err)
+	}
+	if err := c.ValidateTools(); err != nil {
+		return fmt.Errorf("invalid tool configuration: %w", err)
+	}
+	return nil
+}
+
+// ValidateModels checks that every key under `models` names a model type
+// Crush actually selects. An unrecognised key would otherwise sit in the
+// config looking like a configured model while Crush quietly used its
+// default, so it is a load error instead.
+func (c *Config) ValidateModels() error {
+	for _, modelType := range slices.Sorted(maps.Keys(c.Models)) {
+		if IsKnownModelType(modelType) {
+			continue
+		}
+		known := make([]string, 0, len(knownModelTypes))
+		for _, t := range KnownModelTypes() {
+			known = append(known, t.String())
+		}
+		return fmt.Errorf(
+			"models %q: unknown model type; known types are %s",
+			modelType, strings.Join(known, ", "),
+		)
+	}
+	return nil
+}
+
+// ValidateHooks checks that every configured hook is filed under an
+// event Crush actually fires and has a command, and that any matcher is
+// a syntactically valid regex. Event names are matched exactly: an
+// unrecognised name is an error rather than a key nothing ever reads,
+// so a typo surfaces at load time instead of leaving a hook that looks
+// configured and silently never runs. Matcher compilation used for
+// matching is owned by hooks.Runner; this function only validates up
+// front so the user sees config errors at load time rather than on the
+// first tool call.
+func (c *Config) ValidateHooks() error {
+	for _, event := range slices.Sorted(maps.Keys(c.Hooks)) {
+		if !IsKnownHookEvent(event) {
+			return fmt.Errorf(
+				"hook %q: unknown event name; known events are %s",
+				event, strings.Join(KnownHookEvents(), ", "),
+			)
+		}
+		for i, h := range c.Hooks[event] {
 			if h.Command == "" {
 				return fmt.Errorf("hook %s[%d]: command is required", event, i)
 			}
 			if h.Matcher == "" {
 				continue
+			}
+			if !HookEventSupportsMatcher(event) {
+				return fmt.Errorf(
+					"hook %s[%d]: matcher is not supported for the %s event; there is no tool to match",
+					event, i, event,
+				)
 			}
 			if _, err := regexp.Compile(h.Matcher); err != nil {
 				return fmt.Errorf("hook %s[%d]: invalid matcher regex %q: %w", event, i, h.Matcher, err)

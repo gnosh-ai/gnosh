@@ -392,10 +392,7 @@
         }
       },
       "additionalProperties": false,
-      "type": "object",
-      "required": [
-        "type"
-      ]
+      "type": "object"
     },
     "MCPs": {
       "additionalProperties": {
@@ -542,6 +539,10 @@
           },
           "type": "array",
           "description": "Paths to directories containing Agent Skills (folders with SKILL.md files)"
+        },
+        "thinking": {
+          "type": "boolean",
+          "description": "Whether a model with a thinking switch (Qwen on llama.cpp and other OpenAI-compatible servers) thinks before answering; unset keeps the server's default. Toggle it in chat with /think and /no_think"
         },
         "tui": {
           "$ref": "#/$defs/TUIOptions",

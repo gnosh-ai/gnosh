@@ -7,12 +7,18 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/tidwall/sjson"
 )
 
-// Hook event name constants.
+// Hook event name constants. The canonical list lives in the config
+// package (which owns validation and cannot import this one); these are
+// aliases so agent code can keep referring to hooks.EventX.
 const (
-	EventPreToolUse = "PreToolUse"
+	// EventPreToolUse fires immediately before a tool call runs.
+	EventPreToolUse = config.EventPreToolUse
+	// EventStop fires when the agent is about to finish its turn.
+	EventStop = config.EventStop
 )
 
 // HaltExitCode is the exit code that halts the whole turn. 2 blocks the
@@ -40,6 +46,10 @@ type HookInfo struct {
 	Halt         bool   `json:"halt,omitempty"`
 	Reason       string `json:"reason,omitempty"`
 	InputRewrite bool   `json:"input_rewrite,omitempty"`
+	// Error is set when the hook did not run to a verdict: it timed out,
+	// or exited non-zero with a code that is not a decision. See
+	// HookResult.Error.
+	Error string `json:"error,omitempty"`
 }
 
 // Decision represents the outcome of a single hook execution.
@@ -72,6 +82,15 @@ type HookResult struct {
 	Reason       string // Deny or halt reason (same field, different audience).
 	Context      string
 	UpdatedInput string // Shallow-merge patch against tool_input (opaque JSON).
+
+	// Error is set when the hook did not run to a verdict — it timed out,
+	// or exited non-zero with a code that is not a decision (127 for a
+	// command that does not exist, 126 for one that is not executable).
+	// Such a hook is still non-blocking, so Decision stays DecisionNone,
+	// but it must not be mistaken for one that ran and simply had no
+	// opinion: that is how a safety hook pointed at the wrong path came
+	// to be shown as a green "OK" on every call while checking nothing.
+	Error string
 }
 
 // AggregateResult holds the combined outcome of all hooks for an event.

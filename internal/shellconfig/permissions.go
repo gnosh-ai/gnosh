@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
+
+	"github.com/charmbracelet/crush/internal/tooldefs"
 )
 
 // handlePermissions implements the `permissions` builtin.
@@ -39,9 +42,33 @@ func handlePermissions(ctx context.Context, args []string, stdin io.Reader, stdo
 	}
 }
 
+// checkToolNames rejects names the loader will refuse, so a typo fails
+// on the crushrc line that is wrong rather than at the next launch.
+// allowMCP is set for lists that also accept MCP tool names, which are
+// only discovered when a server connects.
+func checkToolNames(names []string, allowMCP bool, what string, stderr io.Writer) error {
+	for _, name := range names {
+		if tooldefs.IsKnown(name) || (allowMCP && tooldefs.IsMCPToolName(name)) {
+			continue
+		}
+		suffix := ""
+		if allowMCP {
+			suffix = fmt.Sprintf(" and is not an MCP tool (%s...)", tooldefs.MCPPrefix)
+		}
+		return usage(stderr, fmt.Sprintf(
+			"%s: %q is not a built-in tool%s; known tools are %s",
+			what, name, suffix, strings.Join(tooldefs.Names(), ", "),
+		))
+	}
+	return nil
+}
+
 func permissionsAllow(b *ConfigBuilder, args []string, stderr io.Writer) error {
 	if len(args) < 3 {
 		return usage(stderr, "usage: permissions allow <tool> [<tool> ...]")
+	}
+	if err := checkToolNames(args[2:], true, "permissions allow", stderr); err != nil {
+		return err
 	}
 	perms := b.section("permissions")
 	allowed, _ := perms["allowed_tools"].([]any)
@@ -62,6 +89,11 @@ func permissionsAllow(b *ConfigBuilder, args []string, stderr io.Writer) error {
 func permissionsDeny(b *ConfigBuilder, args []string, stderr io.Writer) error {
 	if len(args) < 3 {
 		return usage(stderr, "usage: permissions deny <tool> [<tool> ...]")
+	}
+	// deny writes options.disabled_tools, which filters the built-in set
+	// only: an MCP name there would be a no-op, so it is not accepted.
+	if err := checkToolNames(args[2:], false, "permissions deny", stderr); err != nil {
+		return err
 	}
 	opts := b.section("options")
 	disabled, _ := opts["disabled_tools"].([]any)

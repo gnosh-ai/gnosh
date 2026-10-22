@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/charmbracelet/crush/internal/oauth/copilot"
+	"github.com/charmbracelet/crush/internal/tooldefs"
 	"github.com/invopop/jsonschema"
 )
 
@@ -56,6 +57,20 @@ const (
 	SelectedModelTypeLarge SelectedModelType = "large"
 	SelectedModelTypeSmall SelectedModelType = "small"
 )
+
+// knownModelTypes lists every model type Crush selects, in the order
+// they are reported to the user.
+var knownModelTypes = []SelectedModelType{SelectedModelTypeLarge, SelectedModelTypeSmall}
+
+// KnownModelTypes returns the model types a `models` entry may be keyed by.
+func KnownModelTypes() []SelectedModelType {
+	return slices.Clone(knownModelTypes)
+}
+
+// IsKnownModelType reports whether t is a model type Crush actually uses.
+func IsKnownModelType(t SelectedModelType) bool {
+	return slices.Contains(knownModelTypes, t)
+}
 
 const (
 	AgentCoder string = "coder"
@@ -214,11 +229,25 @@ const (
 	MCPHttp  MCPType = "http"
 )
 
+// knownMCPTypes lists every MCP connection type Crush can open, in the
+// order they are reported to the user.
+var knownMCPTypes = []MCPType{MCPStdio, MCPSSE, MCPHttp}
+
+// KnownMCPTypes returns the connection types an MCP server may declare.
+func KnownMCPTypes() []MCPType {
+	return slices.Clone(knownMCPTypes)
+}
+
+// IsKnownMCPType reports whether t is a connection type Crush can open.
+func IsKnownMCPType(t MCPType) bool {
+	return slices.Contains(knownMCPTypes, t)
+}
+
 type MCPConfig struct {
 	Command       string            `json:"command,omitempty" jsonschema:"description=Command to execute for stdio MCP servers,example=npx"`
 	Env           map[string]string `json:"env,omitempty" jsonschema:"description=Environment variables to set for the MCP server"`
 	Args          []string          `json:"args,omitempty" jsonschema:"description=Arguments to pass to the MCP server command"`
-	Type          MCPType           `json:"type" jsonschema:"required,description=Type of MCP connection,enum=stdio,enum=sse,enum=http,default=stdio"`
+	Type          MCPType           `json:"type,omitempty" jsonschema:"description=Type of MCP connection,enum=stdio,enum=sse,enum=http,default=stdio"`
 	URL           string            `json:"url,omitempty" jsonschema:"description=URL for HTTP or SSE MCP servers,format=uri,example=http://localhost:3000/mcp"`
 	Disabled      bool              `json:"disabled,omitempty" jsonschema:"description=Whether this MCP server is disabled,default=false"`
 	DisabledTools []string          `json:"disabled_tools,omitempty" jsonschema:"description=List of tools from this MCP server to disable,example=get-library-doc"`
@@ -1051,58 +1080,61 @@ func (c *Config) SmallModel() *catwalk.Model {
 
 const maxRecentModelsPerType = 5
 
+// MCPToolPrefix is the prefix every MCP-provided tool name carries
+// ("mcp_<server>_<tool>").
+const MCPToolPrefix = tooldefs.MCPPrefix
+
+// KnownToolNames returns the built-in tools the agent can be given, the
+// set that options.disabled_tools filters.
+func KnownToolNames() []string {
+	return tooldefs.Names()
+}
+
+// IsKnownToolName reports whether name is a built-in tool.
+func IsKnownToolName(name string) bool {
+	return tooldefs.IsKnown(name)
+}
+
 func allToolNames() []string {
-	return []string{
-		"agent",
-		"bash",
-		"crush_info",
-		"crush_logs",
-		"job_output",
-		"job_kill",
-		"download",
-		"edit",
-		"multiedit",
-		"lsp_diagnostics",
-		"lsp_references",
-		"lsp_restart",
-		"lsp_symbols",
-		"lsp_definition",
-		"lsp_call_hierarchy",
-		"lsp_rename",
-		"lsp_replace_symbol",
-		"fetch",
-		"agentic_fetch",
-		"glob",
-		"grep",
-		"ls",
-		"question",
-		"sourcegraph",
-		"todos",
-		"view",
-		"write",
-		"list_mcp_resources",
-		"read_mcp_resource",
-	}
+	return tooldefs.Names()
 }
 
 func resolveAllowedTools(allTools []string, disabledTools []string) []string {
 	if disabledTools == nil {
 		return allTools
 	}
-	// filter out disabled tools (exclude mode)
-	return filterSlice(allTools, disabledTools, false)
+	return toolsExcept(allTools, disabledTools)
+}
+
+// readOnlyToolNames are the tools that only look at the project. The
+// names are duplicated from internal/agent/tools, which imports this
+// package and so cannot be imported back; TestToolSubsetsAreRealTools
+// is what keeps the copies honest, because a name that drifts out of
+// allToolNames() would silently drop the tool from these agents rather
+// than fail.
+func readOnlyToolNames() []string {
+	return []string{
+		"glob",
+		"grep",
+		"ls",
+		"lsp_call_hierarchy",
+		"lsp_definition",
+		"lsp_symbols",
+		"sourcegraph",
+		"view",
+	}
 }
 
 func resolveReadOnlyTools(tools []string) []string {
-	readOnlyTools := []string{"glob", "grep", "ls", "lsp_call_hierarchy", "lsp_definition", "lsp_symbols", "sourcegraph", "view"}
-	// filter to only include tools that are in allowedtools (include mode)
-	return filterSlice(tools, readOnlyTools, true)
+	return toolsOnly(tools, readOnlyToolNames())
 }
 
-func resolvePlanTools(tools []string) []string {
-	// The read-only LSP lookups mirror the task agent's tool set: planning
-	// needs symbol navigation just as much as research does.
-	planTools := []string{
+// planToolNames are the tools a planning turn may use. The read-only
+// LSP lookups mirror the task agent's tool set: planning needs symbol
+// navigation just as much as research does. See readOnlyToolNames for
+// why these names are spelled out rather than referenced.
+func planToolNames() []string {
+	return []string{
 		"agent",
 		"glob",
 		"grep",
@@ -1114,15 +1146,29 @@ func resolvePlanTools(tools []string) []string {
 		"sourcegraph",
 		"view",
 	}
-	return filterSlice(tools, planTools, true)
 }
 
-func filterSlice(data []string, mask []string, include bool) []string {
+func resolvePlanTools(tools []string) []string {
+	return toolsOnly(tools, planToolNames())
+}
+
+// toolsOnly keeps the entries of data that appear in mask.
+func toolsOnly(data []string, mask []string) []string {
+	return filterTools(data, mask, true)
+}
+
+// toolsExcept keeps the entries of data that do not appear in mask.
+func toolsExcept(data []string, mask []string) []string {
+	return filterTools(data, mask, false)
+}
+
+// filterTools is the shared body of toolsOnly and toolsExcept. Callers
+// use those instead: filterTools(all, disabled, false) reads as nothing
+// at a call site, while toolsExcept(all, disabled) reads as itself.
+func filterTools(data []string, mask []string, keepMatching bool) []string {
 	var filtered []string
 	for _, s := range data {
-		// if include is true, we include items that ARE in the mask
-		// if include is false, we include items that are NOT in the mask
-		if include == slices.Contains(mask, s) {
+		if slices.Contains(mask, s) == keepMatching {
 			filtered = append(filtered, s)
 		}
 	}

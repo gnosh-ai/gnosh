@@ -1398,23 +1398,19 @@ func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
 
 	// Merge workspace config if present
 	workspacePath := filepath.Join(cfg.Options.DataDirectory, fmt.Sprintf("%s.json", appName))
-	if wsData, err := readFile(workspacePath); err == nil && len(wsData) > 0 {
-		if !json.Valid(wsData) {
-			return fmt.Errorf("invalid JSON in config file %s", workspacePath)
-		}
-		merged, mergeErr := loadFromBytes(append([][]byte{mustMarshalConfig(cfg)}, wsData))
-		if mergeErr == nil {
-			dataDir := cfg.Options.DataDirectory
-			*cfg = *merged
-			cfg.setDefaults(s.workingDir, dataDir)
-			loadedPaths = append(loadedPaths, workspacePath)
-		}
+	merged, err := mergeWorkspaceConfig(cfg, workspacePath, s.workingDir)
+	if err != nil {
+		return err
+	}
+	if merged {
+		loadedPaths = append(loadedPaths, workspacePath)
 	}
 
-	// Validate hooks after all config merging is complete so matcher
-	// regexes are recompiled on the reloaded config (mirrors Load).
-	if err := cfg.ValidateHooks(); err != nil {
-		return fmt.Errorf("invalid hook configuration on reload: %w", err)
+	// Validate after all config merging is complete, the same checks the
+	// initial load runs, so a reload can't install a config that could
+	// never have been loaded from cold.
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("config reload rejected: %w", err)
 	}
 
 	// Save current state for potential rollback BEFORE configureProviders,
