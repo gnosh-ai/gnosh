@@ -1073,6 +1073,11 @@ func (c *coordinator) buildAgentModels(ctx context.Context, isSubAgent bool) (Mo
 	largeModel = newRequestTimeoutModel(largeModel, requestTimeout)
 	smallModel = newRequestTimeoutModel(smallModel, requestTimeout)
 
+	// Ride out a model server that is restarting, outermost so each
+	// reconnect attempt gets a fresh request timeout; see reconnectingModel.
+	largeModel = newReconnectingModel(largeModel)
+	smallModel = newReconnectingModel(smallModel)
+
 	// Hyper completions no longer report the hypercredit balance, so wrap
 	// the Hyper models to fetch it from /v1/credits on every request.
 	if largeModelCfg.Provider == hyper.Name {
