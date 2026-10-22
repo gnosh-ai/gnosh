@@ -78,9 +78,8 @@ func TestUpWithQueueWhileRefreshInFlightStillPops(t *testing.T) {
 }
 
 // TestUpWithQueueAndTextGoesToHistory pins that Up pops only from an empty
-// editor: with text in the editor, Up steps through history as before
-// (which now also includes the queued prompts, newest first) and does not
-// pop.
+// editor: with text in the editor, Up steps through the prompts already
+// sent, as before, and neither pops nor offers a copy of a queued prompt.
 func TestUpWithQueueAndTextGoesToHistory(t *testing.T) {
 	pinTTLs(t)
 
@@ -98,8 +97,8 @@ func TestUpWithQueueAndTextGoesToHistory(t *testing.T) {
 	m.handleHistoryUp(nil)
 	require.Zero(t, ws.popQueueCalls, "Up with text in the editor must not pop")
 	require.Equal(t, 0, m.promptHistory.index)
-	require.Equal(t, "queued two", m.textarea.Value(),
-		"history recall still leads with the most recently queued prompt")
+	require.Equal(t, "older prompt", m.textarea.Value(),
+		"history offers what was sent, not a copy of what is still queued")
 	require.Equal(t, 2, m.promptQueue, "the queue must stay queued")
 }
 

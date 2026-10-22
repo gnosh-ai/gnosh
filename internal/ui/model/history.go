@@ -142,20 +142,13 @@ func (m *UI) syncBangModeFromTextarea() {
 	m.setEditorPrompt(m.yoloModeCached())
 }
 
-// historyEntries returns what Up and Down step through: the prompts queued
-// while a turn is running, newest first, followed by the user messages loaded
-// from the database. A queued prompt lives only in the agent's in-memory queue
-// until its turn runs, so without this it shows in the queue pill but cannot be
-// recalled from the editor.
+// historyEntries returns what Up and Down step through: the user messages
+// loaded from the database, newest first. Prompts still queued are left out.
+// Up in an empty editor takes the ones the user typed out of the queue to
+// edit (dispatchPromptQueuePop), and a copy of a queued prompt offered here,
+// edited and sent, would run it twice: once from the queue, once as typed.
 func (m *UI) historyEntries() []string {
-	if len(m.promptQueueItems) == 0 {
-		return m.promptHistory.messages
-	}
-	entries := make([]string, 0, len(m.promptQueueItems)+len(m.promptHistory.messages))
-	for i := len(m.promptQueueItems) - 1; i >= 0; i-- {
-		entries = append(entries, m.promptQueueItems[i])
-	}
-	return append(entries, m.promptHistory.messages...)
+	return m.promptHistory.messages
 }
 
 // historyPrev changes the text area content to the previous message in the history
