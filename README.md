@@ -1087,7 +1087,13 @@ We’d love to hear your thoughts on this project. Need help? We gotchu. You can
 
 ## License
 
-[FSL-1.1-MIT](https://github.com/charmbracelet/crush/raw/main/LICENSE.md)
+[FSL-1.1-MIT](./LICENSE.md), the same licence as upstream Crush. Each
+version becomes MIT two years after Charm released it.
+
+Contributions are covered by the agreement in
+[CONTRIBUTING.md](./CONTRIBUTING.md), which licenses your work to this
+fork's maintainer and to Charmbracelet, so that it can go upstream later
+without coming back to you. You keep every right to your own work.
 
 ---
 
