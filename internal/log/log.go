@@ -54,7 +54,9 @@ func Setup(logFile string, debug bool, ws ...io.Writer) {
 			}
 		}
 
-		slog.SetDefault(slog.New(slog.NewMultiHandler(handlers...)))
+		final := slog.NewMultiHandler(handlers...)
+		early.buf.drainTo(final)
+		slog.SetDefault(slog.New(final))
 		initialized.Store(true)
 	})
 }
