@@ -1,8 +1,8 @@
-# Crush Development Guide
+# Crash Development Guide
 
 ## Project Overview
 
-Crush is a terminal-based AI coding assistant built in Go by
+Crash is a terminal-based AI coding assistant built in Go by
 [Charm](https://charm.land). It connects to LLMs and gives them tools to read,
 write, and execute code. It supports multiple providers (Anthropic, OpenAI,
 Gemini, Bedrock, Copilot, Hyper, MiniMax, Vercel, and more), integrates with
@@ -10,6 +10,13 @@ LSPs for code intelligence, and supports extensibility via MCP servers and
 agent skills.
 
 The module path is `github.com/charmbracelet/crush`.
+
+This is a fork of Charm's Crush, renamed Crash; the module path keeps the old
+name. Everything users see and touch says crash, and every crush name from
+before the rename still works (`crush.json`, `~/.config/crush`, `.crush/` and
+`crush.db`, `CRUSH_*` variables, `crush_logs`, `crush://skills/`). When adding or
+renaming a file, directory, variable, tool or skill name, keep reading the old
+one too.
 
 ## Architecture
 
@@ -20,9 +27,9 @@ internal/
   cmd/                             CLI commands (root, run, login, models, stats, sessions)
   config/
     config.go                      Config struct, context file paths, agent definitions
-    load.go                        crushrc and crush.json loading and validation
+    load.go                        crashrc and crash.json loading and validation
     provider.go                    Provider configuration and model resolution
-  shellconfig/                      Bash-powered config format (crushrc builtins)
+  shellconfig/                      Bash-powered config format (crashrc builtins)
   agent/
     agent.go                       SessionAgent: runs LLM conversations per session
     coordinator.go                 Coordinator: manages named agents ("coder", "task")
@@ -34,7 +41,7 @@ internal/
   hooks/                           Hook engine: runs user shell commands on hook events
     hooks.go                       Decision types, aggregation logic, event constants
     runner.go                      Parallel hook execution, timeout, dedup
-    input.go                       Stdin payload builder, env vars, stdout parsing (Crush + Claude Code compat)
+    input.go                       Stdin payload builder, env vars, stdout parsing (Crash + Claude Code compat)
   session/session.go               Session CRUD backed by SQLite
   message/                         Message model and content types
   db/                              SQLite via sqlc, with migrations
@@ -69,13 +76,13 @@ internal/
   `.md` description file in `internal/agent/tools/`.
 - **System prompts are Go templates**: `internal/agent/templates/*.md.tpl`
   with runtime data injected.
-- **Context files**: Crush reads AGENTS.md, CRUSH.md, CLAUDE.md, GEMINI.md
+- **Context files**: Crash reads AGENTS.md, CRASH.md, CLAUDE.md, GEMINI.md
   (and `.local` variants) from the working directory for project-specific
   instructions.
-- **Bash config format**: Crush's primary config format is `crushrc` — a
+- **Bash config format**: Crash's primary config format is `crashrc` — a
   Bash script using builtins (`provider`, `model`, `mcp`, `lsp`,
-  `permissions`, `hook`, `options`) to define config. `crush.json` is still
-  supported but is deprecated in favor of `crushrc` and may be removed in a
+  `permissions`, `hook`, `options`) to define config. `crash.json` is still
+  supported but is deprecated in favor of `crashrc` and may be removed in a
   future release. Shell config files are discovered alongside JSON configs
   and deep-merged through the same pipeline. Builtins are registered via
   `shell.RegisterBuiltin` and gated by a `ConfigBuilder` on the context —
@@ -85,7 +92,7 @@ internal/
   generated code in `internal/db/`. Migrations in `internal/db/migrations/`.
 - **Pub/sub**: `internal/pubsub` for decoupled communication between agent,
   UI, and services.
-- **Hooks**: User-defined shell commands in `crushrc` (or `crush.json`)
+- **Hooks**: User-defined shell commands in `crashrc` (or `crash.json`)
   that fire before tool execution. The engine (`internal/hooks/`) is
   independent of fantasy and agent — it takes inputs, runs commands,
   returns decisions. The `hookedTool` decorator in
