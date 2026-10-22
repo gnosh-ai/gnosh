@@ -1,4 +1,7 @@
-# Crush
+# Crash
+
+Crash is Jae Kwon's fork of Charm's [Crush](https://github.com/charmbracelet/crush), renamed. Build it from source
+(`go build -o crash .`); the package managers under [Installation](#installation) install upstream Crush.
 
 <p align="center">
     <a href="https://stuff.charm.sh/crush/charm-crush.png"><img width="450" alt="Charm Crush Logo" src="https://github.com/user-attachments/assets/cf8ca3ce-8b02-43f0-9d0f-5a331488da4b" /></a><br />
@@ -185,15 +188,15 @@ go install -tags sqlite3_dotlk github.com/charmbracelet/crush@latest
 The quickest way to get started is to choose a [Hyper][hyper] model from model
 picker. Follow the steps to authenticate and you'll be good to go.
 
-[Hyper], from Charm, is the official Crush provider. It’s subscription-based,
-with a free tier, and optimized for Crush. It’s privacy focused, with zero data
+[Hyper], from Charm, is the official Crash provider. It’s subscription-based,
+with a free tier, and optimized for Crash. It’s privacy focused, with zero data
 retention (ZDR) is and designed to comply with GDPR. [More on Hyper][hyper].
 
 <p><a href="https://hyper.charm.land"><img width="340" height="200" alt="Charm Hyper" src="https://github.com/user-attachments/assets/50875289-7992-454d-9f14-9f790413fb5e" /></a></p>
 
 ## API Keys
 
-You can also use Crush with many other providers such as Anthopic, OpenAI,
+You can also use Crash with many other providers such as Anthopic, OpenAI,
 Gemini, OpenRouter and so on. Press <kbd>ctrl+l</kbd> to open the model picker,
 choose the provider of your choice, and paste your API key.
 
@@ -232,29 +235,29 @@ That said, you can also set environment variables for preferred providers:
 
 [hyper]: https://hyper.charm.land
 
-Also note that Crush can support nearly any provider, including
+Also note that Crash can support nearly any provider, including
 [Local Models](#local-models). For more info see
 [Custom Providers](#custom-providers) below.
 
 ### By the Way
 
-Is there a provider you’d like to see in Crush? Is there an existing model that needs an update?
+Is there a provider you’d like to see in Crash? Is there an existing model that needs an update?
 
-Crush’s default model listing is managed in [Catwalk](https://github.com/charmbracelet/catwalk), a community-supported, open source repository of Crush-compatible models, and you’re welcome to contribute.
+Crash’s default model listing is managed in [Catwalk](https://github.com/charmbracelet/catwalk), a community-supported, open source repository of Crash-compatible models, and you’re welcome to contribute.
 
 <a href="https://github.com/charmbracelet/catwalk"><img width="174" height="174" alt="Catwalk Badge" src="https://github.com/user-attachments/assets/95b49515-fe82-4409-b10d-5beb0873787d" /></a>
 
 ## Configuration
 
 > [!TIP]
-> Crush ships with a builtin skill for configuring itself. Most of the time
+> Crash ships with a builtin skill for configuring itself. Most of the time
 > you can just tell what you want it to configure and it will get the job done.
 
-Crush runs great with no configuration. That said, if you do need or want to
-customize Crush, you can, with a `crushrc`.
+Crash runs great with no configuration. That said, if you do need or want to
+customize Crash, you can, with a `crashrc`.
 
-A `crushrc` is just Bash with some Crush-specific builtins. It’s a lot like
-a `.bashrc`, just for your Crush. Because Crush has a native, built-in Bash
+A `crashrc` is just Bash with some Crash-specific builtins. It’s a lot like
+a `.bashrc`, just for your Crash. Because Crash has a native, built-in Bash
 interpreter, Bash-based config works identically across all platforms, including
 Windows.
 
@@ -287,26 +290,24 @@ with the following priority:
 
 | Priority | Unix-like                 | Windows                               |
 | -------- | ------------------------- | ------------------------------------- |
-| 1        | `./.crushrc`              | `.\.crushrc`                          |
-| 2        | `./crushrc`               | `.\crushrc`                           |
-| 3        | `~/.config/crush/crushrc` | `%USERPROFILE%\.config\crush\crushrc` |
+| 1        | `./.crashrc`              | `.\.crashrc`                          |
+| 2        | `./crashrc`               | `.\crashrc`                           |
+| 3        | `~/.config/crash/crashrc` | `%USERPROFILE%\.config\crash\crashrc` |
 
-(Crush respects the [XDG Base Directory Specification][xdg], so your paths
+(Crash respects the [XDG Base Directory Specification][xdg], so your paths
 may differ depending on your `XDG_CONFIG_HOME` value. Data directories such as
-`~/.local/share/crush` and `%LOCALAPPDATA%\crush` contain JSON state only; Crush
-does not execute a `crushrc` from them.)
+`~/.local/share/crash` and `%LOCALAPPDATA%\crash` contain JSON state only; Crash
+does not execute a `crashrc` from them.)
 
-Crush is being renamed Crash, and its directories and files with it:
-`~/.config/crash`, `~/.local/share/crash`, `~/.cache/crash`, a project's
-`.crash/` data directory, and `crash.json`, `crashrc`, `.crashignore` and
-`CRASH.md`. Wherever only the one from before the rename exists — say
-`~/.config/crush` or a project's `.crush/` — that one is used, so an existing
-setup and its sessions keep working without being moved; once the new one
-exists, it wins. `~/.config/crash` and `~/.local/share/crash` count only once
-they hold a config file (`crash.json`, `crush.json`, `crashrc` or `crushrc`),
-so a `crash` folder made for something else doesn't hide the `crush` one in
-use. A project uses the closest `.crash/` or `.crush/` on the way up to its
-root.
+Crash was called Crush, and every crush name still works: `~/.config/crush`,
+`~/.local/share/crush`, `~/.cache/crush`, a project's `.crush/` data directory
+with its `crush.db`, and `crush.json`, `crushrc`, `.crushignore` and `CRUSH.md`.
+Wherever only the crush one exists, that one is used, so an existing setup and
+its sessions keep working without being moved; once the crash one exists, it
+wins. `~/.config/crash` and `~/.local/share/crash` count only once they hold a
+config file (`crash.json`, `crush.json`, `crashrc` or `crushrc`), so a `crash`
+folder made for something else doesn't hide the `crush` one in use. A project
+uses the closest `.crash/` or `.crush/` on the way up to its root.
 
 [xdg]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 
@@ -319,25 +320,25 @@ considered deprecated. See: [the config docs](./docs/config/) for details.
 > - `CRASH_GLOBAL_CONFIG`
 > - `CRASH_GLOBAL_DATA`
 >
-> Every `CRUSH_` environment variable in this document also works under its
-> `CRASH_` name, the name after the rename; when both are set, `CRASH_` wins.
+> Every `CRASH_` environment variable in this document also works under its
+> `CRUSH_` name, from before the rename; when both are set, `CRASH_` wins.
 
-As an additional note, Crush also stores ephemeral data, such as application
+As an additional note, Crash also stores ephemeral data, such as application
 state, in one additional location. This is state and should not be edited by
 hand, nor should it be considered configuration.
 
 ```bash
 # Unix
-$HOME/.local/share/crush/crush.json
+$HOME/.local/share/crash/crash.json
 
 # Windows
-%LOCALAPPDATA%\crush\crush.json
+%LOCALAPPDATA%\crash\crash.json
 ```
 
 #### A note on security
 
-Both `crushrc` and `crush.json` are trusted code; `crushrc` runs in a full
-shell, and any `$(...)` in `crush.json` runs at load time. Don't launch Crush
+Both `crashrc` and `crash.json` are trusted code; `crashrc` runs in a full
+shell, and any `$(...)` in `crash.json` runs at load time. Don't launch Crash
 in a directory whose config you haven't reviewed, and don't randomly `source`
 files from the internet into your config.
 
@@ -346,7 +347,7 @@ files from the internet into your config.
 The top-level `env` field sets environment variables at startup, before
 providers are configured. This is useful for variables that affect provider
 authentication (e.g. the AWS SDK credential chain) without wrapping the
-`crush` command in a shell script or exporting them in your shell profile:
+`crash` command in a shell script or exporting them in your shell profile:
 
 ```json
 {
@@ -363,7 +364,7 @@ a value.
 
 ### Themes
 
-Crush ships with built-in color themes.
+Crash ships with built-in color themes.
 
 #### Switching Themes
 
@@ -375,7 +376,7 @@ confirms the selection. Press `esc` to cancel and revert.
 
 Open **Themes**, highlight the theme to customize, and press `ctrl+e`.
 Changes preview live as you type. Press `enter` or `ctrl+s` to save, or `esc`
-to cancel and revert. User themes are stored globally in the Crush config
+to cancel and revert. User themes are stored globally in the Crash config
 directory under `themes/`.
 
 You can also select a theme directly in your config with `active_theme`:
@@ -392,7 +393,7 @@ You can also select a theme directly in your config with `active_theme`:
 ```
 
 Custom theme palettes are stored as JSON files in the global theme directory.
-For example, `~/.config/crush/themes/my-theme.json`:
+For example, `~/.config/crash/themes/my-theme.json`:
 
 ```json
 {
@@ -414,11 +415,11 @@ dialog.
 
 ### LSPs
 
-Crush can use LSPs for additional context to help inform its decisions, just
+Crash can use LSPs for additional context to help inform its decisions, just
 like you would. LSPs can be added manually like so:
 
 ```bash
-# crushrc
+# crashrc
 
 lsp add go --command "gopls" --env "GOTOOLCHAIN go1.24.5"
 lsp add typescript --command "typescript-language-server" --args --stdio
@@ -427,12 +428,12 @@ lsp add nix --command "nil"
 
 ### MCPs
 
-Crush also supports Model Context Protocol (MCP) servers through three transport
+Crash also supports Model Context Protocol (MCP) servers through three transport
 types: `stdio` for command-line servers, `http` for HTTP endpoints, and `sse`
 for Server-Sent Events.
 
 ```bash
-# crushrc
+# crashrc
 
 # Add a local MCP server that runs a Node.js script.
 mcp add filesystem --command node --args /path/to/mcp-server.js \
@@ -450,7 +451,7 @@ mcp add streaming-service --type sse --url "https://example.com/mcp/sse" \
 
 #### MCP OAuth
 
-HTTP and SSE MCP servers that require OAuth can use Crush's built-in
+HTTP and SSE MCP servers that require OAuth can use Crash's built-in
 authorization-code flow instead of a static `Authorization` header. Set
 `"oauth": true` to enable it:
 
@@ -487,34 +488,34 @@ credentials directly. All values support shell expansion:
 }
 ```
 
-When `oauth_client_id` is set, Crush skips dynamic client registration
-and authenticates as the specified client. When omitted, Crush attempts
+When `oauth_client_id` is set, Crash skips dynamic client registration
+and authenticates as the specified client. When omitted, Crash attempts
 dynamic registration automatically (works with Linear, Notion, and other
 servers that support RFC 7591).
 
 #### Sessionless servers
 
 Some HTTP MCP servers are sessionless — they never issue a
-`Mcp-Session-Id` and reject the `subscriptions/listen` stream Crush opens
+`Mcp-Session-Id` and reject the `subscriptions/listen` stream Crash opens
 for list-changed notifications, which would otherwise break the
-connection. Crush auto-detects known sessionless servers (GitHub MCP,
+connection. Crash auto-detects known sessionless servers (GitHub MCP,
 `api.githubcopilot.com/mcp`), so those need no extra configuration.
 
 For other sessionless servers, mark them explicitly with
-`"sessionless": true` (or `--sessionless true` in `crushrc`); set it to
+`"sessionless": true` (or `--sessionless true` in `crashrc`); set it to
 `false` to force the default behavior for an auto-detected URL. The
 tradeoff is that a sessionless server won't push live
 tool/prompt/resource list-changed notifications.
 
 ### Hooks
 
-Crush has preliminary support for hooks. For details, see
+Crash has preliminary support for hooks. For details, see
 [the hook guide](./docs/hooks/).
 
 ### Sharing a workspace across clients
 
-When Crush is run against a shared backend (for example two TUIs talking to
-the same `crush serve`), clients are grouped into **workspaces** keyed by
+When Crash is run against a shared backend (for example two TUIs talking to
+the same `crash serve`), clients are grouped into **workspaces** keyed by
 their resolved `--cwd`. Two clients with the same `--cwd` join the same
 underlying workspace, so they share the session list, message history,
 permission queue, LSP, and MCP state.
@@ -547,14 +548,14 @@ does not get reaped before it can attach.
 
 ### Global context files
 
-Crush automatically includes two files for cross-project instructions. Think of
+Crash automatically includes two files for cross-project instructions. Think of
 these are personal additions to the system prompt.
 
-- `~/.config/crush/CRUSH.md`: Crush-specific rules that would confuse other
-  agentic coding tools. If you only use Crush, this is the only one you need to
+- `~/.config/crash/CRASH.md`: Crash-specific rules that would confuse other
+  agentic coding tools. If you only use Crash, this is the only one you need to
   edit.
 - `~/.config/AGENTS.md`: generic instructions that other coding tools might
-  read. Avoid referring to Crush-specific features or workflows here. You
+  read. Avoid referring to Crash-specific features or workflows here. You
   probably only care about this if you use multiple agentic coding tools and
   want to share instructions between them.
 
@@ -571,17 +572,17 @@ option global-context-path "/full/path/to/folder/of/files/"
 
 ### Ignoring Files
 
-Crush respects `.gitignore` files by default, but you can also create a
-`.crushignore` file to specify additional files and directories that Crush
+Crash respects `.gitignore` files by default, but you can also create a
+`.crashignore` file to specify additional files and directories that Crash
 should ignore. This is useful for excluding files that you want in version
-control but don't want Crush to consider when providing context.
+control but don't want Crash to consider when providing context.
 
-The `.crushignore` file uses the same syntax as `.gitignore` and can be placed
+The `.crashignore` file uses the same syntax as `.gitignore` and can be placed
 in the root of your project or in subdirectories.
 
 ### Allowing Tools
 
-By default, Crush will ask you for permission before running tool calls. If
+By default, Crash will ask you for permission before running tool calls. If
 you'd like, you can allow tools to be executed without prompting you for
 permissions. Use this with care.
 
@@ -601,7 +602,7 @@ To disable tools from MCP servers, see the [MCP config section](#mcps).
 
 ### You only live once
 
-You can also skip all permission prompts completely by running Crush with the
+You can also skip all permission prompts completely by running Crash with the
 `--yolo` flag (or `--dangerously-skip-permissions`, as Claude Code calls it).
 Be very, very careful with this feature.
 
@@ -621,7 +622,7 @@ session) is `-C` here, since `-c` sets the working directory.
 
 ### Disabling Skills
 
-You can prevent Crush from using certain skills entirely. Disabled skills are
+You can prevent Crash from using certain skills entirely. Disabled skills are
 hidden from the agent, including builtin skills and skills discovered from
 disk.
 
@@ -631,28 +632,28 @@ option disable-skill crash-config
 
 ### Agent Skills
 
-Crush supports the [Agent Skills](https://agentskills.io) open standard for
+Crash supports the [Agent Skills](https://agentskills.io) open standard for
 extending agent capabilities with reusable skill packages. Skills are folders
-containing a `SKILL.md` file with instructions that Crush can discover and
+containing a `SKILL.md` file with instructions that Crash can discover and
 activate on demand.
 
 The global paths we looks for skills are:
 
-- `$CRUSH_SKILLS_DIR`
+- `$CRASH_SKILLS_DIR`
 - `$XDG_CONFIG_HOME/agents/skills` or `~/.config/agents/skills/`
-- `$XDG_CONFIG_HOME/crush/skills` or `~/.config/crush/skills/`
+- `$XDG_CONFIG_HOME/crash/skills` or `~/.config/crash/skills/`
 - `~/.agents/skills/`
 - `~/.claude/skills/`
 - On Windows, we _also_ look at
   - `%LOCALAPPDATA%\agents\skills\` or `%USERPROFILE%\AppData\Local\agents\skills\`
-  - `%LOCALAPPDATA%\crush\skills\` or `%USERPROFILE%\AppData\Local\crush\skills\`
+  - `%LOCALAPPDATA%\crash\skills\` or `%USERPROFILE%\AppData\Local\crash\skills\`
 - Additional paths configured via `options.skills_paths`
 
 On top of that, we _also_ load skills in your project from the following
 relative paths:
 
 - `.agents/skills`
-- `.crush/skills`
+- `.crash/skills`
 - `.claude/skills`
 - `.cursor/skills`
 
@@ -666,16 +667,16 @@ You can get started with example skills from [anthropics/skills](https://github.
 
 ```bash
 # Unix
-mkdir -p ~/.config/crush/skills
-cd ~/.config/crush/skills
+mkdir -p ~/.config/crash/skills
+cd ~/.config/crash/skills
 git clone https://github.com/anthropics/skills.git _temp
 mv _temp/skills/* . && rm -rf _temp
 ```
 
 ```powershell
 # Windows (PowerShell)
-mkdir -Force "$env:LOCALAPPDATA\crush\skills"
-cd "$env:LOCALAPPDATA\crush\skills"
+mkdir -Force "$env:LOCALAPPDATA\crash\skills"
+cd "$env:LOCALAPPDATA\crash\skills"
 git clone https://github.com/anthropics/skills.git _temp
 mv _temp/skills/* . ; rm -r -force _temp
 ```
@@ -716,7 +717,7 @@ Skills with `disable-model-invocation` won't appear in the model's available ski
 
 ### Desktop notifications
 
-Crush sends desktop notifications when a tool call requires permission and when
+Crash sends desktop notifications when a tool call requires permission and when
 the agent finishes its turn. They're only sent when the terminal window isn't
 focused _and_ your terminal supports reporting the focus state.
 
@@ -730,24 +731,24 @@ supported.
 
 ### Initialization
 
-When you initialize a project, Crush analyzes your codebase and creates
+When you initialize a project, Crash analyzes your codebase and creates
 a context file that helps it work more effectively in future sessions. By
 default, this file is named `AGENTS.md`, but you can customize the name and
 location with the `initialize-as` option:
 
 ```bash
-# crushrc
+# crashrc
 option initialize-as AGENTS.md
 ```
 
 This is useful if you prefer a different naming convention or want to place the
-file in a specific directory (e.g., `CRUSH.md` or `docs/LLMs.md`). Crush will
+file in a specific directory (e.g., `CRASH.md` or `docs/LLMs.md`). Crash will
 fill the file with project-specific context like build commands, code patterns,
 and conventions it discovered during initialization.
 
 ### Attribution Settings
 
-By default, Crush adds attribution information to Git commits and pull requests
+By default, Crash adds attribution information to Git commits and pull requests
 it creates. You can customize this behavior with `option` commands:
 
 ```bash
@@ -757,15 +758,15 @@ option attribution-generated-with true
 
 - `trailer_style`: Controls the attribution trailer added to commit messages
   (default: `assisted-by`)
-  - `assisted-by`: Adds `Assisted-by: Crush:[ModelID]` as specified in [the convention](https://docs.kernel.org/process/coding-assistants.html#attribution)
-  - `co-authored-by`: Adds `Co-Authored-By: Crush <crush@charm.land>`
+  - `assisted-by`: Adds `Assisted-by: Crash:[ModelID]` as specified in [the convention](https://docs.kernel.org/process/coding-assistants.html#attribution)
+  - `co-authored-by`: Adds `Co-Authored-By: Crash <crash@charm.land>`
   - `none`: No attribution trailer
-- `generated_with`: When true (default), adds `💘 Generated with Crush` line to
+- `generated_with`: When true (default), adds `💘 Generated with Crash` line to
   commit messages and PR descriptions
 
 ### Custom Providers
 
-Crush supports custom provider configurations for both OpenAI-compatible and
+Crash supports custom provider configurations for both OpenAI-compatible and
 Anthropic-compatible APIs.
 
 > [!NOTE]
@@ -820,24 +821,24 @@ model add custom-anthropic/claude-sonnet-4-20250514 \
 
 ### Amazon Bedrock
 
-Crush currently supports running Anthropic models through Bedrock, with caching disabled.
+Crash currently supports running Anthropic models through Bedrock, with caching disabled.
 
-A Bedrock provider appears once Crush can find AWS credentials. You can
+A Bedrock provider appears once Crash can find AWS credentials. You can
 authenticate in one of two ways:
 
 **API key.** Set `AWS_BEARER_TOKEN_BEDROCK` to a Bedrock API key. This is the
 simplest option and never expires mid-session.
 
 **AWS credential chain (SSO, profiles, access keys).** Configure AWS the usual
-way with `aws configure` or `aws configure sso`. Crush picks up whatever the
+way with `aws configure` or `aws configure sso`. Crash picks up whatever the
 AWS SDK credential chain resolves, including `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`
 / `AWS_SECRET_ACCESS_KEY`, or an SSO session. To select a specific profile,
-set `AWS_PROFILE` in your shell (`AWS_PROFILE=myprofile crush`) or in the
+set `AWS_PROFILE` in your shell (`AWS_PROFILE=myprofile crash`) or in the
 top-level [`env`](#environment-variables) config.
 
 If you authenticate via AWS SSO, your session expires periodically. Set
 `aws_auth_refresh` to a command that refreshes it. When Bedrock returns a
-credential error, Crush runs the command, then retries the request in place
+credential error, Crash runs the command, then retries the request in place
 (no duplicate messages, no manual restart):
 
 ```json
@@ -870,7 +871,7 @@ $ gcloud auth application-default login
 To add specific models to the configuration, configure as such:
 
 ```bash
-# crushrc — authentication still comes from gcloud and the VERTEXAI_* env vars.
+# crashrc — authentication still comes from gcloud and the VERTEXAI_* env vars.
 provider add vertexai --type google-vertex
 
 model add vertexai/claude-sonnet-4@20250514 \
@@ -887,9 +888,9 @@ model add vertexai/claude-sonnet-4@20250514 \
 
 ### Local Models
 
-Crush can auto-discovers models from local providers. Add a custom provider
+Crash can auto-discovers models from local providers. Add a custom provider
 with `type` set to `llamacpp`, `omlx`, `lmstudio`, `litellm`, or `ollama`
-and leave out the models list. Crush will populate the model list
+and leave out the models list. Crash will populate the model list
 automatically.
 
 ```bash
@@ -918,7 +919,7 @@ by auto-discovery. Auto discovery will run if the model list is empty for any
 the found models with your hand configured ones.
 
 ```bash
-# crushrc
+# crashrc
 provider add ollama \
   --name Ollama \
   --type ollama \
@@ -944,30 +945,30 @@ The CLI also contains some helper commands to make perusing recent logs easier:
 
 ```bash
 # Print the last 1000 lines
-crush logs
+crash logs
 
 # Print the last 500 lines
-crush logs --tail 500
+crash logs --tail 500
 
 # Follow logs in real time
-crush logs --follow
+crash logs --follow
 ```
 
-Want more logging? Run `crush` with the `--debug` flag, or enable it in your
-`crushrc`:
+Want more logging? Run `crash` with the `--debug` flag, or enable it in your
+`crashrc`:
 
 ```bash
-# crushrc
+# crashrc
 option debug true
 option debug-lsp true
 ```
 
 ## Provider Auto-Updates
 
-By default, Crush automatically checks for the latest and greatest list of
+By default, Crash automatically checks for the latest and greatest list of
 providers and models from [Catwalk](https://github.com/charmbracelet/catwalk),
-the open source Crush provider database. This means that when new providers and
-models are available, or when model metadata changes, Crush automatically
+the open source Crash provider database. This means that when new providers and
+models are available, or when model metadata changes, Crash automatically
 updates your local configuration.
 
 ### Custom provider catalog
@@ -982,43 +983,43 @@ For those with restricted internet access, or those who prefer to work in
 air-gapped environments, this might not be want you want, and this feature can
 be disabled.
 
-To disable automatic provider updates in your `crushrc`:
+To disable automatic provider updates in your `crashrc`:
 
 ```bash
 option provider-auto-update false
 ```
 
-Or set the `CRUSH_DISABLE_PROVIDER_AUTO_UPDATE` environment variable:
+Or set the `CRASH_DISABLE_PROVIDER_AUTO_UPDATE` environment variable:
 
 ```bash
-export CRUSH_DISABLE_PROVIDER_AUTO_UPDATE=1
+export CRASH_DISABLE_PROVIDER_AUTO_UPDATE=1
 ```
 
 ### Manually updating providers
 
-Manually updating providers is possible with the `crush update-providers`
+Manually updating providers is possible with the `crash update-providers`
 command:
 
 ```bash
 # Update providers remotely from Catwalk.
-crush update-providers
+crash update-providers
 
 # Update providers from a custom Catwalk base URL.
-crush update-providers https://example.com/
+crash update-providers https://example.com/
 
 # Update providers from a local file.
-crush update-providers /path/to/local-providers.json
+crash update-providers /path/to/local-providers.json
 
-# Reset providers to the embedded version, embedded at crush at build time.
-crush update-providers embedded
+# Reset providers to the embedded version, embedded at crash at build time.
+crash update-providers embedded
 
 # For more info:
-crush update-providers --help
+crash update-providers --help
 ```
 
 ## Metrics
 
-Crush records pseudonymous usage metrics (tied to a device-specific hash),
+Crash records pseudonymous usage metrics (tied to a device-specific hash),
 which maintainers rely on to inform development and support priorities. The
 metrics include solely usage metadata; prompts and responses are NEVER
 collected.
@@ -1030,10 +1031,10 @@ You can opt out of metrics collection at any time by setting the environment
 variable by setting the following in your environment:
 
 ```bash
-export CRUSH_DISABLE_METRICS=1
+export CRASH_DISABLE_METRICS=1
 ```
 
-Crush also respects the [`DO_NOT_TRACK`](https://donottrack.sh/) convention
+Crash also respects the [`DO_NOT_TRACK`](https://donottrack.sh/) convention
 which can be enabled via `export DO_NOT_TRACK=1`.
 
 ## Q&A
