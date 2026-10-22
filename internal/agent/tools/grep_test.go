@@ -2,16 +2,48 @@ package tools
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 )
+
+// setRipgrepForTest swaps the cached ripgrep path for the duration of the
+// test. It must only be used from tests that are not marked t.Parallel(),
+// since the variable is shared package-wide. An empty path simulates
+// ripgrep being absent from $PATH.
+func setRipgrepForTest(t *testing.T, path string) {
+	t.Helper()
+	orig := getRg
+	t.Cleanup(func() { getRg = orig })
+	if path == "" {
+		getRg = func() string { return "" }
+	} else {
+		getRg = func() string { return path }
+	}
+}
+
+// fakeRipgrepScript writes an executable script that stands in for rg. The
+// script prints whatever the given output bytes contain and exits with the
+// given code.
+func fakeRipgrepScript(t *testing.T, exitCode int, output string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "rg")
+	script := "#!/bin/sh\n"
+	if output != "" {
+		script += "printf '%s' " + fmt.Sprintf("%q", output) + "\n"
+	}
+	script += fmt.Sprintf("exit %d\n", exitCode)
+	require.NoError(t, os.WriteFile(path, []byte(script), 0o755))
+	return path
+}
 
 func TestRegexCache(t *testing.T) {
 	cache := newRegexCache()
@@ -510,4 +542,63 @@ func TestGrepExplainsRegexOperatorsOnNoMatch(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A search that runs out of time must stop and say so; it must not fall
+// back to the Go walker, which takes no context and would search on
+// unbounded.
+func TestGrepTimeoutStopsAndReports(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644))
+
+	// A fake rg that never returns: the timeout must fire, and the tool
+	// must report it rather than continuing with the Go walker.
+	path := filepath.Join(t.TempDir(), "rg")
+	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755))
+	setRipgrepForTest(t, path)
+
+	timeout := 200 * time.Millisecond
+	tool := NewGrepTool(dir, config.ToolGrep{Timeout: &timeout})
+	input, err := json.Marshal(GrepParams{Pattern: "hello"})
+	require.NoError(t, err)
+	resp, err := tool.Run(t.Context(), fantasy.ToolCall{ID: "grep-call", Name: GrepToolName, Input: string(input)})
+	require.NoError(t, err)
+	require.True(t, resp.IsError, resp.Content)
+	require.Contains(t, resp.Content, "timed out")
+	require.Contains(t, resp.Content, "narrower path or pattern")
+}
+
+// When ripgrep is not installed, searchFiles falls back to the Go walker.
+func TestSearchFilesFallsBackToRegexWhenRipgrepMissing(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644))
+
+	setRipgrepForTest(t, "")
+
+	matches, _, err := searchFiles(t.Context(), "hello", dir, "", 100)
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+}
+
+// Other ripgrep failures, such as a pattern it rejects, must be reported as
+// the tool's error, not retried with the Go walker.
+func TestSearchFilesReportsRipgrepFailure(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644))
+
+	path := fakeRipgrepScript(t, 2, "")
+	setRipgrepForTest(t, path)
+
+	_, _, err := searchFiles(t.Context(), "hello", dir, "", 100)
+	require.Error(t, err)
+}
+
+// A path that does not exist is a real error: report it, do not fall back.
+func TestSearchFilesReportsMissingPath(t *testing.T) {
+	dir := t.TempDir()
+	setRipgrepForTest(t, "")
+
+	missing := filepath.Join(dir, "no-such-dir")
+	_, _, err := searchFiles(t.Context(), "hello", missing, "", 100)
+	require.Error(t, err)
 }

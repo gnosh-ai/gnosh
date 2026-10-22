@@ -7,6 +7,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -215,7 +216,17 @@ func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 func searchFiles(ctx context.Context, pattern, rootPath, include string, limit int) ([]grepMatch, bool, error) {
 	matches, err := searchWithRipgrep(ctx, pattern, rootPath, include)
 	if err != nil {
-		matches, err = searchFilesWithRegex(pattern, rootPath, include)
+		// Fall back to the Go walker only when ripgrep is not installed.
+		// A search that ran out of time must not continue on unbounded, and
+		// other ripgrep failures (a rejected pattern, a missing path) must
+		// be reported rather than retried with a slower engine that fails
+		// for different reasons.
+		if ctx.Err() != nil {
+			return nil, false, fmt.Errorf("search timed out; try a narrower path or pattern: %w", ctx.Err())
+		}
+		if errors.Is(err, exec.ErrNotFound) {
+			matches, err = searchFilesWithRegex(pattern, rootPath, include)
+		}
 		if err != nil {
 			return nil, false, err
 		}
@@ -239,7 +250,7 @@ func searchFiles(ctx context.Context, pattern, rootPath, include string, limit i
 func searchWithRipgrep(ctx context.Context, pattern, path, include string) ([]grepMatch, error) {
 	cmd := getRgSearchCmd(ctx, pattern, path, include)
 	if cmd == nil {
-		return nil, fmt.Errorf("ripgrep not found in $PATH")
+		return nil, fmt.Errorf("%w: ripgrep not found in $PATH", exec.ErrNotFound)
 	}
 
 	// Only add ignore files if they exist
@@ -307,6 +318,14 @@ type ripgrepMatch struct {
 
 func searchFilesWithRegex(pattern, rootPath, include string) ([]grepMatch, error) {
 	matches := []grepMatch{}
+
+	// A path that does not exist is a real error: report it rather than
+	// silently returning no matches. filepath.Walk swallows the error for
+	// a missing root and would otherwise leave the caller thinking the
+	// search simply found nothing.
+	if _, err := os.Stat(rootPath); err != nil {
+		return nil, err
+	}
 
 	// Use cached regex compilation
 	regex, err := searchRegexCache.get(pattern)
