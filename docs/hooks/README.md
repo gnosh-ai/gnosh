@@ -365,6 +365,7 @@ Standard input provides the full context as JSON:
 ```jsonc
 {
   "event": "PreToolUse", // Hook event name
+  "hook_event_name": "PreToolUse", // The same, under Claude Code's name for it
   "session_id": "313909e", // Current session ID
   "cwd": "/home/user/project", // Working directory
   "tool_name": "bash", // The tool being called
@@ -759,6 +760,9 @@ Present in every hook event:
 {
   // string. Hook event name.
   "event": "PreToolUse",
+
+  // string. The same, under Claude Code's name for it.
+  "hook_event_name": "PreToolUse",
 
   // string. Current session ID.
   "session_id": "313909e",

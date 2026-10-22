@@ -77,6 +77,7 @@ the rename; either works.
 ```json
 {
   "event": "PreToolUse",
+  "hook_event_name": "PreToolUse",
   "session_id": "313909e",
   "cwd": "/home/user/project",
   "tool_name": "bash",

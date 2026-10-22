@@ -228,6 +228,25 @@ func TestBuildPayload(t *testing.T) {
 	require.Contains(t, s, `"tool_input":{"command":"ls"}`)
 }
 
+// Every payload names its event under Claude Code's key as well, which
+// Claude Code hooks read to tell events apart.
+func TestPayloadsCarryHookEventName(t *testing.T) {
+	t.Parallel()
+	for event, payload := range map[string][]byte{
+		EventPreToolUse:  BuildPayload(EventPreToolUse, "s", "/w", "bash", `{}`),
+		EventPostToolUse: BuildPostPayload("s", "/w", "bash", `{}`, "out", ""),
+		EventStop:        BuildStopPayload("s", "/w", "done", false),
+	} {
+		var got struct {
+			Event         string `json:"event"`
+			HookEventName string `json:"hook_event_name"`
+		}
+		require.NoError(t, json.Unmarshal(payload, &got))
+		require.Equal(t, event, got.Event)
+		require.Equal(t, event, got.HookEventName)
+	}
+}
+
 func TestRunnerExitCode0Allow(t *testing.T) {
 	t.Parallel()
 	hookCfg := config.HookConfig{

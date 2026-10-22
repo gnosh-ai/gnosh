@@ -21,11 +21,14 @@ const SupportedOutputVersion = 1
 // Claude Code hooks (which expect tool_input to be an object, not a
 // string).
 type Payload struct {
-	Event     string          `json:"event"`
-	SessionID string          `json:"session_id"`
-	CWD       string          `json:"cwd"`
-	ToolName  string          `json:"tool_name"`
-	ToolInput json.RawMessage `json:"tool_input"`
+	Event string `json:"event"`
+	// HookEventName repeats Event under Claude Code's name for it, which
+	// Claude Code hooks read to tell events apart.
+	HookEventName string          `json:"hook_event_name"`
+	SessionID     string          `json:"session_id"`
+	CWD           string          `json:"cwd"`
+	ToolName      string          `json:"tool_name"`
+	ToolInput     json.RawMessage `json:"tool_input"`
 
 	// StopHookActive is set on an EventStop payload when the turn is
 	// only still running because an earlier Stop hook blocked it. A
@@ -77,11 +80,12 @@ func toolPayload(eventName, sessionID, cwd, toolName, toolInputJSON string) Payl
 		toolInput = json.RawMessage("{}")
 	}
 	return Payload{
-		Event:     eventName,
-		SessionID: sessionID,
-		CWD:       cwd,
-		ToolName:  toolName,
-		ToolInput: toolInput,
+		Event:         eventName,
+		HookEventName: eventName,
+		SessionID:     sessionID,
+		CWD:           cwd,
+		ToolName:      toolName,
+		ToolInput:     toolInput,
 	}
 }
 
@@ -99,6 +103,7 @@ func marshalPayload(p Payload) []byte {
 func BuildStopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActive bool) []byte {
 	p := Payload{
 		Event:                EventStop,
+		HookEventName:        EventStop,
 		SessionID:            sessionID,
 		CWD:                  cwd,
 		ToolInput:            json.RawMessage("{}"),
