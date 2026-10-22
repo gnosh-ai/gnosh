@@ -72,6 +72,7 @@ type GrepParams struct {
 	Path        string `json:"path,omitempty" description:"The directory to search in. Defaults to the current working directory."`
 	Include     string `json:"include,omitempty" description:"File pattern to include in the search (e.g. \"*.js\", \"*.{ts,tsx}\")"`
 	LiteralText bool   `json:"literal_text,omitempty" description:"If true, the pattern will be treated as literal text with special regex characters escaped. Default is false."`
+	IgnoreCase  bool   `json:"ignore_case,omitempty" description:"If true, letters match regardless of case, as grep -i. Default is false."`
 }
 
 type grepMatch struct {
@@ -152,6 +153,10 @@ func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 			searchPattern := params.Pattern
 			if params.LiteralText {
 				searchPattern = escapeRegexPattern(params.Pattern)
+			}
+			if params.IgnoreCase {
+				// An inline flag, which ripgrep and Go's regexp both read.
+				searchPattern = "(?i)" + searchPattern
 			}
 
 			searchPath := cmp.Or(params.Path, workingDir)

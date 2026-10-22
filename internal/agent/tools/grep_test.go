@@ -647,6 +647,34 @@ func TestSearchFilesWithTheRealRipgrep(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
 
+	matches, _, err = searchFiles(t.Context(), `(?i)FUNC \(S`, dir, "", 100)
+	require.NoError(t, err)
+	require.Len(t, matches, 1, "the inline flag that ignore_case adds works in ripgrep too")
+
 	_, _, err = searchFiles(t.Context(), "x", filepath.Join(dir, "missing"), "", 100)
 	require.Error(t, err, "a missing path is an error, not an empty result")
+}
+
+// ignore_case matches regardless of case, as grep -i does, so a model has
+// no reason to search in the shell for that.
+func TestGrepIgnoreCase(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.go"), []byte("// Hello, World\n"), 0o644))
+	tool := NewGrepTool(dir, config.ToolGrep{})
+	grep := func(params GrepParams) string {
+		input, err := json.Marshal(params)
+		require.NoError(t, err)
+		resp, err := tool.Run(t.Context(), fantasy.ToolCall{ID: "grep-call", Name: GrepToolName, Input: string(input)})
+		require.NoError(t, err)
+		require.False(t, resp.IsError, resp.Content)
+		return resp.Content
+	}
+
+	require.True(t, strings.HasPrefix(grep(GrepParams{Pattern: "hello world"}), "No files found"))
+	require.Contains(t, grep(GrepParams{Pattern: "hello, world", IgnoreCase: true}), "Found 1 matches")
+	require.Contains(t, grep(GrepParams{Pattern: "HELLO, (world)", IgnoreCase: true, LiteralText: true}), "No files found",
+		"literal text stays literal: the parentheses are not in the file")
+	require.Contains(t, grep(GrepParams{Pattern: "HELLO, WORLD", IgnoreCase: true, LiteralText: true}), "Found 1 matches")
 }
