@@ -333,6 +333,10 @@ func newCatwalkStub(t *testing.T, status int, catalog []catwalk.Provider) {
 		w.WriteHeader(status)
 	}))
 	t.Cleanup(server.Close)
+	// TestMain keeps tests off Charm's servers by turning the catalog
+	// fetch off; a test of the fetch, against this local server, turns it
+	// back on.
+	t.Setenv("CRASH_DISABLE_PROVIDER_AUTO_UPDATE", "")
 
 	t.Setenv("CATWALK_URL", server.URL)
 	t.Setenv("HYPER_URL", server.URL)

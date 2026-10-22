@@ -21,6 +21,13 @@ var prefixes = []string{"CRUSH_", "CRASH_"}
 // exports CRUSH_DISABLE_DEFAULT_PROVIDERS=1, and under it a dozen provider
 // tests failed while passing from a clean shell. Tests that need a
 // variable set it themselves with t.Setenv, as before.
+//
+// It then turns off the provider catalog's auto-update, so no test fetches
+// the catalog from Charm's servers (catwalk and Hyper): the network is no
+// part of a unit test, and Jae runs the program with that fetch off. A test
+// of the fetch itself opts back in with
+// t.Setenv("CRASH_DISABLE_PROVIDER_AUTO_UPDATE", "") and points it at a
+// local server.
 func ClearConfigVars() {
 	for _, kv := range os.Environ() {
 		key, _, _ := strings.Cut(kv, "=")
@@ -31,4 +38,5 @@ func ClearConfigVars() {
 			}
 		}
 	}
+	os.Setenv("CRASH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
 }
