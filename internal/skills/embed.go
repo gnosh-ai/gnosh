@@ -5,11 +5,58 @@ import (
 	"io/fs"
 	"log/slog"
 	"path/filepath"
+	"strings"
 )
 
 // BuiltinPrefix is the path prefix for builtin skill files. It is used by
 // the View tool to distinguish embedded files from disk files.
-const BuiltinPrefix = "crush://skills/"
+const BuiltinPrefix = "crash://skills/"
+
+// LegacyBuiltinPrefix is the prefix builtin skill files had before Crush
+// was renamed Crash. Old sessions and prompt templates still name files
+// under it, so it still resolves (see CanonicalBuiltinPath).
+const LegacyBuiltinPrefix = "crush://skills/"
+
+// legacySkillNames maps builtin skills' names from before the rename to
+// their names now.
+var legacySkillNames = map[string]string{
+	"crush-config": "crash-config",
+	"crush-hooks":  "crash-hooks",
+}
+
+// CanonicalSkillName returns a builtin skill's current name given the name
+// it had before the rename; any other name is returned as it is.
+func CanonicalSkillName(name string) string {
+	if current, ok := legacySkillNames[name]; ok {
+		return current
+	}
+	return name
+}
+
+// IsBuiltinPath reports whether path names a builtin skill file, under
+// the current prefix or the one from before the rename.
+func IsBuiltinPath(path string) bool {
+	return strings.HasPrefix(path, BuiltinPrefix) || strings.HasPrefix(path, LegacyBuiltinPrefix)
+}
+
+// CanonicalBuiltinPath returns a builtin skill file's path under the
+// current prefix and skill name: crush://skills/crush-config/SKILL.md is
+// crash://skills/crash-config/SKILL.md. Other paths are returned as they
+// are.
+func CanonicalBuiltinPath(path string) string {
+	rest, ok := strings.CutPrefix(path, LegacyBuiltinPrefix)
+	if !ok {
+		if rest, ok = strings.CutPrefix(path, BuiltinPrefix); !ok {
+			return path
+		}
+	}
+	name, tail, found := strings.Cut(rest, "/")
+	name = CanonicalSkillName(name)
+	if found {
+		return BuiltinPrefix + name + "/" + tail
+	}
+	return BuiltinPrefix + name
+}
 
 //go:embed builtin/*
 var builtinFS embed.FS
@@ -54,9 +101,9 @@ func DiscoverBuiltinWithStates() ([]*Skill, []*SkillState) {
 			return nil
 		}
 
-		// Set paths using the crush prefix. Strip the leading "builtin/"
+		// Set paths using the crash prefix. Strip the leading "builtin/"
 		// so the path is relative to the embedded root
-		// (e.g., "crush://skills/crush-config/SKILL.md").
+		// (e.g., "crash://skills/crash-config/SKILL.md").
 		relPath, _ := filepath.Rel("builtin", path)
 		relPath = filepath.ToSlash(relPath)
 		skill.SkillFilePath = BuiltinPrefix + relPath

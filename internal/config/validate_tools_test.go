@@ -119,10 +119,11 @@ func TestValidateToolsTakesLegacyToolNames(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{
-		Options:     &Options{DisabledTools: []string{"crush_logs"}},
+		Options:     &Options{DisabledTools: []string{"crush_logs"}, DisabledSkills: []string{"crush-config", "jq"}},
 		Permissions: &Permissions{AllowedTools: []string{"crush_info", "bash"}},
 	}
 	require.NoError(t, cfg.ValidateTools())
 	require.Equal(t, []string{"crash_logs"}, cfg.Options.DisabledTools)
 	require.Equal(t, []string{"crash_info", "bash"}, cfg.Permissions.AllowedTools)
+	require.Equal(t, []string{"crash-config", "jq"}, cfg.Options.DisabledSkills, "skills renamed with Crush are the same")
 }

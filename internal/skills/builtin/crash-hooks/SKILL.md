@@ -1,11 +1,11 @@
 ---
-name: crush-hooks
-description: Use when the user wants to add, write, debug, or configure a Crush hook — gating or blocking tool calls, approving or rewriting tool input before execution, running a formatter or linter after a tool call, injecting context into tool results, or troubleshooting hook behavior in crush.json.
+name: crash-hooks
+description: Use when the user wants to add, write, debug, or configure a Crash hook — gating or blocking tool calls, approving or rewriting tool input before execution, running a formatter or linter after a tool call, injecting context into tool results, or troubleshooting hook behavior in crash.json.
 ---
 
-# Crush Hooks
+# Crash Hooks
 
-Hooks are user-defined commands in `crush.json` that fire at specific points
+Hooks are user-defined commands in `crash.json` that fire at specific points
 during execution, giving deterministic control over tool behavior. They run
 **before** permission checks and **only on the top-level agent's** tool calls —
 sub-agent calls (task tool, agentic_fetch, etc.) are not intercepted, though
@@ -20,7 +20,7 @@ need to author correct hooks.
 call succeeds. `Stop` fires when the agent is about to finish its turn.
 
 Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
-`PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Crush refuses
+`PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Crash refuses
 to start on an event name it doesn't fire, rather than accepting a hook that
 would look configured and silently never run.
 
@@ -60,15 +60,15 @@ the input/output contract is identical regardless of language.
 
 | Variable                     | Description                              |
 | ---------------------------- | ---------------------------------------- |
-| `CRUSH_EVENT`                | Event name (`PreToolUse`, `PostToolUse` or `Stop`) |
-| `CRUSH_TOOL_NAME`            | Tool being called; empty on `Stop`       |
-| `CRUSH_SESSION_ID`           | Current session ID                       |
-| `CRUSH_CWD`                  | Working directory                        |
-| `CRUSH_PROJECT_DIR`          | Project root directory                   |
-| `CRUSH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command      |
-| `CRUSH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
-| `CRUSH_TOOL_USE_ID`          | The tool call's ID, the same in its `PreToolUse` and `PostToolUse` hooks |
-| `CRUSH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` if an earlier `Stop` hook is why the turn is still running |
+| `CRASH_EVENT`                | Event name (`PreToolUse`, `PostToolUse` or `Stop`) |
+| `CRASH_TOOL_NAME`            | Tool being called; empty on `Stop`       |
+| `CRASH_SESSION_ID`           | Current session ID                       |
+| `CRASH_CWD`                  | Working directory                        |
+| `CRASH_PROJECT_DIR`          | Project root directory                   |
+| `CRASH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command      |
+| `CRASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
+| `CRASH_TOOL_USE_ID`          | The tool call's ID, the same in its `PreToolUse` and `PostToolUse` hooks |
+| `CRASH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` if an earlier `Stop` hook is why the turn is still running |
 
 Each is also set under its `CRASH_` name (`CRASH_EVENT`, ...), the name after
 the rename; either works.
@@ -157,7 +157,7 @@ Composed in **config order**:
 #!/usr/bin/env bash
 set -euo pipefail
 
-if echo "$CRUSH_TOOL_INPUT_COMMAND" | grep -qE 'rm\s+-(rf|fr)\s+/'; then
+if echo "$CRASH_TOOL_INPUT_COMMAND" | grep -qE 'rm\s+-(rf|fr)\s+/'; then
   echo "Refusing to run rm -rf against root" >&2
   exit 2
 fi
@@ -181,7 +181,7 @@ Emit only `context` — omit `decision` so the normal permission flow still runs
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$CRUSH_TOOL_INPUT_FILE_PATH" == *.go ]]; then
+if [[ "$CRASH_TOOL_INPUT_FILE_PATH" == *.go ]]; then
   echo '{"context": "Remember: run gofumpt after editing Go files."}'
 else
   echo '{}'
@@ -220,7 +220,7 @@ preserved.
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-f="$CRUSH_TOOL_INPUT_FILE_PATH"
+f="$CRASH_TOOL_INPUT_FILE_PATH"
 [[ "$f" == *.go ]] || exit 0
 if ! out=$(gofumpt -w "$f" 2>&1); then
   echo "gofumpt failed on $f: $out" >&2
@@ -228,7 +228,7 @@ if ! out=$(gofumpt -w "$f" 2>&1); then
 fi
 ```
 
-When a hook changes the file the agent just wrote, Crush records a fresh
+When a hook changes the file the agent just wrote, Crash records a fresh
 read of it, so the agent's next edit isn't refused as "modified since it was
 read", and tells the agent the file changed.
 
@@ -258,8 +258,8 @@ done, it is not done. Every 10th consecutive block, the agent is instead asked
 to judge whether there is a genuine reason to stop (impossible as asked,
 blocked on the user, a check that cannot pass here, no progress). If so it
 explains why and ends its reply with `<!-- CRUSH_STOP -->` on its own line;
-Crush ends the turn and warns the user. Otherwise it keeps working. A hook
-that wants to object only once can check `CRUSH_STOP_HOOK_ACTIVE` and exit 0.
+Crash ends the turn and warns the user. Otherwise it keeps working. A hook
+that wants to object only once can check `CRASH_STOP_HOOK_ACTIVE` and exit 0.
 
 A Claude Code-style Stop hook that prints `{"decision": "block", "reason": "…"}`
 works the same as exit `2`. Decision values are matched exactly: `allow`,
@@ -271,26 +271,26 @@ value is reported as a failed hook, not silently ignored.
 1. Add `#!/usr/bin/env bash` and `set -euo pipefail` (for shell scripts).
 2. `chmod +x` the script.
 3. Add the entry under `hooks.PreToolUse` or `hooks.PostToolUse` (with the
-   right matcher) or `hooks.Stop` (no matcher) in `crush.json`. Spell the event
+   right matcher) or `hooks.Stop` (no matcher) in `crash.json`. Spell the event
    name exactly; anything else is a startup error.
 4. Decide intent: inject context (omit `decision`), auto-approve (`"allow"`),
    block (`exit 2`), or halt (`exit 49`). On `Stop`, `exit 2` means "keep
    working" and `exit 49` means "end now".
-5. On `Stop`, check `CRUSH_STOP_HOOK_ACTIVE` so a hook that blocks can't loop.
+5. On `Stop`, check `CRASH_STOP_HOOK_ACTIVE` so a hook that blocks can't loop.
 6. If rewriting input, remember `updated_input` is a shallow merge — only
    include the keys you want to change (`PreToolUse` only).
 
 ## Debugging
 
 - Timeouts kill the hook silently and the tool call proceeds. Bump `timeout` if needed.
-- Non-zero exit codes other than 2/49 are logged but don't block — check Crush logs.
+- Non-zero exit codes other than 2/49 are logged but don't block — check Crash logs.
 - Use `echo "debug info" >&2` for logging without corrupting stdout JSON.
 - `matcher` is a regex against the tool name. Use `^bash$` (not `bash`) if you
   don't also want to match `mcp_something_bash`.
 
 ## Claude Code Compatibility
 
-Crush also accepts Claude Code's `hookSpecificOutput` envelope. One intentional
-divergence: Crush treats `updated_input` as shallow-merge, Claude Code replaces.
+Crash also accepts Claude Code's `hookSpecificOutput` envelope. One intentional
+divergence: Crash treats `updated_input` as shallow-merge, Claude Code replaces.
 Existing Claude Code hooks work without modification for the matcher/decision
 parts; revisit any that relied on `updatedInput` fully replacing tool input.

@@ -303,11 +303,21 @@ var _ filetracker.Service = mockFileTracker{}
 func TestReadBuiltinFile(t *testing.T) {
 	t.Parallel()
 
-	t.Run("reads crush-config skill", func(t *testing.T) {
+	t.Run("reads a builtin skill under its name from before the rename", func(t *testing.T) {
+		t.Parallel()
+
+		resp := runViewTool(t, newViewToolForTest(t.TempDir()), context.WithValue(context.Background(), SessionIDContextKey, "test-session"), ViewParams{
+			FilePath: "crush://skills/crush-config/SKILL.md",
+		})
+		require.False(t, resp.IsError, resp.Content)
+		require.Contains(t, resp.Content, "Crash Configuration")
+	})
+
+	t.Run("reads crash-config skill", func(t *testing.T) {
 		t.Parallel()
 
 		resp, err := readBuiltinFile(ViewParams{
-			FilePath: "crush://skills/crush-config/SKILL.md",
+			FilePath: "crash://skills/crash-config/SKILL.md",
 		}, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, resp.Content)
@@ -318,7 +328,7 @@ func TestReadBuiltinFile(t *testing.T) {
 		t.Parallel()
 
 		resp, err := readBuiltinFile(ViewParams{
-			FilePath: "crush://skills/nonexistent/SKILL.md",
+			FilePath: "crash://skills/nonexistent/SKILL.md",
 		}, nil)
 		require.NoError(t, err)
 		require.True(t, resp.IsError)
@@ -328,14 +338,14 @@ func TestReadBuiltinFile(t *testing.T) {
 		t.Parallel()
 
 		resp, err := readBuiltinFile(ViewParams{
-			FilePath: "crush://skills/crush-config/SKILL.md",
+			FilePath: "crash://skills/crash-config/SKILL.md",
 		}, nil)
 		require.NoError(t, err)
 
 		var meta ViewResponseMetadata
 		require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
 		require.Equal(t, ViewResourceSkill, meta.ResourceType)
-		require.Equal(t, "crush-config", meta.ResourceName)
+		require.Equal(t, "crash-config", meta.ResourceName)
 		require.NotEmpty(t, meta.ResourceDescription)
 	})
 
@@ -343,7 +353,7 @@ func TestReadBuiltinFile(t *testing.T) {
 		t.Parallel()
 
 		resp, err := readBuiltinFile(ViewParams{
-			FilePath: "crush://skills/crush-config/SKILL.md",
+			FilePath: "crash://skills/crash-config/SKILL.md",
 			Offset:   5,
 		}, nil)
 		require.NoError(t, err)

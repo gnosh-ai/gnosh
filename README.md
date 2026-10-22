@@ -626,7 +626,7 @@ hidden from the agent, including builtin skills and skills discovered from
 disk.
 
 ```bash
-option disable-skill crush-config
+option disable-skill crash-config
 ```
 
 ### Agent Skills
