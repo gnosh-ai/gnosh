@@ -901,7 +901,13 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// can take tens of seconds. Blocking Run on it delays the
 	// response to the caller. Use a detached context so the title
 	// goroutine survives Run's cancel.
-	if !hasUserTextMessage(msgs) {
+	//
+	// A sub-agent's session gets none: nothing lists or shows it, and the
+	// request would run beside the sub-agent's first one. On a local
+	// server with few slots that took the slot holding the parent's
+	// prompt cache, and the parent then spent minutes re-reading its
+	// whole conversation when it resumed.
+	if !hasUserTextMessage(msgs) && currentSession.ParentSessionID == "" {
 		titleCtx := context.WithoutCancel(ctx)
 		go a.GenerateTitle(titleCtx, call.SessionID, call.Prompt)
 	}

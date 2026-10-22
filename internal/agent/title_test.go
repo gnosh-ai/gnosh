@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
@@ -106,6 +107,41 @@ func TestGenerateTitleFallsBackToThePrompt(t *testing.T) {
 		"truncated to 50 columns, the ellipsis included")
 	require.NotEqual(t, DefaultSessionName, sess.Title)
 	require.Len(t, llm.recorded(), 2, "both the small and the large model are tried first")
+}
+
+// A sub-agent's session is never listed or shown, so it gets no title
+// request. On the AI box that request ran beside the sub-agent's first one,
+// took the model server's last free slot and evicted the parent's prompt
+// cache; each time the parent resumed it re-read its 110K-token
+// conversation, about seven minutes.
+func TestRunTitlesOnlyTopLevelSessions(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv(t)
+	small := &titleModel{text: "Fix the flaky test", finish: fantasy.FinishReasonStop}
+	a := testSessionAgent(env, fastModel{}, small, "system")
+
+	parent, err := env.sessions.Create(t.Context(), "")
+	require.NoError(t, err)
+	child, err := env.sessions.CreateTaskSession(t.Context(), "call-1", parent.ID, "New Agent Session")
+	require.NoError(t, err)
+
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: child.ID, Prompt: "find where the config is loaded", NonInteractive: true})
+	require.NoError(t, err)
+
+	// The parent's first prompt is still titled. By the time its title is
+	// in, a title request for the child would have been made too.
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: parent.ID, Prompt: "please fix the flaky test"})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		sess, err := env.sessions.Get(t.Context(), parent.ID)
+		return err == nil && sess.Title == "Fix the flaky test"
+	}, 5*time.Second, 10*time.Millisecond)
+
+	require.Equal(t, 1, len(small.recorded()), "only the top-level session asks for a title")
+	sess, err := env.sessions.Get(t.Context(), child.ID)
+	require.NoError(t, err)
+	require.Equal(t, "New Agent Session", sess.Title)
 }
 
 func TestTitleFromPrompt(t *testing.T) {
