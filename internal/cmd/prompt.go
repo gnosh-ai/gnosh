@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/crush/internal/workspace"
 )
 
@@ -56,14 +57,14 @@ var promptExportCmd = &cobra.Command{
 		if err := os.WriteFile(path, builtin, 0o644); err != nil {
 			return err
 		}
-		_, err := fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s (%d bytes). Edit it; Crush uses it from the next start.\n", path, len(builtin))
+		_, err := fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s (%d bytes). Edit it; "+version.Name+" uses it from the next start.\n", path, len(builtin))
 		return err
 	},
 }
 
 var promptShowCmd = &cobra.Command{
 	Use:   "show [name]",
-	Short: "Print the template Crush will use (yours if present, else the built-in)",
+	Short: "Print the template " + version.Name + " will use (yours if present, else the built-in)",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := "coder.md.tpl"

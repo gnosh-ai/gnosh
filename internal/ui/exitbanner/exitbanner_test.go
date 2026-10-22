@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
@@ -40,20 +41,20 @@ func TestRender(t *testing.T) {
 			name:   "compact with a session prints only the resume lines",
 			banner: config.ExitBannerCompact,
 			sess:   testSession(),
-			want:   []string{"Session", "Fix the flaky test", "Continue", "crush -s "},
+			want:   []string{"Session", "Fix the flaky test", "Continue", version.Command + " -s "},
 			// No logo, and no padding around the two lines.
-			notWant: []string{"Thanks for using Crush!"},
+			notWant: []string{"Thanks for using " + version.Name + "!"},
 		},
 		{
 			name:   "default with a session prints the logo and the resume lines",
 			banner: config.ExitBannerDefault,
 			sess:   testSession(),
-			want:   []string{"Thanks for using Crush!", "Session", "Fix the flaky test", "Continue"},
+			want:   []string{"Thanks for using " + version.Name + "!", "Session", "Fix the flaky test", "Continue"},
 		},
 		{
 			name:   "default without a session still prints the logo",
 			banner: config.ExitBannerDefault,
-			want:   []string{"Thanks for using Crush!"},
+			want:   []string{"Thanks for using " + version.Name + "!"},
 			// The separator between logo and resume lines must not be left
 			// dangling when there is no session.
 			notWant: []string{"Continue"},
@@ -62,12 +63,12 @@ func TestRender(t *testing.T) {
 			name:   "unrecognized values fall back to the full banner",
 			banner: config.ExitBanner("wat"),
 			sess:   testSession(),
-			want:   []string{"Thanks for using Crush!", "Continue"},
+			want:   []string{"Thanks for using " + version.Name + "!", "Continue"},
 		},
 		{
 			name: "zero value falls back to the full banner",
 			sess: testSession(),
-			want: []string{"Thanks for using Crush!", "Continue"},
+			want: []string{"Thanks for using " + version.Name + "!", "Continue"},
 		},
 	}
 
@@ -146,4 +147,14 @@ func TestRenderNonPositiveWidthUsesFallback(t *testing.T) {
 	for _, line := range strings.Split(got, "\n") {
 		require.LessOrEqual(t, ansi.StringWidth(line), FallbackWidth)
 	}
+}
+
+// The resume hint must name the command users type now, or copying it
+// from the exit banner runs nothing.
+func TestResumeHintUsesTheCommandName(t *testing.T) {
+	t.Parallel()
+
+	lines := ansi.Strip(sessionResumeLines(testSession(), 80))
+	require.Contains(t, lines, version.Command+" -s ")
+	require.NotContains(t, lines, "crush -s")
 }

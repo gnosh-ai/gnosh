@@ -2,7 +2,10 @@
 
 package notification
 
-import "github.com/gen2brain/beeep"
+import (
+	"github.com/charmbracelet/crush/internal/version"
+	"github.com/gen2brain/beeep"
+)
 
 // NativeSupported reports whether native OS notifications are available on
 // this platform. It is false on illumos/solaris, where beeep's dbus
@@ -15,5 +18,5 @@ const NativeSupported = true
 var defaultNotifyFunc = beeep.Notify
 
 func init() {
-	beeep.AppName = "Crush"
+	beeep.AppName = version.Name
 }

@@ -5,11 +5,12 @@ import (
 	"log/slog"
 
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/version"
 )
 
 // orphanNote is the finish message stored on an assistant message that was
 // left unfinished by a crash or a hard kill, so the UI can say why.
-const orphanNote = "Interrupted: Crush was stopped before this reply finished"
+const orphanNote = "Interrupted: " + version.Name + " was stopped before this reply finished"
 
 // orphanStore is the slice of the message service the repair needs.
 type orphanStore interface {

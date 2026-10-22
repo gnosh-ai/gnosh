@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/charmbracelet/crush/internal/version"
+
 	"github.com/charmbracelet/x/ansi"
 
 	tea "charm.land/bubbletea/v2"
@@ -110,7 +112,7 @@ func (b *OSCBackend) sendOSC99(n Notification) tea.Cmd {
 	b.notifySeq++
 	id := fmt.Sprintf("crush-%d", b.notifySeq)
 
-	appName := "Crush"
+	appName := version.Name
 	notificationType := "crush-notification"
 
 	sb.WriteString(ansi.DesktopNotification(n.Title, "i="+id, "d=0", "p=title", "a="+appName, "t="+notificationType))

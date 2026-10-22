@@ -4,11 +4,12 @@ import (
 	"net/http"
 
 	"github.com/charmbracelet/crush/internal/apigen"
+	"github.com/charmbracelet/crush/internal/version"
 )
 
 // apiInfo is the top-level metadata for the Crush API documentation.
 var apiInfo = apigen.Info{
-	Title:   "Crush API",
+	Title:   version.Name + " API",
 	Version: "1.0",
 }
 

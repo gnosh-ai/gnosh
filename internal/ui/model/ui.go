@@ -1157,7 +1157,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 		if cmd := m.sendNotification(notification.Notification{
-			Title:   "Crush is waiting...",
+			Title:   version.Name + " is waiting...",
 			Message: fmt.Sprintf("Permission required to execute \"%s\"", msg.Payload.ToolName),
 		}); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -1168,7 +1168,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openBatchFormDialog(msg.Payload)
 		m.chat.ScrollToBottom()
 		if cmd := m.sendNotification(notification.Notification{
-			Title:   "Crush is waiting...",
+			Title:   version.Name + " is waiting...",
 			Message: fmt.Sprintf("%d questions need your input", len(msg.Payload.Questions)),
 		}); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -1555,9 +1555,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, m.status.Show(msg))
 	case app.UpdateAvailableMsg:
-		text := fmt.Sprintf("Crush update available: v%s → v%s.", msg.CurrentVersion, msg.LatestVersion)
+		text := fmt.Sprintf("%s update available: v%s → v%s.", version.Name, msg.CurrentVersion, msg.LatestVersion)
 		if msg.IsDevelopment {
-			text = fmt.Sprintf("This is a development version of Crush. The latest version is v%s.", msg.LatestVersion)
+			text = fmt.Sprintf("This is a development version of %s. The latest version is v%s.", version.Name, msg.LatestVersion)
 		}
 		cmds = append(cmds, m.status.Show(util.InfoMsg{
 			Type: util.InfoTypeUpdate,
@@ -1741,7 +1741,7 @@ func (m *UI) setSessionMessages(msgs []message.Message) tea.Cmd {
 func (m *UI) handleConnectionEvent(msg workspace.ConnectionEvent) []tea.Cmd {
 	info := util.InfoMsg{
 		Type: util.InfoTypeWarn,
-		Msg:  "Lost connection to the Crush server — reconnecting…",
+		Msg:  "Lost connection to the " + version.Name + " server — reconnecting…",
 		TTL:  30 * time.Second,
 	}
 	switch msg.State {
@@ -1749,13 +1749,13 @@ func (m *UI) handleConnectionEvent(msg workspace.ConnectionEvent) []tea.Cmd {
 		slog.Warn("Server connection degraded", "error", msg.Err, "stuck", msg.Stuck)
 		if msg.Stuck {
 			info.Type = util.InfoTypeError
-			info.Msg = "Can't restore the connection to the Crush server. Restart Crush to recover."
+			info.Msg = "Can't restore the connection to the " + version.Name + " server. Restart " + version.Name + " to recover."
 			info.TTL = time.Minute
 		}
 	case workspace.ConnectionRecovered:
 		info = util.InfoMsg{
 			Type: util.InfoTypeSuccess,
-			Msg:  "Reconnected to the Crush server.",
+			Msg:  "Reconnected to the " + version.Name + " server.",
 			TTL:  DefaultStatusTTL,
 		}
 	}
@@ -4775,7 +4775,7 @@ func (m *UI) switchPlanToYolo() tea.Cmd {
 
 // Mode banner copy shown in the status bar after switching modes.
 const (
-	planModeBannerMsg = "Plan with Crush before generating any code."
+	planModeBannerMsg = "Plan with " + version.Name + " before generating any code."
 	yoloModeBannerMsg = "Skip permission prompts. System level commands will be blocked."
 )
 
@@ -5977,7 +5977,7 @@ func (m *UI) handleAgentNotification(n notify.Notification) tea.Cmd {
 	switch n.Type {
 	case notify.TypeAgentFinished:
 		cmds = append(cmds, m.sendNotification(notification.Notification{
-			Title:   "Crush is waiting...",
+			Title:   version.Name + " is waiting...",
 			Message: fmt.Sprintf("Agent's turn completed in \"%s\"", n.SessionTitle),
 		}))
 		// Show what the stored balance says right away, and fetch again:

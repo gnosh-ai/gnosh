@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/login"
 	"github.com/charmbracelet/crush/internal/oauth/copilot"
+	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/crush/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -18,7 +19,7 @@ import (
 var loginCmd = &cobra.Command{
 	Aliases: []string{"auth"},
 	Use:     "login [platform]",
-	Short:   "Login Crush to a platform",
+	Short:   "Login " + version.Name + " to a platform",
 	Long: `Login Crush to a specified platform.
 	The platform should be provided as an argument.
 	Available platforms are: hyper, copilot, openai (chatgpt), grok (xai).`,

@@ -9,6 +9,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -149,7 +150,7 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 // SmallRender renders a smaller version of the Crush logo, suitable for
 // smaller windows or sidebar usage.
 func SmallRender(t *styles.Styles, width int, o Opts) string {
-	name := "Crush"
+	name := version.Name
 	if o.Hyper {
 		name = "HYPERCRUSH"
 	}

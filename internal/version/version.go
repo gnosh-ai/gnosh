@@ -6,6 +6,18 @@ import (
 	"strconv"
 )
 
+// Name is the product's display name: what the program calls itself on
+// screen, in help text and in the agent's own prompt. It is deliberately
+// separate from the names on disk (config and data directories, config
+// files, environment variables), which keep their established spellings so
+// existing setups go on working.
+const Name = "Crash"
+
+// Command is the command users type to run it. The old "crush" command is
+// still installed alongside, so either works; this is the one shown in help
+// and in hints such as the resume line printed on exit.
+const Command = "crash"
+
 // Build-time parameters set via -ldflags.
 
 var (
