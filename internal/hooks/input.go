@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -29,6 +30,9 @@ type Payload struct {
 	CWD           string          `json:"cwd"`
 	ToolName      string          `json:"tool_name"`
 	ToolInput     json.RawMessage `json:"tool_input"`
+	// ToolUseID is the ID of the tool call a PreToolUse or PostToolUse
+	// hook runs for, the same in both, as in Claude Code.
+	ToolUseID string `json:"tool_use_id,omitempty"`
 
 	// StopHookActive is set on an EventStop payload when the turn is
 	// only still running because an earlier Stop hook blocked it. A
@@ -64,12 +68,31 @@ func BuildPayload(eventName, sessionID, cwd, toolName, toolInputJSON string) []b
 // that is not a JSON object is left out rather than passed on as
 // something a hook would have to guess at.
 func BuildPostPayload(sessionID, cwd, toolName, toolInputJSON, output, metadata string) []byte {
+	return marshalPayload(postPayload(sessionID, cwd, toolName, toolInputJSON, output, metadata))
+}
+
+func postPayload(sessionID, cwd, toolName, toolInputJSON, output, metadata string) Payload {
 	p := toolPayload(EventPostToolUse, sessionID, cwd, toolName, toolInputJSON)
 	p.ToolResponse = &ToolResponse{Output: output}
 	if meta := json.RawMessage(metadata); json.Valid(meta) && strings.HasPrefix(strings.TrimSpace(metadata), "{") {
 		p.ToolResponse.Metadata = meta
 	}
-	return marshalPayload(p)
+	return p
+}
+
+// toolUseIDKey is the context key WithToolUseID stores a call's ID under.
+type toolUseIDKey struct{}
+
+// WithToolUseID returns a context naming the tool call that hooks run
+// for. They get it as tool_use_id, and in CRASH_TOOL_USE_ID, so that a
+// PreToolUse and a PostToolUse hook can tell they saw the same call.
+func WithToolUseID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, toolUseIDKey{}, id)
+}
+
+func toolUseID(ctx context.Context) string {
+	id, _ := ctx.Value(toolUseIDKey{}).(string)
+	return id
 }
 
 // toolPayload is the payload common to the events that fire around a

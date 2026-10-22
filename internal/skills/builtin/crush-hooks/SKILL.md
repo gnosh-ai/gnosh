@@ -67,6 +67,7 @@ the input/output contract is identical regardless of language.
 | `CRUSH_PROJECT_DIR`          | Project root directory                   |
 | `CRUSH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command      |
 | `CRUSH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
+| `CRUSH_TOOL_USE_ID`          | The tool call's ID, the same in its `PreToolUse` and `PostToolUse` hooks |
 | `CRUSH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` if an earlier `Stop` hook is why the turn is still running |
 
 Each is also set under its `CRASH_` name (`CRASH_EVENT`, ...), the name after
@@ -81,6 +82,7 @@ the rename; either works.
   "session_id": "313909e",
   "cwd": "/home/user/project",
   "tool_name": "bash",
+  "tool_use_id": "call_8f2a",
   "tool_input": {"command": "rm -rf /"}
 }
 ```

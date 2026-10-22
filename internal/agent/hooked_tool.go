@@ -73,6 +73,7 @@ func (h *hookedTool) SetProviderOptions(opts fantasy.ProviderOptions) {
 
 func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 	sessionID := tools.GetSessionFromContext(ctx)
+	ctx = hooks.WithToolUseID(ctx, call.ID)
 	var result hooks.AggregateResult
 	if h.hooks.pre != nil {
 		var err error

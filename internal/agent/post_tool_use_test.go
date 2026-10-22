@@ -103,6 +103,7 @@ func TestPostToolUseSeesTheToolResponse(t *testing.T) {
 		Event        string          `json:"event"`
 		SessionID    string          `json:"session_id"`
 		ToolName     string          `json:"tool_name"`
+		ToolUseID    string          `json:"tool_use_id"`
 		ToolInput    json.RawMessage `json:"tool_input"`
 		ToolResponse struct {
 			Output   string          `json:"output"`
@@ -113,6 +114,7 @@ func TestPostToolUseSeesTheToolResponse(t *testing.T) {
 	require.Equal(t, hooks.EventPostToolUse, got.Event)
 	require.Equal(t, "s1", got.SessionID)
 	require.Equal(t, "bash", got.ToolName)
+	require.Equal(t, "c1", got.ToolUseID)
 	require.JSONEq(t, `{"command":"echo hello"}`, string(got.ToolInput))
 	require.Equal(t, "hello", got.ToolResponse.Output)
 	require.JSONEq(t, `{"exit_code":0}`, string(got.ToolResponse.Metadata))
@@ -223,4 +225,33 @@ func TestPreAndPostToolUseHooksShareTheMetadata(t *testing.T) {
 	require.Equal(t, "allow", meta.Hook.Decision)
 	require.Equal(t, hooks.EventPreToolUse, meta.Hook.Hooks[0].Event)
 	require.Equal(t, hooks.EventPostToolUse, meta.Hook.Hooks[1].Event)
+}
+
+// A tool call's PreToolUse and PostToolUse hooks get the same
+// tool_use_id, in the payload and in CRASH_TOOL_USE_ID, as in Claude Code,
+// so they can tell they saw the same call.
+func TestToolHooksShareTheToolUseID(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	record := func(name string) string {
+		return `printf '%s ' "$CRASH_TOOL_USE_ID" > ` + filepath.Join(dir, name+".env") + `; cat > ` + filepath.Join(dir, name+".json")
+	}
+	inner := &fakeTool{name: "bash", resp: fantasy.NewTextResponse("ok")}
+	tool := newHookedTool(inner, toolHooks{pre: newRunner(t, record("pre")), post: newPostRunner(t, record("post"))})
+	_, err := tool.Run(sessionCtx(t), fantasy.ToolCall{ID: "call-42", Name: "bash", Input: `{}`})
+	require.NoError(t, err)
+
+	for _, name := range []string{"pre", "post"} {
+		env, err := os.ReadFile(filepath.Join(dir, name+".env"))
+		require.NoError(t, err)
+		require.Equal(t, "call-42 ", string(env), name)
+		data, err := os.ReadFile(filepath.Join(dir, name+".json"))
+		require.NoError(t, err)
+		var payload struct {
+			ToolUseID string `json:"tool_use_id"`
+		}
+		require.NoError(t, json.Unmarshal(data, &payload), name)
+		require.Equal(t, "call-42", payload.ToolUseID, name)
+	}
 }

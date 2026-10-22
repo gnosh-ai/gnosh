@@ -347,6 +347,7 @@ The available environment variables are:
 | `CRUSH_PROJECT_DIR`          | Project root directory.                        |
 | `CRUSH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command being run. |
 | `CRUSH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
+| `CRUSH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
 | `CRUSH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` when the turn is only still running because an earlier `Stop` hook blocked it, else `0`. |
 
 Crush is being renamed Crash, so every `CRUSH_` variable above is also set
@@ -369,6 +370,7 @@ Standard input provides the full context as JSON:
   "session_id": "313909e", // Current session ID
   "cwd": "/home/user/project", // Working directory
   "tool_name": "bash", // The tool being called
+  "tool_use_id": "call_8f2a", // The tool call's ID, the same in its PostToolUse hooks
   "tool_input": { "command": "rm -rf /" }, // The tool's input
 }
 ```
@@ -782,6 +784,10 @@ Extends the common payload:
 
   // string. The tool being called.
   "tool_name": "bash",
+
+  // string. The tool call's ID. A PostToolUse hook for the same call gets
+  // the same one, so a pair of hooks can tell they saw the same call.
+  "tool_use_id": "call_8f2a",
 
   // object. Raw JSON input the model sent to the tool. Shape is per-tool.
   "tool_input": {

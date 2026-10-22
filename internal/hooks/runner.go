@@ -89,9 +89,11 @@ func (r *Runner) Hooks() []config.HookConfig {
 // Run executes all matching hooks for the given event and tool, returning
 // an aggregated result.
 func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolInputJSON string) (AggregateResult, error) {
-	envVars := BuildEnv(eventName, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON)
-	payload := BuildPayload(eventName, sessionID, r.cwd, toolName, toolInputJSON)
-	return r.run(ctx, r.matchingHooks(toolName), eventName, toolName, toolInputJSON, envVars, payload)
+	id := toolUseID(ctx)
+	envVars := append(BuildEnv(eventName, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
+	p := toolPayload(eventName, sessionID, r.cwd, toolName, toolInputJSON)
+	p.ToolUseID = id
+	return r.run(ctx, r.matchingHooks(toolName), eventName, toolName, toolInputJSON, envVars, marshalPayload(p))
 }
 
 // RunPostToolUse executes the PostToolUse hooks whose matcher matches
@@ -104,9 +106,11 @@ func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolIn
 // approve or rewrite, so an allow counts as no opinion and UpdatedInput
 // is always cleared, on the aggregate and on each hook.
 func (r *Runner) RunPostToolUse(ctx context.Context, sessionID, toolName, toolInputJSON, output, metadata string) (AggregateResult, error) {
-	envVars := BuildEnv(EventPostToolUse, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON)
-	payload := BuildPostPayload(sessionID, r.cwd, toolName, toolInputJSON, output, metadata)
-	agg, err := r.run(ctx, r.matchingHooks(toolName), EventPostToolUse, toolName, toolInputJSON, envVars, payload)
+	id := toolUseID(ctx)
+	envVars := append(BuildEnv(EventPostToolUse, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
+	p := postPayload(sessionID, r.cwd, toolName, toolInputJSON, output, metadata)
+	p.ToolUseID = id
+	agg, err := r.run(ctx, r.matchingHooks(toolName), EventPostToolUse, toolName, toolInputJSON, envVars, marshalPayload(p))
 	if agg.Decision == DecisionAllow {
 		agg.Decision = DecisionNone
 	}
