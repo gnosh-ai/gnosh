@@ -3348,8 +3348,15 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				}
 
 				attachments := m.attachments.List()
-				m.attachments.Reset()
 				if len(value) == 0 && !message.ContainsTextAttachment(attachments) {
+					// An image or file alone is not a prompt (the agent
+					// refuses one with no text), so it stays in the editor
+					// for the words to go with it. It used to be cleared
+					// here, and lost, with nothing sent.
+					if len(attachments) > 0 {
+						cmds = append(cmds, util.ReportInfo("Type a prompt to send with the attachment"))
+						return tea.Batch(cmds...)
+					}
 					// Enter on an empty editor while a ready plan is pending
 					// reopens the dismissed handoff prompt.
 					if m.mode == uiInputModePlan && m.hasSession() && m.planReadySessionID == m.session.ID {
@@ -3357,6 +3364,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					}
 					return nil
 				}
+				m.attachments.Reset()
 
 				m.randomizePlaceholders()
 				m.historyReset()
