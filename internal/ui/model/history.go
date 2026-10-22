@@ -33,17 +33,25 @@ func (m *UI) loadPromptHistory() tea.Cmd {
 			return promptHistoryLoadedMsg{messages: nil}
 		}
 
-		texts := make([]string, 0, len(messages))
-		for _, msg := range messages {
-			if text := msg.Content().Text; text != "" {
-				texts = append(texts, text)
-			}
-			for _, sc := range msg.ShellCommands() {
-				texts = append(texts, "!"+sc.Command)
-			}
-		}
-		return promptHistoryLoadedMsg{messages: texts}
+		return promptHistoryLoadedMsg{messages: historyTexts(messages)}
 	}
+}
+
+// historyTexts turns stored user messages into the prompts Up recalls. Hidden
+// messages are left out: they are continuations the agent or /loop sent (a
+// Stop hook's objection, /loop's "Continue working" and its check-in), not
+// what the user typed, and the chat does not show them either.
+func historyTexts(messages []message.Message) []string {
+	texts := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		if content := msg.Content(); content.Text != "" && !content.Hidden {
+			texts = append(texts, content.Text)
+		}
+		for _, sc := range msg.ShellCommands() {
+			texts = append(texts, "!"+sc.Command)
+		}
+	}
+	return texts
 }
 
 // handleHistoryUp handles up arrow for history navigation.

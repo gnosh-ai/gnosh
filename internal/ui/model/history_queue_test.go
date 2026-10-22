@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/charmbracelet/crush/internal/message"
 )
 
 // TestHistoryEntries_LeavesQueuedPromptsOut pins that history recall offers
@@ -27,4 +29,17 @@ func TestHistoryEntries_NoQueueIsUnchanged(t *testing.T) {
 	m := &UI{}
 	m.promptHistory.messages = []string{"b", "a"}
 	require.Equal(t, []string{"b", "a"}, m.historyEntries())
+}
+
+// TestHistoryTexts_LeavesHiddenPromptsOut pins that Up recalls only what the
+// user typed. A hidden message is a continuation the agent or /loop sent;
+// recalled and sent, it would show up as if the user had typed it.
+func TestHistoryTexts_LeavesHiddenPromptsOut(t *testing.T) {
+	t.Parallel()
+
+	msgs := []message.Message{
+		{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "Continue working on the task until it is complete.", Hidden: true}}},
+		{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "fix the parser"}}},
+	}
+	require.Equal(t, []string{"fix the parser"}, historyTexts(msgs))
 }
