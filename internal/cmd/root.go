@@ -962,23 +962,92 @@ func shouldEnableMetrics(cfg *config.Config) bool {
 	return true
 }
 
+// stdinWait is how long a piped stdin may stay silent before crash run
+// goes on without it, as Claude Code's -p does. A pipe that is open but
+// never written to, as an ssh session without -n gives, otherwise kept
+// the run waiting forever with nothing on the screen to say why. It is a
+// var so tests can shorten it.
+var stdinWait = 3 * time.Second
+
+// MaybePrependStdin puts what is piped or redirected into stdin before
+// the prompt: `cat log | crash run "why does this fail?"`.
 func MaybePrependStdin(prompt string) (string, error) {
-	if term.IsTerminal(os.Stdin.Fd()) {
+	return prependInput(os.Stdin, os.Stderr, prompt)
+}
+
+func prependInput(in *os.File, warn io.Writer, prompt string) (string, error) {
+	if term.IsTerminal(in.Fd()) {
 		return prompt, nil
 	}
-	fi, err := os.Stdin.Stat()
+	fi, err := in.Stat()
 	if err != nil {
 		return prompt, err
 	}
-	// Check if stdin is a named pipe ( | ) or regular file ( < ).
-	if fi.Mode()&os.ModeNamedPipe == 0 && !fi.Mode().IsRegular() {
+	var bts []byte
+	switch {
+	case fi.Mode().IsRegular():
+		// A redirected file ( < ) is all there already.
+		bts, err = io.ReadAll(in)
+	case fi.Mode()&os.ModeNamedPipe != 0:
+		// A pipe ( | ) may never be written to.
+		var arrived bool
+		bts, arrived, err = readPipe(in, stdinWait)
+		if !arrived {
+			fmt.Fprintf(warn, "Warning: no stdin data received in %s, proceeding without it. "+
+				"To give a slow command's output, write it to a file and redirect from that; "+
+				"to skip stdin, redirect it from /dev/null.\n", stdinWait)
+			return prompt, nil
+		}
+	default:
 		return prompt, nil
 	}
-	bts, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return prompt, err
+	}
+	if len(bts) == 0 {
+		return prompt, nil
 	}
 	return string(bts) + "\n\n" + prompt, nil
+}
+
+// readPipe reads in to the end, provided something arrives (data, or the
+// end of it) within wait. Otherwise it reports arrived false and leaves
+// the read to an abandoned goroutine, which stdin's closing or the
+// process's exit ends.
+func readPipe(in io.Reader, wait time.Duration) (data []byte, arrived bool, err error) {
+	first := make(chan struct{})
+	type result struct {
+		data []byte
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		var buf bytes.Buffer
+		chunk := make([]byte, 32*1024)
+		signaled := false
+		for {
+			n, err := in.Read(chunk)
+			buf.Write(chunk[:n])
+			if !signaled && (n > 0 || err != nil) {
+				close(first)
+				signaled = true
+			}
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					err = nil
+				}
+				done <- result{buf.Bytes(), err}
+				return
+			}
+		}
+	}()
+	select {
+	case <-first:
+		r := <-done
+		return r.data, true, r.err
+	case <-time.After(wait):
+		return nil, false, nil
+	}
 }
 
 // resolveWorkspaceSessionID resolves a session ID that may be a full
