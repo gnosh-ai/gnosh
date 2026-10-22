@@ -33,6 +33,7 @@ func (f *funcTool) SetProviderOptions(_ fantasy.ProviderOptions) {}
 type readRecorder struct{ reads []string }
 
 func (r *readRecorder) RecordRead(_ context.Context, _, path string) { r.reads = append(r.reads, path) }
+
 func (r *readRecorder) LastReadTime(context.Context, string, string) time.Time {
 	return time.Time{}
 }
