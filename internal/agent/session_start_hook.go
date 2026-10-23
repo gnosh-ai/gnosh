@@ -9,7 +9,6 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/hooks"
-	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/pubsub"
 )
 
@@ -29,8 +28,8 @@ const (
 	// Session, say.
 	sessionStartSourceClear sessionStartSource = hooks.SessionStartSourceClear
 	// sessionStartSourceCompact is the first prompt after a session's
-	// conversation was summarized, Klash's own source with no Claude
-	// Code counterpart.
+	// conversation was summarized, as Claude Code's SessionStart fires
+	// with "compact" after a /compact or an automatic compaction.
 	sessionStartSourceCompact sessionStartSource = hooks.SessionStartSourceCompact
 )
 
@@ -75,11 +74,11 @@ func (a *sessionAgent) markSessionSummarized(sessionID string) {
 // messages, compact if it was summarized and this is the prompt that
 // follows, clear if the process has started another session, startup if
 // not.
-func (a *sessionAgent) sessionStartSourceFor(sessionID string, msgs []message.Message) sessionStartSource {
+func (a *sessionAgent) sessionStartSourceFor(sessionID string, hasMessages bool) sessionStartSource {
 	a.sessionStartMu.Lock()
 	defer a.sessionStartMu.Unlock()
 	_, started := a.sessionStarted.Get(sessionID)
-	if len(msgs) > 0 {
+	if hasMessages {
 		if started {
 			return sessionStartSourceCompact
 		}
@@ -94,15 +93,19 @@ func (a *sessionAgent) sessionStartSourceFor(sessionID string, msgs []message.Me
 }
 
 // runSessionStartHooks runs the SessionStart hooks for the session, once,
-// before the process's first prompt to it goes out, with source naming
+// before the process's first prompt to it goes out, with a source naming
 // what started the session. As in Claude Code a hook cannot stop the
 // prompt: a block, a halt or a failure is shown to the user as a hook
 // warning, and the prompt goes ahead. What the hooks print goes to the
-// model with the prompt, as for UserPromptSubmit.
-func (a *sessionAgent) runSessionStartHooks(ctx context.Context, call *SessionAgentCall, source sessionStartSource) {
+// model with the prompt, before what its UserPromptSubmit hooks print.
+func (a *sessionAgent) runSessionStartHooks(ctx context.Context, call *SessionAgentCall) {
 	if a.isSubAgent || a.cfg == nil {
 		return
 	}
+	// The session's messages are not loaded yet: the hooks run before the
+	// prompt is dispatched. Its count, kept by the database, is enough.
+	sess, err := a.sessions.Get(ctx, call.SessionID)
+	source := a.sessionStartSourceFor(call.SessionID, err == nil && sess.MessageCount > 0)
 	hookCfgs := a.cfg.Config().Hooks[hooks.EventSessionStart]
 	if len(hookCfgs) == 0 {
 		return
@@ -153,7 +156,21 @@ func (a *sessionAgent) runSessionStartHooks(ctx context.Context, call *SessionAg
 			})
 		}
 	}
-	call.promptHookContext = strings.TrimSpace(result.Context)
+	call.promptHookContext = joinHookContext(call.promptHookContext, result.Context)
+}
+
+// joinHookContext adds what a hook event printed for a prompt to what
+// earlier hooks printed for it, a blank line between them.
+func joinHookContext(earlier, more string) string {
+	more = strings.TrimSpace(more)
+	switch {
+	case earlier == "":
+		return more
+	case more == "":
+		return earlier
+	default:
+		return earlier + "\n\n" + more
+	}
 }
 
 // warnFailedSessionStartHooks tells the user about each SessionStart hook

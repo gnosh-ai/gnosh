@@ -331,12 +331,13 @@ every source.
   `--continue`, `--session`, or the session list.
 - `"clear"` — the session is new, but this process has already started
   another session: the TUI's New Session command, say.
-- `"compact"` — Klash's own source, with no Claude Code counterpart: the
-  first prompt after the session's conversation was summarized.
+- `"compact"` — the first prompt after the session's conversation was
+  summarized, as Claude Code fires it after a compaction.
 
 **Context**: whatever the hook prints on stdout, as plain text, is what the
 agent reads with the first prompt, inside a `<user-prompt-submit-hook>` tag,
-as for `UserPromptSubmit`. JSON output works too: Klash's `context`, or
+as for `UserPromptSubmit`; the prompt's `UserPromptSubmit` hooks run after
+`SessionStart`'s, as in Claude Code, and what they print comes after it. JSON output works too: Klash's `context`, or
 Claude Code's `hookSpecificOutput.additionalContext`. The context is kept
 with the prompt, so the agent reads it again when the conversation is
 rebuilt on later turns.

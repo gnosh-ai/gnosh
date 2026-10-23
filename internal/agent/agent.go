@@ -744,10 +744,29 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		submit   *activeCancel
 		hookCtx  context.Context
 	)
-	if a.wantsPromptHooks(call) {
+	// The first prompt this process sends to a session goes past its
+	// SessionStart hooks, then, as every prompt the user sends, past
+	// UserPromptSubmit's, in that order, as in Claude Code. Both run while
+	// the prompt is submitting: the session reads as busy, and a Cancel
+	// stops them and the prompt is not sent (cancel-on-entry below, which
+	// reports the cancelled turn). SessionStart ran after the dispatch
+	// before: an Esc in its hooks ended the turn without the RunComplete
+	// a waiting client blocks on, and what its hooks printed replaced what
+	// UserPromptSubmit's had.
+	sessionStart := a.wantsSessionStartHooks(call)
+	promptHooks := a.wantsPromptHooks(call)
+	if sessionStart || promptHooks {
 		submitMu = a.sessionSubmitMu(call.SessionID)
 		submitMu.Lock()
 		hookCtx, submit = a.beginSubmitting(ctx, call.SessionID)
+	}
+	if sessionStart {
+		a.runSessionStartHooks(hookCtx, &call)
+		if hookCtx.Err() == nil {
+			a.markSessionStarted(call.SessionID)
+		}
+	}
+	if promptHooks && hookCtx.Err() == nil {
 		if err := a.runPromptHooks(hookCtx, &call); err != nil {
 			a.endSubmitting(call.SessionID, submit, true)
 			submit.cancel()
@@ -966,34 +985,6 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		if msgs, err = a.getSessionMessages(ctx, currentSession); err != nil {
 			return nil, fmt.Errorf("failed to reload session messages: %w", err)
 		}
-	}
-
-	// The process's first prompt to the session goes past its
-	// SessionStart hooks first, once. They cannot stop the prompt, as in
-	// Claude Code: whatever they say, it goes ahead. What they print
-	// goes to the model with the prompt, as for UserPromptSubmit. While
-	// they run the prompt is submitting, as for UserPromptSubmit: the
-	// session reads as busy, and a Cancel stops the hooks and the
-	// prompt is not sent.
-	if a.wantsSessionStartHooks(call) {
-		source := a.sessionStartSourceFor(call.SessionID, msgs)
-		hookCtx, submit := a.beginSubmitting(ctx, call.SessionID)
-		a.runSessionStartHooks(hookCtx, &call, source)
-		a.endSubmitting(call.SessionID, submit, false)
-		cancelledInHooks := hookCtx.Err() != nil
-		submit.cancel()
-		if cancelledInHooks {
-			// The prompt is not sent: its hooks were stopped by a Cancel,
-			// as for UserPromptSubmit. Persist the canceled turn and end
-			// here, before the user message is added to the session.
-			skipRunComplete = true
-			call.Accepted.Close()
-			if err := a.persistCanceledTurn(ctx, call, false); err != nil {
-				return nil, err
-			}
-			return nil, nil
-		}
-		a.markSessionStarted(call.SessionID)
 	}
 
 	// Generate title from the first real (non-shell) user prompt.

@@ -188,9 +188,9 @@ const (
 	SessionStartSourceClear   = "clear"
 	SessionStartSourceResume  = "resume"
 	SessionStartSourceStartup = "startup"
-	// SessionStartSourceCompact is Klash's own: the first prompt after a
-	// session's conversation was summarized. Claude Code's SessionStart
-	// has no compact source; it has no summarization at all.
+	// SessionStartSourceCompact is the first prompt after a session's
+	// conversation was summarized, as Claude Code's "compact" follows a
+	// /compact or an automatic compaction.
 	SessionStartSourceCompact = "compact"
 )
 

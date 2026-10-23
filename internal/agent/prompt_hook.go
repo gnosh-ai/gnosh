@@ -92,7 +92,7 @@ func (a *sessionAgent) runPromptHooks(ctx context.Context, call *SessionAgentCal
 		return fmt.Errorf("%w: %s", ErrPromptBlocked, reason)
 	}
 	a.warnFailedPromptHooks(call.SessionID, result.Hooks)
-	call.promptHookContext = strings.TrimSpace(result.Context)
+	call.promptHookContext = joinHookContext(call.promptHookContext, result.Context)
 	return nil
 }
 

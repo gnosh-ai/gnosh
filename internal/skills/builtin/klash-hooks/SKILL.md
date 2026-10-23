@@ -167,7 +167,7 @@ beside the common fields. `model` is the ID of the model answering; `source`
 names what started the session: a new one in a process that has started none
 (`startup`), one that already has messages (`resume`), a fresh one in a running
 process, the TUI's New Session, say (`clear`), or the first prompt after a
-summary (`compact`, Klash's own source). A `matcher` on a `SessionStart` hook
+summary (`compact`, as Claude Code fires it after a compaction). A `matcher` on a `SessionStart` hook
 is tested against `source`. It fires once, before the process's first prompt to
 the session, and not for later prompts except the first one after a summary,
 which runs it again with source `compact`. As in Claude Code a hook cannot stop
