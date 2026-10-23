@@ -168,9 +168,17 @@ names what started the session: a new one in a process that has started none
 (`startup`), one that already has messages (`resume`), a fresh one in a running
 process, the TUI's New Session, say (`clear`), or the first prompt after a
 summary (`compact`, as Claude Code fires it after a compaction). A `matcher` on a `SessionStart` hook
-is tested against `source`. It fires once, before the process's first prompt to
-the session, and not for later prompts except the first one after a summary,
-which runs it again with source `compact`. As in Claude Code a hook cannot stop
+is tested against `source`. It fires once per start, before the process's
+first prompt to the session, whether that prompt is visible or a hidden
+continuation. However many prompts are sent at once, the hooks run once:
+the first prompt to take the submit lock runs them, and the others wait
+and then see the session as already started. Later prompts do not run
+them, except the first one after a summary, which runs them again with
+source `compact`. The state is shared by every top-level agent the process
+runs, so a session started by the coder counts as started for the plan
+agent and vice versa. When a `UserPromptSubmit` hook blocks the first
+prompt, what `SessionStart` printed is kept and sent out with the next
+prompt to the session. As in Claude Code a hook cannot stop
 the prompt: exit `2` (or `"decision": "block"`) or `49` is shown to the user as
 a warning and the prompt goes ahead. A hook that fails is also shown as a
 warning. Plain stdout (or `context`, or Claude Code's `additionalContext`) is

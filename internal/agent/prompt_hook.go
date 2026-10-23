@@ -168,11 +168,17 @@ func (a *sessionAgent) warnFailedPromptHooks(sessionID string, ran []hooks.HookI
 	}
 }
 
-// promptHookBlock is what call's UserPromptSubmit hooks added, as the
-// model reads it, or "" for none. Continuations copied from the call are
-// the agent's own and carry nothing of the user's hooks.
+// promptHookBlock is what call's hooks added, as the model reads it, or
+// "" for none. A prompt that ran its own SessionStart hooks carries
+// what they printed even when it is hidden, since the prompt goes out
+// and the model must read it; a continuation copied from a call (a Stop
+// hook's, a loop's) is the agent's own and carries nothing of the
+// user's hooks, and it never ran the hooks itself.
 func promptHookBlock(call SessionAgentCall) string {
-	if call.HiddenUserMessage || call.promptHookContext == "" {
+	if call.promptHookContext == "" {
+		return ""
+	}
+	if call.HiddenUserMessage && !call.sessionStartHookRan {
 		return ""
 	}
 	return message.PromptHookContext(call.promptHookContext)

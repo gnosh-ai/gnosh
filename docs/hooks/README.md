@@ -348,11 +348,21 @@ hook's reason as a warning. Exit `49` (or `"continue": false`) does the
 same. A hook that fails (any other exit code, or a timeout) is shown as a
 warning too, and the prompt goes ahead without it.
 
-**When it runs**: once, before the first prompt the process sends to the
-session. Later prompts to the same session do not run it, except the first
-one after a summary, which runs it again with source `"compact"`. While the
-hooks run the prompt counts as submitting, as for `UserPromptSubmit`: the
-session reads as busy, and Esc stops the hooks and the prompt is not sent.
+**When it runs**: once per start, before the first prompt the process
+sends to the session, whether that prompt is visible or a hidden
+continuation. However many prompts are sent at once, the hooks run once:
+the first prompt to take the submit lock runs them, and the others wait
+and then see the session as already started. Later prompts to the same
+session do not run them, except the first one after a summary, which runs
+them again with source `"compact"`. The state is shared by every top-level
+agent the process runs, so a session started by the coder counts as
+started for the plan agent and vice versa, and a summary made in either
+mode fires `"compact"` for the next prompt in either. When a
+`UserPromptSubmit` hook blocks the first prompt, what `SessionStart`
+printed is kept and sent out with the next prompt to the session, so it
+is neither lost nor sent twice. While the hooks run the prompt counts as
+submitting, as for `UserPromptSubmit`: the session reads as busy, and Esc
+stops the hooks and the prompt is not sent.
 
 **Scope**: like `PreToolUse` and `Stop`, `SessionStart` fires only for the
 **top-level agent**, and not for sub-agents.

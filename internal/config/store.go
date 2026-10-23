@@ -1246,11 +1246,15 @@ func nextRecentModels(cfg *Config, modelType SelectedModelType, model SelectedMo
 
 // NewTestStore creates a ConfigStore for testing purposes.
 func NewTestStore(cfg *Config, loadedPaths ...string) *ConfigStore {
-	return &ConfigStore{
+	store := &ConfigStore{
 		config:      cfg,
 		loadedPaths: loadedPaths,
 		resolver:    NewShellVariableResolver(env.New()),
 	}
+	if wd, err := os.Getwd(); err == nil {
+		store.workingDir = wd
+	}
+	return store
 }
 
 // ImportCopilot attempts to import a GitHub Copilot token from disk.

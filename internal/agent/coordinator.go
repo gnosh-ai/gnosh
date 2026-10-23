@@ -174,6 +174,13 @@ type coordinator struct {
 	mainAgentName string
 	agents        map[string]SessionAgent
 
+	// sessionStartState is the SessionStart hooks' state shared by every
+	// main agent, so a session started by the plan agent counts as
+	// started for the coder and vice versa, and a summary made in either
+	// mode fires "compact" for the next prompt in either. Sub-agents
+	// fire no SessionStart hooks and keep their own.
+	sessionStartState *sessionStartState
+
 	// Skills discovery results (session-start snapshot).
 	allSkills    []*skills.Skill // Pre-filter: all discovered after dedup.
 	activeSkills []*skills.Skill // Post-filter: active skills only.
@@ -275,6 +282,13 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 	}
 	c.agents[config.AgentPlan] = planAgent
 
+	c.sessionStartState = newSessionStartState()
+	if coder, ok := agent.(*sessionAgent); ok {
+		coder.SetSessionStartState(c.sessionStartState)
+	}
+	if planner, ok := planAgent.(*sessionAgent); ok {
+		planner.SetSessionStartState(c.sessionStartState)
+	}
 	c.mainAgent = agent
 	c.mainAgentName = config.AgentCoder
 	if overrides.MainAgent == config.AgentPlan {

@@ -184,9 +184,13 @@ type SessionAgentCall struct {
 	// UserPromptSubmit hooks, which run once, when it is sent, so a
 	// queued prompt that runs later does not run them again.
 	// promptHookContext is what they added for the model to read with
-	// the prompt.
-	promptHooksRan    bool
-	promptHookContext string
+	// the prompt. sessionStartHookRan marks a prompt its own SessionStart
+	// hooks ran for, so what they printed goes to the model with it
+	// whether or not it is hidden, and a continuation copied from it
+	// (a Stop hook's, a loop's) carries none of it a second time.
+	promptHooksRan      bool
+	promptHookContext   string
+	sessionStartHookRan bool
 	// channelMeta holds the attributes of the <channel> element a
 	// channel-originated turn was started with, parsed once at Run
 	// entry. It survives the auto-summarize continuation, whose Prompt
@@ -231,6 +235,11 @@ type SessionAgent interface {
 	CancelAll()
 	IsSessionBusy(sessionID string) bool
 	IsBusy() bool
+	// SetSessionStartState points the agent's SessionStart hooks at the
+	// coordinator's shared state, so a session started by the coder
+	// counts as started for the plan agent and vice versa. Agents built
+	// without a coordinator (tests, sub-agents) keep their own.
+	SetSessionStartState(state *sessionStartState)
 	ListSettledMessages(ctx context.Context, sessionID string) ([]message.Message, error)
 	QueuedPrompts(sessionID string) int
 	QueuedPromptsList(sessionID string) []string
@@ -325,9 +334,28 @@ type sessionAgent struct {
 	acceptSeqGen uint64
 	// sessionStarted records, per session, that this process has sent a
 	// prompt to it, so its SessionStart hooks run once, for the first
-	// prompt, and not for later ones. sessionStartMu guards it.
+	// prompt, and not for later ones. sessionStartMu guards it. A
+	// coordinator gives its main agents a shared sessionStartState
+	// instead, so a session started by the plan agent counts as started
+	// for the coder and vice versa; then this map is unused by them.
 	sessionStarted *csync.Map[string, bool]
 	sessionStartMu sync.Mutex
+	// summarized records, per session, that it was summarized, so the
+	// next prompt to it fires the SessionStart hooks with source
+	// "compact". Cleared when the next prompt runs the hooks. Guarded by
+	// sessionStartMu. Used only by agents without a shared
+	// sessionStartState, which keeps the same state in the shared map.
+	summarized *csync.Map[string, bool]
+	// sessionStartedContext holds, per session, what a SessionStart hook
+	// printed for a first prompt that was refused before it reached the
+	// model, until the next prompt to the session carries it. Guarded by
+	// sessionStartMu. Used only by agents without a shared
+	// sessionStartState, which keeps the same state in the shared map.
+	sessionStartedContext *csync.Map[string, string]
+	// sessionStartState, when set, is the coordinator's shared
+	// SessionStart state the agent reads and updates instead of
+	// sessionStarted; see sessionStartState.
+	sessionStartState *sessionStartState
 }
 
 type SessionAgentOptions struct {
@@ -350,27 +378,29 @@ func NewSessionAgent(
 	opts SessionAgentOptions,
 ) SessionAgent {
 	return &sessionAgent{
-		largeModel:           csync.NewValue(opts.LargeModel),
-		smallModel:           csync.NewValue(opts.SmallModel),
-		systemPromptPrefix:   csync.NewValue(opts.SystemPromptPrefix),
-		systemPrompt:         csync.NewValue(opts.SystemPrompt),
-		isSubAgent:           opts.IsSubAgent,
-		sessions:             opts.Sessions,
-		messages:             opts.Messages,
-		cfg:                  opts.Cfg,
-		disableAutoSummarize: opts.DisableAutoSummarize,
-		tools:                csync.NewSliceFrom(opts.Tools),
-		isYolo:               opts.IsYolo,
-		notify:               opts.Notify,
-		runComplete:          opts.RunComplete,
-		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
-		activeRequests:       csync.NewMap[string, *activeCancel](),
-		dispatchMu:           csync.NewMap[string, *sync.Mutex](),
-		submitMu:             csync.NewMap[string, *sync.Mutex](),
-		submitting:           csync.NewMap[string, []*activeCancel](),
-		acceptedRuns:         csync.NewMap[string, int](),
-		cancelMark:           csync.NewMap[string, uint64](),
-		sessionStarted:       csync.NewMap[string, bool](),
+		largeModel:            csync.NewValue(opts.LargeModel),
+		smallModel:            csync.NewValue(opts.SmallModel),
+		systemPromptPrefix:    csync.NewValue(opts.SystemPromptPrefix),
+		systemPrompt:          csync.NewValue(opts.SystemPrompt),
+		isSubAgent:            opts.IsSubAgent,
+		sessions:              opts.Sessions,
+		messages:              opts.Messages,
+		cfg:                   opts.Cfg,
+		disableAutoSummarize:  opts.DisableAutoSummarize,
+		tools:                 csync.NewSliceFrom(opts.Tools),
+		isYolo:                opts.IsYolo,
+		notify:                opts.Notify,
+		runComplete:           opts.RunComplete,
+		messageQueue:          csync.NewMap[string, []SessionAgentCall](),
+		activeRequests:        csync.NewMap[string, *activeCancel](),
+		dispatchMu:            csync.NewMap[string, *sync.Mutex](),
+		submitMu:              csync.NewMap[string, *sync.Mutex](),
+		submitting:            csync.NewMap[string, []*activeCancel](),
+		acceptedRuns:          csync.NewMap[string, int](),
+		cancelMark:            csync.NewMap[string, uint64](),
+		sessionStarted:        csync.NewMap[string, bool](),
+		summarized:            csync.NewMap[string, bool](),
+		sessionStartedContext: csync.NewMap[string, string](),
 	}
 }
 
@@ -478,8 +508,12 @@ func (a *sessionAgent) sessionMu(sessionID string) *sync.Mutex {
 // appends, losing a prompt the user had already sent.
 func (a *sessionAgent) queueContinuation(call SessionAgentCall) {
 	// A continuation is the agent's own; what the user's hooks added to
-	// the prompt it continues went to the model with that prompt.
+	// the prompt it continues went to the model with that prompt. What
+	// the SessionStart hooks printed for it, if it ran them, went out
+	// with it too and is dropped here, like the rest of its context, so
+	// it is not re-sent for the turn the continuation opens.
 	call.promptHookContext = ""
+	call.sessionStartHookRan = false
 	mu := a.sessionMu(call.SessionID)
 	mu.Lock()
 	defer mu.Unlock()
@@ -753,21 +787,51 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// before: an Esc in its hooks ended the turn without the RunComplete
 	// a waiting client blocks on, and what its hooks printed replaced what
 	// UserPromptSubmit's had.
+	//
+	// The check below is repeated once the submit lock is held: two
+	// prompts sent at once would each pass it otherwise, the second would
+	// wait on the lock and then run the hooks a second time, as "clear" or
+	// "compact", and its output would reach the model twice.
 	sessionStart := a.wantsSessionStartHooks(call)
 	promptHooks := a.wantsPromptHooks(call)
 	if sessionStart || promptHooks {
 		submitMu = a.sessionSubmitMu(call.SessionID)
 		submitMu.Lock()
+		if sessionStart {
+			sessionStart = a.wantsSessionStartHooks(call)
+		}
 		hookCtx, submit = a.beginSubmitting(ctx, call.SessionID)
 	}
+	// sessionStartRan is whether this prompt's own SessionStart hooks ran
+	// for it: they printed their context onto it (hidden or not), and the
+	// session is marked started, so the hooks do not run again for the
+	// prompt that follows.
+	var sessionStartRan bool
 	if sessionStart {
-		a.runSessionStartHooks(hookCtx, &call)
-		if hookCtx.Err() == nil {
+		sessionStartRan = a.runSessionStartHooks(hookCtx, &call)
+		if sessionStartRan && hookCtx.Err() == nil {
 			a.markSessionStarted(call.SessionID)
 		}
 	}
 	if promptHooks && hookCtx.Err() == nil {
+		// What a SessionStart hook printed for the session whose earlier
+		// first prompt was refused here goes out with this one instead,
+		// so it is neither lost nor sent twice.
+		if pending := a.takeSessionStartPendingContext(call.SessionID); pending != "" {
+			call.promptHookContext = joinHookContext(pending, call.promptHookContext)
+		}
 		if err := a.runPromptHooks(hookCtx, &call); err != nil {
+			// The prompt is refused before it reaches the model. When
+			// this prompt ran the SessionStart hooks for the session,
+			// keep what they printed for the next prompt to it: the
+			// session is marked started, so the hooks do not run again.
+			// When it did not, an earlier prompt's output was taken for
+			// this one and was just refused with it: the hooks have not
+			// run for this start yet, so they will run for the next
+			// prompt and print it again.
+			if sessionStartRan {
+				a.setSessionStartPendingContext(call.SessionID, call.promptHookContext)
+			}
 			a.endSubmitting(call.SessionID, submit, true)
 			submit.cancel()
 			submitMu.Unlock()
@@ -1783,11 +1847,18 @@ func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentC
 		attachmentParts = append(attachmentParts, message.BinaryContent{Path: attachment.FilePath, MIMEType: attachment.MimeType, Data: attachment.Content})
 	}
 	parts = append(parts, attachmentParts...)
-	// What the user's UserPromptSubmit hooks added is kept with the
-	// prompt as a hidden part: the chat shows only what was typed, and the
-	// model reads it after the prompt whenever the conversation is rebuilt.
-	if block := promptHookBlock(call); block != "" {
-		parts = append(parts, message.TextContent{Text: block, Hidden: true})
+	// What the user's hooks added is kept with the prompt as a hidden
+	// part: the chat shows only what was typed, and the model reads it
+	// after the prompt whenever the conversation is rebuilt. A prompt
+	// that ran its own SessionStart hooks keeps that context too, hidden
+	// or not; a continuation copied from a call carries none of it.
+	if call.promptHookContext != "" {
+		if !call.HiddenUserMessage || call.sessionStartHookRan {
+			parts = append(parts, message.TextContent{
+				Text:   message.PromptHookContext(call.promptHookContext),
+				Hidden: true,
+			})
+		}
 	}
 	msg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
 		Role:  message.User,
@@ -2485,6 +2556,10 @@ func (a *sessionAgent) SetTools(tools []fantasy.AgentTool) {
 
 func (a *sessionAgent) SetSystemPrompt(systemPrompt string) {
 	a.systemPrompt.Set(systemPrompt)
+}
+
+func (a *sessionAgent) SetSessionStartState(state *sessionStartState) {
+	a.sessionStartState = state
 }
 
 func (a *sessionAgent) Model() Model {
