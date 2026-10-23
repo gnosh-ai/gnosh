@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Path settings read from the environment answer to their CRASH_ names and
-// to the CRUSH_ names from before the rename, the CRASH_ name winning.
+// Path settings read from the environment answer to their KLASH_ names and
+// to the CRUSH_ names from before the rename, the KLASH_ name winning.
 func TestPathSettingsAnswerToBothNames(t *testing.T) {
 	inDir := func(d string) string { return filepath.Join(d, appName+".json") }
 	asIs := func(d string) string { return d }
@@ -28,15 +28,15 @@ func TestPathSettingsAnswerToBothNames(t *testing.T) {
 			old, newer := t.TempDir(), t.TempDir()
 			t.Setenv("CRUSH_"+tc.setting, old)
 			require.Equal(t, tc.want(old), tc.got(), "the name before the rename still works")
-			t.Setenv("CRASH_"+tc.setting, newer)
+			t.Setenv("KLASH_"+tc.setting, newer)
 			require.Equal(t, tc.want(newer), tc.got(), "the new name wins")
 		})
 	}
 }
 
 // A prefixed variable stands in for the plain one while providers are
-// configured; CRASH_ wins over CRUSH_, and the plain value comes back after.
-func TestPushPopCrushEnvPrefersCrash(t *testing.T) {
+// configured; KLASH_ wins over CRUSH_, and the plain value comes back after.
+func TestPushPopCrushEnvPrefersKlash(t *testing.T) {
 	t.Setenv("PUSHPOP_TEST_KEY", "plain")
 	t.Setenv("CRUSH_PUSHPOP_TEST_KEY", "old")
 	restore := PushPopCrushEnv()
@@ -44,18 +44,18 @@ func TestPushPopCrushEnvPrefersCrash(t *testing.T) {
 	restore()
 	require.Equal(t, "plain", os.Getenv("PUSHPOP_TEST_KEY"))
 
-	t.Setenv("CRASH_PUSHPOP_TEST_KEY", "new")
+	t.Setenv("KLASH_PUSHPOP_TEST_KEY", "new")
 	restore = PushPopCrushEnv()
-	require.Equal(t, "new", os.Getenv("PUSHPOP_TEST_KEY"), "CRASH_ wins over CRUSH_")
+	require.Equal(t, "new", os.Getenv("PUSHPOP_TEST_KEY"), "KLASH_ wins over CRUSH_")
 	restore()
 	require.Equal(t, "plain", os.Getenv("PUSHPOP_TEST_KEY"))
 }
 
-// Directories and config files take the name Crash, but where only the one
+// Directories and config files take the name Klash, but where only the one
 // from before the rename exists, that one is used, so an existing setup and
 // its sessions keep working without being moved. Once the new one exists,
 // it wins.
-func TestPathsPreferCrashAndFallBackToCrush(t *testing.T) {
+func TestPathsPreferKlashAndFallBackToCrush(t *testing.T) {
 	mkdir := func(t *testing.T, parts ...string) string {
 		t.Helper()
 		p := filepath.Join(parts...)
@@ -73,23 +73,23 @@ func TestPathsPreferCrashAndFallBackToCrush(t *testing.T) {
 		xdg := t.TempDir()
 		t.Setenv("XDG_CONFIG_HOME", xdg)
 		t.Setenv("CRUSH_GLOBAL_CONFIG", "") // set by TestMain for isolation
-		require.Equal(t, filepath.Join(xdg, "crash", "crash.json"), GlobalConfig(), "a fresh setup gets the new name")
+		require.Equal(t, filepath.Join(xdg, "klash", "klash.json"), GlobalConfig(), "a fresh setup gets the new name")
 
 		mkdir(t, xdg, "crush")
-		require.Equal(t, filepath.Join(xdg, "crush", "crash.json"), GlobalConfig(), "an existing crush directory is used")
+		require.Equal(t, filepath.Join(xdg, "crush", "klash.json"), GlobalConfig(), "an existing crush directory is used")
 		old := touch(t, xdg, "crush", "crush.json")
 		require.Equal(t, old, GlobalConfig(), "and the crush.json in it")
 		require.Equal(t, filepath.Join(xdg, "crush", "skills"), GlobalSkillsDirs()[0])
 
-		// A crash directory made for something else must not hide the
+		// A klash directory made for something else must not hide the
 		// crush one's config, hooks and skills.
-		mkdir(t, xdg, "crash", "commands")
-		require.Equal(t, old, GlobalConfig(), "a crash directory without a config does not take over")
+		mkdir(t, xdg, "klash", "commands")
+		require.Equal(t, old, GlobalConfig(), "a klash directory without a config does not take over")
 		require.Equal(t, filepath.Join(xdg, "crush", "skills"), GlobalSkillsDirs()[0])
 
-		newer := touch(t, xdg, "crash", "crash.json")
-		require.Equal(t, newer, GlobalConfig(), "once the crash directory holds a config, it wins")
-		require.Equal(t, filepath.Join(xdg, "crash", "skills"), GlobalSkillsDirs()[0])
+		newer := touch(t, xdg, "klash", "klash.json")
+		require.Equal(t, newer, GlobalConfig(), "once the klash directory holds a config, it wins")
+		require.Equal(t, filepath.Join(xdg, "klash", "skills"), GlobalSkillsDirs()[0])
 	})
 
 	t.Run("global config from a shell config alone", func(t *testing.T) {
@@ -98,8 +98,8 @@ func TestPathsPreferCrashAndFallBackToCrush(t *testing.T) {
 		t.Setenv("CRUSH_GLOBAL_CONFIG", "") // set by TestMain for isolation
 		mkdir(t, xdg, "crush")
 		touch(t, xdg, "crush", "crushrc")
-		mkdir(t, xdg, "crash", "templates")
-		require.Equal(t, filepath.Join(xdg, "crush", "crash.json"), GlobalConfig(),
+		mkdir(t, xdg, "klash", "templates")
+		require.Equal(t, filepath.Join(xdg, "crush", "klash.json"), GlobalConfig(),
 			"a crush directory with only a crushrc is in use")
 	})
 
@@ -107,18 +107,18 @@ func TestPathsPreferCrashAndFallBackToCrush(t *testing.T) {
 		xdg := t.TempDir()
 		t.Setenv("XDG_DATA_HOME", xdg)
 		t.Setenv("CRUSH_GLOBAL_DATA", "") // set by TestMain for isolation
-		require.Equal(t, filepath.Join(xdg, "crash", "crash.json"), GlobalConfigData())
+		require.Equal(t, filepath.Join(xdg, "klash", "klash.json"), GlobalConfigData())
 		mkdir(t, xdg, "crush")
 		old := touch(t, xdg, "crush", "crush.json")
 		require.Equal(t, old, GlobalConfigData(), "an existing setup's data directory is used")
-		mkdir(t, xdg, "crash", "logs")
-		require.Equal(t, old, GlobalConfigData(), "its OAuth tokens are not hidden by a bare crash directory")
+		mkdir(t, xdg, "klash", "logs")
+		require.Equal(t, old, GlobalConfigData(), "its OAuth tokens are not hidden by a bare klash directory")
 	})
 
 	t.Run("cache", func(t *testing.T) {
 		xdg := t.TempDir()
 		t.Setenv("XDG_CACHE_HOME", xdg)
-		require.Equal(t, filepath.Join(xdg, "crash"), GlobalCacheDir())
+		require.Equal(t, filepath.Join(xdg, "klash"), GlobalCacheDir())
 		old := mkdir(t, xdg, "crush")
 		require.Equal(t, old, GlobalCacheDir())
 	})
@@ -129,9 +129,9 @@ func TestPathsPreferCrashAndFallBackToCrush(t *testing.T) {
 			exists []string
 			want   string
 		}{
-			{"fresh project", nil, ".crash"},
+			{"fresh project", nil, ".klash"},
 			{"project from before the rename", []string{".crush"}, ".crush"},
-			{"both", []string{".crush", ".crash"}, ".crash"},
+			{"both", []string{".crush", ".klash"}, ".klash"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				workingDir := t.TempDir()
@@ -150,23 +150,23 @@ func TestPathsPreferCrashAndFallBackToCrush(t *testing.T) {
 		t.Setenv("XDG_DATA_HOME", t.TempDir())
 		cwd := t.TempDir()
 		old := touch(t, cwd, "crush.json")
-		newer := touch(t, cwd, "crash.json")
+		newer := touch(t, cwd, "klash.json")
 		paths := lookupConfigs(cwd)
 		require.Contains(t, paths, old, "a crush.json is still read")
 		require.Contains(t, paths, newer)
-		require.Greater(t, slices.Index(paths, newer), slices.Index(paths, old), "crash.json is merged later, so it wins")
+		require.Greater(t, slices.Index(paths, newer), slices.Index(paths, old), "klash.json is merged later, so it wins")
 	})
 }
 
-// A log directory's log is crash.log, or the crush.log from before the
+// A log directory's log is klash.log, or the crush.log from before the
 // rename where only that one exists.
 func TestLogFile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	require.Equal(t, filepath.Join(dir, "crash.log"), LogFile(dir))
+	require.Equal(t, filepath.Join(dir, "klash.log"), LogFile(dir))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "crush.log"), nil, 0o644))
 	require.Equal(t, filepath.Join(dir, "crush.log"), LogFile(dir), "an existing log keeps growing")
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "crash.log"), nil, 0o644))
-	require.Equal(t, filepath.Join(dir, "crash.log"), LogFile(dir))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "klash.log"), nil, 0o644))
+	require.Equal(t, filepath.Join(dir, "klash.log"), LogFile(dir))
 }

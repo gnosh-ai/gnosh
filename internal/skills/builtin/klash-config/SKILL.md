@@ -1,42 +1,42 @@
 ---
-name: crash-config
-description: Use when the user needs help configuring Crash — writing crashrc (the Bash config format) or crash.json, setting up providers, models, LSPs, MCP servers, hooks, skills, permissions, or changing Crash behavior.
+name: klash-config
+description: Use when the user needs help configuring Klash — writing klashrc (the Bash config format) or klash.json, setting up providers, models, LSPs, MCP servers, hooks, skills, permissions, or changing Klash behavior.
 ---
 
-# Crash Configuration
+# Klash Configuration
 
-Crash supports two config formats:
+Klash supports two config formats:
 
-- **`crashrc`** — a Bash script that builds config by calling Crash builtins.
+- **`klashrc`** — a Bash script that builds config by calling Klash builtins.
   **Preferred.** Because it is real Bash you get includes, secrets,
   conditionals, and variables for free.
-- **`crash.json`** — static JSON. Fully supported; see
+- **`klash.json`** — static JSON. Fully supported; see
   [Legacy JSON format](#legacy-json-format).
 
 Both are discovered together and deep-merged. Priority (highest to lowest):
 
-1. `.crashrc` / `crashrc` / `.crash.json` / `crash.json` (project-local,
-   closer-to-cwd wins; Windows uses `.\.crashrc` / `.\crashrc`)
-2. `$XDG_CONFIG_HOME/crash/crashrc` or `~/.config/crash/crashrc`
-   (`%XDG_CONFIG_HOME%\crash\crashrc` or
-   `%USERPROFILE%\.config\crash\crashrc` on Windows)
+1. `.klashrc` / `klashrc` / `.klash.json` / `klash.json` (project-local,
+   closer-to-cwd wins; Windows uses `.\.klashrc` / `.\klashrc`)
+2. `$XDG_CONFIG_HOME/klash/klashrc` or `~/.config/klash/klashrc`
+   (`%XDG_CONFIG_HOME%\klash\klashrc` or
+   `%USERPROFILE%\.config\klash\klashrc` on Windows)
 
-Data directories (`~/.local/share/crash` and `%LOCALAPPDATA%\crash`) contain
-machine-owned JSON state only; Crash does not discover or execute a `crashrc`
+Data directories (`~/.local/share/klash` and `%LOCALAPPDATA%\klash`) contain
+machine-owned JSON state only; Klash does not discover or execute a `klashrc`
 from those locations.
 
-If a directory has both `crashrc` and `crash.json`, they merge (`crashrc` wins
-on conflicts) and Crash logs a warning.
+If a directory has both `klashrc` and `klash.json`, they merge (`klashrc` wins
+on conflicts) and Klash logs a warning.
 
-Crash was called Crush, and every crush name still works: `crushrc`,
+Klash was called Crush, and every crush name still works: `crushrc`,
 `crush.json`, `~/.config/crush`, a project's `.crush/`, `CRUSH_*` variables.
-Where a crash one and a crush one both exist, the crash one wins;
-`~/.config/crash` takes over from `~/.config/crush` only once it holds a config
+Where a klash one and a crush one both exist, the klash one wins;
+`~/.config/klash` takes over from `~/.config/crush` only once it holds a config
 file.
 
-## crashrc at a glance
+## klashrc at a glance
 
-A `crashrc` is a plain Bash script executed at load time with the same embedded
+A `klashrc` is a plain Bash script executed at load time with the same embedded
 shell the `bash` tool uses. It builds config by calling builtins (`provider`,
 `model`, `mcp`, `lsp`, `hook`, `permissions`, `option`). Statements run top to
 bottom; later statements win, and `remove`/`reset` operate on anything defined
@@ -45,7 +45,7 @@ earlier or pulled in via `source`.
 ```bash
 #!/usr/bin/env bash
 # Includes and secrets are just Bash.
-source ~/.config/crash/shared.sh
+source ~/.config/klash/shared.sh
 
 provider add anthropic --api-key "$ANTHROPIC_API_KEY"
 
@@ -59,11 +59,11 @@ permissions allow view ls grep edit
 Values are ordinary Bash — quote and expand normally (`"$VAR"`, `$(cmd)`,
 `${VAR:?required}`). A failing `$(command)` aborts the load.
 
-`CRASH_VERSION` is exported into the script so you can feature-detect the
-running Crash (it is the literal `devel` for local builds):
+`KLASH_VERSION` is exported into the script so you can feature-detect the
+running Klash (it is the literal `devel` for local builds):
 
 ```bash
-[[ "$CRASH_VERSION" != devel ]] && lsp add gopls --command gopls
+[[ "$KLASH_VERSION" != devel ]] && lsp add gopls --command gopls
 ```
 
 ## Commands
@@ -100,7 +100,7 @@ model large [<provider>/<id>] [flags]  # set the large slot; no arg prints it
 model small [<provider>/<id>] [flags]  # set the small slot; no arg prints it
 ```
 
-- `<provider>/<id>` is the same form `crash models` prints. A missing slash is
+- `<provider>/<id>` is the same form `klash models` prints. A missing slash is
   an error. `model add` requires the provider to already exist.
 - `model add` flags: `--name`, `--context-window N`, `--default-max-tokens N`,
   `--can-reason BOOL`, `--supports-images BOOL`, `--price-input F`,
@@ -163,7 +163,7 @@ intend to remove it later. See [Hooks runtime](#hooks-runtime) for how hooks
 execute (stdin payload, env vars, decisions).
 
 ```bash
-hook add PreToolUse --matcher "^bash$" --command ".crash/hooks/no-haskell.sh" --name no-haskell
+hook add PreToolUse --matcher "^bash$" --command ".klash/hooks/no-haskell.sh" --name no-haskell
 ```
 
 ### permissions
@@ -204,7 +204,7 @@ option reset <list-key>    # clear a list option back to empty
 ```bash
 option progress false
 option skill-path ./skills
-option disable-skill crash-config
+option disable-skill klash-config
 option attribution-trailer-style assisted-by
 option attribution-generated-with true
 option ui compact true
@@ -213,7 +213,7 @@ option ui exit-banner compact
 ```
 
 > [!IMPORTANT] These skill paths are loaded by default and do NOT need
-> `skill-path`: `.agents/skills`, `.crash/skills`, `.claude/skills`,
+> `skill-path`: `.agents/skills`, `.klash/skills`, `.claude/skills`,
 > `.cursor/skills`.
 
 ## Hooks runtime
@@ -222,7 +222,7 @@ Hooks are user-defined shell commands that fire on agent events: `PreToolUse`
 before a tool runs, `PostToolUse` after one succeeds, `PostToolUseFailure` after
 one fails, `UserPromptSubmit` when the user sends a prompt, and `Stop` when the
 agent is about to finish its turn. This behavior is the same however the hook is
-defined (`hook add` or JSON). The crash-hooks skill has the full reference.
+defined (`hook add` or JSON). The klash-hooks skill has the full reference.
 
 ### How hooks work
 
@@ -233,7 +233,7 @@ defined (`hook add` or JSON). The crash-hooks skill has the full reference.
    variables**.
 
 Event names are matched exactly: `pretooluse` or `pre_tool_use` is a config
-error, not a spelling of `PreToolUse`, and Crash refuses to start on it.
+error, not a spelling of `PreToolUse`, and Klash refuses to start on it.
 
 ### Hook input (stdin)
 
@@ -251,13 +251,13 @@ error, not a spelling of `PreToolUse`, and Crash refuses to start on it.
 
 | Variable                     | Description                                       |
 | ---------------------------- | ------------------------------------------------- |
-| `CRASH_EVENT`                | Event name (e.g. `PreToolUse`)                    |
-| `CRASH_TOOL_NAME`            | Name of the tool being called                     |
-| `CRASH_SESSION_ID`           | Current session ID                                |
-| `CRASH_CWD`                  | Current working directory                         |
-| `CRASH_PROJECT_DIR`          | Project root directory                            |
-| `CRASH_TOOL_INPUT_COMMAND`   | Value of `command` from tool input (if present)   |
-| `CRASH_TOOL_INPUT_FILE_PATH` | Value of `file_path` from tool input (if present) |
+| `KLASH_EVENT`                | Event name (e.g. `PreToolUse`)                    |
+| `KLASH_TOOL_NAME`            | Name of the tool being called                     |
+| `KLASH_SESSION_ID`           | Current session ID                                |
+| `KLASH_CWD`                  | Current working directory                         |
+| `KLASH_PROJECT_DIR`          | Project root directory                            |
+| `KLASH_TOOL_INPUT_COMMAND`   | Value of `command` from tool input (if present)   |
+| `KLASH_TOOL_INPUT_FILE_PATH` | Value of `file_path` from tool input (if present) |
 
 Each is also set under its `CRUSH_` name (`CRUSH_EVENT`, ...), from before
 the rename; either works.
@@ -289,7 +289,7 @@ the rename; either works.
 
 ### Claude Code compatibility
 
-Crash also accepts the Claude Code hook output format, so existing hooks work
+Klash also accepts the Claude Code hook output format, so existing hooks work
 unchanged:
 
 ```json
@@ -322,16 +322,16 @@ user-invocable: true
 
 ## Environment variables
 
-- `CRASH_VERSION` — exported into `crashrc` at load; the running version (or
+- `KLASH_VERSION` — exported into `klashrc` at load; the running version (or
   `devel` for local builds).
-- `CRASH_GLOBAL_CONFIG` — override global config location.
-- `CRASH_GLOBAL_DATA` — override data directory location.
-- `CRASH_SKILLS_DIR` — override default skills directory.
+- `KLASH_GLOBAL_CONFIG` — override global config location.
+- `KLASH_GLOBAL_DATA` — override data directory location.
+- `KLASH_SKILLS_DIR` — override default skills directory.
 
 ## Legacy JSON format
 
-`crash.json` is the original static format. It still works and merges with
-`crashrc`. Basic structure:
+`klash.json` is the original static format. It still works and merges with
+`klashrc`. Basic structure:
 
 ```json
 {
@@ -348,9 +348,9 @@ user-invocable: true
 
 The `$schema` property enables IDE autocomplete but is optional.
 
-### crashrc ↔ crash.json mapping
+### klashrc ↔ klash.json mapping
 
-| crashrc                             | crash.json                                             |
+| klashrc                             | klash.json                                             |
 | ------------------------------------ | ------------------------------------------------------ |
 | `provider add openai --api-key "$K"` | `providers.openai = {"api_key": "$K"}`                 |
 | `model add openai/gpt-x --name X`    | append to `providers.openai.models[]`                  |
@@ -367,10 +367,10 @@ The `$schema` property enables IDE autocomplete but is optional.
 | `option attribution-trailer-style none` | `options.attribution.trailer_style = "none"`        |
 | `option attribution-generated-with false` | `options.attribution.generated_with = false`       |
 
-### Shell expansion in crash.json
+### Shell expansion in klash.json
 
 In JSON, only selected string fields are run through the embedded shell at load
-time (in `crashrc`, everything is native Bash so this table does not apply):
+time (in `klashrc`, everything is native Bash so this table does not apply):
 
 | Surface                                                         | Expansion                          |
 | --------------------------------------------------------------- | ---------------------------------- |
@@ -387,7 +387,7 @@ the request.
 
 ### Security note
 
-Both formats are trusted code. `crashrc` runs entirely, and any `$(...)` in
-`crash.json` runs at load time, with the invoking user's shell privileges,
-before the UI appears. Don't launch Crash in a directory whose config you
+Both formats are trusted code. `klashrc` runs entirely, and any `$(...)` in
+`klash.json` runs at load time, with the invoking user's shell privileges,
+before the UI appears. Don't launch Klash in a directory whose config you
 haven't reviewed.

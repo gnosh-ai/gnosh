@@ -62,14 +62,14 @@ type X402FetchPermissionsParams struct {
 // paying anything larger. The network fee is paid on top.
 const x402MaxPrice = 1_000_000
 
-// x402Asset is the one denomination crash pays in, gno.land's own coin.
+// x402Asset is the one denomination klash pays in, gno.land's own coin.
 const x402Asset = "ugnot"
 
 // x402SignTimeout bounds gnokey's signing, which reads no network but may wait
 // on a Ledger's confirmation.
 const x402SignTimeout = 2 * time.Minute
 
-// x402Remotes are the public RPC endpoints of the chains crash pays on, for a
+// x402Remotes are the public RPC endpoints of the chains klash pays on, for a
 // call that names no remote.
 var x402Remotes = map[string]string{
 	"dev":     "127.0.0.1:26657",
@@ -77,7 +77,7 @@ var x402Remotes = map[string]string{
 	"onyx-1":  "https://rpc.onyx.testnets.gno.land:443",
 }
 
-// x402ChainAllowed reports whether crash pays on chain: a local dev chain or
+// x402ChainAllowed reports whether klash pays on chain: a local dev chain or
 // a test network. x402 on gno.land is unaudited and meant for testnets only,
 // so mainnet, and any chain not known to be a test chain, is refused before a
 // payment exists, the way gno-mcp confines its writes.
@@ -93,7 +93,7 @@ func x402ChainAllowed(chain string) bool {
 // Every payment is the user's: the permission dialog names the resource and
 // the key, and the password prompt names the price, the payee and the fee.
 // The password goes to gnokey's standard input and nowhere else, gnokey signs
-// one bank send of exactly the price, and crash checks the signature before it
+// one bank send of exactly the price, and klash checks the signature before it
 // hands the payment to the seller. questions is nil when there is no user to
 // ask, as in a non-interactive run; the tool then pays nothing.
 func NewX402FetchTool(permissions permission.Service, questions question.Service, workingDir string, client *http.Client) fantasy.AgentTool {
@@ -173,7 +173,7 @@ func NewX402FetchTool(permissions permission.Service, questions question.Service
 			codec := x402http.Newx402HTTPClient(x402.Newx402Client())
 			required, err := codec.GetPaymentRequiredResponse(headerMap(unpaid.Header), body)
 			if err != nil {
-				return fantasy.NewTextErrorResponse("The seller answered 402 Payment Required without x402 terms crash can read: " + err.Error()), nil
+				return fantasy.NewTextErrorResponse("The seller answered 402 Payment Required without x402 terms klash can read: " + err.Error()), nil
 			}
 			offer, chain, err := chooseGnoOffer(required.Accepts)
 			if err != nil {
@@ -181,7 +181,7 @@ func NewX402FetchTool(permissions permission.Service, questions question.Service
 			}
 			remote := cmp.Or(params.Remote, x402Remotes[chain])
 			if remote == "" {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("the seller charges on chain %s, which has no public node crash knows; pass remote, a node on %s", chain, chain)), nil
+				return fantasy.NewTextErrorResponse(fmt.Sprintf("the seller charges on chain %s, which has no public node klash knows; pass remote, a node on %s", chain, chain)), nil
 			}
 			node, err := x402gno.NewRPCNode(remote)
 			if err != nil {
@@ -198,7 +198,7 @@ func NewX402FetchTool(permissions permission.Service, questions question.Service
 				case strings.Contains(msg, "fund it"):
 					msg += " (https://faucet.gno.land funds the test networks)"
 				case errors.Is(err, x402gno.ErrExcessiveFee):
-					// The node, which the call named or crash knows, is the one
+					// The node, which the call named or klash knows, is the one
 					// that reported the price; it may be wrong, or not honest.
 					msg += fmt.Sprintf(". The node at %s reported that price; nothing was paid. Tell the user rather than trying another node", node.Endpoint())
 				}
@@ -297,8 +297,8 @@ func headerMap(h http.Header) map[string]string {
 	return m
 }
 
-// chooseGnoOffer picks the first offer crash pays, and its chain id: the
-// exact scheme, on a gno.land chain crash pays on, in ugnot, within
+// chooseGnoOffer picks the first offer klash pays, and its chain id: the
+// exact scheme, on a gno.land chain klash pays on, in ugnot, within
 // x402MaxPrice. When none qualifies, the error says why of each.
 func chooseGnoOffer(accepts []types.PaymentRequirements) (types.PaymentRequirements, string, error) {
 	var why []string
@@ -309,13 +309,13 @@ func chooseGnoOffer(accepts []types.PaymentRequirements) (types.PaymentRequireme
 		case !isGno:
 			why = append(why, label+": not a gno.land chain")
 		case offer.Scheme != "exact":
-			why = append(why, label+": crash pays only the exact scheme")
+			why = append(why, label+": klash pays only the exact scheme")
 		case !x402ChainAllowed(chain):
-			why = append(why, label+": crash pays only on dev and test chains (dev, staging, onyx-*, test*), never mainnet; x402 on gno.land is unaudited, testnet-only work")
+			why = append(why, label+": klash pays only on dev and test chains (dev, staging, onyx-*, test*), never mainnet; x402 on gno.land is unaudited, testnet-only work")
 		case offer.Asset != x402Asset:
-			why = append(why, label+": crash pays only in ugnot")
+			why = append(why, label+": klash pays only in ugnot")
 		case !withinX402Max(offer.Amount):
-			why = append(why, fmt.Sprintf("%s: more than the %d ugnot (1 GNOT) crash pays in one payment", label, x402MaxPrice))
+			why = append(why, fmt.Sprintf("%s: more than the %d ugnot (1 GNOT) klash pays in one payment", label, x402MaxPrice))
 		default:
 			return offer, chain, nil
 		}
@@ -323,7 +323,7 @@ func chooseGnoOffer(accepts []types.PaymentRequirements) (types.PaymentRequireme
 	if len(why) == 0 {
 		return types.PaymentRequirements{}, "", errors.New("the seller's 402 lists no way to pay")
 	}
-	return types.PaymentRequirements{}, "", errors.New("crash cannot pay any of the seller's offers:\n- " + strings.Join(why, "\n- "))
+	return types.PaymentRequirements{}, "", errors.New("klash cannot pay any of the seller's offers:\n- " + strings.Join(why, "\n- "))
 }
 
 // withinX402Max reports whether amount, a whole number of ugnot, is at most
@@ -438,7 +438,7 @@ func gnotAmount(coin std.Coin) string {
 // signature alone to a second file, and the directory holding both is removed
 // afterwards. Neither file holds a secret.
 func gnokeySignPayment(ctx context.Context, home, name, password string, payment *x402gno.Payment) ([]byte, error) {
-	dir, err := os.MkdirTemp("", "crash-x402-")
+	dir, err := os.MkdirTemp("", "klash-x402-")
 	if err != nil {
 		return nil, err
 	}

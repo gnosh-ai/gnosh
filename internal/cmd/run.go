@@ -41,33 +41,33 @@ var runCmd = &cobra.Command{
 The prompt can be provided as arguments or piped from stdin.`,
 	Example: `
 # Run a simple prompt
-crash run "Guess my 5 favorite Pokémon"
+klash run "Guess my 5 favorite Pokémon"
 
 # Pipe input from stdin
-curl https://charm.land | crash run "Summarize this website"
+curl https://charm.land | klash run "Summarize this website"
 
 # Read from a file
-crash run "What is this code doing?" <<< prrr.go
+klash run "What is this code doing?" <<< prrr.go
 
 # Redirect output to a file
-crash run "Generate a hot README for this project" > MY_HOT_README.md
+klash run "Generate a hot README for this project" > MY_HOT_README.md
 
 # Run in quiet mode (hide the spinner)
-crash run --quiet "Generate a README for this project"
+klash run --quiet "Generate a README for this project"
 
 # Run in verbose mode (show logs)
-crash run --verbose "Generate a README for this project"
+klash run --verbose "Generate a README for this project"
 
 # Use a specific reasoning effort
 # Levels depend on the model, unsupported values are rejected
 # with the accepted values listed
-crash run --reasoning-effort high "What is the meaning of life?"
+klash run --reasoning-effort high "What is the meaning of life?"
 
 # Continue a previous session
-crash run --session {session-id} "Follow up on your last response"
+klash run --session {session-id} "Follow up on your last response"
 
 # Continue the most recent session
-crash run --continue "Follow up on your last response"
+klash run --continue "Follow up on your last response"
 
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -83,7 +83,7 @@ crash run --continue "Follow up on your last response"
 		// sessionID is read from --session or --resume.
 		sessionID := sessionFlag(cmd)
 		if sessionID == pickSession {
-			return errors.New("a session ID must follow -r in crash run; `crash -r` on its own lists the sessions to pick from")
+			return errors.New("a session ID must follow -r in klash run; `klash -r` on its own lists the sessions to pick from")
 		}
 
 		// Cancel on SIGINT or SIGTERM.
@@ -201,7 +201,7 @@ func init() {
 	addRunFlags(runCmd)
 }
 
-// addRunFlags adds crash run's flags to cmd.
+// addRunFlags adds klash run's flags to cmd.
 func addRunFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolP("quiet", "q", false, "Hide spinner")
 	cmd.Flags().BoolP("verbose", "v", false, "Show logs and a line per tool call on stderr")
@@ -220,7 +220,7 @@ func addRunFlags(cmd *cobra.Command) {
 	addYoloFlags(cmd)
 	addToolFlags(cmd)
 	addSystemPromptFlags(cmd)
-	cmd.Flags().Lookup("yolo").Usage = "Accepted for Claude Code's sake; changes nothing, as crash run already accepts its session's permission requests"
+	cmd.Flags().Lookup("yolo").Usage = "Accepted for Claude Code's sake; changes nothing, as klash run already accepts its session's permission requests"
 	cmd.Flags().Lookup("dangerously-skip-permissions").Usage = "Same as --yolo"
 }
 
@@ -944,7 +944,7 @@ func setThinking(ws workspace.Workspace, enabled bool, out io.Writer) error {
 	return err
 }
 
-// runOutput is where crash run writes its answer, by --output-format:
+// runOutput is where klash run writes its answer, by --output-format:
 // streamed as it comes for text, or collected and printed as one result
 // object at the end for json, as Claude Code's -p --output-format json
 // does, for scripts that read the answer and the session to resume.
@@ -1002,7 +1002,7 @@ func (o *runOutput) finish(runErr error) error {
 	return runErr
 }
 
-// noProviderError says why crash run has no provider to use. When the
+// noProviderError says why klash run has no provider to use. When the
 // config names providers that loading had to leave out, such as one whose
 // model server did not answer, it says which and why; "no providers
 // configured" sent a user whose server was down to set one up again.

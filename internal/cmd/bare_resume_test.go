@@ -29,7 +29,7 @@ func TestBareResume(t *testing.T) {
 	}
 }
 
-// crash run cannot show a list to pick from, so a bare -r there says what
+// klash run cannot show a list to pick from, so a bare -r there says what
 // to give it instead of looking for a session named ":pick:".
 func TestRunRefusesABareResume(t *testing.T) {
 	cmd := &cobra.Command{Use: "run", RunE: runCmd.RunE}
@@ -38,5 +38,5 @@ func TestRunRefusesABareResume(t *testing.T) {
 	cmd.SilenceUsage, cmd.SilenceErrors = true, true
 	err := cmd.Execute()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "a session ID must follow -r in crash run")
+	require.Contains(t, err.Error(), "a session ID must follow -r in klash run")
 }

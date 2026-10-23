@@ -51,7 +51,7 @@ var statsCmd = &cobra.Command{
 }
 
 func init() {
-	statsCmd.Flags().String("crawl-dir", "", "Crawl a directory recursively for all Crash projects and aggregate stats")
+	statsCmd.Flags().String("crawl-dir", "", "Crawl a directory recursively for all Klash projects and aggregate stats")
 	statsCmd.Flags().Bool("all", false, "Aggregate stats from all known projects (from projects.json)")
 }
 
@@ -226,7 +226,7 @@ func runStats(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	if outputDataDir == "" {
-		outputDataDir = ".crash"
+		outputDataDir = ".klash"
 	}
 
 	htmlPath := filepath.Join(outputDataDir, "stats/index.html")
@@ -245,7 +245,7 @@ func runStats(cmd *cobra.Command, _ []string) error {
 }
 
 // crawlForStats crawls a directory recursively looking for session
-// databases: .crash/crash.db, or the .crush/ and crush.db names from
+// databases: .klash/klash.db, or the .crush/ and crush.db names from
 // before the rename.
 func crawlForStats(ctx context.Context, rootDir string) ([]ProjectStats, error) {
 	var dbPaths []struct {
@@ -263,9 +263,9 @@ func crawlForStats(ctx context.Context, rootDir string) ([]ProjectStats, error) 
 			return filepath.SkipDir
 		}
 
-		if !d.IsDir() && (d.Name() == "crash.db" || d.Name() == "crush.db") {
+		if !d.IsDir() && (d.Name() == "klash.db" || d.Name() == "crush.db") {
 			dir := filepath.Dir(path)
-			if base := filepath.Base(dir); base == ".crash" || base == ".crush" {
+			if base := filepath.Base(dir); base == ".klash" || base == ".crush" {
 				projectDir := filepath.Dir(dir)
 				dbPaths = append(dbPaths, struct {
 					dbPath     string

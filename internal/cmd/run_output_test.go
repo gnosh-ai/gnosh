@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// crash run --output-format json prints one result object at the end, as
+// klash run --output-format json prints one result object at the end, as
 // Claude Code's -p --output-format json does, so a script gets the answer
 // and the session to resume without parsing streamed text.
 func TestRunOutputJSON(t *testing.T) {

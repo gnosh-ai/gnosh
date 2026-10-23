@@ -929,8 +929,8 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	allTools = append(
 		allTools,
 		tools.NewBashTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.cfg.Config().Options.Attribution, modelID, c.cfg.Config().Options.GetMaxBackgroundJobs()),
-		tools.NewCrashInfoTool(c.cfg, c.lspManager, c.allSkills, c.activeSkills, c.skillTracker),
-		tools.NewCrashLogsTool(logFile),
+		tools.NewKlashInfoTool(c.cfg, c.lspManager, c.allSkills, c.activeSkills, c.skillTracker),
+		tools.NewKlashLogsTool(logFile),
 		tools.NewJobOutputTool(c.cfg.Config().Options.DataDirectory),
 		tools.NewJobKillTool(),
 		tools.NewDownloadTool(c.permissions, c.cfg.WorkingDir(), nil),
@@ -1735,7 +1735,7 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 	// A sub-agent works on its parent's behalf, so when the parent's
 	// session is auto-approved, as a non-interactive run's is, the
 	// sub-agent's is too. Otherwise its first permission request waits
-	// for an answer nobody is there to give: in a crash run on the AI box
+	// for an answer nobody is there to give: in a klash run on the AI box
 	// a sub-agent hung that way, reading a file in the Go module cache.
 	if c.permissions != nil && c.permissions.IsSessionAutoApproved(params.SessionID) {
 		c.permissions.AutoApproveSession(session.ID)

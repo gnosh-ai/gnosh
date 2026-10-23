@@ -15,7 +15,7 @@ func TestToolFlags(t *testing.T) {
 	t.Parallel()
 
 	parse := func(args ...string) ([]string, []string, error) {
-		cmd := &cobra.Command{Use: "crash", RunE: func(*cobra.Command, []string) error { return nil }}
+		cmd := &cobra.Command{Use: "klash", RunE: func(*cobra.Command, []string) error { return nil }}
 		cmd.SilenceErrors, cmd.SilenceUsage = true, true
 		addToolFlags(cmd)
 		cmd.SetArgs(args)
@@ -37,7 +37,7 @@ func TestToolFlags(t *testing.T) {
 
 	_, disallowed, err = parse("--disallowed-tools", "BASH,crush_logs")
 	require.NoError(t, err)
-	require.Equal(t, []string{"bash", "crash_logs"}, disallowed, "any case, and the names from before the rename")
+	require.Equal(t, []string{"bash", "klash_logs"}, disallowed, "any case, and the names from before the rename")
 
 	_, _, err = parse("--disallowedTools", "Bsh")
 	require.ErrorContains(t, err, `unknown tool "Bsh"`)
@@ -51,7 +51,7 @@ func TestToolFlags(t *testing.T) {
 func TestToolFlagsWithoutTheFlags(t *testing.T) {
 	t.Parallel()
 
-	allowed, disallowed, err := toolFlags(&cobra.Command{Use: "crash"})
+	allowed, disallowed, err := toolFlags(&cobra.Command{Use: "klash"})
 	require.NoError(t, err)
 	require.Empty(t, allowed)
 	require.Empty(t, disallowed)
@@ -64,7 +64,7 @@ func TestToolsFlag(t *testing.T) {
 	t.Parallel()
 
 	parse := func(args ...string) ([]string, error) {
-		cmd := &cobra.Command{Use: "crash", RunE: func(*cobra.Command, []string) error { return nil }}
+		cmd := &cobra.Command{Use: "klash", RunE: func(*cobra.Command, []string) error { return nil }}
 		cmd.SilenceErrors, cmd.SilenceUsage = true, true
 		addToolFlags(cmd)
 		cmd.SetArgs(args)

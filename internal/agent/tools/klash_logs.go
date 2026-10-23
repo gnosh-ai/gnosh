@@ -17,23 +17,23 @@ import (
 	"charm.land/fantasy"
 )
 
-const CrashLogsToolName = "crash_logs"
+const KlashLogsToolName = "klash_logs"
 
-//go:embed crash_logs.md.tpl
-var crashLogsDescriptionTmpl []byte
+//go:embed klash_logs.md.tpl
+var klashLogsDescriptionTmpl []byte
 
-var crashLogsDescriptionTpl = template.Must(
-	template.New("crashLogsDescription").
-		Parse(string(crashLogsDescriptionTmpl)),
+var klashLogsDescriptionTpl = template.Must(
+	template.New("klashLogsDescription").
+		Parse(string(klashLogsDescriptionTmpl)),
 )
 
-type crashLogsDescriptionData struct {
+type klashLogsDescriptionData struct {
 	DefaultLines int
 	MaxLines     int
 }
 
-func crashLogsDescription() string {
-	return renderTemplate(crashLogsDescriptionTpl, crashLogsDescriptionData{
+func klashLogsDescription() string {
+	return renderTemplate(klashLogsDescriptionTpl, klashLogsDescriptionData{
 		DefaultLines: defaultLogLines,
 		MaxLines:     maxLogLines,
 	})
@@ -69,23 +69,23 @@ var sensitiveKeys = []string{
 	"credential",
 }
 
-type CrashLogsParams struct {
+type KlashLogsParams struct {
 	Lines int `json:"lines,omitempty" description:"Number of recent log entries to return (default 50, max 100)"`
 }
 
-func NewCrashLogsTool(logFile string) fantasy.AgentTool {
+func NewKlashLogsTool(logFile string) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
-		CrashLogsToolName,
-		crashLogsDescription(),
-		func(ctx context.Context, params CrashLogsParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-			result := runCrashLogs(logFile, params)
+		KlashLogsToolName,
+		klashLogsDescription(),
+		func(ctx context.Context, params KlashLogsParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			result := runKlashLogs(logFile, params)
 			return fantasy.NewTextResponse(result), nil
 		},
 	)
 }
 
-// runCrashLogs reads and formats the last N log entries from the given file.
-func runCrashLogs(logFile string, params CrashLogsParams) string {
+// runKlashLogs reads and formats the last N log entries from the given file.
+func runKlashLogs(logFile string, params KlashLogsParams) string {
 	// Validate and clamp the lines parameter.
 	lines := params.Lines
 	if lines <= 0 {

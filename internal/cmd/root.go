@@ -59,7 +59,7 @@ func init() {
 	rootCmd.PersistentFlags().StringP("cwd", "c", "", "Current working directory")
 	rootCmd.PersistentFlags().StringP("data-dir", "D", "", "Custom data directory")
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
-	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", server.DefaultHost(), "Connect to a specific Crash server host (for advanced users)")
+	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", server.DefaultHost(), "Connect to a specific Klash server host (for advanced users)")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
 	addYoloFlags(rootCmd)
 	addToolFlags(rootCmd)
@@ -90,28 +90,28 @@ var rootCmd = &cobra.Command{
 	Long:  "A glamorous, terminal-first AI assistant for software development and adjacent tasks",
 	Example: `
 # Run in interactive mode
-crash
+klash
 
-# Run non-interactively (Claude Code's -p works too: crash -p "...")
-crash run "Guess my 5 favorite Pokémon"
+# Run non-interactively (Claude Code's -p works too: klash -p "...")
+klash run "Guess my 5 favorite Pokémon"
 
 # Run a non-interactively with pipes and redirection
-cat README.md | crash run "make this more glamorous" > GLAMOROUS_README.md
+cat README.md | klash run "make this more glamorous" > GLAMOROUS_README.md
 
 # Run with debug logging in a specific directory
-crash --debug --cwd /path/to/project
+klash --debug --cwd /path/to/project
 
 # Run in yolo mode (auto-accept all permissions; use with care)
-crash --yolo
+klash --yolo
 
 # Run with custom data directory
-crash --data-dir /path/to/custom/.crash
+klash --data-dir /path/to/custom/.klash
 
 # Continue a previous session
-crash --session {session-id}
+klash --session {session-id}
 
 # Continue the most recent session
-crash --continue
+klash --continue
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sessionID := sessionFlag(cmd)
@@ -198,8 +198,8 @@ const defaultVersionTemplate = `{{with .DisplayName}}{{printf "%s " .}}{{end}}{{
 `
 
 // printAsRun maps Claude Code's way of asking one question without the
-// TUI, -p/--print, onto crash run: `crash -p "question"`, with any flags
-// after it, runs as `crash run "question"`. Only a leading -p/--print is
+// TUI, -p/--print, onto klash run: `klash -p "question"`, with any flags
+// after it, runs as `klash run "question"`. Only a leading -p/--print is
 // rewritten, the form Claude Code users type.
 func printAsRun(args []string) ([]string, bool) {
 	if len(args) == 0 || (args[0] != "-p" && args[0] != "--print") {
@@ -251,7 +251,7 @@ func Execute() {
 // its first letter. fang title-cases the whole first word, capitalizing
 // after every - or ( and lowercasing the rest, so an error that starts
 // with a flag, a quoted name, an environment variable or a path showed it
-// changed: --Disallowed-Tools, "Bash(Git:*)", Crash_client_server.
+// changed: --Disallowed-Tools, "Bash(Git:*)", Klash_client_server.
 func errorHandler(w io.Writer, styles fang.Styles, err error) {
 	styles.ErrorText = styles.ErrorText.Transform(capitalizeFirstLetter)
 	fang.DefaultErrorHandler(w, styles, err)
@@ -280,9 +280,9 @@ func supportsProgressBar() bool {
 }
 
 // useClientServer returns true when the client/server architecture is
-// enabled via the CRASH_CLIENT_SERVER environment variable.
+// enabled via the KLASH_CLIENT_SERVER environment variable.
 func useClientServer() bool {
-	v, _ := strconv.ParseBool(env.Getenv("CRASH_CLIENT_SERVER"))
+	v, _ := strconv.ParseBool(env.Getenv("KLASH_CLIENT_SERVER"))
 	return v
 }
 
@@ -304,7 +304,7 @@ func setupWorkspaceWithProgressBar(cmd *cobra.Command) (workspace.Workspace, fun
 }
 
 // setupWorkspace returns a Workspace and cleanup function. When
-// CRASH_CLIENT_SERVER=1, it connects to a server process and returns a
+// KLASH_CLIENT_SERVER=1, it connects to a server process and returns a
 // ClientWorkspace. Otherwise it creates an in-process app.App and
 // returns an AppWorkspace.
 func setupWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
@@ -329,7 +329,7 @@ func yoloFlag(cmd *cobra.Command) bool {
 }
 
 // workspaceYolo reports whether the workspace cmd sets up accepts every
-// permission request. crash run takes the yolo flags but keeps them to
+// permission request. klash run takes the yolo flags but keeps them to
 // itself: it already accepts its own session's requests, and a yolo
 // workspace it created on a shared server would hand yolo to a TUI that
 // joined it later, since the first client's flags win.
@@ -524,12 +524,12 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 	if allowed, disallowed, err := toolFlags(cmd); err != nil {
 		return nil, nil, nil, err
 	} else if len(allowed) > 0 || len(disallowed) > 0 {
-		return nil, nil, nil, fmt.Errorf("tools named with --allowed-tools or --disallowed-tools cannot reach the server's config with %s=1 yet; set options.disabled_tools or permissions.allowed_tools in the project's crash.json instead", "CRASH_CLIENT_SERVER")
+		return nil, nil, nil, fmt.Errorf("tools named with --allowed-tools or --disallowed-tools cannot reach the server's config with %s=1 yet; set options.disabled_tools or permissions.allowed_tools in the project's klash.json instead", "KLASH_CLIENT_SERVER")
 	}
 	if replace, appended, err := systemPromptFlags(cmd); err != nil {
 		return nil, nil, nil, err
 	} else if replace != "" || appended != "" {
-		return nil, nil, nil, fmt.Errorf("--system-prompt and --append-system-prompt cannot reach the server's agent with %s=1 yet", "CRASH_CLIENT_SERVER")
+		return nil, nil, nil, fmt.Errorf("--system-prompt and --append-system-prompt cannot reach the server's agent with %s=1 yet", "KLASH_CLIENT_SERVER")
 	}
 
 	hostURL, err := server.ParseHostURL(clientHost)
@@ -636,7 +636,7 @@ func replaceExitingServer(cmd *cobra.Command, hostURL *url.URL) error {
 		}
 	}
 	if err := spawnAndWaitReady(cmd, hostURL); err != nil {
-		return fmt.Errorf("failed to initialize the Crash server: %v", err)
+		return fmt.Errorf("failed to initialize the Klash server: %v", err)
 	}
 	return nil
 }
@@ -700,13 +700,13 @@ func ensureServer(cmd *cobra.Command, hostURL *url.URL) error {
 
 		if needsStart {
 			if err := spawnAndWaitReady(cmd, hostURL); err != nil {
-				return fmt.Errorf("failed to initialize the Crash server: %v", err)
+				return fmt.Errorf("failed to initialize the Klash server: %v", err)
 			}
 			return nil
 		}
 
 		if err := waitForServerReady(cmd.Context(), hostURL); err != nil {
-			return fmt.Errorf("failed to initialize the Crash server: %v", err)
+			return fmt.Errorf("failed to initialize the Klash server: %v", err)
 		}
 	}
 
@@ -787,10 +787,10 @@ func safeHostName(hostURL *url.URL) string {
 }
 
 // serverReadyTimeout returns the total budget for the readiness probe.
-// Overridable via CRASH_SERVER_READY_TIMEOUT (parsed as a Go duration).
+// Overridable via KLASH_SERVER_READY_TIMEOUT (parsed as a Go duration).
 func serverReadyTimeout() time.Duration {
 	const def = 10 * time.Second
-	v := env.Getenv("CRASH_SERVER_READY_TIMEOUT")
+	v := env.Getenv("KLASH_SERVER_READY_TIMEOUT")
 	if v == "" {
 		return def
 	}
@@ -1038,11 +1038,11 @@ func startDetachedServer(cmd *cobra.Command, hostURL *url.URL) error {
 	c.Stderr = stderr
 
 	if err := c.Start(); err != nil {
-		return fmt.Errorf("failed to start the Crash server: %v", err)
+		return fmt.Errorf("failed to start the Klash server: %v", err)
 	}
 
 	if err := c.Process.Release(); err != nil {
-		return fmt.Errorf("failed to detach the Crash server process: %v", err)
+		return fmt.Errorf("failed to detach the Klash server process: %v", err)
 	}
 
 	return nil
@@ -1051,18 +1051,18 @@ func startDetachedServer(cmd *cobra.Command, hostURL *url.URL) error {
 // shouldEnableMetrics reports whether to send usage metrics to Charm's
 // analytics. Upstream Crush sends them unless told not to; this fork sends
 // none unless asked. DO_NOT_TRACK=1 always wins, then
-// CRASH_DISABLE_METRICS when it holds a value, then option metrics.
+// KLASH_DISABLE_METRICS when it holds a value, then option metrics.
 func shouldEnableMetrics(cfg *config.Config) bool {
 	if v, _ := strconv.ParseBool(os.Getenv("DO_NOT_TRACK")); v {
 		return false
 	}
-	if disable, ok := env.LookupBool("CRASH_DISABLE_METRICS"); ok {
+	if disable, ok := env.LookupBool("KLASH_DISABLE_METRICS"); ok {
 		return !disable
 	}
 	return cfg.Options.MetricsOptedIn()
 }
 
-// stdinWait is how long a piped stdin may stay silent before crash run
+// stdinWait is how long a piped stdin may stay silent before klash run
 // goes on without it, as Claude Code's -p does. A pipe that is open but
 // never written to, as an ssh session without -n gives, otherwise kept
 // the run waiting forever with nothing on the screen to say why. It is a
@@ -1070,7 +1070,7 @@ func shouldEnableMetrics(cfg *config.Config) bool {
 var stdinWait = 3 * time.Second
 
 // MaybePrependStdin puts what is piped or redirected into stdin before
-// the prompt: `cat log | crash run "why does this fail?"`.
+// the prompt: `cat log | klash run "why does this fail?"`.
 func MaybePrependStdin(prompt string) (string, error) {
 	return prependInput(os.Stdin, os.Stderr, prompt)
 }

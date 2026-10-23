@@ -13,7 +13,7 @@ it as a scratchpad for what's next, not as documentation of current behavior.
 
 ### Motivation
 
-Right now `crashrc` runs once, at startup. If you want to change something
+Right now `klashrc` runs once, at startup. If you want to change something
 mid-session — swap the large model, allow a tool, add an MCP server — you edit
 the file and restart.
 
@@ -23,16 +23,16 @@ session**. The mental model is exactly a shell and its `.bashrc`:
 
 - Running a config command changes the **current session only** — like typing
   `export` or `alias` at a live prompt.
-- To make it stick, you edit your `crashrc` — like editing `.bashrc`.
+- To make it stick, you edit your `klashrc` — like editing `.bashrc`.
 
-So you could say "Crash, switch to the small model for a bit" and it just
+So you could say "Klash, switch to the small model for a bit" and it just
 runs `model small …`, live, no restart.
 
 > [!IMPORTANT]
 > **Persistence is a non-goal.** The bash tool never writes config files.
 > This is deliberate: a script can't be round-tripped. You don't regenerate
 > your `.bashrc` from the live shell's state, and we won't regenerate
-> `crashrc` from live config state. Want it permanent? Edit `crashrc`.
+> `klashrc` from live config state. Want it permanent? Edit `klashrc`.
 
 ### Why it's mostly wiring
 
@@ -114,26 +114,26 @@ larger, later increment.
 
 ### Motivation
 
-Crash currently uses JSON files in data directories as both persisted machine
+Klash currently uses JSON files in data directories as both persisted machine
 state and high-priority configuration:
 
 ```text
-~/.local/share/crash/crash.json
-.crash/crash.json
+~/.local/share/klash/klash.json
+.klash/klash.json
 ```
 
 These files hold mutable choices such as preferred/recent models, UI settings,
 workspace overrides, and some credentials. Treating them as ordinary config
 means state enters the same generic JSON merge/reload path as user-authored
-`crashrc` and legacy `crash.json` files.
+`klashrc` and legacy `klash.json` files.
 
 The goal is to make the roles explicit:
 
 | Role | Format |
 |---|---|
-| User-authored executable configuration | `crashrc` / `.crashrc` |
-| Legacy user-authored static configuration | `crash.json` / `.crash.json` |
-| Crash-owned persistent preferences and history | versioned `state.json` |
+| User-authored executable configuration | `klashrc` / `.klashrc` |
+| Legacy user-authored static configuration | `klash.json` / `.klash.json` |
+| Klash-owned persistent preferences and history | versioned `state.json` |
 | Session-only changes | memory |
 | Credentials/OAuth tokens | dedicated secure storage |
 
@@ -145,10 +145,10 @@ config and being deep-merged through the config pipeline.
 ### Proposed files
 
 ```text
-~/.config/crash/crashrc             global user config
-~/.local/share/crash/state.json     global machine state
-./crashrc / ./.crashrc              project user config
-.crash/state.json                   workspace machine state
+~/.config/klash/klashrc             global user config
+~/.local/share/klash/state.json     global machine state
+./klashrc / ./.klashrc              project user config
+.klash/state.json                   workspace machine state
 ```
 
 State files should be machine-owned, written with `0600`, protected by the
@@ -184,12 +184,12 @@ Explicit user configuration should beat remembered state:
 built-in defaults
 → global state defaults
 → workspace state defaults
-→ global legacy crash.json
-→ global crashrc
-→ project legacy crash.json
-→ project crashrc
-→ project .crash.json
-→ project .crashrc
+→ global legacy klash.json
+→ global klashrc
+→ project legacy klash.json
+→ project klashrc
+→ project .klash.json
+→ project .klashrc
 → runtime-only overrides
 ```
 
@@ -201,9 +201,9 @@ building without participating in precedence.
 User-authored JSON remains a supported config input during this work:
 
 ```text
-~/.config/crash/crash.json
-./crash.json
-./.crash.json
+~/.config/klash/klash.json
+./klash.json
+./.klash.json
 ```
 
 It must be decoded as configuration, never migrated as state. Only the
@@ -215,7 +215,7 @@ If user JSON is retired later:
 1. Keep reading it for a compatibility period.
 2. Warn only when a user-authored JSON config is loaded.
 3. Provide an explicit conversion command (for example,
-   `crash config convert crash.json > crashrc`).
+   `klash config convert klash.json > klashrc`).
 4. Never rewrite user config automatically.
 
 Using JSON internally for state is independent of deprecating JSON as a user
@@ -255,22 +255,22 @@ func (s *ConfigStore) SetCompactMode(scope Scope, enabled bool) error {
 Real-time commands run through the Bash tool remain session-only and do not
 write state, preserving the shell/`.bashrc` mental model.
 
-### Typed crashrc builder
+### Typed klashrc builder
 
 This is related but separate. Today the Bash path is:
 
 ```text
-crashrc → map[string]any → JSON → Config
+klashrc → map[string]any → JSON → Config
 ```
 
 A later typed-builder phase should become:
 
 ```text
-crashrc → typed ConfigBuilder → Config
+klashrc → typed ConfigBuilder → Config
 state.json → typed StateStore ───────┘
 ```
 
-Legacy `crash.json` would decode into a typed config patch and apply to the same
+Legacy `klash.json` would decode into a typed config patch and apply to the same
 builder. This may require moving pure config data types into a dependency-neutral
 package to avoid import cycles.
 
@@ -282,11 +282,11 @@ package to avoid import cycles.
 4. Stop merging global/workspace data JSON as config.
 5. Move provider credentials and OAuth tokens to dedicated secure storage.
 6. Remove generic state callers of `SetConfigField` / dotted JSON paths.
-7. Replace the `crashrc` map/JSON bridge with a typed config builder.
+7. Replace the `klashrc` map/JSON bridge with a typed config builder.
 
 Migration must preserve unknown legacy fields or warn and leave the original
 file untouched. Successfully migrated files can be renamed to
-`crash.json.migrated`; corrupt files should be quarantined as timestamped
+`klash.json.migrated`; corrupt files should be quarantined as timestamped
 `state.json.corrupt-*` files and replaced with defaults.
 
 ## Permission-level hard deny
@@ -294,9 +294,9 @@ file untouched. Successfully migrated files can be renamed to
 **Status:** not implemented; probably unnecessary until a real use case
 appears.
 
-Crash currently has three useful tool states across both config formats:
+Klash currently has three useful tool states across both config formats:
 
-| State | `crashrc` | `crash.json` | Behavior |
+| State | `klashrc` | `klash.json` | Behavior |
 |---|---|---|---|
 | Auto-approved | `permissions allow bash` | `permissions.allowed_tools` | Visible; runs without prompting |
 | Prompted | neither list | neither list | Visible; asks the user before running |
@@ -306,7 +306,7 @@ Crash currently has three useful tool states across both config formats:
 block: because the tool is absent from the agent's tool list, the model cannot
 attempt to use it.
 
-The one state Crash does **not** have is "visible but always rejected": the
+The one state Klash does **not** have is "visible but always rejected": the
 model can see and choose the tool, but the permission engine denies every
 request without prompting. Supporting that would require a separate
 permission-level deny list in both the config schema and permission engine.

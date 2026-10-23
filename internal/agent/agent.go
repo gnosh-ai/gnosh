@@ -705,7 +705,7 @@ func ValidateCall(call SessionAgentCall) error {
 func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *fantasy.AgentResult, retErr error) {
 	// The model reads the prompt trimmed whenever the conversation is
 	// rebuilt (ToAIMessage), so it is sent trimmed now too. Sent as typed,
-	// a prompt with a trailing newline, as `crash run` makes from piped
+	// a prompt with a trailing newline, as `klash run` makes from piped
 	// stdin, differed from its rebuilt copy, and the local server's prompt
 	// cache missed from that message on.
 	call.Prompt = strings.TrimSpace(call.Prompt)
@@ -1718,7 +1718,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 }
 
 func (a *sessionAgent) getCacheControlOptions() fantasy.ProviderOptions {
-	if t, _ := strconv.ParseBool(env.Getenv("CRASH_DISABLE_ANTHROPIC_CACHE")); t {
+	if t, _ := strconv.ParseBool(env.Getenv("KLASH_DISABLE_ANTHROPIC_CACHE")); t {
 		return fantasy.ProviderOptions{}
 	}
 	return fantasy.ProviderOptions{
@@ -2409,7 +2409,7 @@ func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
 // queue, oldest first, along with the attachments that came with each, and
 // leaves everything else queued:
 //   - hidden continuations, for the turn-end handoff to pick up;
-//   - prompts that carry a RunID: a caller such as `crash run` is waiting
+//   - prompts that carry a RunID: a caller such as `klash run` is waiting
 //     for their RunComplete and would hang;
 //   - channel messages (a Signal message, say): the user did not write
 //     them, and in the editor they would lose the channel their reply

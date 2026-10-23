@@ -310,25 +310,25 @@ func TestReadBuiltinFile(t *testing.T) {
 			FilePath: "crush://skills/crush-config/SKILL.md",
 		})
 		require.False(t, resp.IsError, resp.Content)
-		require.Contains(t, resp.Content, "Crash Configuration")
+		require.Contains(t, resp.Content, "Klash Configuration")
 	})
 
-	t.Run("reads crash-config skill", func(t *testing.T) {
+	t.Run("reads klash-config skill", func(t *testing.T) {
 		t.Parallel()
 
 		resp, err := readBuiltinFile(ViewParams{
-			FilePath: "crash://skills/crash-config/SKILL.md",
+			FilePath: "klash://skills/klash-config/SKILL.md",
 		}, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, resp.Content)
-		require.Contains(t, resp.Content, "Crash Configuration")
+		require.Contains(t, resp.Content, "Klash Configuration")
 	})
 
 	t.Run("not found", func(t *testing.T) {
 		t.Parallel()
 
 		resp, err := readBuiltinFile(ViewParams{
-			FilePath: "crash://skills/nonexistent/SKILL.md",
+			FilePath: "klash://skills/nonexistent/SKILL.md",
 		}, nil)
 		require.NoError(t, err)
 		require.True(t, resp.IsError)
@@ -338,14 +338,14 @@ func TestReadBuiltinFile(t *testing.T) {
 		t.Parallel()
 
 		resp, err := readBuiltinFile(ViewParams{
-			FilePath: "crash://skills/crash-config/SKILL.md",
+			FilePath: "klash://skills/klash-config/SKILL.md",
 		}, nil)
 		require.NoError(t, err)
 
 		var meta ViewResponseMetadata
 		require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
 		require.Equal(t, ViewResourceSkill, meta.ResourceType)
-		require.Equal(t, "crash-config", meta.ResourceName)
+		require.Equal(t, "klash-config", meta.ResourceName)
 		require.NotEmpty(t, meta.ResourceDescription)
 	})
 
@@ -353,7 +353,7 @@ func TestReadBuiltinFile(t *testing.T) {
 		t.Parallel()
 
 		resp, err := readBuiltinFile(ViewParams{
-			FilePath: "crash://skills/crash-config/SKILL.md",
+			FilePath: "klash://skills/klash-config/SKILL.md",
 			Offset:   5,
 		}, nil)
 		require.NoError(t, err)

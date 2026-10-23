@@ -293,7 +293,7 @@ func TestCachePathFor(t *testing.T) {
 		{
 			name:        "with XDG_DATA_HOME",
 			xdgDataHome: "/custom/data",
-			expected:    "/custom/data/crash/providers.json",
+			expected:    "/custom/data/klash/providers.json",
 		},
 		{
 			name:     "without either",

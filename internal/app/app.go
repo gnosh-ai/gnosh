@@ -1064,9 +1064,9 @@ func (app *App) Shutdown() {
 // check asks for upstream Crush's latest release, which says nothing about
 // this fork, and a source build's version reads as a prerelease, so it
 // would report an update on every start. It runs only when asked for with
-// CRASH_DISABLE_UPDATE_CHECK=0.
+// KLASH_DISABLE_UPDATE_CHECK=0.
 func updateCheckEnabled() bool {
-	disable, ok := env.LookupBool("CRASH_DISABLE_UPDATE_CHECK")
+	disable, ok := env.LookupBool("KLASH_DISABLE_UPDATE_CHECK")
 	return ok && !disable
 }
 

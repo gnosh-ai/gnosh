@@ -18,15 +18,15 @@ import (
 
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
-	Short: "Check that Crash can run here: config, providers, models, hooks and tools",
-	Long: `Check the setup Crash runs with in this directory, as Claude Code's
+	Short: "Check that Klash can run here: config, providers, models, hooks and tools",
+	Long: `Check the setup Klash runs with in this directory, as Claude Code's
 doctor does: the config files it loads, the providers it can use and why it
 cannot use the others, the models it picks, the hooks it runs, and whether
-the programs it calls are installed. It exits non-zero when Crash could not
+the programs it calls are installed. It exits non-zero when Klash could not
 run a turn here.`,
 	Example: `
 # Check the setup for the current directory
-crash doctor
+klash doctor
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := ResolveCwd(cmd)
@@ -42,7 +42,7 @@ crash doctor
 		lines, ok := doctorReport(store, exec.LookPath)
 		fmt.Fprintln(cmd.OutOrStdout(), strings.Join(lines, "\n"))
 		if !ok {
-			return errors.New("crash could not run a turn here; see above")
+			return errors.New("klash could not run a turn here; see above")
 		}
 		return nil
 	},
@@ -58,7 +58,7 @@ func doctorReport(store *config.ConfigStore, lookPath func(string) (string, erro
 	}
 	cfg := store.Config()
 
-	add("✓", "crash %s", version.Version)
+	add("✓", "klash %s", version.Version)
 
 	if paths := store.LoadedPaths(); len(paths) > 0 {
 		add("✓", "config: %s", strings.Join(paths, ", "))

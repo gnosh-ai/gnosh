@@ -1,8 +1,8 @@
-# Crash Development Guide
+# Klash Development Guide
 
 ## Project Overview
 
-Crash is a terminal-based AI coding assistant built in Go by
+Klash is a terminal-based AI coding assistant built in Go by
 [Charm](https://charm.land). It connects to LLMs and gives them tools to read,
 write, and execute code. It supports multiple providers (Anthropic, OpenAI,
 Gemini, Bedrock, Copilot, Hyper, MiniMax, Vercel, and more), integrates with
@@ -11,8 +11,8 @@ agent skills.
 
 The module path is `github.com/charmbracelet/crush`.
 
-This is a fork of Charm's Crush, renamed Crash; the module path keeps the old
-name. Everything users see and touch says crash, and every crush name from
+This is a fork of Charm's Crush, renamed Klash; the module path keeps the old
+name. Everything users see and touch says klash, and every crush name from
 before the rename still works (`crush.json`, `~/.config/crush`, `.crush/` and
 `crush.db`, `CRUSH_*` variables, `crush_logs`, `crush://skills/`). When adding or
 renaming a file, directory, variable, tool or skill name, keep reading the old
@@ -27,9 +27,9 @@ internal/
   cmd/                             CLI commands (root, run, login, models, stats, sessions)
   config/
     config.go                      Config struct, context file paths, agent definitions
-    load.go                        crashrc and crash.json loading and validation
+    load.go                        klashrc and klash.json loading and validation
     provider.go                    Provider configuration and model resolution
-  shellconfig/                      Bash-powered config format (crashrc builtins)
+  shellconfig/                      Bash-powered config format (klashrc builtins)
   agent/
     agent.go                       SessionAgent: runs LLM conversations per session
     coordinator.go                 Coordinator: manages named agents ("coder", "task")
@@ -41,7 +41,7 @@ internal/
   hooks/                           Hook engine: runs user shell commands on hook events
     hooks.go                       Decision types, aggregation logic, event constants
     runner.go                      Parallel hook execution, timeout, dedup
-    input.go                       Stdin payload builder, env vars, stdout parsing (Crash + Claude Code compat)
+    input.go                       Stdin payload builder, env vars, stdout parsing (Klash + Claude Code compat)
   session/session.go               Session CRUD backed by SQLite
   message/                         Message model and content types
   db/                              SQLite via sqlc, with migrations
@@ -76,13 +76,13 @@ internal/
   `.md` description file in `internal/agent/tools/`.
 - **System prompts are Go templates**: `internal/agent/templates/*.md.tpl`
   with runtime data injected.
-- **Context files**: Crash reads AGENTS.md, CRASH.md, CLAUDE.md, GEMINI.md
+- **Context files**: Klash reads AGENTS.md, KLASH.md, CLAUDE.md, GEMINI.md
   (and `.local` variants) from the working directory for project-specific
   instructions.
-- **Bash config format**: Crash's primary config format is `crashrc` — a
+- **Bash config format**: Klash's primary config format is `klashrc` — a
   Bash script using builtins (`provider`, `model`, `mcp`, `lsp`,
-  `permissions`, `hook`, `options`) to define config. `crash.json` is still
-  supported but is deprecated in favor of `crashrc` and may be removed in a
+  `permissions`, `hook`, `options`) to define config. `klash.json` is still
+  supported but is deprecated in favor of `klashrc` and may be removed in a
   future release. Shell config files are discovered alongside JSON configs
   and deep-merged through the same pipeline. Builtins are registered via
   `shell.RegisterBuiltin` and gated by a `ConfigBuilder` on the context —
@@ -92,7 +92,7 @@ internal/
   generated code in `internal/db/`. Migrations in `internal/db/migrations/`.
 - **Pub/sub**: `internal/pubsub` for decoupled communication between agent,
   UI, and services.
-- **Hooks**: User-defined shell commands in `crashrc` (or `crash.json`)
+- **Hooks**: User-defined shell commands in `klashrc` (or `klash.json`)
   that fire before tool execution. The engine (`internal/hooks/`) is
   independent of fantasy and agent — it takes inputs, runs commands,
   returns decisions. The `hookedTool` decorator in
@@ -126,11 +126,11 @@ real program never produces. Before saying a change works:
 1. Build test inputs from what the real system produces. Find where the data
    really comes from (who calls this code, and with what) and copy that,
    instead of hand-building an input the new code happens to handle. For
-   example, tool results reach `crash run` in their own tool-role messages,
+   example, tool results reach `klash run` in their own tool-role messages,
    not inside the assistant message that made the call.
-2. Run the real thing once, the way a user would: `go build -o /tmp/crash .`
-   and run it (`/tmp/crash run "..." < /dev/null`, or the TUI), and look at
-   the result. A change to how Crash calls an outside program (ripgrep, git,
+2. Run the real thing once, the way a user would: `go build -o /tmp/klash .`
+   and run it (`/tmp/klash run "..." < /dev/null`, or the TUI), and look at
+   the result. A change to how Klash calls an outside program (ripgrep, git,
    an LSP) is checked against that program, not a stub of it.
 3. Re-read the diff for side effects: what else does it now allow, skip or
    break? Give anything that touches permissions, hooks, safety checks or

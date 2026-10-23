@@ -1,12 +1,12 @@
-// Package x402gno is crash's copy of the client half of gno.land's x402
+// Package x402gno is klash's copy of the client half of gno.land's x402
 // "exact" payment mechanism: building a payment a seller's requirements ask
 // for, checking it against the chain, and completing it with a signature made
-// elsewhere. Crash has gnokey make that signature, so a key's password goes to
+// elsewhere. Klash has gnokey make that signature, so a key's password goes to
 // gnokey and nowhere else.
 //
-// It is gnoverse/x402's client/exact, trimmed to what crash uses: Prepare and
+// It is gnoverse/x402's client/exact, trimmed to what klash uses: Prepare and
 // Payment, without the x402.SchemeNetworkClient that signs in process, and
-// with the facilitator's three protocol constants written out here so crash
+// with the facilitator's three protocol constants written out here so klash
 // does not link the facilitator. Keep the two in step until the Go client is
 // published as a module, then import it instead.
 //

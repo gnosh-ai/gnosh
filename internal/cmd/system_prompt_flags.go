@@ -13,14 +13,14 @@ import (
 // --append-system-prompt, each with a -file form; read them with
 // systemPromptFlags.
 func addSystemPromptFlags(cmd *cobra.Command) {
-	cmd.Flags().String("system-prompt", "", "Instructions to use in place of Crash's own; the environment, skills and context files (CRASH.md, AGENTS.md) are kept")
+	cmd.Flags().String("system-prompt", "", "Instructions to use in place of Klash's own; the environment, skills and context files (KLASH.md, AGENTS.md) are kept")
 	cmd.Flags().String("system-prompt-file", "", "Read the --system-prompt instructions from a file")
 	cmd.Flags().String("append-system-prompt", "", "Text to add at the end of the system prompt")
 	cmd.Flags().String("append-system-prompt-file", "", "Read text to add at the end of the system prompt from a file")
 	cmd.MarkFlagsMutuallyExclusive("system-prompt", "system-prompt-file")
 }
 
-// systemPromptFlags returns the instructions that replace Crash's own and
+// systemPromptFlags returns the instructions that replace Klash's own and
 // the text to add at the end of the system prompt, from cmd's system
 // prompt flags. Both append flags may be given; the file's text comes
 // second. A command without the flags names neither.

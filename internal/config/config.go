@@ -21,12 +21,12 @@ import (
 	"github.com/invopop/jsonschema"
 )
 
-// The program is being renamed from Crush to Crash. Its directories and
+// The program is being renamed from Crush to Klash. Its directories and
 // config files take the new name, but where only the one from before the
 // rename exists, that one is used (see fsext.FirstExisting), so existing
 // setups and their sessions keep working without being moved.
 const (
-	appName              = "crash"
+	appName              = "klash"
 	legacyAppName        = "crush"
 	defaultDataDirectory = "." + appName
 	legacyDataDirectory  = "." + legacyAppName
@@ -41,12 +41,12 @@ var defaultContextPaths = []string{
 	"CLAUDE.local.md",
 	"GEMINI.md",
 	"gemini.md",
-	"crash.md",
-	"crash.local.md",
-	"Crash.md",
-	"Crash.local.md",
-	"CRASH.md",
-	"CRASH.local.md",
+	"klash.md",
+	"klash.local.md",
+	"Klash.md",
+	"Klash.local.md",
+	"KLASH.md",
+	"KLASH.local.md",
 	"crush.md",
 	"crush.local.md",
 	"Crush.md",
@@ -277,7 +277,7 @@ type MCPConfig struct {
 	//
 	// When nil, Crush auto-detects a set of known sessionless servers (see
 	// IsSessionless); set it explicitly to override that detection.
-	Sessionless *bool `json:"sessionless,omitempty" jsonschema:"description=Mark a sessionless MCP server (no Mcp-Session-Id) so Crash skips the subscriptions/listen stream it would otherwise reject. Leave unset to auto-detect known sessionless servers (e.g. GitHub MCP),default=false"`
+	Sessionless *bool `json:"sessionless,omitempty" jsonschema:"description=Mark a sessionless MCP server (no Mcp-Session-Id) so Klash skips the subscriptions/listen stream it would otherwise reject. Leave unset to auto-detect known sessionless servers (e.g. GitHub MCP),default=false"`
 
 	// Headers are HTTP headers for HTTP/SSE MCP servers. Values run
 	// through shell expansion at MCP startup, so $VAR and $(cmd)
@@ -388,7 +388,7 @@ type TUIOptions struct {
 	Transparent *bool       `json:"transparent,omitempty" jsonschema:"description=Enable transparent background for the TUI interface,default=false"`
 	Scrollbar   string      `json:"scrollbar,omitempty" jsonschema:"description=Chat scrollbar visibility,enum=default,enum=always,enum=never,default=default"`
 	Mouse       *bool       `json:"mouse,omitempty" jsonschema:"description=Enable terminal mouse capture for selection\\, clicks\\, and scrolling in the TUI. Disable to let the terminal emulator or tmux handle text selection and copy/paste,default=true"`
-	ExitBanner  ExitBanner  `json:"exit_banner,omitempty" jsonschema:"description=Exit banner style after quitting Crash,enum=default,enum=compact,enum=none,default=default"`
+	ExitBanner  ExitBanner  `json:"exit_banner,omitempty" jsonschema:"description=Exit banner style after quitting Klash,enum=default,enum=compact,enum=none,default=default"`
 }
 
 // IsTransparent reports whether the TUI draws a transparent background. The
@@ -484,7 +484,7 @@ const (
 type Attribution struct {
 	TrailerStyle  TrailerStyle `json:"trailer_style,omitempty" jsonschema:"description=Style of attribution trailer to add to commits,enum=none,enum=co-authored-by,enum=assisted-by,default=assisted-by"`
 	CoAuthoredBy  *bool        `json:"co_authored_by,omitempty" jsonschema:"description=Deprecated: use trailer_style instead"`
-	GeneratedWith bool         `json:"generated_with,omitempty" jsonschema:"description=Add Generated with Crash line to commit messages and issues and PRs,default=true"`
+	GeneratedWith bool         `json:"generated_with,omitempty" jsonschema:"description=Add Generated with Klash line to commit messages and issues and PRs,default=true"`
 }
 
 // JSONSchemaExtend marks the co_authored_by field as deprecated in the schema.
@@ -511,7 +511,7 @@ type Options struct {
 	// verbatim. After defaulting the stored value is always absolute.
 	DataDirectory             string       `json:"data_directory,omitempty" jsonschema:"description=Directory for storing application data. Relative paths are resolved against the working directory; absolute paths are used as-is.,default=.crush,example=.crush"`
 	DisabledTools             []string     `json:"disabled_tools,omitempty" jsonschema:"description=List of built-in tools to disable and hide from the agent,example=bash,example=sourcegraph"`
-	DisableProviderAutoUpdate *bool        `json:"disable_provider_auto_update,omitempty" jsonschema:"description=Disable fetching the provider catalog from Charm's servers (catwalk.charm.land and hyper.charm.land). Unset it is not fetched and the catalog built into Crash is used; set false to fetch it,default=true"`
+	DisableProviderAutoUpdate *bool        `json:"disable_provider_auto_update,omitempty" jsonschema:"description=Disable fetching the provider catalog from Charm's servers (catwalk.charm.land and hyper.charm.land). Unset it is not fetched and the catalog built into Klash is used; set false to fetch it,default=true"`
 	DisableDefaultProviders   bool         `json:"disable_default_providers,omitempty" jsonschema:"description=Ignore all default/embedded providers. When enabled\\, providers must be fully specified in the config file with base_url\\, models\\, and api_key - no merging with defaults occurs,default=false"`
 	Attribution               *Attribution `json:"attribution,omitempty" jsonschema:"description=Attribution settings for generated content"`
 	DisableMetrics            *bool        `json:"disable_metrics,omitempty" jsonschema:"description=Disable sending usage metrics to Charm's analytics (data.charm.land). Unset none are sent; set false to send them,default=true"`
@@ -519,7 +519,7 @@ type Options struct {
 	AutoLSP                   *bool        `json:"auto_lsp,omitempty" jsonschema:"description=Automatically setup LSPs based on root markers,default=true"`
 	Progress                  *bool        `json:"progress,omitempty" jsonschema:"description=Show indeterminate progress updates during long operations,default=true"`
 	Notifications             string       `json:"notifications,omitempty" jsonschema:"description=Notification style to use. Options: auto (default)\\, native\\, osc\\, bell\\, disabled. Auto selects based on environment: native for local sessions\\, osc for SSH (with automatic OSC 99/777 detection).,enum=auto,enum=native,enum=osc,enum=bell,enum=disabled,default=auto"`
-	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=crash-config"`
+	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=klash-config"`
 	RequestTimeout            *int         `json:"request_timeout,omitempty" jsonschema:"description=Timeout in seconds for each LLM API request. Streaming responses are aborted only after this much inactivity\\, so slow but active streams are never killed. 0 disables it\\, negative values are invalid.,default=60,example=120,example=300,example=0"`
 	MaxBackgroundJobs         *int         `json:"max_background_jobs,omitempty" jsonschema:"description=How many background shell jobs may run at once. Jobs that have finished never count against it. 0 or negative restores the default.,default=50,example=10,example=200"`
 	LoopMaxTurns              *int         `json:"loop_max_turns,omitempty" jsonschema:"description=An optional hard cap on how many turns /loop may drive. Unset (or 0 or negative) means no cap: every 25 turns the agent is asked whether it has a genuine reason to stop and otherwise keeps going.,example=200"`
@@ -544,7 +544,7 @@ func (o *Options) GetLoopMaxTurns() int {
 // Charm's servers. Upstream Crush fetches it unless told not to; this fork
 // uses the catalog built into the binary unless the user asks for the
 // fetch (option provider-auto-update true, or
-// CRASH_DISABLE_PROVIDER_AUTO_UPDATE=0).
+// KLASH_DISABLE_PROVIDER_AUTO_UPDATE=0).
 func (o *Options) ProviderAutoUpdate() bool {
 	return o != nil && o.DisableProviderAutoUpdate != nil && !*o.DisableProviderAutoUpdate
 }

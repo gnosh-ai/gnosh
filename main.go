@@ -15,17 +15,17 @@ import (
 )
 
 func main() {
-	if setting := env.Getenv("CRASH_PROFILE"); setting != "" {
+	if setting := env.Getenv("KLASH_PROFILE"); setting != "" {
 		go servePprof(setting)
 	}
 
 	cmd.Execute()
 }
 
-// pprofDefaultAddr is where CRASH_PROFILE=1 serves pprof.
+// pprofDefaultAddr is where KLASH_PROFILE=1 serves pprof.
 const pprofDefaultAddr = "localhost:6060"
 
-// servePprof serves net/http/pprof for CRASH_PROFILE; see pprofListen.
+// servePprof serves net/http/pprof for KLASH_PROFILE; see pprofListen.
 func servePprof(setting string) {
 	ln, err := pprofListen(setting, pprofDefaultAddr)
 	if err != nil {
@@ -41,7 +41,7 @@ func servePprof(setting string) {
 // pprofListen opens the listener pprof is served on: the host:port that
 // setting names, or else defaultAddr, or, when another process already
 // holds defaultAddr, a free port on localhost. Every crash on a machine
-// asked for the same port, so only the first could be profiled; a crash
+// asked for the same port, so only the first could be profiled; a klash
 // that hung later could not be. Its port is in its log, or in
 // `ss -ltnp | grep pid=<pid>`.
 func pprofListen(setting, defaultAddr string) (net.Listener, error) {

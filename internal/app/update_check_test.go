@@ -17,8 +17,8 @@ func TestUpdateCheckEnabled(t *testing.T) {
 		"false": true,
 		"maybe": false,
 	} {
-		t.Setenv("CRASH_DISABLE_UPDATE_CHECK", value)
+		t.Setenv("KLASH_DISABLE_UPDATE_CHECK", value)
 		t.Setenv("CRUSH_DISABLE_UPDATE_CHECK", "")
-		require.Equal(t, want, updateCheckEnabled(), "CRASH_DISABLE_UPDATE_CHECK=%q", value)
+		require.Equal(t, want, updateCheckEnabled(), "KLASH_DISABLE_UPDATE_CHECK=%q", value)
 	}
 }

@@ -4,7 +4,7 @@
 > This document was designed for both humans and agents.
 
 Hooks are user-defined shell scripts that run when various events happen during
-the agent lifecycle, allowing you to both build on top of Crash, customize
+the agent lifecycle, allowing you to both build on top of Klash, customize
 its behavior, and exert deterministic control over an agent's wily behavior.
 
 Hooks are just shell commands, and were designed to be both simple and future
@@ -15,9 +15,9 @@ forward.
 - Hooks are just shell commands
 - Hooks can be written in any language because they’re just executables: Bash, Python, Node, Rust, Haskell, whatever
 - Hooks are Claude Code-compatible
-- Crash ships with a builtin `crash-hook` skill write, edit, and configure
-  hooks; just tell Crash how to configure Crash
-- Crash supports six hooks: `PreToolUse`, which fires before a tool call,
+- Klash ships with a builtin `klash-hook` skill write, edit, and configure
+  hooks; just tell Klash how to configure Klash
+- Klash supports six hooks: `PreToolUse`, which fires before a tool call,
   `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
   fails, `UserPromptSubmit`, which fires when you send a prompt and can add
   context to it or block it, `Stop`, which fires when the agent is about to
@@ -50,9 +50,9 @@ disallow the use of Haskell (but we love you, Simon Peyton Jones).
 ### Config
 
 The first thing we need to do is hook up our hook. Let's add the following to
-our **project-level** `crash.json`. Relative paths like `./no-haskell.sh` work
+our **project-level** `klash.json`. Relative paths like `./no-haskell.sh` work
 here because the project root is your working directory. If you're configuring
-a global hook (`~/.config/crash/crash.json`), use an absolute path instead.
+a global hook (`~/.config/klash/klash.json`), use an absolute path instead.
 
 ```jsonc
 {
@@ -79,8 +79,8 @@ Now, let's make our `no-haskell.sh` hook script.
 #!/usr/bin/env bash
 
 # Disallow ghc, cabal, and stack. Pipe the bash command output
-# ($CRASH_TOOL_INPUT_COMMAND) to grep and match on a regexp.
-if echo "$CRASH_TOOL_INPUT_COMMAND" | grep -qE '(^| )((ghc|cabal|stack)(\.exe)?)( |$)'; then
+# ($KLASH_TOOL_INPUT_COMMAND) to grep and match on a regexp.
+if echo "$KLASH_TOOL_INPUT_COMMAND" | grep -qE '(^| )((ghc|cabal|stack)(\.exe)?)( |$)'; then
 
   # Someone is trying to use Haskell. Let's send a message back to the model
   # and user explaining why we're blocking this. Note that we send all feedback
@@ -98,7 +98,7 @@ That's basically it. For the full guide on how hooks work, however, read on.
 
 ## Execution model
 
-Hooks run through Crash's embedded POSIX shell (`mvdan.cc/sh`) — the same
+Hooks run through Klash's embedded POSIX shell (`mvdan.cc/sh`) — the same
 interpreter the `bash` tool uses. Inline commands and shebang-less scripts
 execute in-process; scripts with a `#!` shebang dispatch to the named
 interpreter via `os/exec`. This contract is identical on macOS, Linux, and
@@ -118,26 +118,26 @@ What this means in practice:
   `#!/usr/bin/env bash` scripts work on Windows the same way they do on
   Unix. CRLF line endings in the shebang line are tolerated.
 - **Permissive shebang fallback**: if the absolute path in a shebang
-  doesn't exist (e.g. `#!/bin/bash` on Windows), Crash falls back to a
+  doesn't exist (e.g. `#!/bin/bash` on Windows), Klash falls back to a
   `PATH` lookup of the base name (`bash`) before giving up. A debug-level
   log records the fallback. If the interpreter isn't on `PATH` either, the
   hook fails cleanly as a non-blocking warning and the agent proceeds as
   "no opinion".
-- **Environment**: every hook sees `CRASH=1`, `AGENT=crush`, and
-  `AI_AGENT=crush` on top of the `CRASH_*` hook-specific variables. These
+- **Environment**: every hook sees `KLASH=1`, `AGENT=crush`, and
+  `AI_AGENT=crush` on top of the `KLASH_*` hook-specific variables. These
   three markers are guaranteed and match what the `bash` tool sets, so
   scripts that detect "am I being run by an AI agent?" behave the same in
   both contexts.
-- **Timeout behavior**: when a hook exceeds its timeout, Crash cancels the
+- **Timeout behavior**: when a hook exceeds its timeout, Klash cancels the
   context and waits a short grace period (~1s) for the interpreter to
-  yield. If the hook still hasn't returned, Crash abandons it, logs a
+  yield. If the hook still hasn't returned, Klash abandons it, logs a
   warning, and treats the result as "no opinion" so the agent can proceed.
   Long-running work should honor context cancellation or run in a
   subprocess via a shebang.
 
 ## Configuration
 
-Hooks can be added to your `crash.json` (or `.crash.json`) at both the global
+Hooks can be added to your `klash.json` (or `.klash.json`) at both the global
 and project-level, with project level hooks taking precedence.
 
 ```jsonc
@@ -158,17 +158,17 @@ and project-level, with project level hooks taking precedence.
 > [!IMPORTANT]
 > The `command` is resolved relative to your **current working directory** —
 > not relative to the config file. Relative paths like `./hooks/whatever.sh`
-> work fine in project-level `crash.json` because the project root is also
-> your working directory. For **global** config (`~/.config/crash/`),
+> work fine in project-level `klash.json` because the project root is also
+> your working directory. For **global** config (`~/.config/klash/`),
 > however, you must use either an absolute path or an inline command:
 >
 > ```jsonc
-> // Global ~/.config/crash/crash.json
+> // Global ~/.config/klash/klash.json
 > {
 >   "hooks": {
 >     "PreToolUse": [
 >       {
->         "command": "/home/you/.config/crash/hooks/no-haskell.sh"
+>         "command": "/home/you/.config/klash/hooks/no-haskell.sh"
 >         // or use an inline command:
 >         // "command": "echo '{\"decision\":\"allow\"}'"
 >       }
@@ -195,7 +195,7 @@ stuff, and so on.
 
 > [!IMPORTANT]
 > Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
-> `PRE_TOOL_USE` are all errors, not spellings of `PreToolUse`. Crash refuses to
+> `PRE_TOOL_USE` are all errors, not spellings of `PreToolUse`. Klash refuses to
 > start on an event name it doesn't fire, rather than loading a hook that would
 > look configured and silently never run.
 
@@ -233,7 +233,7 @@ feedback — "lint failed on line 12" — and `context` (or Claude Code's
 ```bash
 #!/usr/bin/env bash
 # hooks/gofumpt.sh — format every Go file the agent writes.
-f="$CRASH_TOOL_INPUT_FILE_PATH"
+f="$KLASH_TOOL_INPUT_FILE_PATH"
 [[ "$f" == *.go ]] || exit 0
 if ! out=$(gofumpt -w "$f" 2>&1); then
   echo "gofumpt failed on $f: $out" >&2
@@ -242,7 +242,7 @@ fi
 ```
 
 **Formatters**: a hook that changes the file the agent just wrote would make
-the agent's next edit of it fail as "modified since it was last read". Crash
+the agent's next edit of it fail as "modified since it was last read". Klash
 records a fresh read of the file instead, and tells the model the hook changed
 it, so it can view it again before editing near what changed. Claude Code does
 the same.
@@ -271,7 +271,7 @@ hook is a config error, and every configured hook runs.
 
 **Context**: whatever the hook prints on stdout, as plain text, is what the
 agent reads after your prompt, inside a `<user-prompt-submit-hook>` tag, as in
-Claude Code. JSON output works too: Crash's `context`, or Claude Code's
+Claude Code. JSON output works too: Klash's `context`, or Claude Code's
 `hookSpecificOutput.additionalContext`. The chat shows only what you typed; the
 context is kept with the prompt, so the agent reads the same thing when the
 conversation is rebuilt on a later turn.
@@ -353,12 +353,12 @@ giving up on a counter would defeat the point of the hook. Instead, at every
 whether there is a genuine reason to stop — the task cannot be done as asked,
 it is blocked on something only you can provide or decide, the hook's check
 cannot pass in this environment, or it is repeating itself without progress. If
-it finds one, it explains why and the turn ends, and Crash shows a warning
+it finds one, it explains why and the turn ends, and Klash shows a warning
 quoting its reason and the hook's last objection. Otherwise it keeps working.
 You can always cancel the turn yourself.
 
 A hook that wants to object only once can still stand down on its own:
-`stop_hook_active` in the payload (and `CRASH_STOP_HOOK_ACTIVE` in the
+`stop_hook_active` in the payload (and `KLASH_STOP_HOOK_ACTIVE` in the
 environment) is set when the turn is only still running because an earlier
 `Stop` hook blocked it.
 
@@ -414,24 +414,24 @@ Hooks are keyed by event name. Only `command` is required, and you can omit
 
 ## Building Hooks
 
-When a hook fires, Crash:
+When a hook fires, Klash:
 
 1. Filters hooks whose `matcher` regex matches the tool name (no matcher = match
    all).
 2. Deduplicates by `command` (identical commands run once).
-3. Runs all matching hooks **in parallel** through Crash's embedded POSIX
+3. Runs all matching hooks **in parallel** through Klash's embedded POSIX
    shell (see [Execution model](#execution-model)).
 4. Waits for all to finish (or time out), then aggregates results **in config
    order**: deny wins over allow, allow wins over none; `updated_input` patches
    shallow-merge in order.
 5. Applies the result **before** permission checks. If the aggregated decision
    is `deny`, the tool call is blocked and you never see a permission prompt
-   for it. If it's `allow`, Crash treats that as affirmative pre-approval and
+   for it. If it's `allow`, Klash treats that as affirmative pre-approval and
    also skips the prompt. Silence (no decision) falls through to the normal
    permission flow.
 
 Note that you can omit `matcher` and match in your shell script instead,
-however you'll incur some additional overhead as Crash will still parse and
+however you'll incur some additional overhead as Klash will still parse and
 run each hook.
 
 ### Input
@@ -446,28 +446,28 @@ The available environment variables are:
 
 | Variable                     | Description                                    |
 | ---------------------------- | ---------------------------------------------- |
-| `CRASH`                      | Always `1` when running under Crash.           |
+| `KLASH`                      | Always `1` when running under Klash.           |
 | `AGENT`                      | Always `crush`.                                |
 | `AI_AGENT`                   | Always `crush`.                                |
-| `CRASH_EVENT`                | The hook event name (e.g. `PreToolUse`).       |
-| `CRASH_TOOL_NAME`            | The tool being called (e.g. `bash`). Empty on `Stop`. |
-| `CRASH_SESSION_ID`           | Current session ID.                            |
-| `CRASH_CWD`                  | Working directory.                             |
-| `CRASH_PROJECT_DIR`          | Project root directory.                        |
-| `CRASH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command being run. |
-| `CRASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
-| `CRASH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
-| `CRASH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` when the turn is only still running because an earlier `Stop` hook blocked it, else `0`. |
-| `CRASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, the same as the `trigger` field in the payload. |
+| `KLASH_EVENT`                | The hook event name (e.g. `PreToolUse`).       |
+| `KLASH_TOOL_NAME`            | The tool being called (e.g. `bash`). Empty on `Stop`. |
+| `KLASH_SESSION_ID`           | Current session ID.                            |
+| `KLASH_CWD`                  | Working directory.                             |
+| `KLASH_PROJECT_DIR`          | Project root directory.                        |
+| `KLASH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command being run. |
+| `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
+| `KLASH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
+| `KLASH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` when the turn is only still running because an earlier `Stop` hook blocked it, else `0`. |
+| `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, the same as the `trigger` field in the payload. |
 
-Crash was called Crush, so every `CRASH_` variable above is also set under its
+Klash was called Crush, so every `KLASH_` variable above is also set under its
 `CRUSH_` name (`CRUSH_EVENT`, `CRUSH_TOOL_NAME`, and so on), and `CRUSH=1`
-beside `CRASH=1`. Either works; the `CRUSH_` names stay for hooks written before
+beside `KLASH=1`. Either works; the `CRUSH_` names stay for hooks written before
 the rename. `AGENT` and `AI_AGENT` still say `crush`, since other tools may
 match on that value.
 
-The `CRASH`, `AGENT`, and `AI_AGENT` markers are also set by the `bash`
-tool, so a script can detect "am I running under Crash?" the same way in
+The `KLASH`, `AGENT`, and `AI_AGENT` markers are also set by the `bash`
+tool, so a script can detect "am I running under Klash?" the same way in
 either context.
 
 #### JSON
@@ -511,7 +511,7 @@ command = data.get("tool_input", {}).get("command", "")
 
 ### Output
 
-Hooks communicate back to Crash via **exit code** and `stdout`/`stderr`. The
+Hooks communicate back to Klash via **exit code** and `stdout`/`stderr`. The
 simplest way to do this is to return an error code and print additional context
 to stderr. For example:
 
@@ -611,7 +611,7 @@ EOF
 
 Hooks run in parallel, but their results compose in config order. Whichever hook
 finishes first doesn't get to "win" by virtue of timing; composition is
-deterministic based on the order hooks appear in `crash.json`.
+deterministic based on the order hooks appear in `klash.json`.
 
 When multiple hooks match the same tool call:
 
@@ -628,7 +628,7 @@ When multiple hooks match the same tool call:
 
 ### Timeouts
 
-If a hook exceeds its timeout, Crash cancels its context and treats the
+If a hook exceeds its timeout, Klash cancels its context and treats the
 result as a non-blocking error so the tool call proceeds. The default
 timeout is 60 seconds, as in Claude Code. Shebang-dispatched subprocesses are killed through
 `exec.CommandContext`; in-process hooks get a short grace period to yield
@@ -661,7 +661,7 @@ Prevent the agent from running `rm -rf` in bash:
 # Block rm -rf commands in the bash tool. Otherwise stay silent so the
 # normal permission flow runs.
 
-if echo "$CRASH_TOOL_INPUT_COMMAND" | grep -qE 'rm\s+-(rf|fr)\s+/'; then
+if echo "$KLASH_TOOL_INPUT_COMMAND" | grep -qE 'rm\s+-(rf|fr)\s+/'; then
   echo "Refusing to run rm -rf against root" >&2
   exit 2
 fi
@@ -672,7 +672,7 @@ exit 0
 ### Auto-approve read-only tools
 
 Skip the permission prompt for tools that can't change anything. The hook
-returns `decision: "allow"`, which tells Crash to pre-approve the call:
+returns `decision: "allow"`, which tells Klash to pre-approve the call:
 
 ```jsonc
 {
@@ -695,7 +695,7 @@ risk; consider a more targeted allowlist instead:
 #!/usr/bin/env bash
 # hooks/safe-bash.sh — auto-approve read-only bash commands.
 
-case "$CRASH_TOOL_INPUT_COMMAND" in
+case "$KLASH_TOOL_INPUT_COMMAND" in
   ls*|cat*|grep*|rg*|echo*|pwd*)
     echo '{"decision":"allow"}'
     ;;
@@ -731,7 +731,7 @@ Add a reminder to the model whenever it writes a Go file:
 # Emit context only; stay silent on `decision` so the normal permission
 # prompt still runs for edits/writes.
 
-if [[ "$CRASH_TOOL_INPUT_FILE_PATH" == *.go ]]; then
+if [[ "$KLASH_TOOL_INPUT_FILE_PATH" == *.go ]]; then
   echo '{"context": "Remember: run gofumpt after editing Go files."}'
 else
   echo '{}'
@@ -753,7 +753,7 @@ With no `matcher` this fires for every tool. It exits 0 with no stdout so the
 tool call always proceeds.
 
 ```jsonc
-{ "command": "echo \"$(date -Iseconds) $CRASH_TOOL_NAME\" >> ./tools.log" }
+{ "command": "echo \"$(date -Iseconds) $KLASH_TOOL_NAME\" >> ./tools.log" }
 ```
 
 ### A real-world Example:
@@ -802,20 +802,20 @@ process.stdin.on("end", () => {
 
 ## Claude Code compatibility
 
-Crash hooks are broadly compatible with [Claude Code
+Klash hooks are broadly compatible with [Claude Code
 hooks](https://docs.claude.com/en/docs/claude-code/hooks): the config shape,
 stdin payload, output envelope, and exit codes line up so most Claude Code
-hooks run under Crash unchanged. This document covers the Crash-specific API
+hooks run under Klash unchanged. This document covers the Klash-specific API
 only — anything not documented here isn't guaranteed to work.
 
-Both decision vocabularies are understood. Crash's own top-level `decision`
+Both decision vocabularies are understood. Klash's own top-level `decision`
 is `"allow"` or `"deny"`; Claude Code's is `"approve"` or `"block"`, which is
 how a Claude Code `Stop` hook keeps the agent working. Claude Code's
 `hookSpecificOutput.permissionDecision` of `"allow"`, `"deny"` or `"ask"` is
 read too, where `"ask"` falls through to the normal permission prompt.
 
 Claude Code's other envelope fields are read too. `"continue": false` stops
-everything, as a Crash `halt` does, with `stopReason` as the reason. Top-level
+everything, as a Klash `halt` does, with `stopReason` as the reason. Top-level
 fields count alongside `hookSpecificOutput`, so a `PostToolUse` or `Stop` hook
 that blocks with a top-level `"decision": "block"` and sends `additionalContext`
 in `hookSpecificOutput` gets both; where both give a decision,
@@ -826,7 +826,7 @@ Decision values are matched exactly. Anything else — `"Deny"`, `"denied"`,
 line, or as a warning for a `Stop` hook) rather than quietly treated as no
 opinion. Like any failed hook it does not block, but you will see it.
 
-One intentional divergence: Crash treats `updated_input` as a shallow-merge
+One intentional divergence: Klash treats `updated_input` as a shallow-merge
 patch against the original `tool_input` rather than a full replacement. Keys
 you omit are preserved. See [Output](#output) for details.
 
@@ -920,7 +920,7 @@ The PreToolUse payload, plus what the tool returned:
   // object. What the tool returned. "output" is the text the model reads;
   // "metadata" is the tool's metadata object, when it has one (for bash it
   // includes "exit_code"). Claude Code's tool_response is shaped per tool;
-  // Crash's is this one shape for every tool.
+  // Klash's is this one shape for every tool.
   "tool_response": {
     "output": "ok  	example.com/pkg	0.012s",
     "metadata": { "exit_code": 0 },
@@ -996,7 +996,7 @@ Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
   "trigger": "manual",
 
   // string. The instructions to fold into the summary, as in Claude Code.
-  // Crash has none of its own, so this is always the empty string.
+  // Klash has none of its own, so this is always the empty string.
   "custom_instructions": "",
 }
 ```
@@ -1076,7 +1076,7 @@ PreToolUse-specific rules:
 
 4. `decision` precedence: `deny` > `allow` > `null`. First deny determines the
    outcome; subsequent allows don't override. If the final aggregated decision
-   is `allow`, Crash pre-approves the tool call and skips the permission
+   is `allow`, Klash pre-approves the tool call and skips the permission
    prompt. If it's `null` (no hook allowed), the tool goes through the normal
    permission flow.
 5. `updated_input` patches shallow-merge sequentially against the original

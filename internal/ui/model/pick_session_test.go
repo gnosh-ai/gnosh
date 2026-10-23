@@ -22,7 +22,7 @@ func (w *pickSessionWorkspace) ListSessions(context.Context) ([]session.Session,
 	return w.sessions, w.err
 }
 
-// A bare `crash -r` opens the sessions list as the UI starts, as Claude
+// A bare `klash -r` opens the sessions list as the UI starts, as Claude
 // Code's `claude -r` opens its picker; with no session to pick, it says so
 // instead of opening an empty list.
 func TestStartupSessionPicker(t *testing.T) {
@@ -70,7 +70,7 @@ func TestStartupSessionPickerWaitsOutOnboarding(t *testing.T) {
 
 // A session asked for on the command line is not put behind the question
 // whether to initialize the project: answering it either way dropped the
-// session, so `crash -C` in such a project came up without it.
+// session, so `klash -C` in such a project came up without it.
 func TestStartStateLetsAnAskedForSessionPastTheInitQuestion(t *testing.T) {
 	t.Parallel()
 
