@@ -118,3 +118,17 @@ func TestRunPreCompactEnvCarriesTheTrigger(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "manual\n", string(data))
 }
+
+// custom_instructions belongs to PreCompact: other events' payloads leave
+// it out rather than carry it empty.
+func TestCustomInstructionsOnlyInPreCompactPayloads(t *testing.T) {
+	t.Parallel()
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(BuildPayload(EventPreToolUse, "sess", "/p", "bash", `{"command":"ls"}`), &payload))
+	_, has := payload["custom_instructions"]
+	require.False(t, has)
+
+	require.NoError(t, json.Unmarshal(BuildPreCompactPayload("sess", "/p", PreCompactTriggerAuto), &payload))
+	require.Equal(t, "", payload["custom_instructions"])
+}

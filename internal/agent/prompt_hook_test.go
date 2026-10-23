@@ -436,3 +436,24 @@ func TestRun_PromptIsSentAsItIsRebuilt(t *testing.T) {
 	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: " \n "})
 	require.ErrorIs(t, err, ErrEmptyPrompt, "a prompt of only space is empty")
 }
+
+// A prompt still in its UserPromptSubmit hooks does not stop a summary:
+// IsSessionBusy counts it, but it will queue behind the summary as behind
+// a turn, and the summary at the end of a turn must not fail as busy.
+func TestSummarizeIsNotBlockedByAPromptInItsHooks(t *testing.T) {
+	t.Parallel()
+
+	r := promptHookAgent(t, promptHooks(`sleep 5`))
+	done := make(chan error, 1)
+	go func() {
+		_, err := r.agent.Run(context.Background(), SessionAgentCall{SessionID: r.sessionID, Prompt: "next prompt"})
+		done <- err
+	}()
+	require.Eventually(t, func() bool { return r.agent.isSubmitting(r.sessionID) }, 3*time.Second, 10*time.Millisecond)
+
+	err := r.agent.Summarize(t.Context(), r.sessionID, nil, nil, preCompactTriggerAuto)
+	require.NotErrorIs(t, err, ErrSessionBusy)
+
+	r.agent.Cancel(r.sessionID)
+	<-done
+}

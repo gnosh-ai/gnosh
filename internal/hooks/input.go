@@ -66,8 +66,10 @@ type Payload struct {
 	// payload, as Claude Code's PreCompact input carries them: whether
 	// the user asked for the summary or the context filled up, and the
 	// instructions to fold into it, which Crash has none of.
-	Trigger            string `json:"trigger,omitempty"`
-	CustomInstructions string `json:"custom_instructions"`
+	Trigger string `json:"trigger,omitempty"`
+	// It is a pointer so that it is left out of every other event's
+	// payload, while a PreCompact payload has it even when empty.
+	CustomInstructions *string `json:"custom_instructions,omitempty"`
 }
 
 // ToolResponse is what a tool call returned, as a PostToolUse hook sees
@@ -191,7 +193,7 @@ func BuildPreCompactPayload(sessionID, cwd, trigger string) []byte {
 		CWD:                cwd,
 		ToolInput:          json.RawMessage("{}"),
 		Trigger:            trigger,
-		CustomInstructions: "",
+		CustomInstructions: new(string),
 	})
 }
 

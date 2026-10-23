@@ -1550,7 +1550,12 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 }
 
 func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) error {
-	if a.IsSessionBusy(sessionID) {
+	// A turn running in the session stops a summary. A prompt that is
+	// still in its UserPromptSubmit hooks does not: IsSessionBusy counts
+	// it, and the summary at the end of a turn failed as busy when the
+	// user had just sent another prompt. That prompt queues behind the
+	// summary as it would behind the turn.
+	if a.hasActiveRun(sessionID) {
 		return ErrSessionBusy
 	}
 
