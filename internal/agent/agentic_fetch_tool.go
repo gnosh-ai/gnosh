@@ -112,7 +112,7 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 
 			if params.URL != "" {
 				// URL mode: fetch the URL content first.
-				content, err := tools.FetchURLAndConvert(ctx, client, params.URL)
+				content, err := tools.FetchURLAndConvert(ctx, tools.ApprovedFetchClient(ctx, client, params.URL), params.URL)
 				if err != nil {
 					return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to fetch URL: %s", err)), nil
 				}

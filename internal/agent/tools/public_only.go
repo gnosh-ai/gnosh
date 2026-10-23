@@ -1,10 +1,13 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -64,6 +67,47 @@ func isPublicAddr(addr netip.Addr) bool {
 	}
 	for _, p := range notPublic {
 		if p.Contains(addr) {
+			return false
+		}
+	}
+	return true
+}
+
+// ApprovedFetchClient is the client for fetching a URL the user approved,
+// agentic_fetch's: client itself when the URL names a local or private
+// address, which the user then asked for by name, and else PublicOnly(client),
+// so that a redirect from the approved page to an address on the user's
+// network is refused. The plain client followed it, and the page it led
+// to went into the fetch agent's prompt, for it to pass on in its own
+// fetches.
+func ApprovedFetchClient(ctx context.Context, client *http.Client, rawURL string) *http.Client {
+	if namesLocalAddress(ctx, rawURL) {
+		return client
+	}
+	return PublicOnly(client)
+}
+
+// namesLocalAddress reports whether rawURL's host is a local or private
+// address: localhost, such an IP address, or a name whose every address
+// is one.
+func namesLocalAddress(ctx context.Context, rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Hostname() == "" {
+		return false
+	}
+	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return !isPublicAddr(addr)
+	}
+	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	if err != nil || len(addrs) == 0 {
+		return false
+	}
+	for _, addr := range addrs {
+		if isPublicAddr(addr) {
 			return false
 		}
 	}

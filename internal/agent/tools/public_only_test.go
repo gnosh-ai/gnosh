@@ -47,3 +47,25 @@ func TestPublicOnlyRefusesLocalAddresses(t *testing.T) {
 		require.Truef(t, isPublicAddr(netip.MustParseAddr(addr)), addr)
 	}
 }
+
+// The URL the user approved is fetched with the plain client when it
+// names a local address, which the user asked for by name, and else
+// through PublicOnly, so the page cannot redirect into the user's network.
+func TestApprovedFetchClient(t *testing.T) {
+	t.Parallel()
+
+	for _, u := range []string{"http://127.0.0.1:8080/props", "http://localhost/", "http://LOCALHOST:3000", "http://192.168.1.1/admin", "http://[::1]:9000/", "http://100.100.1.1/"} {
+		require.Truef(t, namesLocalAddress(t.Context(), u), u)
+	}
+	for _, u := range []string{"https://93.184.216.34/", "http://[2606:4700::1111]/", "not a url", "file:///etc/passwd"} {
+		require.Falsef(t, namesLocalAddress(t.Context(), u), u)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, "the page you asked for")
+	}))
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	require.Same(t, client, ApprovedFetchClient(t.Context(), client, srv.URL), "a local URL the user approved is fetched as asked")
+	require.NotSame(t, client, ApprovedFetchClient(t.Context(), client, "https://93.184.216.34/"))
+}
