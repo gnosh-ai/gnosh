@@ -133,6 +133,22 @@ func toolUseID(ctx context.Context) string {
 	return id
 }
 
+// toolAliasesKey is the context key WithToolAliases stores names under.
+type toolAliasesKey struct{}
+
+// WithToolAliases returns a context giving the tool call that hooks run
+// for more names to match against, such as an MCP tool's Claude Code
+// name, mcp__<server>__<tool>, which its own name, mcp_<server>_<tool>,
+// cannot be turned back into: server names have underscores too.
+func WithToolAliases(ctx context.Context, names ...string) context.Context {
+	return context.WithValue(ctx, toolAliasesKey{}, names)
+}
+
+func toolAliases(ctx context.Context) []string {
+	names, _ := ctx.Value(toolAliasesKey{}).([]string)
+	return names
+}
+
 // subAgentKey is the context key WithSubAgent stores a sub-agent under.
 type subAgentKey struct{}
 

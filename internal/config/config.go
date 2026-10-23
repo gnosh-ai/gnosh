@@ -913,8 +913,11 @@ func (t ToolGlob) GetTimeout() time.Duration {
 type HookConfig struct {
 	// Friendly display name shown in the TUI. Falls back to Command when empty.
 	Name string `json:"name,omitempty" jsonschema:"description=Friendly display name shown in the TUI for this hook"`
-	// Regex pattern tested against the tool name. Empty means match all.
-	Matcher string `json:"matcher,omitempty" jsonschema:"description=Regex pattern tested against the tool name. Empty means match all tools."`
+	// Matcher picks the tools (or the SessionStart source, the PreCompact
+	// trigger) the hook runs for, as in Claude Code: empty or "*" for all,
+	// exact names separated by | or , ("Bash", "edit|write"), or else an
+	// unanchored regular expression ("^mcp_github_"). See HookMatcher.
+	Matcher string `json:"matcher,omitempty" jsonschema:"description=Which tools the hook runs for as in Claude Code: empty or * for all; exact names separated by | such as Bash|edit (klash's or Claude Code's names); anything else is an unanchored regular expression."`
 	// Shell command to execute.
 	Command string `json:"command" jsonschema:"required,description=Shell command to execute when the hook fires"`
 	// Timeout in seconds. Default 60, as in Claude Code.

@@ -148,7 +148,7 @@ and project-level, with project level hooks taking precedence.
     "PreToolUse": [
       {
         "name": "no-rm-rf", // friendly name shown in the TUI
-        "matcher": "bash", // regex tested against the tool name
+        "matcher": "bash", // the tool's name; see "Matchers" below
         "command": "./hooks/my-hot-hook.sh", // the path to the hook
         "timeout": 10, // in seconds; default 60, as in Claude Code
       },
@@ -193,7 +193,23 @@ enforce policies, rewrite tool input, inject context the model should see, log
 stuff, and so on.
 
 **Matched against**: the tool name (e.g. `bash`, `edit`, `write`,
-`mcp_github_create_pull_request`).
+`mcp_github_create_pull_request`), and Claude Code's name for the same tool
+(`Bash`, `Edit`, `Write`, `mcp__github__create_pull_request`), so a matcher
+written for Claude Code matches here too.
+
+**Matchers** are read as Claude Code reads them:
+
+- empty, or `*`: every tool;
+- only letters, digits, `_`, `-`, spaces, `,` and `|`: exact names, separated
+  by `|` or `,` (`bash`, `Edit|Write`, `edit, write`). `Edit` does not match
+  `MultiEdit`, and `mcp_github` matches no tool (Klash logs a warning);
+- anything else: a regular expression, unanchored (`^mcp_github_`,
+  `mcp__github__.*`, `Notebook.*`).
+
+Claude Code's names Klash knows: `Agent` and `Task` (agent), `Bash`,
+`BashOutput` (job_output), `Edit`, `Glob`, `Grep`, `KillShell` (job_kill),
+`LS`, `MultiEdit`, `Read` (view), `TodoWrite` (todos), `WebFetch` (fetch) and
+`Write`. The payload's `tool_name` is Klash's name, `bash` not `Bash`.
 
 > [!IMPORTANT]
 > Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
@@ -550,8 +566,8 @@ Hooks are keyed by event name. Only `command` is required, and you can omit
 
 When a hook fires, Klash:
 
-1. Filters hooks whose `matcher` regex matches the tool name (no matcher = match
-   all).
+1. Filters hooks whose `matcher` matches the tool's name, or Claude Code's name
+   for it (no matcher, or `*`, matches all; see [Matchers](#pretooluse)).
 2. Deduplicates by `command` (identical commands run once).
 3. Runs all matching hooks **in parallel** through Klash's embedded POSIX
    shell (see [Execution model](#execution-model)).
@@ -992,9 +1008,10 @@ Each entry under a `hooks.<EventName>` array:
   // command when omitted.
   "name": "no-rm-rf",
 
-  // string. Optional. Regex tested against the tool name, or against the
-  // PreCompact trigger, or against the SessionStart source. Omit to match
-  // all.
+  // string. Optional. Tested against the tool name (Klash's or Claude
+  // Code's), or against the PreCompact trigger, or against the SessionStart
+  // source, as in Claude Code: exact names separated by | or ,, or else a
+  // regular expression. Omit it, or use *, to match all.
   // A matcher on a Stop or UserPromptSubmit hook is a config error,
   // because there is nothing to match when a turn ends or a prompt is
   // sent.

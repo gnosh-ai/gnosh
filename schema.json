@@ -119,7 +119,7 @@
         },
         "matcher": {
           "type": "string",
-          "description": "Regex pattern tested against the tool name. Empty means match all tools."
+          "description": "Which tools the hook runs for as in Claude Code: empty or * for all; exact names separated by | such as Bash|edit (klash's or Claude Code's names); anything else is an unanchored regular expression."
         },
         "command": {
           "type": "string",

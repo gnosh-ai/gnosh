@@ -1,6 +1,10 @@
 package config
 
-import "slices"
+import (
+	"regexp"
+	"slices"
+	"strings"
+)
 
 // Hook event names. These are the only keys Crush recognises under the
 // `hooks` object in crush.json. An unrecognised key is a config error,
@@ -75,4 +79,70 @@ func IsKnownHookEvent(name string) bool {
 // against its trigger; SessionStart against its source.
 func HookEventSupportsMatcher(event string) bool {
 	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventSessionStart
+}
+
+// HookMatcher is a hook's matcher read as Claude Code reads one: "*" (or
+// "") matches everything; one made only of letters, digits, '_', '-',
+// spaces, ',' and '|' is a list of exact names, split at '|' and ',' (so
+// "Edit|Write" is two names, and "Edit" does not match "MultiEdit"); and
+// anything else is a regular expression, unanchored ("^Edit$",
+// "mcp__github__.*"). A nil *HookMatcher matches everything.
+type HookMatcher struct {
+	names []string       // the exact names, when not a regular expression
+	re    *regexp.Regexp // the regular expression, when it is one
+}
+
+// exactHookMatcher is what a matcher of exact names is made of.
+var exactHookMatcher = regexp.MustCompile(`^[A-Za-z0-9_\- ,|]+$`)
+
+// CompileHookMatcher reads a hook's matcher, as HookMatcher says; nil for
+// one that matches everything, and an error for a regular expression that
+// does not compile.
+func CompileHookMatcher(matcher string) (*HookMatcher, error) {
+	if s := strings.TrimSpace(matcher); s == "" || s == "*" {
+		return nil, nil
+	}
+	if exactHookMatcher.MatchString(matcher) {
+		var names []string
+		for _, name := range strings.FieldsFunc(matcher, func(r rune) bool { return r == '|' || r == ',' }) {
+			if name = strings.TrimSpace(name); name != "" {
+				names = append(names, name)
+			}
+		}
+		return &HookMatcher{names: names}, nil
+	}
+	re, err := regexp.Compile(matcher)
+	if err != nil {
+		return nil, err
+	}
+	return &HookMatcher{re: re}, nil
+}
+
+// Matches reports whether the matcher matches any of names: a tool's
+// names, say, its own and Claude Code's for it.
+func (m *HookMatcher) Matches(names ...string) bool {
+	if m == nil {
+		return true
+	}
+	for _, name := range names {
+		switch {
+		case name == "":
+		case m.re != nil:
+			if m.re.MatchString(name) {
+				return true
+			}
+		case slices.Contains(m.names, name):
+			return true
+		}
+	}
+	return false
+}
+
+// Names are the exact names the matcher is a list of, none for a
+// regular expression or one that matches everything.
+func (m *HookMatcher) Names() []string {
+	if m == nil {
+		return nil
+	}
+	return slices.Clone(m.names)
 }

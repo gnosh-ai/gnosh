@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -1747,8 +1746,9 @@ func (c *Config) ValidateModels() error {
 }
 
 // ValidateHooks checks that every configured hook is filed under an
-// event Crush actually fires and has a command, and that any matcher is
-// a syntactically valid regex. Event names are matched exactly: an
+// event Crush actually fires and has a command, and that any matcher
+// compiles (see HookMatcher); it logs a warning for a tool event's
+// matcher that names no tool there can be. Event names are matched exactly: an
 // unrecognised name is an error rather than a key nothing ever reads,
 // so a typo surfaces at load time instead of leaving a hook that looks
 // configured and silently never runs. Matcher compilation used for
@@ -1767,7 +1767,8 @@ func (c *Config) ValidateHooks() error {
 			if h.Command == "" {
 				return fmt.Errorf("hook %s[%d]: command is required", event, i)
 			}
-			if h.Matcher == "" {
+			// "*" matches everything, as no matcher does, as in Claude Code.
+			if m := strings.TrimSpace(h.Matcher); m == "" || m == "*" {
 				continue
 			}
 			if !HookEventSupportsMatcher(event) {
@@ -1776,10 +1777,36 @@ func (c *Config) ValidateHooks() error {
 					event, i, event,
 				)
 			}
-			if _, err := regexp.Compile(h.Matcher); err != nil {
+			m, err := CompileHookMatcher(h.Matcher)
+			if err != nil {
 				return fmt.Errorf("hook %s[%d]: invalid matcher regex %q: %w", event, i, h.Matcher, err)
+			}
+			if event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure {
+				for _, name := range m.Names() {
+					if !namesSomeTool(name) {
+						slog.Warn("A hook's matcher names no tool, so it matches nothing; a name is matched exactly, and a regular expression such as mcp_github_.* matches a server's tools",
+							"event", event, "matcher", h.Matcher, "name", name)
+					}
+				}
 			}
 		}
 	}
 	return nil
+}
+
+// namesSomeTool reports whether an exact matcher name can be a tool's: a
+// built-in tool's own name, its name before the rename or Claude Code's
+// name for it; or an MCP tool's whole name, mcp_<server>_<tool> or Claude
+// Code's mcp__<server>__<tool>, which is not checked further, since MCP
+// servers' tools come and go.
+func namesSomeTool(name string) bool {
+	if tooldefs.IsKnown(name) || tooldefs.FromClaudeCode(name) != "" {
+		return true
+	}
+	rest, ok := strings.CutPrefix(name, tooldefs.MCPPrefix)
+	if !ok {
+		return false
+	}
+	server, tool, ok := strings.Cut(strings.TrimPrefix(rest, "_"), "_")
+	return ok && server != "" && strings.TrimPrefix(tool, "_") != ""
 }

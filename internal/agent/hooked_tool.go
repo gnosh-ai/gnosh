@@ -73,6 +73,13 @@ func (h *hookedTool) SetProviderOptions(opts fantasy.ProviderOptions) {
 func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 	sessionID := tools.GetSessionFromContext(ctx)
 	ctx = hooks.WithToolUseID(ctx, call.ID)
+	// An MCP tool's matchers also see its Claude Code name.
+	if m, ok := h.inner.(interface {
+		MCP() string
+		MCPToolName() string
+	}); ok {
+		ctx = hooks.WithToolAliases(ctx, "mcp__"+m.MCP()+"__"+m.MCPToolName())
+	}
 	var result hooks.AggregateResult
 	if h.hooks.pre != nil {
 		var err error
