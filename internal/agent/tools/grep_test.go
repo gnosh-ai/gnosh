@@ -121,9 +121,11 @@ func TestGrepWithIgnoreFiles(t *testing.T) {
 
 	// Test both implementations
 	for name, fn := range map[string]func(pattern, path, include string) ([]grepMatch, error){
-		"regex": searchFilesWithRegex,
+		"regex": func(pattern, path, include string) ([]grepMatch, error) {
+			return searchFilesWithRegex(pattern, path, grepOptions{include: include}, 200)
+		},
 		"rg": func(pattern, path, include string) ([]grepMatch, error) {
-			return searchWithRipgrep(t.Context(), pattern, path, include)
+			return searchWithRipgrep(t.Context(), pattern, path, grepOptions{include: include})
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -181,9 +183,11 @@ func TestSearchImplementations(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".crushignore"), []byte("file5.txt\n"), 0o644))
 
 	for name, fn := range map[string]func(pattern, path, include string) ([]grepMatch, error){
-		"regex": searchFilesWithRegex,
+		"regex": func(pattern, path, include string) ([]grepMatch, error) {
+			return searchFilesWithRegex(pattern, path, grepOptions{include: include}, 200)
+		},
 		"rg": func(pattern, path, include string) ([]grepMatch, error) {
-			return searchWithRipgrep(t.Context(), pattern, path, include)
+			return searchWithRipgrep(t.Context(), pattern, path, grepOptions{include: include})
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -437,9 +441,11 @@ func TestMultipleMatchesPerFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "file.txt"), []byte(content), 0o644))
 
 	for name, fn := range map[string]func(pattern, path, include string) ([]grepMatch, error){
-		"regex": searchFilesWithRegex,
+		"regex": func(pattern, path, include string) ([]grepMatch, error) {
+			return searchFilesWithRegex(pattern, path, grepOptions{include: include}, 200)
+		},
 		"rg": func(pattern, path, include string) ([]grepMatch, error) {
-			return searchWithRipgrep(t.Context(), pattern, path, include)
+			return searchWithRipgrep(t.Context(), pattern, path, grepOptions{include: include})
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -469,9 +475,11 @@ func TestColumnMatch(t *testing.T) {
 
 	// Test both implementations
 	for name, fn := range map[string]func(pattern, path, include string) ([]grepMatch, error){
-		"regex": searchFilesWithRegex,
+		"regex": func(pattern, path, include string) ([]grepMatch, error) {
+			return searchFilesWithRegex(pattern, path, grepOptions{include: include}, 200)
+		},
 		"rg": func(pattern, path, include string) ([]grepMatch, error) {
-			return searchWithRipgrep(t.Context(), pattern, path, include)
+			return searchWithRipgrep(t.Context(), pattern, path, grepOptions{include: include})
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -575,7 +583,7 @@ func TestSearchFilesFallsBackToRegexWhenRipgrepMissing(t *testing.T) {
 
 	setRipgrepForTest(t, "")
 
-	matches, _, err := searchFiles(t.Context(), "hello", dir, "", 100)
+	matches, _, err := searchFiles(t.Context(), "hello", dir, grepOptions{}, 100)
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
 }
@@ -588,7 +596,7 @@ func TestSearchFilesReportsRipgrepFailure(t *testing.T) {
 
 	setRipgrepForTest(t, fakeRipgrep(t, "", "", 2))
 
-	_, _, err := searchFiles(t.Context(), "hello", dir, "", 100)
+	_, _, err := searchFiles(t.Context(), "hello", dir, grepOptions{}, 100)
 	require.Error(t, err)
 }
 
@@ -598,7 +606,7 @@ func TestSearchFilesReportsMissingPath(t *testing.T) {
 	setRipgrepForTest(t, "")
 
 	missing := filepath.Join(dir, "no-such-dir")
-	_, _, err := searchFiles(t.Context(), "hello", missing, "", 100)
+	_, _, err := searchFiles(t.Context(), "hello", missing, grepOptions{}, 100)
 	require.Error(t, err)
 }
 
@@ -612,7 +620,7 @@ func TestSearchFilesKeepsMatchesWhenRipgrepCouldNotReadAFile(t *testing.T) {
 		"\n" + `{"type":"summary","data":{}}` + "\n"
 	setRipgrepForTest(t, fakeRipgrep(t, stdout, "rg: "+dir+"/locked: Permission denied (os error 13)\n", 2))
 
-	matches, _, err := searchFiles(t.Context(), "hello", dir, "", 100)
+	matches, _, err := searchFiles(t.Context(), "hello", dir, grepOptions{}, 100)
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
 	require.Equal(t, file, matches[0].path)
@@ -625,7 +633,7 @@ func TestSearchFilesReportsRipgrepsMessage(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644))
 	setRipgrepForTest(t, fakeRipgrep(t, "", "rg: regex parse error:\n    (?:func (s)\n    ^\nerror: unclosed group\n", 2))
 
-	_, _, err := searchFiles(t.Context(), "func (s", dir, "", 100)
+	_, _, err := searchFiles(t.Context(), "func (s", dir, grepOptions{}, 100)
 	require.ErrorContains(t, err, "unclosed group")
 }
 
@@ -640,27 +648,27 @@ func TestSearchFilesWithTheRealRipgrep(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("func (s *Server) Start()\n"), 0o644))
 
-	_, _, err = searchFiles(t.Context(), "func (s", dir, "", 100)
+	_, _, err = searchFiles(t.Context(), "func (s", dir, grepOptions{}, 100)
 	require.ErrorContains(t, err, "unclosed group", "a pattern ripgrep rejects is reported with its message")
 
-	matches, _, err := searchFiles(t.Context(), `func \(s`, dir, "", 100)
+	matches, _, err := searchFiles(t.Context(), `func \(s`, dir, grepOptions{}, 100)
 	require.NoError(t, err)
 	require.Len(t, matches, 1)
 
-	matches, _, err = searchFiles(t.Context(), `(?i)FUNC \(S`, dir, "", 100)
+	matches, _, err = searchFiles(t.Context(), `(?i)FUNC \(S`, dir, grepOptions{}, 100)
 	require.NoError(t, err)
 	require.Len(t, matches, 1, "the inline flag that ignore_case adds works in ripgrep too")
 
-	_, _, err = searchFiles(t.Context(), "x", filepath.Join(dir, "missing"), "", 100)
+	_, _, err = searchFiles(t.Context(), "x", filepath.Join(dir, "missing"), grepOptions{}, 100)
 	require.Error(t, err, "a missing path is an error, not an empty result")
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.php"), []byte("$user->getName();\nrun --force\n"), 0o644))
 	for _, pattern := range []string{"->getName", "--force"} {
-		matches, _, err = searchFiles(t.Context(), pattern, dir, "", 100)
+		matches, _, err = searchFiles(t.Context(), pattern, dir, grepOptions{}, 100)
 		require.NoError(t, err, "a pattern starting with a dash is searched for, not read as an option")
 		require.Len(t, matches, 1, pattern)
 	}
-	matches, _, err = searchFiles(t.Context(), "Start|getName", dir, "*.php", 100)
+	matches, _, err = searchFiles(t.Context(), "Start|getName", dir, grepOptions{include: "*.php"}, 100)
 	require.NoError(t, err)
 	require.Len(t, matches, 1, "include still filters: a.txt's Start is left out")
 }
@@ -687,4 +695,156 @@ func TestGrepIgnoreCase(t *testing.T) {
 	require.Contains(t, grep(GrepParams{Pattern: "HELLO, (world)", IgnoreCase: true, LiteralText: true}), "No files found",
 		"literal text stays literal: the parentheses are not in the file")
 	require.Contains(t, grep(GrepParams{Pattern: "HELLO, WORLD", IgnoreCase: true, LiteralText: true}), "Found 1 matches")
+}
+
+// grepRaw runs the grep tool on dir with the raw JSON a model sends,
+// Claude Code's parameter names and all.
+func grepRaw(t *testing.T, dir, input string) fantasy.ToolResponse {
+	t.Helper()
+	resp, err := NewGrepTool(dir, config.ToolGrep{}).Run(t.Context(), fantasy.ToolCall{ID: "grep-call", Name: GrepToolName, Input: input})
+	require.NoError(t, err)
+	return resp
+}
+
+// claudeCodeGrepDir writes the files the tests of Claude Code's grep
+// parameters search.
+func claudeCodeGrepDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.go"), []byte("one\ntwo\nthree\nfour\nfive\nsix three\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.txt"), []byte("Three\n"), 0o644))
+	return dir
+}
+
+// grepContent runs the grep tool on dir with input and returns what it
+// answered, which must not be an error.
+func grepContent(t *testing.T, dir, input string) string {
+	t.Helper()
+	resp := grepRaw(t, dir, input)
+	require.False(t, resp.IsError, resp.Content)
+	return resp.Content
+}
+
+// checkClaudeCodeGrep checks Claude Code's Grep parameters on a
+// claudeCodeGrepDir, whichever engine searches. A model used to them
+// sends -A, -B and -C for the lines around a match, glob and -i for
+// include and ignore_case, output_mode to list the files or count the
+// matching lines, and head_limit to cap the results. They were dropped
+// without a word.
+func checkClaudeCodeGrep(t *testing.T, dir string) {
+	t.Helper()
+	content := func(input string) string { return grepContent(t, dir, input) }
+
+	require.Contains(t, content(`{"pattern": "three", "glob": "*.go", "-C": 1}`),
+		"  Line 2- two\n  Line 3, Char 1: three\n  Line 4- four\n  Line 5- five\n  Line 6, Char 5: six three\n")
+	after := content(`{"pattern": "^three", "glob": "*.go", "-A": 1}`)
+	require.Contains(t, after, "  Line 3, Char 1: three\n  Line 4- four\n")
+	require.NotContains(t, after, "Line 2-")
+	require.Contains(t, content(`{"pattern": "one|five", "glob": "*.go", "-A": 1}`),
+		"  Line 1, Char 1: one\n  Line 2- two\n  --\n  Line 5, Char 1: five\n  Line 6- six three\n")
+	require.Contains(t, content(`{"pattern": "four", "glob": "*.go", "-B": 2}`),
+		"  Line 2- two\n  Line 3- three\n  Line 4, Char 1: four\n")
+
+	require.Contains(t, content(`{"pattern": "three", "-i": true}`), "Found 3 matches")
+	require.Contains(t, content(`{"pattern": "three", "-i": true, "glob": "*.txt"}`), "Found 1 matches")
+	files := content(`{"pattern": "three", "-i": true, "output_mode": "files_with_matches"}`)
+	require.Contains(t, files, "Found 2 files\n")
+	require.Contains(t, files, filepath.ToSlash(filepath.Join(dir, "b.txt"))+"\n")
+	require.NotContains(t, files, "Line ")
+	counts := content(`{"pattern": "three", "-i": true, "output_mode": "count"}`)
+	require.Contains(t, counts, "Found 3 matches in 2 files\n")
+	require.Contains(t, counts, filepath.ToSlash(filepath.Join(dir, "a.go"))+": 2\n")
+
+	limited := content(`{"pattern": "three", "glob": "*.go", "head_limit": 1}`)
+	require.Contains(t, limited, "Found 1 matches")
+	require.Contains(t, limited, "(Results are truncated.")
+
+	bad := grepRaw(t, dir, `{"pattern": "three", "output_mode": "lines"}`)
+	require.True(t, bad.IsError)
+	require.Contains(t, bad.Content, `output_mode "lines"`)
+}
+
+// Without ripgrep, as in tests, the Go walker takes Claude Code's grep
+// parameters, and says type needs ripgrep.
+func TestGrepTakesClaudeCodesParameters(t *testing.T) {
+	t.Parallel()
+
+	dir := claudeCodeGrepDir(t)
+	checkClaudeCodeGrep(t, dir)
+	require.Contains(t, grepRaw(t, dir, `{"pattern": "three", "type": "go"}`).Content, "need ripgrep")
+}
+
+// With ripgrep the same holds, the context is the walker's line for line,
+// and type and multiline, which only ripgrep does, work.
+func TestGrepTakesClaudeCodesParametersWithTheRealRipgrep(t *testing.T) {
+	rg, err := exec.LookPath("rg")
+	if err != nil {
+		t.Skip("rg is not installed")
+	}
+	setRipgrepForTest(t, rg)
+	dir := claudeCodeGrepDir(t)
+	checkClaudeCodeGrep(t, dir)
+
+	opts := grepOptions{before: 1, after: 1}
+	fromRipgrep, err := searchWithRipgrep(t.Context(), "three", dir, opts)
+	require.NoError(t, err)
+	fromWalker, err := searchFilesWithRegex("three", dir, opts, 100)
+	require.NoError(t, err)
+	require.Equal(t, lineKinds(fromWalker), lineKinds(fromRipgrep))
+
+	require.Contains(t, grepContent(t, dir, `{"pattern": "three", "type": "go", "-i": true}`), "Found 2 matches")
+	require.Contains(t, grepContent(t, dir, `{"pattern": "two\\nthree", "multiline": true, "glob": "*.go"}`),
+		"  Line 2, Char 1: two\n  Line 3: three\n")
+}
+
+// lineKinds is each line's number and whether it matched, to compare
+// two searches.
+func lineKinds(lines []grepMatch) []string {
+	var kinds []string
+	for _, l := range lines {
+		kind := "match"
+		if l.context {
+			kind = "context"
+		}
+		kinds = append(kinds, fmt.Sprintf("%s:%d %s", filepath.Base(l.path), l.lineNum, kind))
+	}
+	return kinds
+}
+
+// The walker shows each context line once, however many matches it is
+// near, and no line past the end of a file.
+func TestSearchFilesWithRegexContext(t *testing.T) {
+	t.Parallel()
+
+	dir := claudeCodeGrepDir(t)
+	lines, err := searchFilesWithRegex("three", dir, grepOptions{before: 1, after: 1}, 100)
+	require.NoError(t, err)
+	require.Equal(t, []string{"a.go:2 context", "a.go:3 match", "a.go:4 context", "a.go:5 context", "a.go:6 match"}, lineKinds(lines))
+}
+
+// Cut at head_limit, a kept match keeps the context that runs on from
+// it, and the context of the first match left out goes with it.
+func TestFirstMatchesKeepsContextWithItsMatch(t *testing.T) {
+	t.Parallel()
+
+	line := func(n int, context bool) grepMatch {
+		return grepMatch{path: "a.go", lineNum: n, lineText: "x", context: context}
+	}
+	lines := []grepMatch{line(2, true), line(3, false), line(4, true), line(9, true), line(10, false), line(11, true)}
+	kept, truncated := firstMatches(lines, 1)
+	require.True(t, truncated)
+	require.Equal(t, lines[:3], kept)
+	kept, truncated = firstMatches(lines, 2)
+	require.False(t, truncated)
+	require.Equal(t, lines, kept)
+}
+
+// The tool's schema offers Claude Code's names, so a model sees them.
+func TestGrepSchemaHasClaudeCodesNames(t *testing.T) {
+	t.Parallel()
+
+	params := NewGrepTool(t.TempDir(), config.ToolGrep{}).Info().Parameters
+	for _, name := range []string{"-A", "-B", "-C", "-i", "glob", "type", "output_mode", "head_limit", "multiline"} {
+		require.Contains(t, params, name)
+	}
 }

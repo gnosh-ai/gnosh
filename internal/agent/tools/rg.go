@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -46,7 +47,7 @@ func getRgCmd(ctx context.Context, globPattern string) *exec.Cmd {
 	return exec.CommandContext(ctx, name, args...)
 }
 
-func getRgSearchCmd(ctx context.Context, pattern, path, include string) *exec.Cmd {
+func getRgSearchCmd(ctx context.Context, pattern, path string, opts grepOptions) *exec.Cmd {
 	name := getRg()
 	if name == "" {
 		return nil
@@ -56,8 +57,20 @@ func getRgSearchCmd(ctx context.Context, pattern, path, include string) *exec.Cm
 	// pattern such as "->getName" or "--force" is searched for rather than
 	// read as an option.
 	args := []string{"--json", "-H", "-n", "-0", "-e", pattern}
-	if include != "" {
-		args = append(args, "--glob="+include)
+	if opts.include != "" {
+		args = append(args, "--glob="+opts.include)
+	}
+	if opts.fileType != "" {
+		args = append(args, "--type="+opts.fileType)
+	}
+	if opts.before > 0 {
+		args = append(args, "--before-context="+strconv.Itoa(opts.before))
+	}
+	if opts.after > 0 {
+		args = append(args, "--after-context="+strconv.Itoa(opts.after))
+	}
+	if opts.multiline {
+		args = append(args, "--multiline", "--multiline-dotall")
 	}
 	args = append(args, "--", path)
 

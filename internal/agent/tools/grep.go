@@ -3,6 +3,7 @@ package tools
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -67,12 +68,39 @@ var (
 	globBraceRegex = regexp.MustCompile(`\{([^}]+)\}`)
 )
 
+// GrepParams are the grep tool's parameters, with Claude Code's Grep
+// names beside Klash's own: a model used to those passed glob, -i, -C or
+// output_mode, and they were dropped without a word.
 type GrepParams struct {
-	Pattern     string `json:"pattern" description:"The regex pattern to search for in file contents"`
-	Path        string `json:"path,omitempty" description:"The directory to search in. Defaults to the current working directory."`
-	Include     string `json:"include,omitempty" description:"File pattern to include in the search (e.g. \"*.js\", \"*.{ts,tsx}\")"`
-	LiteralText bool   `json:"literal_text,omitempty" description:"If true, the pattern will be treated as literal text with special regex characters escaped. Default is false."`
-	IgnoreCase  bool   `json:"ignore_case,omitempty" description:"If true, letters match regardless of case, as grep -i. Default is false."`
+	Pattern      string `json:"pattern" description:"The regex pattern to search for in file contents"`
+	Path         string `json:"path,omitempty" description:"The file or directory to search in. Defaults to the current working directory."`
+	Include      string `json:"include,omitempty" description:"File pattern to include in the search (e.g. \"*.js\", \"*.{ts,tsx}\")"`
+	Glob         string `json:"glob,omitempty" description:"The same as include"`
+	Type         string `json:"type,omitempty" description:"File type to search, as ripgrep's --type names it: go, js, py, rust, java, ..."`
+	LiteralText  bool   `json:"literal_text,omitempty" description:"If true, the pattern will be treated as literal text with special regex characters escaped. Default is false."`
+	IgnoreCase   bool   `json:"ignore_case,omitempty" description:"If true, letters match regardless of case, as grep -i. Default is false."`
+	CaseFold     bool   `json:"-i,omitempty" description:"The same as ignore_case"`
+	OutputMode   string `json:"output_mode,omitempty" description:"content (the default): the matching lines; files_with_matches: only the files that match; count: how many lines match in each file"`
+	After        int    `json:"-A,omitempty" description:"Lines to show after each match, in content mode"`
+	Before       int    `json:"-B,omitempty" description:"Lines to show before each match, in content mode"`
+	ContextLines int    `json:"-C,omitempty" description:"Lines to show before and after each match, in content mode"`
+	HeadLimit    int    `json:"head_limit,omitempty" description:"Show at most this many matches, files or counts. Default is 100."`
+	Multiline    bool   `json:"multiline,omitempty" description:"If true, . matches newlines and a pattern can span lines. Default is false."`
+}
+
+// Grep's output modes, by Claude Code's names.
+const (
+	grepOutputContent = "content"
+	grepOutputFiles   = "files_with_matches"
+	grepOutputCount   = "count"
+)
+
+// grepOptions are a search's options beyond its pattern and path.
+type grepOptions struct {
+	include       string
+	fileType      string
+	before, after int
+	multiline     bool
 }
 
 type grepMatch struct {
@@ -81,6 +109,8 @@ type grepMatch struct {
 	lineNum  int
 	charNum  int
 	lineText string
+	// context marks a line shown around a match (-A, -B, -C), not one.
+	context bool
 }
 
 type GrepResponseMetadata struct {
@@ -154,9 +184,31 @@ func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 			if params.LiteralText {
 				searchPattern = escapeRegexPattern(params.Pattern)
 			}
-			if params.IgnoreCase {
+			if params.IgnoreCase || params.CaseFold {
 				// An inline flag, which ripgrep and Go's regexp both read.
 				searchPattern = "(?i)" + searchPattern
+			}
+			mode := cmp.Or(params.OutputMode, grepOutputContent)
+			if mode != grepOutputContent && mode != grepOutputFiles && mode != grepOutputCount {
+				return fantasy.NewTextErrorResponse(fmt.Sprintf("output_mode %q: expected content, files_with_matches or count", params.OutputMode)), nil
+			}
+			opts := grepOptions{
+				include:   cmp.Or(params.Include, params.Glob),
+				fileType:  params.Type,
+				multiline: params.Multiline,
+			}
+			if mode == grepOutputContent {
+				opts.before = cmp.Or(params.Before, params.ContextLines)
+				opts.after = cmp.Or(params.After, params.ContextLines)
+			}
+			limit := params.HeadLimit
+			if limit <= 0 {
+				limit = 100
+			}
+			// Files and counts are limited per file, after the search.
+			searchLimit := limit
+			if mode != grepOutputContent {
+				searchLimit = 10000
 			}
 
 			// A relative path is the tool's, as view's is, not the
@@ -167,53 +219,32 @@ func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 			searchCtx, cancel := context.WithTimeout(ctx, config.GetTimeout())
 			defer cancel()
 
-			matches, truncated, err := searchFiles(searchCtx, searchPattern, searchPath, params.Include, 100)
+			matches, truncated, err := searchFiles(searchCtx, searchPattern, searchPath, opts, searchLimit)
 			if err != nil {
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("error searching files: %v", err)), nil
 			}
 
 			var output strings.Builder
-			if len(matches) == 0 {
+			found := countMatches(matches)
+			switch {
+			case found == 0:
 				output.WriteString("No files found")
 				if !params.LiteralText {
 					output.WriteString(regexOperatorHint(params.Pattern))
 				}
-			} else {
-				fmt.Fprintf(&output, "Found %d matches\n", len(matches))
-
-				currentFile := ""
-				for _, match := range matches {
-					if currentFile != match.path {
-						if currentFile != "" {
-							output.WriteString("\n")
-						}
-						currentFile = match.path
-						fmt.Fprintf(&output, "%s:\n", filepath.ToSlash(match.path))
-					}
-					if match.lineNum > 0 {
-						lineText := match.lineText
-						if ansi.StringWidth(lineText) > maxGrepContentWidth {
-							lineText = ansi.Truncate(lineText, maxGrepContentWidth, "...")
-						}
-						if match.charNum > 0 {
-							fmt.Fprintf(&output, "  Line %d, Char %d: %s\n", match.lineNum, match.charNum, lineText)
-						} else {
-							fmt.Fprintf(&output, "  Line %d: %s\n", match.lineNum, lineText)
-						}
-					} else {
-						fmt.Fprintf(&output, "  %s\n", match.path)
-					}
-				}
-
-				if truncated {
-					output.WriteString("\n(Results are truncated. Consider using a more specific path or pattern.)")
-				}
+			case mode == grepOutputContent:
+				writeGrepLines(&output, matches, opts.before > 0 || opts.after > 0)
+			default:
+				truncated = writeGrepFiles(&output, matches, mode == grepOutputCount, limit) || truncated
+			}
+			if found > 0 && truncated {
+				output.WriteString("\n(Results are truncated. Consider using a more specific path or pattern.)")
 			}
 
 			return fantasy.WithResponseMetadata(
 				fantasy.NewTextResponse(output.String()),
 				GrepResponseMetadata{
-					NumberOfMatches: len(matches),
+					NumberOfMatches: found,
 					Truncated:       truncated,
 				},
 			), nil
@@ -221,14 +252,97 @@ func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 	)
 }
 
-func searchFiles(ctx context.Context, pattern, rootPath, include string, limit int) ([]grepMatch, bool, error) {
+// countMatches is how many of lines are matches, not context.
+func countMatches(lines []grepMatch) int {
+	n := 0
+	for _, l := range lines {
+		if !l.context {
+			n++
+		}
+	}
+	return n
+}
+
+// writeGrepLines writes the matching lines, and the context lines around
+// them, grouped by file. With context, "--" separates the groups of a
+// file that are not next to each other, as grep's does.
+func writeGrepLines(output *strings.Builder, lines []grepMatch, withContext bool) {
+	fmt.Fprintf(output, "Found %d matches\n", countMatches(lines))
+	var prev *grepMatch
+	for i := range lines {
+		line := &lines[i]
+		if prev == nil || prev.path != line.path {
+			if prev != nil {
+				output.WriteString("\n")
+			}
+			fmt.Fprintf(output, "%s:\n", filepath.ToSlash(line.path))
+		} else if withContext && !follows(*prev, *line) {
+			output.WriteString("  --\n")
+		}
+		prev = line
+		if line.lineNum <= 0 {
+			fmt.Fprintf(output, "  %s\n", line.path)
+			continue
+		}
+		// A multiline match spans lines; each gets its own.
+		for j, text := range strings.Split(line.lineText, "\n") {
+			if ansi.StringWidth(text) > maxGrepContentWidth {
+				text = ansi.Truncate(text, maxGrepContentWidth, "...")
+			}
+			switch {
+			case line.context:
+				fmt.Fprintf(output, "  Line %d- %s\n", line.lineNum+j, text)
+			case j == 0 && line.charNum > 0:
+				fmt.Fprintf(output, "  Line %d, Char %d: %s\n", line.lineNum, line.charNum, text)
+			default:
+				fmt.Fprintf(output, "  Line %d: %s\n", line.lineNum+j, text)
+			}
+		}
+	}
+}
+
+// writeGrepFiles writes the files with matches, with how many lines in
+// each match when counts is set, at most limit of them, and reports
+// whether there were more.
+func writeGrepFiles(output *strings.Builder, lines []grepMatch, counts bool, limit int) bool {
+	var files []string
+	perFile := map[string]int{}
+	for _, l := range lines {
+		if l.context {
+			continue
+		}
+		if perFile[l.path] == 0 {
+			files = append(files, l.path)
+		}
+		perFile[l.path]++
+	}
+	truncated := len(files) > limit
+	if truncated {
+		files = files[:limit]
+	}
+	if counts {
+		fmt.Fprintf(output, "Found %d matches in %d files\n", countMatches(lines), len(perFile))
+	} else {
+		fmt.Fprintf(output, "Found %d files\n", len(perFile))
+	}
+	for _, f := range files {
+		if counts {
+			fmt.Fprintf(output, "%s: %d\n", filepath.ToSlash(f), perFile[f])
+		} else {
+			fmt.Fprintf(output, "%s\n", filepath.ToSlash(f))
+		}
+	}
+	return truncated
+}
+
+func searchFiles(ctx context.Context, pattern, rootPath string, opts grepOptions, limit int) ([]grepMatch, bool, error) {
 	// A path that does not exist is an error, not an empty result: neither
 	// engine says so plainly (ripgrep reports it as a failed search, the Go
 	// walker not at all).
 	if _, err := os.Stat(rootPath); err != nil {
 		return nil, false, err
 	}
-	matches, err := searchWithRipgrep(ctx, pattern, rootPath, include)
+	matches, err := searchWithRipgrep(ctx, pattern, rootPath, opts)
 	if err != nil {
 		// Fall back to the Go walker only when ripgrep is not installed.
 		// A search that ran out of time must not continue on unbounded, and
@@ -239,7 +353,10 @@ func searchFiles(ctx context.Context, pattern, rootPath, include string, limit i
 			return nil, false, fmt.Errorf("search timed out; try a narrower path or pattern: %w", ctx.Err())
 		}
 		if errors.Is(err, exec.ErrNotFound) {
-			matches, err = searchFilesWithRegex(pattern, rootPath, include)
+			if opts.fileType != "" || opts.multiline {
+				return nil, false, errors.New("type and multiline need ripgrep (rg), which is not installed; use include for the files to search")
+			}
+			matches, err = searchFilesWithRegex(pattern, rootPath, opts, limit)
 		}
 		if err != nil {
 			return nil, false, err
@@ -253,16 +370,43 @@ func searchFiles(ctx context.Context, pattern, rootPath, include string, limit i
 		return matches[i].modTime.After(matches[j].modTime)
 	})
 
-	truncated := len(matches) > limit
-	if truncated {
-		matches = matches[:limit]
-	}
-
+	matches, truncated := firstMatches(matches, limit)
 	return matches, truncated, nil
 }
 
-func searchWithRipgrep(ctx context.Context, pattern, path, include string) ([]grepMatch, error) {
-	cmd := getRgSearchCmd(ctx, pattern, path, include)
+// firstMatches keeps the first limit matches of lines and the context
+// lines that follow them, and reports whether there were more.
+func firstMatches(lines []grepMatch, limit int) ([]grepMatch, bool) {
+	n := 0
+	for i, l := range lines {
+		if l.context {
+			continue
+		}
+		if n < limit {
+			n++
+			continue
+		}
+		// Keep the lines that run on from the last match kept; context
+		// after a gap is the dropped match's.
+		end := i
+		for end > 0 && lines[end-1].context {
+			end--
+		}
+		for end < i && follows(lines[end-1], lines[end]) {
+			end++
+		}
+		return lines[:end], true
+	}
+	return lines, false
+}
+
+// follows reports whether line comes right after prev in the same file.
+func follows(prev, line grepMatch) bool {
+	return prev.path == line.path && line.lineNum == prev.lineNum+strings.Count(prev.lineText, "\n")+1
+}
+
+func searchWithRipgrep(ctx context.Context, pattern, path string, opts grepOptions) ([]grepMatch, error) {
+	cmd := getRgSearchCmd(ctx, pattern, path, opts)
 	if cmd == nil {
 		return nil, fmt.Errorf("%w: ripgrep not found in $PATH", exec.ErrNotFound)
 	}
@@ -300,7 +444,8 @@ func searchWithRipgrep(ctx context.Context, pattern, path, include string) ([]gr
 }
 
 // parseRipgrepMatches reads the matches out of ripgrep's --json output,
-// keeping the first match on each line.
+// keeping the first match on each line, and the context lines around
+// them in order.
 func parseRipgrepMatches(output []byte) []grepMatch {
 	var matches []grepMatch
 	for line := range bytes.SplitSeq(bytes.TrimSpace(output), []byte{'\n'}) {
@@ -309,6 +454,20 @@ func parseRipgrepMatches(output []byte) []grepMatch {
 		}
 		var match ripgrepMatch
 		if err := json.Unmarshal(line, &match); err != nil {
+			continue
+		}
+		if match.Type == "context" {
+			fi, err := os.Stat(match.Data.Path.Text)
+			if err != nil {
+				continue
+			}
+			matches = append(matches, grepMatch{
+				path:     match.Data.Path.Text,
+				modTime:  fi.ModTime(),
+				lineNum:  match.Data.LineNumber,
+				lineText: strings.TrimRight(match.Data.Lines.Text, "\r\n"),
+				context:  true,
+			})
 			continue
 		}
 		if match.Type != "match" {
@@ -349,8 +508,9 @@ type ripgrepMatch struct {
 	} `json:"data"`
 }
 
-func searchFilesWithRegex(pattern, rootPath, include string) ([]grepMatch, error) {
+func searchFilesWithRegex(pattern, rootPath string, opts grepOptions, limit int) ([]grepMatch, error) {
 	matches := []grepMatch{}
+	found := 0
 
 	// Use cached regex compilation
 	regex, err := searchRegexCache.get(pattern)
@@ -359,8 +519,8 @@ func searchFilesWithRegex(pattern, rootPath, include string) ([]grepMatch, error
 	}
 
 	var includePattern *regexp.Regexp
-	if include != "" {
-		regexPattern := globToRegex(include)
+	if opts.include != "" {
+		regexPattern := globToRegex(opts.include)
 		includePattern, err = globRegexCache.get(regexPattern)
 		if err != nil {
 			return nil, fmt.Errorf("invalid include pattern: %w", err)
@@ -398,7 +558,7 @@ func searchFilesWithRegex(pattern, rootPath, include string) ([]grepMatch, error
 			return nil
 		}
 
-		lineMatches, err := fileMatches(path, regex)
+		lineMatches, err := fileMatches(path, regex, opts.before, opts.after)
 		if err != nil {
 			return nil // Skip files we can't read
 		}
@@ -410,8 +570,12 @@ func searchFilesWithRegex(pattern, rootPath, include string) ([]grepMatch, error
 				lineNum:  lm.lineNum,
 				charNum:  lm.charNum,
 				lineText: lm.lineText,
+				context:  lm.context,
 			})
-			if len(matches) >= 200 {
+			if !lm.context {
+				found++
+			}
+			if found > limit {
 				return filepath.SkipAll
 			}
 		}
@@ -427,18 +591,20 @@ func searchFilesWithRegex(pattern, rootPath, include string) ([]grepMatch, error
 
 // lineMatch is a single matching line within a file: its 1-based line
 // number, the 1-based column of the first match on that line, and the
-// line text (with the trailing newline stripped).
+// line text (with the trailing newline stripped). context marks a line
+// shown around a match instead.
 type lineMatch struct {
 	lineNum  int
 	charNum  int
 	lineText string
+	context  bool
 }
 
-// fileMatches returns every line in filePath that matches pattern. Like
-// ripgrep, it reports one entry per matching line (using the first match
-// on the line for the column) instead of stopping at the first match in
-// the file.
-func fileMatches(filePath string, pattern *regexp.Regexp) ([]lineMatch, error) {
+// fileMatches returns every line in filePath that matches pattern, and
+// the before and after lines around each, in order. Like ripgrep, it
+// reports one entry per matching line (using the first match on the line
+// for the column) instead of stopping at the first match in the file.
+func fileMatches(filePath string, pattern *regexp.Regexp, before, after int) ([]lineMatch, error) {
 	if pattern == nil {
 		return nil, nil
 	}
@@ -453,17 +619,22 @@ func fileMatches(filePath string, pattern *regexp.Regexp) ([]lineMatch, error) {
 	}
 	defer file.Close()
 
-	var matches []lineMatch
+	var lines []string
+	var found []lineMatch
 	reader := bufio.NewReader(file)
-	lineNum := 0
 	for {
 		line, err := reader.ReadString('\n')
-		lineNum++
+		if line == "" && err == io.EOF {
+			// The end of a file whose last line ends with a newline: no
+			// line follows it.
+			break
+		}
 		line = strings.TrimSuffix(line, "\n")
 		line = strings.TrimSuffix(line, "\r")
+		lines = append(lines, line)
 		if loc := pattern.FindStringIndex(line); loc != nil {
-			matches = append(matches, lineMatch{
-				lineNum:  lineNum,
+			found = append(found, lineMatch{
+				lineNum:  len(lines),
 				charNum:  loc[0] + 1,
 				lineText: line,
 			})
@@ -475,8 +646,29 @@ func fileMatches(filePath string, pattern *regexp.Regexp) ([]lineMatch, error) {
 			return nil, err
 		}
 	}
+	if before == 0 && after == 0 {
+		return found, nil
+	}
 
-	return matches, nil
+	// Each match with its context, a line shown once however many
+	// matches it is near.
+	var out []lineMatch
+	next := 1 // the first line not yet shown
+	for i, m := range found {
+		for n := max(next, m.lineNum-before); n < m.lineNum; n++ {
+			out = append(out, lineMatch{lineNum: n, lineText: lines[n-1], context: true})
+		}
+		out = append(out, m)
+		next = m.lineNum + 1
+		end := min(len(lines), m.lineNum+after)
+		if i+1 < len(found) {
+			end = min(end, found[i+1].lineNum-1)
+		}
+		for ; next <= end; next++ {
+			out = append(out, lineMatch{lineNum: next, lineText: lines[next-1], context: true})
+		}
+	}
+	return out, nil
 }
 
 // isTextFile checks if a file is a text file by examining its MIME type.
