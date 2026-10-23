@@ -1253,15 +1253,11 @@ func nextRecentModels(cfg *Config, modelType SelectedModelType, model SelectedMo
 // runs them in the process's. For a test's own directory, use
 // NewTestStoreIn.
 func NewTestStore(cfg *Config, loadedPaths ...string) *ConfigStore {
-	store := &ConfigStore{
+	return &ConfigStore{
 		config:      cfg,
 		loadedPaths: loadedPaths,
 		resolver:    NewShellVariableResolver(env.New()),
 	}
-	if wd, err := os.Getwd(); err == nil {
-		store.workingDir = wd
-	}
-	return store
 }
 
 // NewTestStoreIn is NewTestStore for a project in workingDir, for a test

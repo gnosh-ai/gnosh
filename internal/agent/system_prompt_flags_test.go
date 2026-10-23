@@ -107,6 +107,10 @@ func TestNewCoordinatorStartsWithThePlanAgent(t *testing.T) {
 		}
 		require.Equal(t, want, name)
 		require.Same(t, coord.agents[want], agent)
+		// Either agent may send the session's first prompt; what its
+		// SessionStart hooks know of the session is one record for both.
+		require.Same(t, coord.agents[config.AgentCoder].(*sessionAgent).sessionStarts,
+			coord.agents[config.AgentPlan].(*sessionAgent).sessionStarts)
 	}
 }
 

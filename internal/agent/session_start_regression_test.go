@@ -104,6 +104,7 @@ func TestRun_SessionStartSharedAcrossAgents(t *testing.T) {
 		Messages:             env.messages,
 		Cfg:                  store,
 		Notify:               &recordingNotifier{},
+		SessionStarts:        state,
 	}).(*sessionAgent)
 	planAgent := NewSessionAgent(SessionAgentOptions{
 		LargeModel:           model,
@@ -115,9 +116,8 @@ func TestRun_SessionStartSharedAcrossAgents(t *testing.T) {
 		Messages:             env.messages,
 		Cfg:                  store,
 		Notify:               &recordingNotifier{},
+		SessionStarts:        state,
 	}).(*sessionAgent)
-	coderAgent.SetSessionStartState(state)
-	planAgent.SetSessionStartState(state)
 
 	sess, err := env.sessions.Create(t.Context(), "shared session")
 	require.NoError(t, err)
@@ -271,8 +271,8 @@ func TestRun_SessionStartHiddenContinuationCarriesPendingContext(t *testing.T) {
 
 	// Simulate the first prompt being blocked: save its context as
 	// pending, mark the session started, and reset the hooks' output.
-	r.agent.setSessionStartPendingContext(r.sessionID, "The build on main is red.")
-	r.agent.markSessionStarted(r.sessionID)
+	r.agent.sessionStarts.setPending(r.sessionID, "The build on main is red.")
+	r.agent.sessionStarts.markStarted(r.sessionID)
 
 	// A hidden continuation prompt (a Stop hook's, /loop's) is the next
 	// prompt. It takes the pending context and carries it to the model.

@@ -177,12 +177,13 @@ type coordinator struct {
 	mainAgentName string
 	agents        map[string]SessionAgent
 
-	// sessionStartState is the SessionStart hooks' state shared by every
-	// main agent, so a session started by the plan agent counts as
-	// started for the coder and vice versa, and a summary made in either
-	// mode fires "compact" for the next prompt in either. Sub-agents
-	// fire no SessionStart hooks and keep their own.
-	sessionStartState *sessionStartState
+	// sessionStarts is what the SessionStart hooks of the agents the
+	// coordinator builds know of the sessions the process started: one
+	// for all of them, so a session started in code mode counts as
+	// started in plan mode, and a summary made in either fires "compact"
+	// for the next prompt in either. Sub-agents fire no SessionStart
+	// hooks, so sharing it with them changes nothing.
+	sessionStarts *sessionStartState
 
 	// Skills discovery results (session-start snapshot).
 	allSkills    []*skills.Skill // Pre-filter: all discovered after dedup.
@@ -225,21 +226,22 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 	skillTracker := skills.NewTracker(activeSkills)
 
 	c := &coordinator{
-		cfg:          opts.Config,
-		sessions:     opts.Sessions,
-		messages:     opts.Messages,
-		permissions:  opts.Permissions,
-		questions:    opts.Questions,
-		history:      opts.History,
-		filetracker:  opts.FileTracker,
-		lspManager:   opts.LSPManager,
-		notify:       opts.Notify,
-		runComplete:  opts.RunComplete,
-		agents:       make(map[string]SessionAgent),
-		allSkills:    allSkills,
-		activeSkills: activeSkills,
-		skillTracker: skillTracker,
-		interactive:  opts.Interactive,
+		cfg:           opts.Config,
+		sessions:      opts.Sessions,
+		messages:      opts.Messages,
+		permissions:   opts.Permissions,
+		questions:     opts.Questions,
+		history:       opts.History,
+		filetracker:   opts.FileTracker,
+		lspManager:    opts.LSPManager,
+		notify:        opts.Notify,
+		runComplete:   opts.RunComplete,
+		agents:        make(map[string]SessionAgent),
+		sessionStarts: newSessionStartState(),
+		allSkills:     allSkills,
+		activeSkills:  activeSkills,
+		skillTracker:  skillTracker,
+		interactive:   opts.Interactive,
 	}
 
 	agentCfg, ok := opts.Config.Config().Agents[config.AgentCoder]
@@ -285,13 +287,6 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 	}
 	c.agents[config.AgentPlan] = planAgent
 
-	c.sessionStartState = newSessionStartState()
-	if coder, ok := agent.(*sessionAgent); ok {
-		coder.SetSessionStartState(c.sessionStartState)
-	}
-	if planner, ok := planAgent.(*sessionAgent); ok {
-		planner.SetSessionStartState(c.sessionStartState)
-	}
 	c.mainAgent = agent
 	c.mainAgentName = config.AgentCoder
 	if overrides.MainAgent == config.AgentPlan {
@@ -865,6 +860,7 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		IsSubAgent:           isSubAgent,
 		AgentType:            agent.ID,
 		PermissionMode:       c.permissionMode,
+		SessionStarts:        c.sessionStarts,
 		DisableAutoSummarize: c.cfg.Config().Options.DisableAutoSummarize,
 		IsYolo:               c.permissions.SkipRequests(),
 		Sessions:             c.sessions,

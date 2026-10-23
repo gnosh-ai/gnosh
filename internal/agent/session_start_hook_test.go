@@ -56,12 +56,6 @@ func sessionStartAgent(t *testing.T, subAgent bool, preseed string, hookCfgs ...
 		Cfg:                  config.NewTestStore(cfg, env.workingDir),
 		Notify:               notifier,
 	}).(*sessionAgent)
-	if !subAgent {
-		// As a coordinator's main agents do, so the SessionStart hooks
-		// run on their shared state.
-		state := newSessionStartState()
-		a.SetSessionStartState(state)
-	}
 	sess, err := env.sessions.Create(t.Context(), "session start")
 	require.NoError(t, err)
 	if preseed != "" {

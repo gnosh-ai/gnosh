@@ -178,7 +178,7 @@ func promptHookBlock(call SessionAgentCall) string {
 	if call.promptHookContext == "" {
 		return ""
 	}
-	if call.HiddenUserMessage && !call.sessionStartHookRan {
+	if call.HiddenUserMessage && !call.carriesSessionStart {
 		return ""
 	}
 	return message.PromptHookContext(call.promptHookContext)
