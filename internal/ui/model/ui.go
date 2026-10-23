@@ -919,15 +919,20 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case agentRunSubmittedMsg:
 		if msg.err != nil {
-			// The run never started, so no terminal event is coming to
-			// retire its spinner, or to drive a loop's next turn: left
-			// armed, the loop would wait idle and then take over the
-			// user's next prompt.
-			m.endPendingTurn(msg.sessionID)
 			cmds = append(cmds, util.ReportError(msg.err))
-			if msg.sessionID == m.loop.sessionID {
-				if cmd := m.stopLoop("the next turn could not be sent"); cmd != nil {
-					cmds = append(cmds, cmd)
+			// A prompt sent behind a running turn and refused (a
+			// UserPromptSubmit hook blocked it) leaves that turn running:
+			// its spinner, its clock and a /loop driving it stay as they
+			// are. Otherwise the run never started, so no terminal event is
+			// coming to retire its spinner, or to drive a loop's next turn:
+			// left armed, the loop would wait idle and then take over the
+			// user's next prompt.
+			if !msg.queued {
+				m.endPendingTurn(msg.sessionID)
+				if msg.sessionID == m.loop.sessionID {
+					if cmd := m.stopLoop("the next turn could not be sent"); cmd != nil {
+						cmds = append(cmds, cmd)
+					}
 				}
 			}
 		}
@@ -5438,7 +5443,7 @@ func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...mes
 		if errors.Is(err, context.Canceled) {
 			err = nil
 		}
-		return agentRunSubmittedMsg{sessionID: sessionID, err: err}
+		return agentRunSubmittedMsg{sessionID: sessionID, err: err, queued: queued}
 	})
 	return tea.Batch(cmds...)
 }
@@ -6031,8 +6036,13 @@ func (m *UI) handleAgentNotification(n notify.Notification) tea.Cmd {
 		}
 	case notify.TypeAgentError:
 		// Terminal edge like TypeAgentFinished; fall through to the
-		// busy/queue refresh below.
+		// busy/queue refresh below. In client/server mode this is the only
+		// word of a run that failed, a prompt a hook blocked among them,
+		// so say what happened; it used to end the spinner in silence.
 		m.endPendingTurn(n.SessionID)
+		if n.Message != "" {
+			cmds = append(cmds, util.ReportError(errors.New(n.Message)))
+		}
 	case notify.TypeReAuthenticate:
 		return m.handleReAuthenticate(n.ProviderID)
 	case notify.TypeAWSSSOAuth:

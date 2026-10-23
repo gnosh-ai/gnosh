@@ -109,6 +109,9 @@ type promptQueueMsg struct {
 type agentRunSubmittedMsg struct {
 	sessionID string
 	err       error
+	// queued is set when the prompt was sent while a turn was running,
+	// so it would have waited behind that turn rather than started one.
+	queued bool
 }
 
 // agentModelChangedMsg reports that the coordinator's model was updated
