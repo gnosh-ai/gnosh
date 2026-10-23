@@ -28,6 +28,7 @@ import (
 	"github.com/gnolang/gno/gno.land/pkg/gnoland/ugnot"
 	"github.com/gnolang/gno/tm2/pkg/amino"
 	"github.com/gnolang/gno/tm2/pkg/crypto"
+	"github.com/gnolang/gno/tm2/pkg/crypto/multisig"
 	"github.com/gnolang/gno/tm2/pkg/sdk/bank"
 	"github.com/gnolang/gno/tm2/pkg/std"
 	x402 "github.com/x402-foundation/x402/go/v2"
@@ -81,6 +82,13 @@ const (
 // is well clear of any.
 var unpricedGasFee = std.Coin{Denom: ugnot.Denom, Amount: 1_000_000}
 
+// maxGasFee is the most a payment offers as its network fee: 1 GNOT, the fee
+// offered to a chain that reports no gas price. The fee follows the gas price
+// the buyer's node reports, and a node can report any price, while neither
+// the spend cap nor the facilitator bounds the fee and the chain keeps all of
+// it. At onyx-1's price a payment's fee is 0.02 GNOT.
+var maxGasFee = std.Coin{Denom: ugnot.Denom, Amount: 1_000_000}
+
 // denomination is tm2's denomination grammar (std.ValidateDenom), capped at its
 // MaxDenomLength of 274 bytes. The coin a payment sends is amount and asset as
 // one string, so an asset outside it is either refused by the chain or read as
@@ -108,6 +116,10 @@ var ErrInvalidRequirements = errors.New("x402-gno: payment requirements refused"
 // spend controls set for its asset. The cap bounds the price; the fee is paid on
 // top of it.
 var ErrExceedsSpendCap = errors.New("x402-gno: price exceeds the spend cap")
+
+// ErrExcessiveFee reports a network fee above the most a payment offers, 1
+// GNOT: the gas price the node reported is either wrong or not one to pay at.
+var ErrExcessiveFee = errors.New("x402-gno: network fee too high")
 
 // Node is the chain access a payment needs before it is signed: which chain the
 // node serves, the number and sequence of the account the signature is verified
@@ -173,6 +185,18 @@ func (p *Payment) Payload(signature []byte) (types.PaymentPayload, error) {
 	if p.PubKey == nil {
 		return types.PaymentPayload{}, errors.New("x402-gno: the payment names no key to verify its signature with")
 	}
+	// The chain verifies the payer's own signature against the account
+	// MsgSend.FromAddress names, and a session's against the session account,
+	// so PubKey has to be that account's key.
+	signer := p.SessionAddr
+	if signer.IsZero() && len(p.Tx.Msgs) == 1 {
+		if send, ok := p.Tx.Msgs[0].(bank.MsgSend); ok {
+			signer = send.FromAddress
+		}
+	}
+	if p.PubKey.Address() != signer {
+		return types.PaymentPayload{}, fmt.Errorf("x402-gno: key %s is not the key of %s, the account the payment is signed for", p.PubKey.Address(), signer)
+	}
 	rendering, err := std.VerifySignaturePayload(p.PubKey, p.Tx.SignDoc(p.ChainID, p.AccountNumber, p.Sequence), signature)
 	if err != nil {
 		return types.PaymentPayload{}, fmt.Errorf("x402-gno: build the sign doc: %w", err)
@@ -228,7 +252,7 @@ func readTerms(req types.PaymentRequirements) (terms, error) {
 	// written, so a payTo that decodes but is written otherwise, such as in
 	// upper case, names an address no payment to it can match.
 	payTo, err := crypto.AddressFromBech32(req.PayTo)
-	if err != nil || payTo.String() != req.PayTo {
+	if err != nil || payTo.String() != req.PayTo || payTo.IsZero() {
 		return terms{}, refuse("payTo %s is not a gno address", req.PayTo)
 	}
 	// §6.1 reserves both keys: an offer naming a transfer method or a flow this
@@ -341,6 +365,11 @@ func Prepare(ctx context.Context, node Node, pub crypto.PubKey, master crypto.Ad
 	if pub == nil {
 		return nil, errors.New("x402-gno: the signer has no public key")
 	}
+	// The facilitator takes one signature from one signer and refuses a
+	// threshold key outright, so a payment signed with one never settles.
+	if _, ok := pub.(multisig.PubKeyMultisigThreshold); ok {
+		return nil, errors.New("x402-gno: a multisig key cannot pay: the facilitator takes one signature from one signer")
+	}
 	// The address of the signing key: the payer itself, or the session that
 	// signs for the master.
 	key := pub.Address()
@@ -365,6 +394,9 @@ func Prepare(ctx context.Context, node Node, pub crypto.PubKey, master crypto.Ad
 	fee, err := gasFee(price)
 	if err != nil {
 		return nil, err
+	}
+	if fee.Denom != maxGasFee.Denom || fee.Amount > maxGasFee.Amount {
+		return nil, fmt.Errorf("%w: the gas price the node reports, %s per %d gas, makes the fee %s, more than the %s a payment offers", ErrExcessiveFee, price.Price, price.Gas, fee, maxGasFee)
 	}
 
 	payer, session := key, crypto.Address{}

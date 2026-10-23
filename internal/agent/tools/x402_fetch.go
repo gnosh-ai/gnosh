@@ -194,8 +194,13 @@ func NewX402FetchTool(permissions permission.Service, questions question.Service
 			payment, err := x402gno.Prepare(ctx, node, signer.pub, master, offer, strconv.Itoa(x402MaxPrice))
 			if err != nil {
 				msg := err.Error()
-				if strings.Contains(msg, "fund it") {
+				switch {
+				case strings.Contains(msg, "fund it"):
 					msg += " (https://faucet.gno.land funds the test networks)"
+				case errors.Is(err, x402gno.ErrExcessiveFee):
+					// The node, which the call named or crash knows, is the one
+					// that reported the price; it may be wrong, or not honest.
+					msg += fmt.Sprintf(". The node at %s reported that price; nothing was paid. Tell the user rather than trying another node", node.Endpoint())
 				}
 				return fantasy.NewTextErrorResponse(msg), nil
 			}

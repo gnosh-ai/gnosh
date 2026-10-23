@@ -5,7 +5,8 @@ Fetch a URL that charges for access through x402, paying for it on a gno.land te
 - Pass the key the user named: a gnokey key name or address, and home when the user keeps keys outside gnokey's default directory
 - With a session key, pass master: the address of the account that registered the session, which pays within the limits the chain holds for it
 - remote is a node on the chain the seller names; the public nodes of dev (127.0.0.1:26657), staging and onyx-1 are known, any other chain needs it
-- It pays only on local and test chains (dev, staging, onyx-*, test*), only in ugnot, and at most 1 GNOT per payment; mainnet is refused, because x402 on gno.land is unaudited, testnet-only work
+- It pays only on local and test chains (dev, staging, onyx-*, test*), only in ugnot, at most 1 GNOT per payment, and a network fee of at most 1 GNOT; mainnet is refused, because x402 on gno.land is unaudited, testnet-only work
+- The fee follows the gas price the node reports; if a node reports a price that would make the fee more than 1 GNOT, the payment is refused: tell the user, and do not go looking for another node
 - One call pays at most once, for exactly the price the seller names, plus the network fee
 - Never ask the user for a password in chat; the prompt is the only place a password goes
 - If the user declines (Esc), stop and ask them what to do; do not retry on your own

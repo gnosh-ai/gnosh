@@ -132,8 +132,8 @@ tool shows you the price, the payee, the chain and the network fee, and asks
 for the key's password in the masked prompt above. gnokey signs one bank send
 of exactly that price, the seller's facilitator settles it, and the agent gets
 the resource and the transaction hash. Crash checks the signature before the
-payment leaves, pays only in ugnot, at most 1 GNOT at a time, and only on
-local and test chains: x402 on gno.land
+payment leaves, pays only in ugnot, at most 1 GNOT at a time plus a network
+fee of at most 1 GNOT, and only on local and test chains: x402 on gno.land
 ([gnoverse/x402](https://github.com/gnoverse/x402)) is unaudited, testnet-only
 work, so mainnet is refused. Pay from a session key and the chain caps what it
 can spend as well. Nothing is paid without you at the prompt: a run with

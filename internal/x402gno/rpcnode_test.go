@@ -134,16 +134,20 @@ func TestARevokedSessionIsAnError(t *testing.T) {
 	require.ErrorContains(t, err, "session not found")
 }
 
-// TestAChainReportingNoGasPriceIsUnpriced: no data is no price, which the
-// payment answers with its unpriced fee, not an error.
+// TestAChainReportingNoGasPriceIsUnpriced: a chain that stored no price
+// answers gas 0 at an empty price, and that, like no data, is no price, which
+// the payment answers with its unpriced fee, not an error.
 func TestAChainReportingNoGasPriceIsUnpriced(t *testing.T) {
-	node, err := x402gno.NewRPCNode(stubChain(t, "dev", nil, nil).URL)
-	require.NoError(t, err)
+	unset := stubChain(t, "dev", map[string]string{"auth/gasprice": "{\n  \"gas\": \"0\",\n  \"price\": \"\"\n}"}, nil)
+	for _, server := range []string{unset.URL, stubChain(t, "dev", nil, nil).URL} {
+		node, err := x402gno.NewRPCNode(server)
+		require.NoError(t, err)
 
-	price, err := node.GasPrice(context.Background())
+		price, err := node.GasPrice(context.Background())
 
-	require.NoError(t, err)
-	require.Nil(t, price)
+		require.NoError(t, err)
+		require.Nil(t, price)
+	}
 }
 
 // TestANodeThatIsNotThereIsAnError: nothing listening, and a server that is

@@ -208,8 +208,9 @@ with the transaction hash. Pay only when the user asked you to; one call is
 one payment.
 
 - It pays only on dev and test chains (`dev`, `staging`, `onyx-*`,
-  `test*`), only in ugnot, and at most 1 GNOT per payment. x402 on gno.land
-  is unaudited, testnet-only work, and mainnet has no facilitator.
+  `test*`), only in ugnot, at most 1 GNOT per payment, and a network fee of
+  at most 1 GNOT. x402 on gno.land is unaudited, testnet-only work, and
+  mainnet has no facilitator.
 - `remote` must reach a node on the seller's chain; the nodes of dev,
   staging and onyx-1 are known.
 - A session key pays with `master` set to the account that registered it.

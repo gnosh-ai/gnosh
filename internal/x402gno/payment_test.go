@@ -13,6 +13,7 @@ import (
 	"github.com/gnolang/gno/tm2/pkg/amino"
 	"github.com/gnolang/gno/tm2/pkg/crypto"
 	"github.com/gnolang/gno/tm2/pkg/crypto/keys"
+	"github.com/gnolang/gno/tm2/pkg/crypto/multisig"
 	"github.com/gnolang/gno/tm2/pkg/sdk/bank"
 	"github.com/gnolang/gno/tm2/pkg/std"
 	"github.com/stretchr/testify/require"
@@ -317,7 +318,7 @@ func TestTheFeeFollowsTheChainsGasPrice(t *testing.T) {
 		want  string
 	}{
 		"onyx-1's price":    {&std.GasPrice{Gas: 1000, Price: std.Coin{Denom: "ugnot", Amount: 1}}, "20000ugnot"},
-		"rounded up":        {&std.GasPrice{Gas: 7, Price: std.Coin{Denom: "ugnot", Amount: 3}}, "8571429ugnot"},
+		"rounded up":        {&std.GasPrice{Gas: 3000, Price: std.Coin{Denom: "ugnot", Amount: 1}}, "6667ugnot"},
 		"no price reported": {nil, "1000000ugnot"},
 	}
 	for name, tc := range cases {
@@ -331,4 +332,56 @@ func TestTheFeeFollowsTheChainsGasPrice(t *testing.T) {
 			require.Equal(t, tc.want, payment.Tx.Fee.GasFee.String())
 		})
 	}
+}
+
+// TestAFeeOverTheCeilingIsRefused: the fee follows the gas price the node
+// reports, and a node can report any price; a fee past 1 GNOT, or in another
+// coin, is refused before anything is signed, while a fee of exactly 1 GNOT,
+// what an unpriced chain gets, is paid.
+func TestAFeeOverTheCeilingIsRefused(t *testing.T) {
+	pub := keyFrom(t, test1Mnemonic).pub
+	refused := map[string]*std.GasPrice{
+		"a price sized to the balance": {Gas: 20_000_000, Price: std.Coin{Denom: "ugnot", Amount: 999_700_000}},
+		"just past 1 GNOT":             {Gas: 1000, Price: std.Coin{Denom: "ugnot", Amount: 51}},
+		"another coin":                 {Gas: 1000, Price: std.Coin{Denom: "ufee", Amount: 5}},
+	}
+	for name, price := range refused {
+		t.Run(name, func(t *testing.T) {
+			node := newFakeNode()
+			node.gasPrice = price
+			_, err := x402gno.Prepare(context.Background(), node, pub, crypto.Address{}, offer(), "")
+			require.ErrorIs(t, err, x402gno.ErrExcessiveFee)
+		})
+	}
+
+	node := newFakeNode()
+	node.gasPrice = &std.GasPrice{Gas: 1000, Price: std.Coin{Denom: "ugnot", Amount: 50}}
+	payment, err := x402gno.Prepare(context.Background(), node, pub, crypto.Address{}, offer(), "")
+	require.NoError(t, err)
+	require.Equal(t, "1000000ugnot", payment.Tx.Fee.GasFee.String())
+}
+
+// TestAMultisigKeyCannotPay: the facilitator takes one signature from one
+// signer, so a payment a threshold key signs could never settle.
+func TestAMultisigKeyCannotPay(t *testing.T) {
+	shared := multisig.NewPubKeyMultisigThreshold(1, []crypto.PubKey{keyFrom(t, test1Mnemonic).pub})
+
+	_, err := x402gno.Prepare(context.Background(), newFakeNode(), shared, crypto.Address{}, offer(), "")
+
+	require.ErrorContains(t, err, "a multisig key cannot pay")
+}
+
+// TestPayloadRefusesAKeyThatIsNotThePayers: a payment whose key was swapped
+// after Prepare, and signed by that other key, never becomes a payload.
+func TestPayloadRefusesAKeyThatIsNotThePayers(t *testing.T) {
+	payment, err := x402gno.Prepare(context.Background(), newFakeNode(), keyFrom(t, test1Mnemonic).pub, crypto.Address{}, offer(), "")
+	require.NoError(t, err)
+	other := keyFrom(t, sessionMnemonic)
+	payment.PubKey = other.pub
+	signBytes, err := payment.SignBytes()
+	require.NoError(t, err)
+
+	_, err = payment.Payload(other.sign(t, signBytes))
+
+	require.ErrorContains(t, err, "is not the key of "+test1Address)
 }

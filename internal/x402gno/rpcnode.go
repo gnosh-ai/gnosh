@@ -143,7 +143,8 @@ func decodeBaseAccount(raw json.RawMessage) (std.Account, error) {
 }
 
 // GasPrice reads the gas price of the chain's last block, as gnokey reads it
-// to estimate a fee. A node answering with nothing reports no price.
+// to estimate a fee. A chain that has stored no price answers gas 0 at an
+// empty price, which is no price, as is an answer with nothing in it.
 func (n *RPCNode) GasPrice(ctx context.Context) (*std.GasPrice, error) {
 	data, err := n.query(ctx, "auth/gasprice")
 	if err != nil {
@@ -155,6 +156,9 @@ func (n *RPCNode) GasPrice(ctx context.Context) (*std.GasPrice, error) {
 	var price std.GasPrice
 	if err := amino.UnmarshalJSON(data, &price); err != nil {
 		return nil, fmt.Errorf("decode gas price %q: %w", data, err)
+	}
+	if price.Gas == 0 || price.Price.Amount == 0 {
+		return nil, nil
 	}
 	return &price, nil
 }

@@ -132,9 +132,16 @@ func (g x402Gnokey) runs(t *testing.T) [][]string {
 // key's session under test1 at 34 and 3.
 func stubX402Chain(t *testing.T) *httptest.Server {
 	t.Helper()
+	return stubX402ChainPricing(t, `{"gas": "1000", "price": "1ugnot"}`)
+}
+
+// stubX402ChainPricing is stubX402Chain answering the gas price query with
+// gasPrice.
+func stubX402ChainPricing(t *testing.T, gasPrice string) *httptest.Server {
+	t.Helper()
 	session := newX402Key(t, x402SessionMnemonic).pub.Address().String()
 	answers := map[string]string{
-		"auth/gasprice":              `{"gas": "1000", "price": "1ugnot"}`,
+		"auth/gasprice":              gasPrice,
 		"auth/accounts/" + x402Buyer: `{"BaseAccount": {"address": "` + x402Buyer + `", "coins": "", "public_key": null, "account_number": "12", "sequence": "7"}}`,
 		"auth/accounts/" + x402Buyer + "/session/" + session: `{"BaseSessionAccount": {"BaseAccount": {"address": "` + session +
 			`", "coins": "", "public_key": null, "account_number": "34", "sequence": "3"}}}`,
@@ -611,4 +618,27 @@ func TestX402ChainAllowed(t *testing.T) {
 	for _, chain := range []string{"gnoland-1", "gnoland", "mainnet", "", "portal-loop", "tendermint_test"} {
 		require.False(t, x402ChainAllowed(chain), chain)
 	}
+}
+
+// TestX402Fetch_ALyingNodesFeeIsRefusedUnasked: the fee follows the gas price
+// the node reports, and the node may be one the model named. A price that
+// would make the fee more than 1 GNOT is refused before the user is asked,
+// naming the node, and nothing is signed.
+func TestX402Fetch_ALyingNodesFeeIsRefusedUnasked(t *testing.T) {
+	buyer := newX402Key(t, x402Mnemonic)
+	gnokey := fakeX402Gnokey(t, buyer.listLine("buyer"))
+	chain := stubX402ChainPricing(t, `{"gas": "20000000", "price": "999700000ugnot"}`)
+	seller := newStubSeller(t, x402Offer(), buyer.pub, 12, 7, served)
+	questions := question.NewService()
+	tool := NewX402FetchTool(allowingPermissions(), questions, t.TempDir(), nil)
+
+	resp := runX402Fetch(t, tool, X402FetchParams{URL: seller.URL, Key: "buyer", Remote: chain.URL})
+
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "network fee too high")
+	require.Contains(t, resp.Content, "The node at "+chain.URL+" reported that price; nothing was paid")
+	_, asked := questions.Pending()
+	require.False(t, asked)
+	require.Len(t, gnokey.runs(t), 1, "gnokey only listed the key")
+	require.Empty(t, seller.payments)
 }
