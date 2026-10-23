@@ -1094,7 +1094,7 @@ func TestConfig_configureProvidersCustomProviderValidation(t *testing.T) {
 		require.False(t, exists, "a raw-non-empty BaseURL that resolves to empty must be rejected")
 	})
 
-	t.Run("BaseURL resolving to empty with disable_default_providers returns an error", func(t *testing.T) {
+	t.Run("BaseURL resolving to empty with disable_default_providers is left out, and says why", func(t *testing.T) {
 		cfg := &Config{
 			Providers: csync.NewMapFrom(map[string]ProviderConfig{
 				"custom": {
@@ -1112,7 +1112,9 @@ func TestConfig_configureProvidersCustomProviderValidation(t *testing.T) {
 		env := env.NewFromMap(map[string]string{})
 		resolver := NewShellVariableResolver(env)
 		err := cfg.configureProviders(context.Background(), testStore(cfg), env, resolver, []catwalk.Provider{})
-		require.Error(t, err, "the sole custom provider is invalid after resolution, so configuration must fail")
+		require.NoError(t, err, "a provider left out is reported, not a failed load")
+		require.Equal(t, 0, cfg.Providers.Len())
+		require.Equal(t, "it has no base_url", cfg.SkippedProviders()["custom"])
 	})
 
 	t.Run("custom provider with no models attempts discovery and is removed on failure", func(t *testing.T) {
