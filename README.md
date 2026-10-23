@@ -165,6 +165,7 @@ Claude Code's names work here too.
 | `claude -p "…"`                  | `crash run "…"`, or `crash -p "…"`                 | Answer one prompt without the TUI                           |
 | `-p --output-format json`        | `crash run --output-format json`                   | Print one JSON result at the end                            |
 | `claude -r <id>`                 | `crash -s <id>`, or `crash -r <id>`                | Continue a session by ID                                    |
+| `claude -r`                      | `crash -r`                                         | Pick a session to continue from a list                      |
 | `claude -c`                      | `crash -C`                                         | Continue the last session; `-c` sets the working directory |
 | `--dangerously-skip-permissions` | `--yolo`, or `--dangerously-skip-permissions`      | Skip every permission prompt                                |
 | `--allowedTools Read Grep`       | `--allowedTools "Read Grep"`, or `Read,Grep`       | Let these tools run without asking                          |

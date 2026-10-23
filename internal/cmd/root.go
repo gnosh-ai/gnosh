@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -115,6 +116,10 @@ crash --continue
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sessionID := sessionFlag(cmd)
 		continueLast, _ := cmd.Flags().GetBool("continue")
+		pick := sessionID == pickSession
+		if pick {
+			sessionID = ""
+		}
 
 		ws, cleanup, err := setupWorkspaceWithProgressBar(cmd)
 		if err != nil {
@@ -134,6 +139,9 @@ crash --continue
 
 		com := common.DefaultCommon(ws)
 		model := ui.New(com, sessionID, continueLast)
+		if pick {
+			model.PickSessionAtStart()
+		}
 
 		inputFilter := ui.NewFilter()
 		var env uv.Environ = os.Environ()
@@ -223,9 +231,11 @@ func Execute() {
 		_, _ = w.WriteString(heartbit.String())
 		rootCmd.SetVersionTemplate(b.String() + "\n" + defaultVersionTemplate)
 	}
-	if args, ok := printAsRun(os.Args[1:]); ok {
-		rootCmd.SetArgs(args)
+	args := os.Args[1:]
+	if run, ok := printAsRun(args); ok {
+		args = run
 	}
+	rootCmd.SetArgs(bareResume(args))
 	if err := fang.Execute(
 		context.Background(),
 		rootCmd,
@@ -331,9 +341,35 @@ func workspaceYolo(cmd *cobra.Command) bool {
 // and --continue; read the session with sessionFlag.
 func addSessionFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
-	cmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it")
+	cmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it; with no ID, pick a session from a list")
 	cmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	cmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
+}
+
+// pickSession is the --resume value that asks for the list of sessions to
+// pick from: what a bare -r or --resume becomes (see bareResume), as
+// Claude Code's `claude -r` opens its picker. Session IDs are UUIDs, so it
+// cannot name one.
+const pickSession = ":pick:"
+
+// bareResume gives a -r or --resume with no ID after it, at the end or
+// before another flag, the value pickSession. The flag cannot take an
+// optional value instead: pflag would then no longer read `-r <id>`, the
+// form Claude Code users type.
+func bareResume(args []string) []string {
+	out := slices.Clone(args)
+	if len(out) > 0 && (out[0] == cobra.ShellCompRequestCmd || out[0] == cobra.ShellCompNoDescRequestCmd) {
+		return out
+	}
+	for i, arg := range out {
+		if arg == "--" {
+			break
+		}
+		if (arg == "-r" || arg == "--resume") && (i+1 == len(out) || strings.HasPrefix(out[i+1], "-")) {
+			out[i] = "--resume=" + pickSession
+		}
+	}
+	return out
 }
 
 // sessionFlag is the ID of the session to continue, from --session or

@@ -225,6 +225,9 @@ type UI struct {
 	initialSessionID string
 	// continueLastSession is set to continue the most recent session on startup.
 	continueLastSession bool
+	// pickSessionAtStart opens the sessions list on startup, for a bare
+	// `crash -r` (see PickSessionAtStart).
+	pickSessionAtStart bool
 
 	lastUserMessageTime int64
 
@@ -655,6 +658,9 @@ func (m *UI) Init() tea.Cmd {
 	if initialSession != nil {
 		cmds = append(cmds, initialSession)
 	}
+	if cmd := m.startupSessionPicker(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	// loadSessionMsg reloads history for whichever session arrives, so
 	// doing it here too would be discarded — and with no session set yet
 	// it reads every user message in the database, which the pending
@@ -693,6 +699,33 @@ func (m *UI) Init() tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 	return tea.Batch(cmds...)
+}
+
+// PickSessionAtStart makes the UI open the list of sessions to pick from
+// as it starts, for a bare `crash -r`, as Claude Code's `claude -r` opens
+// its picker.
+func (m *UI) PickSessionAtStart() {
+	m.pickSessionAtStart = true
+}
+
+// startupSessionPicker opens the sessions list at startup when
+// PickSessionAtStart asked for it, or says there is no session to pick
+// rather than open an empty list. Like loadInitialSession, it waits out
+// onboarding.
+func (m *UI) startupSessionPicker() tea.Cmd {
+	if !m.pickSessionAtStart || m.state != uiLanding {
+		return nil
+	}
+	return func() tea.Msg {
+		sessions, err := m.com.Workspace.ListSessions(context.Background())
+		if err != nil {
+			return util.NewErrorMsg(err)
+		}
+		if len(sessions) == 0 {
+			return util.NewInfoMsg("No sessions to resume here yet")
+		}
+		return dialog.ActionOpenDialog{DialogID: dialog.SessionsID}
+	}
 }
 
 // loadInitialSession loads the initial session if one was specified on startup.

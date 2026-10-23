@@ -82,6 +82,9 @@ crash run --continue "Follow up on your last response"
 
 		// sessionID is read from --session or --resume.
 		sessionID := sessionFlag(cmd)
+		if sessionID == pickSession {
+			return errors.New("crash run needs the ID of the session to continue after -r; crash -r on its own lists them to pick from")
+		}
 
 		// Cancel on SIGINT or SIGTERM.
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
