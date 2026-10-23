@@ -334,9 +334,8 @@ does not run the hook again when its turn comes. While the hook runs the session
 counts as busy, and Esc stops the hook and the prompt is not sent. Prompts the
 agent sends itself (a `Stop` hook's or `/loop`'s continuation), a sub-agent's
 prompt and a channel message (from Signal, say, written by someone else) do not
-fire it. A hook that could not evaluate (exit `3`, or one that could not run
-or timed out) blocks the prompt; one that fails with any other exit code is
-shown as a warning, and the prompt goes out without it.
+fire it. A hook that could not evaluate (exit `3`, an error it reports on
+stderr, or one that could not run or timed out) blocks the prompt.
 
 **What it reads**: `prompt` is the prompt as the agent will read it: what you
 typed, followed by the text of any pasted or attached text file. A paste of more
@@ -392,7 +391,7 @@ rebuilt on later turns.
 **Blocking**: exit code `2` (or `"decision": "block"`) means the hook
 objects, but the prompt goes ahead anyway, as in Claude Code: you get the
 hook's reason as a warning. Exit `49` (or `"continue": false`) does the
-same. A hook that fails or could not evaluate (any other exit code, or a
+same. A hook that could not evaluate (exit `3`, an error on stderr, or a
 timeout) is shown as a warning too, and the prompt goes ahead without it.
 
 **When it runs**: once per start, before the first prompt the process
@@ -446,10 +445,9 @@ matches nothing. Every configured `Stop` hook runs.
 **Blocking**: exit code `2` means "you are not finished" — the turn stays alive
 and your stderr is handed to the model as the reason to keep working. Exit code
 `49` means the opposite: end the turn now, even if another `Stop` hook blocked
-it. A hook that could not evaluate (exit `3`, or one that could not run or
-timed out) keeps the turn going as exit `2` does: a check that did not run has
-not passed. One that fails with any other exit code lets the turn end, and the
-user is told the check never ran.
+it. A hook that could not evaluate (exit `3`, an error it reports on stderr,
+or one that could not run or timed out) keeps the turn going as exit `2` does:
+a check that did not run has not passed. The user is told why.
 
 ```jsonc
 {
@@ -508,9 +506,8 @@ hook runs.
 finished" — the sub-agent stays alive and your stderr is handed to it as the
 reason to keep working. Exit code `49` means the opposite: end the sub-agent's
 work now, even if another `SubagentStop` hook blocked it. A hook that could
-not evaluate (exit `3`, or one that could not run or timed out) keeps it
-working as exit `2` does; one that fails with any other exit code lets the
-sub-agent finish, and the user is told the check never ran. When the hooks let the sub-agent finish, the `agent`
+not evaluate (exit `3`, an error it reports on stderr, or one that could not
+run or timed out) keeps it working as exit `2` does, and the user is told why. When the hooks let the sub-agent finish, the `agent`
 tool hands the parent its last answer — the one after the hooks let it end.
 
 The same persistence rules as `Stop` apply: there is no cap on how many times
@@ -573,9 +570,8 @@ fires on both.
 
 **Blocking**: exit code `2` (or `"decision": "block"`) means the hook objects,
 but the summary goes ahead anyway; you get the hook's reason as a warning.
-Exit `49` (or `"continue": false`) does the same. A hook that fails or could
-not evaluate (any other exit code, or a timeout) is also shown as a warning,
-and the summary goes ahead without it.
+Exit `49` (or `"continue": false`) does the same. A hook that could not
+evaluate is also shown as a warning, and the summary goes ahead without it.
 
 **Scope**: like `PreToolUse` and `Stop`, `PreCompact` fires only for the
 **top-level agent**, and not for sub-agents.
@@ -729,8 +725,8 @@ fi
 | 2         | **Block the tool.** Stderr is used as the deny reason (no JSON). |
 | 3         | **Could not evaluate.** Blocks as 2 does; stderr says why.       |
 | 49        | **Halt the turn.** Stderr is used as the halt reason (no JSON).  |
-| 126, 127  | The hook could not run. Blocks as 3 does.                        |
-| Other     | Non-blocking error. Logged and shown — the tool call proceeds.   |
+| 126, 127, 129+ | The hook could not run, or was killed. Blocks as 3 does.    |
+| Other     | With a reason on stderr, an error: blocks as 3 does. Silent: no opinion. |
 
 The difference between exit 2 and exit 49:
 
@@ -770,10 +766,15 @@ warning. On `Stop` and `SubagentStop` the agent keeps working; at each
 reflection checkpoint it may judge that the check cannot run here, say why,
 and stop, and you are told.
 
-Any other exit code (`1`, say) stays a non-blocking error, as in Claude Code:
-a script whose last line is a test that came out false, such as
-`[[ $f == *.go ]] && gofmt -w "$f"`, exits `1` and means nothing by it. To fail
-closed on an error of your own, exit `3`.
+Any other exit code counts by what the hook says. With a reason on stderr (a
+traceback, `jq: error`, `No such file`), the hook ran into trouble and did not
+check: it blocks, as an error. Without a word, it is a test that came out false,
+as `[[ $f == *.go ]] && gofmt -w "$f"` exits `1` on every other file: no
+opinion. A hook killed by a signal (exit above `128`, the out-of-memory killer
+say) blocks too, since it says nothing either. So a hook that logs to stderr
+should end with its verdict, `exit 0` included, and one that only wants to warn
+exits `0` with Claude Code's `{"systemMessage": "…"}`, which shows you the
+message and blocks nothing.
 
 That said, if you need more control, or if you need to rewrite input, you can
 use JSON on stdout. Exit 0 and print a JSON object to provide context, update
@@ -1051,7 +1052,9 @@ how a Claude Code `Stop` hook keeps the agent working. Claude Code's
 read too, where `"ask"` falls through to the normal permission prompt.
 
 Claude Code's other envelope fields are read too. `"continue": false` stops
-everything, as a Klash `halt` does, with `stopReason` as the reason. Top-level
+everything, as a Klash `halt` does, with `stopReason` as the reason.
+`"systemMessage"` is shown to you as a warning and blocks nothing: on a tool's
+hook line, or as a hook warning for the other events. Top-level
 fields count alongside `hookSpecificOutput`, so a `PostToolUse` or `Stop` hook
 that blocks with a top-level `"decision": "block"` and sends `additionalContext`
 in `hookSpecificOutput` gets both; where both give a decision,
@@ -1327,8 +1330,8 @@ Extends the common envelope:
 | `2`   | Block this tool call. Stderr becomes the deny reason. Stdout is ignored. |
 | `3`   | Could not evaluate. Blocks as `2` does; stderr says why.                 |
 | `49`  | Halt the whole turn. Stderr becomes the halt reason. Stdout is ignored.  |
-| `126`, `127` | The hook could not run. Blocks as `3` does.                       |
-| other | Non-blocking error. Logged and shown; the tool call proceeds.            |
+| `126`, `127`, `129`+ | The hook could not run, or was killed. Blocks as `3` does. |
+| other | With a reason on stderr, an error: blocks as `3` does. Silent: no opinion. |
 
 Exit `2` blocks the tool call on `PreToolUse` and keeps the agent working on
 `Stop`. On `PostToolUse`, where the call has already run, it hands stderr to the

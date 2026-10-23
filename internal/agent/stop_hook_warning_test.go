@@ -76,20 +76,41 @@ func TestStopHook_FailedHookWarnsTheUser(t *testing.T) {
 	require.Contains(t, warnings[0].Message, "the turn goes on", "say what it did")
 }
 
-// A hook that fails with an exit code that is not a verdict, 1 say, is a
-// non-blocking error, as in Claude Code: the turn ends, and the warning
-// says it ended without the check.
-func TestStopHook_NonBlockingFailureLetsTheTurnEnd(t *testing.T) {
+// A hook that fails with an error that says why, 1 with a message here,
+// did not check: the turn goes on, and the warning says why. A silent
+// non-zero exit is a test that came out false: the turn ends, with no
+// warning.
+func TestStopHook_AnErrorThatSaysWhyHoldsTheTurn(t *testing.T) {
 	t.Parallel()
 
 	a, n := stopHookAgentWithNotifier(t,
 		config.HookConfig{Name: "lint", Command: `echo "linter crashed" >&2; exit 1`})
+	_, blocked := a.stopHookContinuation(t.Context(), SessionAgentCall{SessionID: "s1"}, "done")
+	require.True(t, blocked)
+	warnings := n.warnings()
+	require.Len(t, warnings, 1)
+	require.Equal(t, `Stop hook "lint" could not evaluate: exit 1: linter crashed; the turn goes on, since a check that could not run does not pass`, warnings[0].Message)
 
+	a, n = stopHookAgentWithNotifier(t,
+		config.HookConfig{Name: "review-marker", Command: `[ -f /no/such/marker/for/stop/tests ] && { echo "review first" >&2; exit 2; }`})
+	_, blocked = a.stopHookContinuation(t.Context(), SessionAgentCall{SessionID: "s1"}, "done")
+	require.False(t, blocked)
+	require.Empty(t, n.warnings())
+}
+
+// A Stop hook's systemMessage reaches the user as a warning, and the
+// turn ends: it blocks nothing.
+func TestStopHook_SystemMessageWarns(t *testing.T) {
+	t.Parallel()
+
+	a, n := stopHookAgentWithNotifier(t,
+		config.HookConfig{Name: "changelog", Command: `echo '{"systemMessage":"remember the changelog"}'`})
 	_, blocked := a.stopHookContinuation(t.Context(), SessionAgentCall{SessionID: "s1"}, "done")
 	require.False(t, blocked)
 	warnings := n.warnings()
 	require.Len(t, warnings, 1)
-	require.Equal(t, `Stop hook "lint" failed: exit 1: linter crashed; the turn ended without its check`, warnings[0].Message)
+	require.Equal(t, `Stop hook "changelog": remember the changelog`, warnings[0].Message)
+	require.Equal(t, "s1", warnings[0].SessionID)
 }
 
 func TestStopHook_CleanHookDoesNotWarn(t *testing.T) {

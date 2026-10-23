@@ -303,6 +303,7 @@ func (r *Runner) run(
 			Reason:       results[i].Reason,
 			InputRewrite: results[i].UpdatedInput != "",
 			Error:        results[i].Error,
+			Message:      results[i].SystemMessage,
 
 			CouldNotEvaluate: results[i].CouldNotEvaluate,
 		}
@@ -456,27 +457,30 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, event
 				slog.Warn("Hook did not start", "command", hook.Command, "error", err)
 				return couldNotRun(hook, "did not start: "+firstLine(detail))
 			}
-			if exitCode == 126 || exitCode == 127 {
+			if exitCode == 126 || exitCode == 127 || exitCode > 128 {
 				// The hook, or a command it runs, could not be found or
-				// run: it checked nothing.
+				// run, or the hook was killed: it checked nothing.
 				slog.Warn("Hook could not run", "command", hook.Command, "exit_code", exitCode, "stderr", stderrText)
 				return couldNotRun(hook, hookFailureMessage(exitCode, detail))
 			}
-			// Other non-zero exits are non-blocking errors, as in Claude
-			// Code: a hook ending in a test that came out false, such as
-			// [[ $f == *.go ]] && gofmt -w "$f", exits 1 on every other
-			// file.
-			slog.Warn(
-				"Hook failed with non-blocking error",
-				"command", hook.Command,
-				"exit_code", exitCode,
-				"stderr", stderrText,
-				"error", err,
-			)
-			return HookResult{
-				Decision: DecisionNone,
-				Error:    hookFailureMessage(exitCode, detail),
+			if stderrText != "" {
+				// An error that says why: the hook ran into trouble, a
+				// check that crashed or a tool that failed, and did not
+				// check. Claude Code lets it pass as a non-blocking error.
+				slog.Warn("Hook failed", "command", hook.Command, "exit_code", exitCode, "stderr", stderrText)
+				failure := hookFailureMessage(exitCode, stderrText)
+				return HookResult{
+					Decision:         DecisionDeny,
+					CouldNotEvaluate: true,
+					Reason:           fmt.Sprintf("hook %q failed (%s), so it did not check this. %s", hook.DisplayName(), failure, checkDidNotPass),
+					Error:            failure,
+				}
 			}
+			// A silent non-zero exit is a test that came out false, as
+			// [[ $f == *.go ]] && gofmt -w "$f" exits 1 on every other
+			// file: no opinion, and no failure either.
+			slog.Debug("Hook exited non-zero without a word; no opinion", "command", hook.Command, "exit_code", exitCode)
+			return HookResult{Decision: DecisionNone}
 		}
 	}
 
@@ -534,15 +538,17 @@ func firstLine(s string) string {
 	return first
 }
 
-// hookFailureMessage summarises a non-blocking hook failure for display:
+// hookFailureMessage summarises how a hook failed, for display:
 // the exit code, what it usually means, and the first line of stderr.
 func hookFailureMessage(exitCode int, stderrText string) string {
 	msg := fmt.Sprintf("exit %d", exitCode)
-	switch exitCode {
-	case 126:
+	switch {
+	case exitCode == 126:
 		msg += " (not executable)"
-	case 127:
+	case exitCode == 127:
 		msg += " (command not found)"
+	case exitCode > 128:
+		msg += fmt.Sprintf(" (killed by signal %d)", exitCode-128)
 	}
 	if first := firstLine(stderrText); first != "" {
 		msg += ": " + first

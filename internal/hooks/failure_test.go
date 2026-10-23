@@ -39,14 +39,68 @@ func TestRunnerReportsCommandNotFound(t *testing.T) {
 		"and why it failed — the shell put the reason in its error, not on stderr")
 }
 
-func TestRunnerReportsNonBlockingExitWithStderr(t *testing.T) {
+// An error that says why on stderr, a check that crashed or a tool it
+// ran that failed, did not check: it blocks, where Claude Code lets it
+// pass as a non-blocking error.
+func TestRunnerErrorThatSaysWhyBlocks(t *testing.T) {
 	t.Parallel()
 
-	r := preRunner(t, config.HookConfig{Command: `echo "linter crashed" >&2; exit 1`})
+	r := preRunner(t, config.HookConfig{Name: "lint", Command: `echo "linter crashed" >&2; exit 1`})
+	result, err := r.Run(context.Background(), EventPreToolUse, "sess", "bash", `{}`)
+	require.NoError(t, err)
+	require.Equal(t, DecisionDeny, result.Decision)
+	require.True(t, result.Hooks[0].CouldNotEvaluate)
+	require.Equal(t, "exit 1: linter crashed", result.Hooks[0].Error)
+	require.Equal(t, `hook "lint" failed (exit 1: linter crashed), so it did not check this. A check that could not run does not pass.`, result.Reason)
+}
+
+// A silent non-zero exit is a test that came out false, as a hook ending
+// in [[ $f == *.go ]] && gofmt -w "$f" exits 1 on every other file: no
+// opinion, and not a failure to show either.
+func TestRunnerSilentExitIsNoOpinion(t *testing.T) {
+	t.Parallel()
+
+	for _, cmd := range []string{`[ -f /no/such/file/for/hook/tests ] && echo found`, "exit 4"} {
+		r := preRunner(t, config.HookConfig{Command: cmd})
+		result, err := r.Run(context.Background(), EventPreToolUse, "sess", "bash", `{}`)
+		require.NoError(t, err)
+		require.Equal(t, DecisionNone, result.Decision, cmd)
+		require.Empty(t, result.Hooks[0].Error, cmd)
+		require.False(t, result.Hooks[0].CouldNotEvaluate, cmd)
+	}
+}
+
+// A hook killed by a signal, the kernel's out-of-memory killer say, says
+// nothing on stderr and checked nothing: it blocks.
+func TestRunnerKilledHookBlocks(t *testing.T) {
+	t.Parallel()
+
+	r := preRunner(t, config.HookConfig{Command: `sh -c 'kill -9 $$'`})
+	result, err := r.Run(context.Background(), EventPreToolUse, "sess", "bash", `{}`)
+	require.NoError(t, err)
+	require.Equal(t, DecisionDeny, result.Decision)
+	require.True(t, result.Hooks[0].CouldNotEvaluate)
+	require.Equal(t, "exit 137 (killed by signal 9)", result.Hooks[0].Error)
+}
+
+// A hook warns the user, blocking nothing, with Claude Code's
+// systemMessage. One that is not a string is an answer that cannot be
+// read.
+func TestRunnerSystemMessage(t *testing.T) {
+	t.Parallel()
+
+	r := preRunner(t, config.HookConfig{Command: `echo '{"systemMessage":"lint found 3 warnings"}'`})
 	result, err := r.Run(context.Background(), EventPreToolUse, "sess", "bash", `{}`)
 	require.NoError(t, err)
 	require.Equal(t, DecisionNone, result.Decision)
-	require.Equal(t, "exit 1: linter crashed", result.Hooks[0].Error)
+	require.Equal(t, "lint found 3 warnings", result.Hooks[0].Message)
+	require.Empty(t, result.Hooks[0].Error)
+
+	r = preRunner(t, config.HookConfig{Command: `echo '{"systemMessage":3}'`})
+	result, err = r.Run(context.Background(), EventPreToolUse, "sess", "bash", `{}`)
+	require.NoError(t, err)
+	require.Equal(t, DecisionDeny, result.Decision)
+	require.Contains(t, result.Hooks[0].Error, "systemMessage must be a string, got a number or boolean")
 }
 
 func TestRunnerReportsTimeout(t *testing.T) {
@@ -181,7 +235,7 @@ func TestRunnerAttributesErrorToTheFailingHook(t *testing.T) {
 	dir := t.TempDir()
 	r := NewRunner([]config.HookConfig{
 		{Name: "good", Command: "exit 0"},
-		{Name: "broken", Command: "exit 4"},
+		{Name: "broken", Command: `echo "lint config is missing" >&2; exit 4`},
 	}, dir, dir)
 	result, err := r.Run(context.Background(), EventPreToolUse, "sess", "bash", `{}`)
 	require.NoError(t, err)
@@ -191,8 +245,8 @@ func TestRunnerAttributesErrorToTheFailingHook(t *testing.T) {
 		byName[h.Name] = h
 	}
 	require.Empty(t, byName["good"].Error)
-	require.Equal(t, "exit 4", byName["broken"].Error)
-	require.Equal(t, DecisionNone, result.Decision, "exit 4 is a non-blocking error, as in Claude Code")
+	require.Equal(t, "exit 4: lint config is missing", byName["broken"].Error)
+	require.Equal(t, DecisionDeny, result.Decision, "an error that says why blocks")
 }
 
 func TestHookFailureMessage(t *testing.T) {
@@ -202,6 +256,7 @@ func TestHookFailureMessage(t *testing.T) {
 	require.Equal(t, "exit 127 (command not found): sh: nope: not found",
 		hookFailureMessage(127, "sh: nope: not found"))
 	require.Equal(t, "exit 126 (not executable)", hookFailureMessage(126, ""))
+	require.Equal(t, "exit 137 (killed by signal 9)", hookFailureMessage(137, ""))
 	require.Equal(t, "exit 1: first line", hookFailureMessage(1, "first line\nsecond line"),
 		"only the first line fits on a status line")
 }

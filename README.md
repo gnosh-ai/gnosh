@@ -64,9 +64,10 @@ you let it open cannot redirect it there.
   know, stops it at startup with the names it does know. Upstream ignored
   such a hook, so a misspelt guard simply never ran.
 - A check that cannot run holds the work up instead of passing it. A hook
-  whose script is missing, whose command is not installed, that times out, or
-  that says so itself (exit `3`, "could not evaluate") blocks as a failed
-  check does, and says why. Upstream, and Claude Code, let such a hook pass,
+  whose script is missing, whose command is not installed, that crashes or
+  fails with an error, that times out, or that says so itself (exit `3`,
+  "could not evaluate") blocks as a failed check does, and says why. A hook
+  that only wants to warn says so with Claude Code's `systemMessage`. Upstream, and Claude Code, let such a hook pass,
   so a check that never ran read as one that passed. See
   [Could not evaluate](docs/hooks/README.md#could-not-evaluate-klash-fails-closed).
 - A hook whose answer Klash cannot read, a misspelt `"Deny"` say, blocks too,
@@ -115,7 +116,7 @@ Claude Code's names work here too.
 - **Hooks** take Claude Code's events and answers: `PreToolUse`,
   `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit`, `SessionStart`,
   `Stop`, `SubagentStop` and `PreCompact`, with `tool_use_id`,
-  `hook_event_name`, `permission_mode`, `continue: false` and
+  `hook_event_name`, `permission_mode`, `continue: false`, `systemMessage` and
   `hookSpecificOutput`. Matchers know Claude Code's tool names (`Bash`,
   `Edit|Write`, `mcp__github__.*`), so the `hooks` block of your
   `~/.claude/settings.json` can be pasted into `klash.json`; an entry Klash

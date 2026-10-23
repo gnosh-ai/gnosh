@@ -58,6 +58,7 @@ func (a *sessionAgent) runPreCompactHooks(ctx context.Context, sessionID string,
 	runner := hooks.NewRunner(hookCfgs, workingDir, workingDir)
 	result, err := runner.RunPreCompact(ctx, sessionID, string(trigger))
 	a.warnFailedPreCompactHooks(sessionID, result.Hooks)
+	a.warnHookMessages(sessionID, hooks.EventPreCompact, result.Hooks)
 	if err != nil {
 		slog.Warn("PreCompact hook execution error; summarizing without it",
 			"session_id", sessionID,
@@ -99,7 +100,7 @@ func (a *sessionAgent) warnFailedPreCompactHooks(sessionID string, ran []hooks.H
 		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 			SessionID: sessionID,
 			Type:      notify.TypeHookWarning,
-			Message:   fmt.Sprintf("PreCompact hook %q %s; the summary went ahead without it", h.Name, hookFailure(h)),
+			Message:   fmt.Sprintf("PreCompact hook %q could not evaluate: %s; the summary went ahead without it", h.Name, h.Error),
 		})
 	}
 }

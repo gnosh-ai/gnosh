@@ -417,22 +417,15 @@ func TestSubagentStopHookHasNoCap(t *testing.T) {
 		"the agent is asked to reflect at the 10th objection, and only then")
 }
 
-// A SubagentStop hook that fails with an exit code that is not a
-// verdict, 1 say, is non-blocking, as in Claude Code: the sub-agent
-// finishes, and the user is told the check never ran.
-func TestSubagentStopHookFailureLetsTheSubAgentFinishWithAWarning(t *testing.T) {
-	r := runSubagentTurn(t, `echo "the script broke" >&2; exit 1`)
+// A SubagentStop hook that exits non-zero without a word, a test that
+// came out false, has no opinion: the sub-agent finishes, with no
+// warning.
+func TestSubagentStopHookSilentExitLetsTheSubAgentFinish(t *testing.T) {
+	r := runSubagentTurn(t, `[ -f /no/such/marker/for/subagent/tests ] && { echo "not done" >&2; exit 2; }`)
 
-	require.Equal(t, int64(1), r.turns.Load(),
-		"a failed hook must not cost the sub-agent an extra turn")
+	require.Equal(t, int64(1), r.turns.Load(), "a test that came out false must not cost the sub-agent a turn")
 	requireSubagentQueueEmpty(t, r)
-
-	warnings := r.notifier.warnings()
-	require.Len(t, warnings, 1, "the user must be told the check never ran")
-	require.Contains(t, warnings[0].Message, "SubagentStop")
-	require.Contains(t, warnings[0].Message, "the script broke")
-	require.Equal(t, r.parentID, warnings[0].SessionID,
-		"in the session the user is in: klash run prints only that session's warnings")
+	require.Empty(t, r.notifier.warnings())
 }
 
 // A SubagentStop hook that could not check (exit 3) keeps the sub-agent
@@ -440,17 +433,24 @@ func TestSubagentStopHookFailureLetsTheSubAgentFinishWithAWarning(t *testing.T) 
 // it can check on its second try, and the user is told why the first
 // held the sub-agent.
 func TestSubagentStopHookCouldNotEvaluateKeepsTheSubAgentWorking(t *testing.T) {
-	ran := filepath.Join(t.TempDir(), "ran")
-	r := runSubagentTurn(t,
-		`if [ -f `+ran+` ]; then exit 0; fi; touch `+ran+`; echo "ffprobe is not installed" >&2; exit 3`)
+	for code, want := range map[string]string{
+		"3": "could not evaluate: ffprobe is not installed",
+		"1": "could not evaluate: exit 1: ffprobe is not installed",
+	} {
+		ran := filepath.Join(t.TempDir(), "ran")
+		r := runSubagentTurn(t,
+			`if [ -f `+ran+` ]; then exit 0; fi; touch `+ran+`; echo "ffprobe is not installed" >&2; exit `+code)
 
-	require.Equal(t, int64(2), r.turns.Load(),
-		"the hook that could not check holds the sub-agent for one more turn")
-	requireSubagentQueueEmpty(t, r)
-	warnings := r.notifier.warnings()
-	require.Len(t, warnings, 1)
-	require.Contains(t, warnings[0].Message, "could not evaluate: ffprobe is not installed")
-	require.Contains(t, warnings[0].Message, "the turn goes on")
+		require.Equal(t, int64(2), r.turns.Load(),
+			"exit %s: the hook that could not check holds the sub-agent for one more turn", code)
+		requireSubagentQueueEmpty(t, r)
+		warnings := r.notifier.warnings()
+		require.Len(t, warnings, 1)
+		require.Contains(t, warnings[0].Message, want)
+		require.Contains(t, warnings[0].Message, "the turn goes on")
+		require.Equal(t, r.parentID, warnings[0].SessionID,
+			"in the session the user is in: klash run prints only that session's warnings")
+	}
 }
 
 // A SubagentStop hook that halts (exit 49) ends the sub-agent's turn

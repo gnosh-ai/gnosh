@@ -81,6 +81,9 @@ type HookInfo struct {
 	// CouldNotEvaluate is set when the hook could not check what it was
 	// asked to, so it blocked. See HookResult.CouldNotEvaluate.
 	CouldNotEvaluate bool `json:"could_not_evaluate,omitempty"`
+	// Message is what the hook asked to show the user, its
+	// systemMessage. See HookResult.SystemMessage.
+	Message string `json:"message,omitempty"`
 }
 
 // Decision represents the outcome of a single hook execution.
@@ -114,13 +117,11 @@ type HookResult struct {
 	Context      string
 	UpdatedInput string // Shallow-merge patch against tool_input (opaque JSON).
 
-	// Error is set when the hook did not run to a verdict: it could not
-	// run (see CouldNotEvaluate), or it exited non-zero with a code that
-	// is not a decision, which is a non-blocking error as in Claude Code.
-	// Either way it must not be mistaken for a hook that ran and simply
-	// had no opinion: that is how a safety hook pointed at the wrong path
-	// came to be shown as a green "OK" on every call while checking
-	// nothing.
+	// Error is set when the hook did not run to a verdict (see
+	// CouldNotEvaluate), so that it is not mistaken for a hook that ran
+	// and simply had no opinion: that is how a safety hook pointed at the
+	// wrong path came to be shown as a green "OK" on every call while
+	// checking nothing.
 	Error string
 
 	// CouldNotEvaluate is set when the hook did not check what it was
@@ -129,7 +130,15 @@ type HookResult struct {
 	// result is a DecisionDeny, so it blocks wherever a hook can, and its
 	// Reason says why it could not check: a check that did not run must
 	// not pass. "ffmpeg exited 0" once passed for "the audio is fine".
+	// An exit with another code counts when the hook says why on stderr,
+	// as a check that crashed does; a silent one is a test that came out
+	// false, no opinion.
 	CouldNotEvaluate bool
+
+	// SystemMessage is what the hook asked to show the user, as Claude
+	// Code's "systemMessage" is: a warning that blocks nothing. It is the
+	// way for a hook to warn, now that an error on stderr blocks.
+	SystemMessage string
 
 	// rewriteRejected records that the hook's tool-input rewrite was
 	// malformed, so that no allow it gives, wherever in its output, is

@@ -186,6 +186,7 @@ func (a *sessionAgent) runSessionStartHooks(ctx context.Context, call *SessionAg
 	model := a.largeModel.Get()
 	result, err := runner.RunSessionStart(ctx, call.SessionID, model.ModelCfg.Model, string(source))
 	a.warnFailedSessionStartHooks(call.SessionID, result.Hooks)
+	a.warnHookMessages(call.SessionID, hooks.EventSessionStart, result.Hooks)
 	if err != nil {
 		slog.Warn("SessionStart hook execution error; sending the prompt without it",
 			"session_id", call.SessionID,
@@ -245,8 +246,8 @@ func (a *sessionAgent) warnFailedSessionStartHooks(sessionID string, ran []hooks
 			SessionID: sessionID,
 			Type:      notify.TypeHookWarning,
 			Message: fmt.Sprintf(
-				"SessionStart hook %q %s; the prompt went ahead without it",
-				h.Name, hookFailure(h),
+				"SessionStart hook %q could not evaluate: %s; the prompt went ahead without it",
+				h.Name, h.Error,
 			),
 		})
 	}

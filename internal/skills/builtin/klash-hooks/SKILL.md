@@ -122,8 +122,8 @@ Communicate back via exit code (+ stderr) or JSON on stdout.
 | 2         | Block this tool call. Stderr becomes the deny reason.         |
 | 3         | Could not evaluate. Blocks as 2 does; stderr says why.        |
 | 49        | Halt the whole turn. Stderr becomes the halt reason.          |
-| 126, 127  | The hook could not run. Blocks as 3 does.                     |
-| Other     | Non-blocking error. Logged and shown; tool call proceeds.     |
+| 126, 127, 129+ | The hook could not run, or was killed. Blocks as 3 does. |
+| Other     | With a reason on stderr, an error: blocks. Silent: no opinion. |
 
 Exit 2 blocks one tool call (agent sees the reason and can try again); exit 49
 ends the whole turn (user takes over). Default to deny — reach for halt only
@@ -134,10 +134,14 @@ policy violation).
 missing, its input is not there) must exit 3 with the reason on stderr, never
 exit 0: "ffmpeg exited 0" once passed for "the audio is fine". Klash blocks on
 it as on exit 2, and says the hook could not check. A hook that could not run
-counts the same: never started, not found or not executable (126, 127), timed
-out, or JSON that cannot be read (an unknown `decision`). Claude Code lets
-these pass. Any other exit code (1, say) stays non-blocking: a script ending in
-a false test (`[[ $f == *.go ]] && gofmt -w "$f"`) exits 1 for nothing.
+counts the same: never started, not found or not executable (126, 127), killed
+(129+), timed out, or JSON that cannot be read (an unknown `decision`). Claude
+Code lets these pass. Any other exit code blocks too when stderr says why (a
+crash, a tool's error); a silent one is a false test
+(`[[ $f == *.go ]] && gofmt -w "$f"` exits 1 on other files), no opinion. So a
+hook that logs to stderr must end with its verdict (`exit 0`), and a hook that
+only warns exits 0 with `{"systemMessage": "…"}`, shown to the user, blocking
+nothing.
 
 **JSON envelope (exit 0):**
 
@@ -217,9 +221,8 @@ for sub-agents started by the `agent` tool: exit `2` (or
 working, your stderr is its reason, and the `agent` tool eventually returns
 the sub-agent's last answer to the parent once its hooks let it finish. Exit
 `49` ends the sub-agent's work now. A hook that could not evaluate (exit 3,
-126, 127, a timeout) keeps it working as exit 2 does; one that fails with any
-other exit code lets the sub-agent finish, and the user is told the check
-never ran. There is no cap, and the
+an error on stderr, 126, 127, a timeout) keeps it working as exit 2 does, and
+the user is told why. There is no cap, and the
 sub-agent is asked to judge at every 10th consecutive block, exactly as the
 main agent is at `Stop` checkpoints. It fires only for sub-agents; the
 top-level agent's gate is `Stop`, which never fires for sub-agents.
@@ -381,8 +384,9 @@ value cannot be read, so the hook could not evaluate: it blocks.
 
 - A timeout counts as could not evaluate: the hook blocks. Bump `timeout` if needed.
 - A missing script or command (126, 127) blocks too, with the reason on the hook's line.
-- Other non-zero exit codes (not 2, 3, 49) are logged and shown but don't block.
-- Use `echo "debug info" >&2` for logging without corrupting stdout JSON.
+- Any other non-zero exit with text on stderr blocks as an error; a silent one is no opinion.
+- Use `echo "debug info" >&2` for logging without corrupting stdout JSON, and end
+  such a hook with its verdict (`exit 0`), or its log reads as an error.
 - `matcher` follows Claude Code's rules: exact names separated by `|` or `,`
   (`bash`, `Edit|Write`; Claude Code's names match Klash's tools), `*` or empty
   for all, and anything else is an unanchored regex (`^mcp_github_`). A plain

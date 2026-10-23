@@ -11,10 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/pubsub"
 )
 
 // wantsPromptHooks reports whether call is a prompt the user sent whose
@@ -83,6 +81,7 @@ func (a *sessionAgent) runPromptHooks(ctx context.Context, call *SessionAgentCal
 		)
 		return nil
 	}
+	a.warnHookMessages(call.SessionID, hooks.EventUserPromptSubmit, result.Hooks)
 	if result.Halt || result.Decision == hooks.DecisionDeny {
 		reason := strings.TrimSpace(result.Reason)
 		if reason == "" {
@@ -91,7 +90,6 @@ func (a *sessionAgent) runPromptHooks(ctx context.Context, call *SessionAgentCal
 		slog.Info("UserPromptSubmit hook blocked the prompt", "session_id", call.SessionID, "reason", reason)
 		return fmt.Errorf("%w: %s", ErrPromptBlocked, reason)
 	}
-	a.warnFailedPromptHooks(call.SessionID, result.Hooks)
 	call.promptHookContext = joinHookContext(call.promptHookContext, result.Context)
 	return nil
 }
@@ -144,28 +142,6 @@ func (a *sessionAgent) cancelSubmitting(sessionID string) {
 func (a *sessionAgent) isSubmitting(sessionID string) bool {
 	list, ok := a.submitting.Get(sessionID)
 	return ok && len(list) > 0
-}
-
-// warnFailedPromptHooks tells the user about each UserPromptSubmit hook
-// that did not run to a verdict, since the prompt went out without what
-// it would have added or checked.
-func (a *sessionAgent) warnFailedPromptHooks(sessionID string, ran []hooks.HookInfo) {
-	if a.notify == nil {
-		return
-	}
-	for _, h := range ran {
-		if h.Error == "" {
-			continue
-		}
-		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
-			SessionID: sessionID,
-			Type:      notify.TypeHookWarning,
-			Message: fmt.Sprintf(
-				"UserPromptSubmit hook %q %s; the prompt was sent without it",
-				h.Name, hookFailure(h),
-			),
-		})
-	}
 }
 
 // promptHookBlock is what call's hooks added, as the model reads it, or

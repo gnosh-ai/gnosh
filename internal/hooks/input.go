@@ -445,6 +445,8 @@ func parseStdout(stdout string) HookResult {
 		// in stopReason.
 		Continue   *bool  `json:"continue"`
 		StopReason string `json:"stopReason"`
+		// Claude Code's warning for the user, which blocks nothing.
+		SystemMessage json.RawMessage `json:"systemMessage"`
 	}
 	if err := json.Unmarshal([]byte(stdout), &parsed); err != nil {
 		return HookResult{Decision: DecisionNone}
@@ -465,6 +467,11 @@ func parseStdout(stdout string) HookResult {
 	}
 	if result.Halt && result.Reason == "" {
 		result.Reason = parsed.StopReason
+	}
+	if raw := parsed.SystemMessage; len(raw) > 0 && string(raw) != "null" {
+		if err := json.Unmarshal(raw, &result.SystemMessage); err != nil {
+			setParseError(&result, fmt.Errorf("systemMessage must be a string, got %s", jsonTypeName(raw)))
+		}
 	}
 	decision, err := parseDecision(parsed.Decision)
 	result.Decision = decision

@@ -1022,8 +1022,18 @@ func renderHookLine(sty *styles.Styles, hi hooks.HookInfo, rawName, detail strin
 	)
 }
 
-// hookDetail returns the styled detail text for a single hook result.
+// hookDetail returns the styled detail text for a single hook result,
+// with what the hook asked to show the user, its systemMessage, after it.
 func hookDetail(sty *styles.Styles, hi hooks.HookInfo) string {
+	detail := hookVerdict(sty, hi)
+	if hi.Message != "" {
+		detail += " " + sty.Tool.HookDeniedReason.Render(hi.Message)
+	}
+	return detail
+}
+
+// hookVerdict returns the styled verdict of a single hook result.
+func hookVerdict(sty *styles.Styles, hi hooks.HookInfo) string {
 	const (
 		okMessage               = "OK"
 		denialMessage           = "Denied"
@@ -1039,8 +1049,8 @@ func hookDetail(sty *styles.Styles, hi hooks.HookInfo) string {
 		return sty.Tool.HookDenied.Render(couldNotEvaluateMessage) + " " + sty.Tool.HookDeniedReason.Render(hi.Error)
 	}
 	// Any other hook that never reached a verdict is not "OK" either: it
-	// checked nothing. It is non-blocking, so the call went ahead, but the
-	// line has to say the hook did not run rather than vouch for it.
+	// checked nothing, and the line has to say so rather than vouch for
+	// it.
 	if hi.Error != "" {
 		return sty.Tool.HookDenied.Render(failedMessage) + " " + sty.Tool.HookDeniedReason.Render(hi.Error)
 	}

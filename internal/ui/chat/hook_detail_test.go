@@ -45,6 +45,16 @@ func TestHookDetail_CouldNotEvaluate(t *testing.T) {
 	require.Equal(t, "Could Not Evaluate ffprobe is not installed", got)
 }
 
+// What a hook asked to show the user, its systemMessage, follows the
+// verdict on its line.
+func TestHookDetail_SystemMessage(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	got := plain(hookDetail(&sty, hooks.HookInfo{Name: "lint", Decision: "none", Message: "lint found 3 warnings"}))
+	require.Equal(t, "OK lint found 3 warnings", got)
+}
+
 // The ordinary cases must render exactly as they did before.
 func TestHookDetail_UnchangedForRealVerdicts(t *testing.T) {
 	t.Parallel()
