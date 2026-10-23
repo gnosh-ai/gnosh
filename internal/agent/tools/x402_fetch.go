@@ -197,6 +197,11 @@ func NewX402FetchTool(permissions permission.Service, questions question.Service
 				switch {
 				case strings.Contains(msg, "fund it"):
 					msg += " (https://faucet.gno.land funds the test networks)"
+					if master.IsZero() {
+						// A session key has no account of its own: without
+						// master it reads as an unfunded one.
+						msg += ". If the key is a session key, call again with master, the address of the account that registered it, which pays"
+					}
 				case errors.Is(err, x402gno.ErrExcessiveFee):
 					// The node, which the call named or klash knows, is the one
 					// that reported the price; it may be wrong, or not honest.
@@ -370,11 +375,12 @@ func gnokeyKey(ctx context.Context, home, nameOrAddress string) (gnokeyEntry, er
 		}
 		return gnokeyEntry{name: name, pub: pub}, nil
 	}
-	where := "gnokey's keybase"
-	if home != "" {
-		where += " at " + home
+	if home == "" {
+		// Models drop optional parameters, home among them, even when the user
+		// named it; say which keybase this was, so the next call can add it.
+		return gnokeyEntry{}, fmt.Errorf("gnokey's default keybase holds no key %q; if the user named a gnokey home that holds it, call again with that home; otherwise the user adds the key with gnokey add, in a terminal", nameOrAddress)
 	}
-	return gnokeyEntry{}, fmt.Errorf("%s holds no key %q; the user adds keys with gnokey add, in a terminal", where, nameOrAddress)
+	return gnokeyEntry{}, fmt.Errorf("gnokey's keybase at %s holds no key %q; the user adds keys with gnokey add, in a terminal", home, nameOrAddress)
 }
 
 // askX402Password asks the user for the key's password in a masked prompt

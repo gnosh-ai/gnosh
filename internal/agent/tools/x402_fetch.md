@@ -2,7 +2,7 @@ Fetch a URL that charges for access through x402, paying for it on a gno.land te
 
 <usage>
 - Use it when a URL answers 402 Payment Required (fetch reports that) and the user has said to pay; never on your own initiative
-- Pass the key the user named: a gnokey key name or address, and home when the user keeps keys outside gnokey's default directory
+- Pass the key the user named: a gnokey key name or address; and whenever the user names a gnokey home, pass it as home on every call, or gnokey's default keybase is searched instead
 - With a session key, pass master: the address of the account that registered the session, which pays within the limits the chain holds for it
 - remote is a node on the chain the seller names; the public nodes of dev (127.0.0.1:26657), staging and onyx-1 are known, any other chain needs it
 - It pays only on local and test chains (dev, staging, onyx-*, test*), only in ugnot, at most 1 GNOT per payment, and a network fee of at most 1 GNOT; mainnet is refused, because x402 on gno.land is unaudited, testnet-only work

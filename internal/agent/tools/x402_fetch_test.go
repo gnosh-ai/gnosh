@@ -555,6 +555,47 @@ func TestX402Fetch_AKeyGnokeyDoesNotHoldIsNamed(t *testing.T) {
 	require.Zero(t, seller.requests)
 }
 
+// TestX402Fetch_AKeyMissingFromTheDefaultKeybaseAsksForHome: a call without
+// home searched gnokey's default keybase, and the agent hears so, with what to
+// pass if the user named another home. Qwen dropped home this way on
+// 2026-10-23 and retried the same call three times.
+func TestX402Fetch_AKeyMissingFromTheDefaultKeybaseAsksForHome(t *testing.T) {
+	buyer := newX402Key(t, x402Mnemonic)
+	gnokey := fakeX402Gnokey(t, buyer.listLine("someone-else"))
+	seller := newStubSeller(t, x402Offer(), buyer.pub, 12, 7, served)
+	tool := NewX402FetchTool(allowingPermissions(), question.NewService(), t.TempDir(), nil)
+
+	resp := runX402Fetch(t, tool, X402FetchParams{URL: seller.URL, Key: "buyer"})
+
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, `gnokey's default keybase holds no key "buyer"`)
+	require.Contains(t, resp.Content, "call again with that home")
+	require.Equal(t, [][]string{{"list"}}, gnokey.runs(t))
+	require.Zero(t, seller.requests)
+}
+
+// TestX402Fetch_ASessionKeyWithoutMasterIsToldToPassIt: a session key has no
+// account of its own, so without master it reads as unfunded; the agent hears
+// to pass master as well as where to fund, and nothing is asked or paid.
+func TestX402Fetch_ASessionKeyWithoutMasterIsToldToPassIt(t *testing.T) {
+	session := newX402Key(t, x402SessionMnemonic)
+	gnokey := fakeX402Gnokey(t, session.listLine("agent"))
+	chain := stubX402Chain(t)
+	seller := newStubSeller(t, x402Offer(), session.pub, 34, 3, served)
+	questions := question.NewService()
+	tool := NewX402FetchTool(allowingPermissions(), questions, t.TempDir(), nil)
+
+	resp := runX402Fetch(t, tool, X402FetchParams{URL: seller.URL, Key: "agent", Remote: chain.URL})
+
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "fund it")
+	require.Contains(t, resp.Content, "If the key is a session key, call again with master")
+	_, asked := questions.Pending()
+	require.False(t, asked)
+	require.Len(t, gnokey.runs(t), 1, "gnokey only listed keys; it signed nothing")
+	require.Empty(t, seller.payments)
+}
+
 // TestX402Fetch_PaysNothingWithNoOneToAsk: without a user to type the
 // password there is no payment.
 func TestX402Fetch_PaysNothingWithNoOneToAsk(t *testing.T) {
