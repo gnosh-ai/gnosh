@@ -97,15 +97,22 @@ func TestHookScriptProblem(t *testing.T) {
 	require.Empty(t, hookScriptProblem(`"${CLAUDE_PROJECT_DIR}/ok.sh"`, dir))
 }
 
-// The report names the hook whose script is missing.
+// The report names the hook whose script is missing, and what that
+// costs: Klash fails closed, so where a hook can block, a hook that cannot
+// run blocks every time, an error; where none can, it is a warning.
 func TestDoctorReportNamesABrokenHook(t *testing.T) {
 	t.Parallel()
 
 	cfg := doctorConfig()
 	missing := filepath.Join(t.TempDir(), "gate.sh")
 	cfg.Hooks = map[string][]config.HookConfig{config.EventStop: {{Name: "gate", Command: missing}}}
-
 	lines, ok := doctorReport(config.NewTestStore(cfg), found)
-	require.True(t, ok, "a broken hook is worth knowing, but a turn can still run")
-	require.Contains(t, strings.Join(lines, "\n"), `! hook Stop "gate": `+missing+" does not exist, so it fails each time it fires")
+	require.False(t, ok, "a gate that cannot run holds every turn")
+	require.Contains(t, strings.Join(lines, "\n"), `✗ hook Stop "gate": `+missing+" does not exist, so every turn is held at its end")
+
+	cfg = doctorConfig()
+	cfg.Hooks = map[string][]config.HookConfig{config.EventSessionStart: {{Name: "memsync", Command: missing}}}
+	lines, ok = doctorReport(config.NewTestStore(cfg), found)
+	require.True(t, ok, "a SessionStart hook cannot block, so a turn still runs")
+	require.Contains(t, strings.Join(lines, "\n"), `! hook SessionStart "memsync": `+missing+" does not exist, so it is skipped, with a warning, each time it fires")
 }

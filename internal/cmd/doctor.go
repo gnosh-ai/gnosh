@@ -110,7 +110,11 @@ func doctorReport(store *config.ConfigStore, lookPath func(string) (string, erro
 	for _, event := range config.KnownHookEvents() {
 		for _, h := range cfg.Hooks[event] {
 			if problem := hookScriptProblem(h.Command, store.WorkingDir()); problem != "" {
-				add("!", "hook %s %q: %s, so it fails each time it fires", event, h.DisplayName(), problem)
+				mark, cost := missingHookCost(event)
+				add(mark, "hook %s %q: %s, so %s", event, h.DisplayName(), problem, cost)
+				if mark == "✗" {
+					ok = false
+				}
 			}
 		}
 	}
@@ -136,6 +140,27 @@ func doctorReport(store *config.ConfigStore, lookPath func(string) (string, erro
 		add("✓", "data: %s", cfg.Options.DataDirectory)
 	}
 	return lines, ok
+}
+
+// missingHookCost says what a hook that cannot run costs at event, and
+// how doctor marks it. Klash fails closed, so where a hook can block it
+// blocks every time it fires, and a turn cannot do its work: an error.
+// Where none can, it is a warning each time.
+func missingHookCost(event string) (mark, cost string) {
+	switch event {
+	case config.EventPreToolUse:
+		return "✗", "every tool call it matches is blocked"
+	case config.EventUserPromptSubmit:
+		return "✗", "every prompt is blocked"
+	case config.EventStop:
+		return "✗", "every turn is held at its end"
+	case config.EventSubagentStop:
+		return "✗", "every sub-agent is held at its end"
+	case config.EventPostToolUse, config.EventPostToolUseFailure:
+		return "!", "every call it matches ends with a note that it could not run"
+	default:
+		return "!", "it is skipped, with a warning, each time it fires"
+	}
 }
 
 // hookScriptProblem says what is wrong with the script a hook command
