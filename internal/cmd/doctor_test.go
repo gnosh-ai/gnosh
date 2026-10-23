@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -29,6 +30,43 @@ func doctorConfig() *config.Config {
 }
 
 func found(name string) (string, error) { return "/usr/bin/" + name, nil }
+
+// foundAllBut finds every program except missing.
+func foundAllBut(missing string) func(string) (string, error) {
+	return func(name string) (string, error) {
+		if name == missing {
+			return "", exec.ErrNotFound
+		}
+		return found(name)
+	}
+}
+
+// A hook that starts with a bare program name has it looked up, since a
+// program that is not installed makes the hook fail closed every time it
+// fires. The shell's own keywords and builtins, Klash's jq, and commands
+// that start with a path, an assignment or other shell syntax are not.
+func TestHookCommandProblem(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "ruff is not installed", hookCommandProblem("ruff check --fix .", foundAllBut("ruff")))
+	require.Empty(t, hookCommandProblem("ruff check .", found))
+	require.Empty(t, hookCommandProblem("", found))
+	// Each of these starts with a word that is not on the PATH, and is
+	// left alone for what that word is.
+	for _, command := range []string{
+		"cd sub && ruff check .",    // a shell builtin
+		"echo hi",                   // a shell builtin
+		"jq -r .tool_input.command", // the hook shell's own builtin
+		"if true; then ruff; fi",    // a shell keyword
+		"[[ -f x ]] && ruff",        // shell syntax
+		"FIX=1 ruff",                // an assignment
+		"./hooks/ruff.sh",           // a path, which hookScriptProblem checks
+		`"ruff" check`,              // quoted
+	} {
+		first := strings.Fields(command)[0]
+		require.Empty(t, hookCommandProblem(command, foundAllBut(first)), command)
+	}
+}
 
 // A setup that can run a turn reports each part as fine.
 func TestDoctorReportOnAWorkingSetup(t *testing.T) {
@@ -109,6 +147,12 @@ func TestDoctorReportNamesABrokenHook(t *testing.T) {
 	lines, ok := doctorReport(config.NewTestStore(cfg), found)
 	require.False(t, ok, "a gate that cannot run holds every turn")
 	require.Contains(t, strings.Join(lines, "\n"), `✗ hook Stop "gate": `+missing+" does not exist, so every turn is held at its end")
+
+	cfg = doctorConfig()
+	cfg.Hooks = map[string][]config.HookConfig{config.EventPreToolUse: {{Name: "lint", Command: "ruff check ."}}}
+	lines, ok = doctorReport(config.NewTestStore(cfg), foundAllBut("ruff"))
+	require.False(t, ok, "a PreToolUse hook whose program is missing blocks every call it matches")
+	require.Contains(t, strings.Join(lines, "\n"), `✗ hook PreToolUse "lint": ruff is not installed, so every tool call it matches is blocked`)
 
 	cfg = doctorConfig()
 	cfg.Hooks = map[string][]config.HookConfig{config.EventSessionStart: {{Name: "memsync", Command: missing}}}

@@ -20,6 +20,14 @@ func init() {
 	RegisterBuiltin("jq", handleJQ)
 }
 
+// IsBuiltin reports whether name is one of the shell's in-process
+// builtins (jq, the config builtins), which a command runs without
+// anything on the PATH.
+func IsBuiltin(name string) bool {
+	_, ok := builtins[name]
+	return ok
+}
+
 // RegisterBuiltin registers a builtin command handler. Must be called during
 // init(), before any shell execution. If a handler is already registered for
 // the same name, the new one replaces it.

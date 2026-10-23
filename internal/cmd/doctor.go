@@ -7,13 +7,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/home"
+	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/spf13/cobra"
+	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 var doctorCmd = &cobra.Command{
@@ -109,7 +113,11 @@ func doctorReport(store *config.ConfigStore, lookPath func(string) (string, erro
 	}
 	for _, event := range config.KnownHookEvents() {
 		for _, h := range cfg.Hooks[event] {
-			if problem := hookScriptProblem(h.Command, store.WorkingDir()); problem != "" {
+			problem := hookScriptProblem(h.Command, store.WorkingDir())
+			if problem == "" {
+				problem = hookCommandProblem(h.Command, lookPath)
+			}
+			if problem != "" {
 				mark, cost := missingHookCost(event)
 				add(mark, "hook %s %q: %s, so %s", event, h.DisplayName(), problem, cost)
 				if mark == "✗" {
@@ -161,6 +169,32 @@ func missingHookCost(event string) (mark, cost string) {
 	default:
 		return "!", "it is skipped, with a warning, each time it fires"
 	}
+}
+
+// commandName is a name a command can be run by: no path, no quoting, no
+// assignment, no shell syntax.
+var commandName = regexp.MustCompile(`^[A-Za-z0-9_.+-]+$`)
+
+// hookCommandProblem says that the program a hook command starts with is
+// not installed, when it starts with a bare name ("ruff check", "npx
+// prettier"): a hook whose program is missing exits 127, which Klash
+// counts as a hook that could not run. Shell keywords and builtins, the
+// hook shell's own builtins (jq), and a command that starts any other way
+// (a path, which hookScriptProblem checks, an assignment or a quote) are
+// left alone.
+func hookCommandProblem(command string, lookPath func(string) (string, error)) string {
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return ""
+	}
+	name := fields[0]
+	if !commandName.MatchString(name) || syntax.IsKeyword(name) || interp.IsBuiltin(name) || shell.IsBuiltin(name) {
+		return ""
+	}
+	if _, err := lookPath(name); err != nil {
+		return name + " is not installed"
+	}
+	return ""
 }
 
 // hookScriptProblem says what is wrong with the script a hook command
