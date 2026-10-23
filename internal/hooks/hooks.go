@@ -25,6 +25,9 @@ const (
 	EventUserPromptSubmit = config.EventUserPromptSubmit
 	// EventStop fires when the agent is about to finish its turn.
 	EventStop = config.EventStop
+	// EventPreCompact fires just before a session's conversation is
+	// summarized, manual or automatic.
+	EventPreCompact = config.EventPreCompact
 )
 
 // HaltExitCode is the exit code that halts the whole turn. 2 blocks the

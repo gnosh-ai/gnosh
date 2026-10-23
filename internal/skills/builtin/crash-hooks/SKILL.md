@@ -19,17 +19,20 @@ need to author correct hooks.
 `PreToolUse` fires before every tool call. `PostToolUse` fires after a tool
 call succeeds, and `PostToolUseFailure` after one fails. `UserPromptSubmit`
 fires when the user sends a prompt, before the agent sees it. `Stop` fires when
-the agent is about to finish its turn.
+the agent is about to finish its turn. `PreCompact` fires just before a
+session's conversation is summarized, manual or automatic.
 
 Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
 `PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Crash refuses
 to start on an event name it doesn't fire, rather than accepting a hook that
 would look configured and silently never run.
 
-A `matcher` only makes sense for `PreToolUse`, `PostToolUse` and
-`PostToolUseFailure`. There is no tool in play when a prompt is sent or a turn
-ends, so a `matcher` on a `UserPromptSubmit` or `Stop` hook is a config error
-too, and every configured hook for those events runs.
+A `matcher` only makes sense for `PreToolUse`, `PostToolUse`,
+`PostToolUseFailure` and `PreCompact`. The first three match against the tool
+name; `PreCompact` matches against its trigger (`manual` or `auto`). There is
+nothing to match when a prompt is sent or a turn ends, so a `matcher` on a
+`UserPromptSubmit` or `Stop` hook is a config error too, and every configured
+hook for those events runs.
 
 ## Configuration
 
@@ -72,6 +75,7 @@ the input/output contract is identical regardless of language.
 | `CRASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
 | `CRASH_TOOL_USE_ID`          | The tool call's ID, the same in its `PreToolUse` and `PostToolUse` hooks |
 | `CRASH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` if an earlier `Stop` hook is why the turn is still running |
+| `CRASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, as in the payload's `trigger` field |
 
 Each is also set under its `CRASH_` name (`CRASH_EVENT`, ...), the name after
 the rename; either works.
@@ -154,6 +158,14 @@ the user sees the reason. `prompt` includes the text of pasted or attached text
 files, as the agent will read it. It runs once per prompt the user sends, also
 for one queued behind a running turn, and never for the agent's own
 continuations or for channel messages; Esc while it runs cancels the prompt.
+
+**On `PreCompact`** the input is `{"trigger": "manual"|"auto", "custom_instructions": ""}`
+beside the common fields. `trigger` names what set the summary going: the user
+asked (`manual`), or the context filled up (`auto`). A `matcher` on a
+`PreCompact` hook is tested against `trigger`. As in Claude Code a hook cannot
+stop the summary: exit `2` (or `"decision": "block"`) or `49` is shown to the
+user as a warning and the summary goes ahead. A hook that fails is also shown
+as a warning. It fires only for the top-level agent, not sub-agents.
 
 ## Aggregation (Multiple Hooks)
 
@@ -286,8 +298,9 @@ value is reported as a failed hook, not silently ignored.
 1. Add `#!/usr/bin/env bash` and `set -euo pipefail` (for shell scripts).
 2. `chmod +x` the script.
 3. Add the entry under `hooks.PreToolUse` or `hooks.PostToolUse` (with the
-   right matcher) or `hooks.Stop` (no matcher) in `crash.json`. Spell the event
-   name exactly; anything else is a startup error.
+   right matcher), `hooks.Stop` (no matcher), or `hooks.PreCompact` (matcher
+   against `manual`/`auto`) in `crash.json`. Spell the event name exactly;
+   anything else is a startup error.
 4. Decide intent: inject context (omit `decision`), auto-approve (`"allow"`),
    block (`exit 2`), or halt (`exit 49`). On `Stop`, `exit 2` means "keep
    working" and `exit 49` means "end now".

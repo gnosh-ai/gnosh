@@ -931,8 +931,8 @@ func TestMatcherMatchesALegacyToolName(t *testing.T) {
 	t.Parallel()
 
 	r := NewRunner([]config.HookConfig{{Command: "true", Matcher: "^crush_logs$"}}, t.TempDir(), t.TempDir())
-	require.Len(t, r.matchingHooks("crash_logs"), 1)
-	require.Empty(t, r.matchingHooks("bash"))
+	require.Len(t, r.matchingHooks("crash_logs", "crush_logs"), 1)
+	require.Empty(t, r.matchingHooks("bash", ""))
 }
 
 // A PostToolUseFailure hook gets the failed call and its error, as in

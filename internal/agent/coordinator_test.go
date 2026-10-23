@@ -56,7 +56,7 @@ func (m *mockSessionAgent) PopQueuedPrompts(sessionID string) []message.PoppedPr
 	return nil
 }
 
-func (m *mockSessionAgent) Summarize(context.Context, string, fantasy.ProviderOptions, func(context.Context, *fantasy.ProviderError) error) error {
+func (m *mockSessionAgent) Summarize(context.Context, string, fantasy.ProviderOptions, func(context.Context, *fantasy.ProviderError) error, preCompactTrigger) error {
 	return nil
 }
 

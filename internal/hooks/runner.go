@@ -95,7 +95,7 @@ func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolIn
 	envVars := append(BuildEnv(eventName, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
 	p := toolPayload(eventName, sessionID, r.cwd, toolName, toolInputJSON)
 	p.ToolUseID = id
-	return r.run(ctx, r.matchingHooks(toolName), eventName, toolName, toolInputJSON, envVars, marshalPayload(p))
+	return r.run(ctx, r.matchingHooks(toolName, tooldefs.LegacyName(toolName)), eventName, toolName, toolInputJSON, envVars, marshalPayload(p))
 }
 
 // RunPostToolUse executes the PostToolUse hooks whose matcher matches
@@ -113,7 +113,7 @@ func (r *Runner) RunPostToolUse(ctx context.Context, sessionID, toolName, toolIn
 	p := postPayload(sessionID, r.cwd, toolName, toolInputJSON, output, metadata)
 	p.ToolUseID = id
 	p.DurationMS = took.Milliseconds()
-	agg, err := r.run(ctx, r.matchingHooks(toolName), EventPostToolUse, toolName, toolInputJSON, envVars, marshalPayload(p))
+	agg, err := r.run(ctx, r.matchingHooks(toolName, tooldefs.LegacyName(toolName)), EventPostToolUse, toolName, toolInputJSON, envVars, marshalPayload(p))
 	return afterTheCall(agg), err
 }
 
@@ -130,7 +130,7 @@ func (r *Runner) RunPostToolUseFailure(ctx context.Context, sessionID, toolName,
 	p.Error = errText
 	p.IsInterrupt = interrupted
 	p.DurationMS = took.Milliseconds()
-	agg, err := r.run(ctx, r.matchingHooks(toolName), EventPostToolUseFailure, toolName, toolInputJSON, envVars, marshalPayload(p))
+	agg, err := r.run(ctx, r.matchingHooks(toolName, tooldefs.LegacyName(toolName)), EventPostToolUseFailure, toolName, toolInputJSON, envVars, marshalPayload(p))
 	return afterTheCall(agg), err
 }
 
@@ -179,6 +179,25 @@ func (r *Runner) RunUserPromptSubmit(ctx context.Context, sessionID, prompt stri
 	envVars := BuildEnv(EventUserPromptSubmit, "", sessionID, r.cwd, r.projectDir, "")
 	payload := BuildUserPromptSubmitPayload(sessionID, r.cwd, prompt, attachments)
 	agg, err := r.run(ctx, r.Hooks(), EventUserPromptSubmit, "", "", envVars, payload)
+	agg.UpdatedInput = ""
+	return agg, err
+}
+
+// RunPreCompact executes the PreCompact hooks whose matcher matches the
+// summary's trigger, just before a session's conversation is
+// summarized. Trigger is the PreCompactTriggerManual or
+// PreCompactTriggerAuto name of what set the summary going; hooks with
+// no matcher match both, as in Claude Code.
+//
+// A PreCompact hook cannot stop the summary, as in Claude Code: the
+// caller runs the summary whatever the aggregated result says, and
+// tells the user about any hook that did not run to a verdict.
+// UpdatedInput is meaningless without a tool call and is always
+// cleared.
+func (r *Runner) RunPreCompact(ctx context.Context, sessionID, trigger string) (AggregateResult, error) {
+	envVars := append(BuildEnv(EventPreCompact, "", sessionID, r.cwd, r.projectDir, ""), hookVar("PRE_COMPACT_TRIGGER", trigger)...)
+	payload := BuildPreCompactPayload(sessionID, r.cwd, trigger)
+	agg, err := r.run(ctx, r.matchingHooks(trigger, ""), EventPreCompact, "", "", envVars, payload)
 	agg.UpdatedInput = ""
 	return agg, err
 }
@@ -246,13 +265,13 @@ func (r *Runner) run(
 
 // matchingHooks returns hooks whose matcher matches the tool name (or has
 // no matcher, which matches everything). A matcher written for the name a
-// tool had before the rename (^crush_logs$) still matches it.
-func (r *Runner) matchingHooks(toolName string) []config.HookConfig {
-	legacy := tooldefs.LegacyName(toolName)
+// tool had before the rename (^crush_logs$) still matches it. matchName
+// is the tool's legacy name, or "" for events with no legacy name.
+func (r *Runner) matchingHooks(toolName, matchName string) []config.HookConfig {
 	var matched []config.HookConfig
 	for _, h := range r.hooks {
 		if h.matcher == nil || h.matcher.MatchString(toolName) ||
-			(legacy != "" && h.matcher.MatchString(legacy)) {
+			(matchName != "" && h.matcher.MatchString(matchName)) {
 			matched = append(matched, h.cfg)
 		}
 	}

@@ -17,12 +17,14 @@ forward.
 - Hooks are Claude Code-compatible
 - Crash ships with a builtin `crash-hook` skill write, edit, and configure
   hooks; just tell Crash how to configure Crash
-- Crash supports five hooks: `PreToolUse`, which fires before a tool call,
+- Crash supports six hooks: `PreToolUse`, which fires before a tool call,
   `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
   fails, `UserPromptSubmit`, which fires when you send a prompt and can add
-  context to it or block it, and `Stop`, which fires when the agent is about to
-  finish its turn and can refuse to let it end; plans are to support the full
-  gamut, so please let us know which hooks you'd like to see next
+  context to it or block it, `Stop`, which fires when the agent is about to
+  finish its turn and can refuse to let it end, and `PreCompact`, which fires
+  just before the session is summarized and can object to it; plans are to
+  support the full gamut, so please let us know which hooks you'd like to see
+  next
 - Hooks run in parallel for speed, but their results compose in config order
   for determinism
 
@@ -364,6 +366,49 @@ environment) is set when the turn is only still running because an earlier
 not for sub-agents. It is also skipped when the turn is being continued for
 auto-summarization, since that turn isn't ending either.
 
+### PreCompact
+
+This hook fires just before a session's conversation is summarized: when you
+ask for the summary, or automatically when the context is nearly full. As in
+Claude Code, a hook cannot stop the summary — it is told, through a `trigger`
+field in its payload, whether the summary is manual or automatic, and a hook
+that blocks or fails is shown as a warning while the summary goes ahead.
+
+**Matched against**: the trigger, `"manual"` or `"auto"`. A `matcher` on a
+`PreCompact` hook is tested against that trigger, so a hook matched on
+`^manual$` only fires when you ask for the summary, and a hook with no matcher
+fires on both.
+
+**Blocking**: exit code `2` (or `"decision": "block"`) means the hook objects,
+but the summary goes ahead anyway; you get the hook's reason as a warning.
+Exit `49` (or `"continue": false`) does the same. A hook that fails (any other
+exit code, or a timeout) is also shown as a warning, and the summary goes
+ahead without it.
+
+**Scope**: like `PreToolUse` and `Stop`, `PreCompact` fires only for the
+**top-level agent**, and not for sub-agents.
+
+```jsonc
+{
+  "hooks": {
+    "PreCompact": [
+      { "matcher": "^manual$", "command": "./hooks/before-summarize.sh" }
+    ]
+  }
+}
+```
+
+```bash
+#!/usr/bin/env bash
+# hooks/before-summarize.sh — say goodbye before the conversation is
+# summarized, only when the user asked for it.
+read -r input
+trigger=$(echo "$input" | jq -r '.trigger')
+[[ "$trigger" == "manual" ]] || exit 0
+echo "The user asked for a summary; make sure the important context is captured." >&2
+exit 2
+```
+
 Hooks are keyed by event name. Only `command` is required, and you can omit
 `matcher` to match all tools.
 
@@ -413,6 +458,7 @@ The available environment variables are:
 | `CRASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
 | `CRASH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
 | `CRASH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` when the turn is only still running because an earlier `Stop` hook blocked it, else `0`. |
+| `CRASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, the same as the `trigger` field in the payload. |
 
 Crash was called Crush, so every `CRASH_` variable above is also set under its
 `CRUSH_` name (`CRUSH_EVENT`, `CRUSH_TOOL_NAME`, and so on), and `CRUSH=1`
@@ -806,9 +852,11 @@ Each entry under a `hooks.<EventName>` array:
   // command when omitted.
   "name": "no-rm-rf",
 
-  // string. Optional. Regex tested against the tool name. Omit to match all.
-  // PreToolUse and PostToolUse only: a matcher on a Stop hook is a config
-  // error, because there is no tool to match when a turn ends.
+  // string. Optional. Regex tested against the tool name, or against the
+  // PreCompact trigger. Omit to match all.
+  // A matcher on a Stop or UserPromptSubmit hook is a config error,
+  // because there is nothing to match when a turn ends or a prompt is
+  // sent.
   "matcher": "^bash$",
 
   // string. Required. Shell command to run.
@@ -932,6 +980,24 @@ Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
   // string. The assistant message the turn is about to end on, so the hook
   // can judge the answer without reading the session back out of the database.
   "last_assistant_message": "I've fixed the parser.",
+}
+```
+
+### Stdin payload — PreCompact
+
+Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
+
+```jsonc
+{
+  // ...common fields...
+
+  // string. "manual" when the user asked for the summary, "auto" when the
+  // context filled up. A matcher on a PreCompact hook is tested against this.
+  "trigger": "manual",
+
+  // string. The instructions to fold into the summary, as in Claude Code.
+  // Crash has none of its own, so this is always the empty string.
+  "custom_instructions": "",
 }
 ```
 

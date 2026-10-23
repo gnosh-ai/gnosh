@@ -61,6 +61,13 @@ type Payload struct {
 	// Attachments names the files sent with it, if any.
 	Prompt      string   `json:"prompt,omitempty"`
 	Attachments []string `json:"attachments,omitempty"`
+
+	// Trigger and CustomInstructions are set on an EventPreCompact
+	// payload, as Claude Code's PreCompact input carries them: whether
+	// the user asked for the summary or the context filled up, and the
+	// instructions to fold into it, which Crash has none of.
+	Trigger            string `json:"trigger,omitempty"`
+	CustomInstructions string `json:"custom_instructions"`
 }
 
 // ToolResponse is what a tool call returned, as a PostToolUse hook sees
@@ -161,6 +168,30 @@ func BuildUserPromptSubmitPayload(sessionID, cwd, prompt string, attachments []s
 		ToolInput:     json.RawMessage("{}"),
 		Prompt:        prompt,
 		Attachments:   attachments,
+	})
+}
+
+// PreCompact triggers, as in Claude Code: the user asked for the
+// summary, or the context filled up.
+const (
+	PreCompactTriggerManual = "manual"
+	PreCompactTriggerAuto   = "auto"
+)
+
+// BuildPreCompactPayload constructs the JSON stdin payload for an
+// EventPreCompact hook. There is no tool in play, so tool_name is empty
+// and tool_input is an empty object. Trigger names who asked for the
+// summary; CustomInstructions is Crash's counterpart to Claude Code's,
+// which Crash has none of, so it is always the empty string.
+func BuildPreCompactPayload(sessionID, cwd, trigger string) []byte {
+	return marshalPayload(Payload{
+		Event:              EventPreCompact,
+		HookEventName:      EventPreCompact,
+		SessionID:          sessionID,
+		CWD:                cwd,
+		ToolInput:          json.RawMessage("{}"),
+		Trigger:            trigger,
+		CustomInstructions: "",
 	})
 }
 
