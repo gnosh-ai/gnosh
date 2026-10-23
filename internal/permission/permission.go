@@ -204,7 +204,7 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 		return true, nil
 	}
 
-	if (opts.Action == "read" || opts.Action == "list") && s.inAddedDir(opts.Path) {
+	if action, ok := addedDirTools[opts.ToolName]; ok && action == opts.Action && s.inAddedDir(opts.Path) {
 		return true, nil
 	}
 
@@ -344,6 +344,16 @@ func (s *permissionService) SkipRequests() bool {
 
 // inAddedDir reports whether path lies in one of the directories added
 // with --add-dir.
+// addedDirTools are the tools whose reads and listings are approved under
+// a directory added with --add-dir, each with the action it asks for:
+// view reading a file, ls listing a directory. Only theirs: the MCP
+// resource tools and gnokey ask with the same action names for a path
+// that names no file on disk (an MCP URI joined to the working
+// directory, a directory the model chose), and still ask. The names are
+// internal/agent/tools', which imports this package; a test there runs
+// the real tools against an added directory.
+var addedDirTools = map[string]string{"view": "read", "ls": "list"}
+
 func (s *permissionService) inAddedDir(path string) bool {
 	for _, dir := range s.addedDirs {
 		if rel, err := filepath.Rel(dir, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
