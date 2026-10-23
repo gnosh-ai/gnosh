@@ -430,12 +430,11 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	}(ctx, sess.ID, prompt)
 
 	messageEvents := app.Messages.Subscribe(ctx)
-	messageReadBytes := make(map[string]int)
+	answer := &answerPrinter{w: output, readBytes: map[string]int{}}
 	var trace *format.ToolTrace
 	if traceTools {
 		trace = format.NewToolTrace(os.Stderr)
 	}
-	var printed bool
 	subSessions := map[string]bool{}
 	isSubSession := func(id string) bool {
 		sub, known := subSessions[id]
@@ -482,28 +481,7 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 		}
 
 		stopSpinner()
-
-		content := msg.Content().String()
-		readBytes := messageReadBytes[msg.ID]
-
-		if len(content) < readBytes {
-			slog.Error("Non-interactive: message content is shorter than read bytes", "message_length", len(content), "read_bytes", readBytes)
-			return fmt.Errorf("message content is shorter than read bytes: %d < %d", len(content), readBytes)
-		}
-
-		part := content[readBytes:]
-		// Trim leading whitespace. Sometimes the LLM includes leading
-		// formatting and indentation, which we don't want here.
-		if readBytes == 0 {
-			part = strings.TrimLeft(part, " \t")
-		}
-		// Ignore initial whitespace-only messages.
-		if printed || strings.TrimSpace(part) != "" {
-			printed = true
-			fmt.Fprint(output, part)
-		}
-		messageReadBytes[msg.ID] = len(content)
-		return nil
+		return answer.print(msg)
 	}
 
 	for {
@@ -578,6 +556,44 @@ func traceToolCalls(trace *format.ToolTrace, msg message.Message, sub bool) {
 			}
 		}
 	}
+}
+
+// answerPrinter writes the text of a run's assistant messages as it
+// streams in, each new part once, with a blank line between one message
+// and the next: they used to run together ("Let me look.There are two
+// files.").
+type answerPrinter struct {
+	w         io.Writer
+	readBytes map[string]int // how much of each message's text is written
+	printed   bool
+	lastID    string // the message last written to
+}
+
+func (p *answerPrinter) print(msg message.Message) error {
+	content := msg.Content().String()
+	readBytes := p.readBytes[msg.ID]
+	if len(content) < readBytes {
+		slog.Error("Non-interactive: message content is shorter than read bytes", "message_length", len(content), "read_bytes", readBytes)
+		return fmt.Errorf("message content is shorter than read bytes: %d < %d", len(content), readBytes)
+	}
+	part := content[readBytes:]
+	p.readBytes[msg.ID] = len(content)
+	// Trim leading whitespace. Sometimes the LLM includes leading
+	// formatting and indentation, which we don't want here.
+	if readBytes == 0 {
+		part = strings.TrimLeft(part, " \t")
+	}
+	// Ignore initial whitespace-only messages.
+	if part == "" || (!p.printed && strings.TrimSpace(part) == "") {
+		return nil
+	}
+	if p.printed && msg.ID != p.lastID {
+		fmt.Fprint(p.w, "\n\n")
+	}
+	p.printed = true
+	p.lastID = msg.ID
+	fmt.Fprint(p.w, part)
+	return nil
 }
 
 // drainMessageEvents hands handle every message event already waiting in

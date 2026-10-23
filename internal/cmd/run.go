@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -961,6 +962,12 @@ type runOutput struct {
 	stdout    io.Writer     // json: where the result object goes
 	start     time.Time
 	sessionID string // set once the run knows its session
+	// final is the text of the run's last assistant message with any, the
+	// json result as Claude Code gives it: the answer, not the narration
+	// of each step before it ("Let me look.").
+	final      string
+	finalID    string         // the message final came from
+	assistants map[string]int // each assistant message's place in the run
 }
 
 func newRunOutput(format string, stdout io.Writer) (*runOutput, error) {
@@ -992,6 +999,20 @@ func (o *runOutput) message(msg message.Message) {
 	if o.stream != nil {
 		o.stream.message(msg)
 	}
+	if msg.Role != message.Assistant || msg.IsSummaryMessage {
+		return
+	}
+	if o.assistants == nil {
+		o.assistants = map[string]int{}
+	}
+	if _, ok := o.assistants[msg.ID]; !ok {
+		o.assistants[msg.ID] = len(o.assistants)
+	}
+	// A late update of an earlier message does not take the answer back.
+	text := strings.TrimSpace(msg.Content().Text)
+	if text != "" && (o.finalID == "" || o.assistants[msg.ID] >= o.assistants[o.finalID]) {
+		o.final, o.finalID = text, msg.ID
+	}
 }
 
 // finish ends the run's output and passes runErr on. In json, it prints
@@ -1014,7 +1035,7 @@ func (o *runOutput) finish(runErr error) error {
 	}{
 		Type:       "result",
 		Subtype:    "success",
-		Result:     strings.TrimSpace(o.answer.String()),
+		Result:     cmp.Or(o.final, strings.TrimSpace(o.answer.String())),
 		SessionID:  o.sessionID,
 		DurationMS: time.Since(o.start).Milliseconds(),
 	}

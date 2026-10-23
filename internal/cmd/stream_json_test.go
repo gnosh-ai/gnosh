@@ -50,7 +50,8 @@ func TestStreamJSONWritesATurnInOrder(t *testing.T) {
 	o.message(assistantMsg("x1", "sub", message.TextContent{Text: "sub-agent work"}, message.Finish{Reason: message.FinishReasonEndTurn}))
 	o.message(message.Message{ID: "sum", Role: message.Assistant, SessionID: "s1", IsSummaryMessage: true, Parts: []message.ContentPart{message.TextContent{Text: "summary"}, message.Finish{Reason: message.FinishReasonEndTurn}}})
 	o.message(assistantMsg("a2", "s1", message.ReasoningContent{Thinking: "Two files."}, message.TextContent{Text: "go.mod and main.go"}, message.Finish{Reason: message.FinishReasonEndTurn}))
-	_, _ = o.w.Write([]byte("go.mod and main.go"))
+	// What the run printed holds every step's text; the result is the answer.
+	_, _ = o.w.Write([]byte("Let me look.\n\ngo.mod and main.go"))
 	require.NoError(t, o.finish(nil))
 
 	lines := streamLines(t, out.String())
@@ -113,4 +114,25 @@ func TestToolInput(t *testing.T) {
 	require.JSONEq(t, `{}`, string(toolInput("")))
 	require.JSONEq(t, `{"path":"a.go"}`, string(toolInput(`{"path":"a.go"}`)))
 	require.JSONEq(t, `"{not json"`, string(toolInput("{not json")))
+}
+
+// json's result is the final answer, as in Claude Code, not every step's
+// text run together, and a late update of an earlier message does not
+// take it back.
+func TestJSONResultIsTheFinalAnswer(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	o, err := newRunOutput("json", &out)
+	require.NoError(t, err)
+	o.started("s1", "/work", "m")
+	o.message(assistantMsg("a1", "s1", message.TextContent{Text: "Let me look."}))
+	o.message(assistantMsg("a2", "s1", message.TextContent{Text: "Two files."}))
+	o.message(assistantMsg("a1", "s1", message.TextContent{Text: "Let me look."}, message.Finish{Reason: message.FinishReasonToolUse}))
+	_, _ = o.w.Write([]byte("Let me look.\n\nTwo files."))
+	require.NoError(t, o.finish(nil))
+
+	var res map[string]any
+	require.NoError(t, json.Unmarshal(out.Bytes(), &res))
+	require.Equal(t, "Two files.", res["result"])
 }
