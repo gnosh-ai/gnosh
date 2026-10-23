@@ -1931,7 +1931,7 @@ func (a *sessionAgent) filterDisabledMCPTools(ctx context.Context, toolList []fa
 	}
 	filtered := make([]fantasy.AgentTool, 0, len(toolList))
 	for _, t := range toolList {
-		if mcpTool, ok := t.(*tools.Tool); ok {
+		if mcpTool, ok := innermostTool(t).(interface{ MCP() string }); ok {
 			if _, off := disabled[mcpTool.MCP()]; off {
 				continue
 			}

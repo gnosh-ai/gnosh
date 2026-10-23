@@ -1820,6 +1820,16 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 		)
 	}
 
+	// A tool result that ended the sub-agent's turn, a hook's halt or a
+	// permission the user denied, ends the parent's too. It is the user's
+	// word on the turn: the parent went on before, given only the
+	// sub-agent's last text, and could try by other means what was just
+	// refused.
+	if reason, halted := subAgentHalt(result); halted {
+		resp := fantasy.NewTextErrorResponse("The sub-agent was stopped: " + reason)
+		resp.StopTurn = true
+		return resp, nil
+	}
 	output := subAgentOutput(result)
 	if output == "" {
 		return fantasy.NewTextErrorResponse("Sub-agent completed but produced no text output."), nil
@@ -1827,11 +1837,36 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 	return fantasy.NewTextResponse(output), nil
 }
 
+// subAgentOutput is the sub-agent's answer as the parent reads it, without
+// the stop marker it ends on when it overrules its SubagentStop hooks.
 func subAgentOutput(result *fantasy.AgentResult) string {
 	if result == nil {
 		return ""
 	}
-	return result.Response.Content.Text()
+	return StripStopMarker(result.Response.Content.Text())
+}
+
+// subAgentHalt reports whether a tool result ended the sub-agent's turn,
+// and what it said.
+func subAgentHalt(result *fantasy.AgentResult) (string, bool) {
+	if result == nil || len(result.Steps) == 0 {
+		return "", false
+	}
+	for _, tr := range result.Steps[len(result.Steps)-1].Content.ToolResults() {
+		if !tr.StopTurn {
+			continue
+		}
+		switch out := tr.Result.(type) {
+		case fantasy.ToolResultOutputContentText:
+			return out.Text, true
+		case fantasy.ToolResultOutputContentError:
+			if out.Error != nil {
+				return out.Error.Error(), true
+			}
+		}
+		return "no reason given", true
+	}
+	return "", false
 }
 
 // updateParentSessionCost accumulates the cost from a child session to its parent session.
