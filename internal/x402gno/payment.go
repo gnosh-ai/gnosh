@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -448,10 +449,22 @@ func readAccount(ctx context.Context, node Node, master, key crypto.Address) (st
 			return nil, fmt.Errorf("x402-gno: read session %s of %s: %w", key, master, err)
 		}
 	}
-	if acc == nil {
+	// Node is an interface others implement, and a nil account behind a
+	// non-nil interface would otherwise panic inside a buyer's request.
+	if isNil(acc) {
 		return nil, fmt.Errorf("x402-gno: the node answered with no account for %s", key)
 	}
 	return acc, nil
+}
+
+// isNil reports whether v is nil, or an interface holding a nil pointer, as an
+// RPC client's constructor returns alongside its error.
+func isNil(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	return rv.Kind() == reflect.Pointer && rv.IsNil()
 }
 
 // gasFee is the fee a payment offers for gasWanted at price: gasPriceMargin
