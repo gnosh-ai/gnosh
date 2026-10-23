@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/charmbracelet/crush/internal/tooldefs"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
@@ -297,12 +298,14 @@ type execMiddleware = func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc
 //     that deny rules see the already-resolved argv of anything the
 //     script exec's rather than the outer path-prefixed wrapper;
 //  3. block list;
-//  4. optional Go coreutils (only when useGoCoreUtils is on).
+//  4. tool names (a Klash tool run as a command is told to be called);
+//  5. optional Go coreutils (only when useGoCoreUtils is on).
 func standardHandlers(blockFuncs []BlockFunc) []execMiddleware {
 	handlers := []execMiddleware{
 		builtinHandler(),
 		scriptDispatchHandler(blockFuncs),
 		blockHandler(blockFuncs),
+		toolNameHandler(),
 	}
 	if useGoCoreUtils && coreUtilsExecHandler != nil {
 		handlers = append(handlers, coreUtilsExecHandler)
@@ -344,6 +347,28 @@ func blockHandler(blockFuncs []BlockFunc) execMiddleware {
 				}
 			}
 			return next(ctx, args)
+		}
+	}
+}
+
+// toolNameHandler returns middleware that says so when a command the
+// shell cannot find is named like one of Klash's tools: a model that runs
+// "job_kill 077" in bash meant the job_kill tool, and the shell's own
+// "executable file not found" left an agent on the AI box with a server
+// it never stopped. A command of that name on the PATH runs as usual.
+func toolNameHandler() execMiddleware {
+	return func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+		return func(ctx context.Context, args []string) error {
+			err := next(ctx, args)
+			if len(args) == 0 || ExitCode(err) != 127 || !tooldefs.IsKnown(args[0]) {
+				return err
+			}
+			hc := interp.HandlerCtx(ctx)
+			if _, lookErr := interp.LookPathDir(hc.Dir, hc.Env, args[0]); lookErr == nil {
+				return err
+			}
+			fmt.Fprintf(hc.Stderr, "%s is a Klash tool, not a shell command: call the %s tool instead.\n", args[0], tooldefs.Canonical(args[0]))
+			return err
 		}
 	}
 }

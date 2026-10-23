@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -226,6 +229,70 @@ func TestRun_BlockFuncs(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not allowed") {
 		t.Fatalf("expected 'not allowed' error, got: %v", err)
+	}
+}
+
+// An agent on the AI box ran "job_kill 077" in bash, meaning the job_kill
+// tool, and the shell's not-found error told it nothing more. The shell
+// now says it is a tool, by its current name; another missing command,
+// and a command on the PATH named like a tool, are left as they were.
+func TestRun_ToolNameAsCommand(t *testing.T) {
+	run := func(command string, env []string) (stdout, stderr string, code int) {
+		var out, errOut bytes.Buffer
+		err := Run(t.Context(), RunOptions{
+			Command: command,
+			Cwd:     t.TempDir(),
+			Env:     env,
+			Stdout:  &out,
+			Stderr:  &errOut,
+		})
+		return out.String(), errOut.String(), ExitCode(err)
+	}
+
+	_, stderr, code := run("job_kill 077", nil)
+	if code != 127 {
+		t.Fatalf("exit code = %d, want 127", code)
+	}
+	if !strings.Contains(stderr, "executable file not found") {
+		t.Fatalf("the shell's own error is gone: %q", stderr)
+	}
+	if !strings.Contains(stderr, "job_kill is a Klash tool, not a shell command: call the job_kill tool instead.") {
+		t.Fatalf("stderr does not say job_kill is a tool: %q", stderr)
+	}
+
+	_, stderr, _ = run("crush_info", nil)
+	if !strings.Contains(stderr, "call the klash_info tool instead") {
+		t.Fatalf("a tool's old name does not lead to the tool: %q", stderr)
+	}
+
+	_, stderr, code = run("no_such_command_here", nil)
+	if code != 127 || strings.Contains(stderr, "Klash tool") {
+		t.Fatalf("a missing command that names no tool: exit %d, stderr %q", code, stderr)
+	}
+
+	// Go's coreutils, the default on Windows, run ls in process, off the
+	// PATH: an ls that worked is no cue to call the ls tool.
+	if coreUtilsExecHandler != nil {
+		saved := useGoCoreUtils
+		useGoCoreUtils = true
+		t.Cleanup(func() { useGoCoreUtils = saved })
+		_, stderr, code = run("ls", nil)
+		if code != 0 || strings.Contains(stderr, "Klash tool") {
+			t.Fatalf("ls through Go's coreutils: exit %d, stderr %q", code, stderr)
+		}
+		useGoCoreUtils = saved
+	}
+
+	if runtime.GOOS == "windows" {
+		return
+	}
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "view"), []byte("#!/bin/sh\necho ran\nexit 127\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code := run("view", []string{"PATH=" + bin})
+	if stdout != "ran\n" || code != 127 || strings.Contains(stderr, "Klash tool") {
+		t.Fatalf("a view command on the PATH: stdout %q, exit %d, stderr %q", stdout, code, stderr)
 	}
 }
 

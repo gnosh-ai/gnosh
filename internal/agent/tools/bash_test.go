@@ -84,9 +84,47 @@ func TestBashTool_CustomAutoBackgroundThreshold(t *testing.T) {
 	require.True(t, meta.Background)
 	require.NotEmpty(t, meta.ShellID)
 	require.Contains(t, resp.Content, "moved to background")
+	require.Contains(t, resp.Content, "Call the job_output tool with this ID to read its output, or the job_kill tool to stop it.")
 
 	bgManager := shell.GetBackgroundShellManager()
 	require.NoError(t, bgManager.Kill(meta.ShellID))
+}
+
+// run_in_background starts the command as a background job at once, and
+// the result names the tools that read and stop it as tools.
+func TestBashTool_RunInBackground(t *testing.T) {
+	workingDir := t.TempDir()
+	tool := newBashToolForTest(workingDir)
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+
+	resp := runBashTool(t, tool, ctx, BashParams{
+		Description:     "serve",
+		Command:         "sleep 30",
+		RunInBackground: true,
+	})
+
+	require.False(t, resp.IsError)
+	var meta BashResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+	require.True(t, meta.Background)
+	require.Equal(t, "Background shell started with ID: "+meta.ShellID+"\n\nCall the job_output tool with this ID to read its output, or the job_kill tool to stop it.", resp.Content)
+	require.NoError(t, shell.GetBackgroundShellManager().Kill(meta.ShellID))
+}
+
+// An agent on the AI box ran "job_kill 077" in bash to stop a background
+// job, meaning the job_kill tool, and left the job running; the result
+// now says to call the tool.
+func TestBashTool_ToolNameAsCommand(t *testing.T) {
+	workingDir := t.TempDir()
+	tool := newBashToolForTest(workingDir)
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+
+	resp := runBashTool(t, tool, ctx, BashParams{
+		Description: "stop the server",
+		Command:     "job_kill 077",
+	})
+
+	require.Contains(t, resp.Content, "job_kill is a Klash tool, not a shell command: call the job_kill tool instead.")
 }
 
 type recordingPermissionService struct {
