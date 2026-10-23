@@ -193,7 +193,7 @@ func (a *sessionAgent) runSessionStartHooks(ctx context.Context, call *SessionAg
 		)
 		return false
 	}
-	if result.Halt || result.Decision == hooks.DecisionDeny {
+	if result.Objected {
 		reason := result.Reason
 		if reason == "" {
 			reason = "a hook objected"
@@ -245,8 +245,8 @@ func (a *sessionAgent) warnFailedSessionStartHooks(sessionID string, ran []hooks
 			SessionID: sessionID,
 			Type:      notify.TypeHookWarning,
 			Message: fmt.Sprintf(
-				"SessionStart hook %q failed: %s; the prompt went ahead without it",
-				h.Name, h.Error,
+				"SessionStart hook %q %s; the prompt went ahead without it",
+				h.Name, hookFailure(h),
 			),
 		})
 	}

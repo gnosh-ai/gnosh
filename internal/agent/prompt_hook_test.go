@@ -195,6 +195,19 @@ func TestRun_UserPromptSubmitHookBlocks(t *testing.T) {
 	require.False(t, r.agent.IsSessionBusy(r.sessionID))
 }
 
+// A UserPromptSubmit hook that could not check blocks the prompt as
+// exit 2 does, and the user reads why: a gate that cannot run does not
+// wave the prompt through.
+func TestRun_UserPromptSubmitHookCouldNotEvaluate(t *testing.T) {
+	t.Parallel()
+
+	r := promptHookAgent(t, promptHooks(`echo "the secret scanner is not installed" >&2; exit 3`))
+	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "my key is sk-123"})
+	require.ErrorIs(t, err, ErrPromptBlocked)
+	require.Contains(t, err.Error(), "could not check this: the secret scanner is not installed")
+	require.Empty(t, r.model.recorded(), "a prompt no check could clear never reaches the model")
+}
+
 // Claude Code's JSON forms work too: "decision": "block" blocks with its
 // reason, and hookSpecificOutput.additionalContext adds context.
 func TestRun_UserPromptSubmitHookClaudeCodeJSON(t *testing.T) {

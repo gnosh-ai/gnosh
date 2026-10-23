@@ -129,7 +129,7 @@ func (a *sessionAgent) stopHookContinuation(
 	} else {
 		result, err = runner.RunStop(ctx, call.SessionID, lastAssistantMessage, call.stopHookDepth > 0)
 	}
-	a.warnFailedStopHooks(userSession, eventName, result.Hooks)
+	a.warnFailedStopHooks(userSession, eventName, result.Hooks, err != nil || result.Halt || result.Decision != hooks.DecisionDeny)
 	if err != nil {
 		slog.Warn("Stop hook execution error; letting the turn end",
 			"session_id", call.SessionID,
@@ -241,15 +241,16 @@ func StripStopMarker(text string) string {
 }
 
 // warnFailedStopHooks tells the user about any Stop or SubagentStop hook
-// that did not run to a verdict.
+// that did not run to a verdict; ended says whether the turn ended.
 //
-// A PreToolUse hook that fails shows as "Failed" on its tool's line, but
-// a Stop hook has no line of its own: it runs as the turn ends. A failed
-// one is non-blocking, so the turn simply ends — which means a "tests
-// must pass" gate pointed at the wrong script would let every turn
-// finish, unchecked, with nothing on screen to say the check never ran.
-// This is the only place that can say so.
-func (a *sessionAgent) warnFailedStopHooks(sessionID, event string, ran []hooks.HookInfo) {
+// A PreToolUse hook that fails shows on its tool's line, but a Stop hook
+// has no line of its own: it runs as the turn ends, and its objections
+// reach the model as hidden prompts. One that could not run or could not
+// check blocks, so the turn goes on; without this warning the user would
+// not know why. One that failed with any other exit code is non-blocking,
+// so the turn may end without its check, and this is the only place that
+// can say so.
+func (a *sessionAgent) warnFailedStopHooks(sessionID, event string, ran []hooks.HookInfo, ended bool) {
 	if a.notify == nil {
 		return
 	}
@@ -260,11 +261,21 @@ func (a *sessionAgent) warnFailedStopHooks(sessionID, event string, ran []hooks.
 		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 			SessionID: sessionID,
 			Type:      notify.TypeHookWarning,
-			Message: fmt.Sprintf(
-				"%s hook %q failed: %s; the turn ended without its check",
-				event, h.Name, h.Error,
-			),
+			Message:   fmt.Sprintf("%s hook %q %s; %s", event, h.Name, hookFailure(h), stopHookOutcome(h, ended)),
 		})
+	}
+}
+
+// stopHookOutcome says what became of the turn after h, which did not
+// reach a verdict, ran as it ended.
+func stopHookOutcome(h hooks.HookInfo, ended bool) string {
+	switch {
+	case ended:
+		return "the turn ended without its check"
+	case h.CouldNotEvaluate:
+		return "the turn goes on, since a check that could not run does not pass"
+	default:
+		return "the turn goes on, held by another hook"
 	}
 }
 

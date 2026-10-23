@@ -54,24 +54,42 @@ func stopHookAgentWithNotifier(t *testing.T, hookCfgs ...config.HookConfig) (*se
 	return a, n
 }
 
-// A Stop hook has no line on screen of its own. When one fails to run —
+// A Stop hook has no line on screen of its own. When one cannot run —
 // here, a "tests must pass" gate pointed at a script that is not there —
-// the turn ends as if it had passed. The warning is the only sign.
+// it checked nothing, and the turn used to end as if it had passed, a
+// warning the only sign. It goes on now, and the warning says why.
 func TestStopHook_FailedHookWarnsTheUser(t *testing.T) {
 	t.Parallel()
 
 	a, n := stopHookAgentWithNotifier(t,
 		config.HookConfig{Name: "tests-must-pass", Command: "./hooks/tests-must-pass.sh"})
 
-	_, blocked := a.stopHookContinuation(t.Context(), SessionAgentCall{SessionID: "s1"}, "done")
-	require.False(t, blocked, "a hook that never ran cannot hold the turn open; it is non-blocking")
+	next, blocked := a.stopHookContinuation(t.Context(), SessionAgentCall{SessionID: "s1"}, "done")
+	require.True(t, blocked, "a gate that could not run must not let the turn end as if it had passed")
+	require.Contains(t, next.Prompt, `hook "tests-must-pass" could not run`, "the agent is told why")
 
 	warnings := n.warnings()
 	require.Len(t, warnings, 1, "the user must be told the gate did not run")
 	require.Equal(t, "s1", warnings[0].SessionID)
 	require.Contains(t, warnings[0].Message, "tests-must-pass", "name the hook")
 	require.Contains(t, warnings[0].Message, "no such file or directory", "say why")
-	require.Contains(t, warnings[0].Message, "without its check", "say what it cost")
+	require.Contains(t, warnings[0].Message, "the turn goes on", "say what it did")
+}
+
+// A hook that fails with an exit code that is not a verdict, 1 say, is a
+// non-blocking error, as in Claude Code: the turn ends, and the warning
+// says it ended without the check.
+func TestStopHook_NonBlockingFailureLetsTheTurnEnd(t *testing.T) {
+	t.Parallel()
+
+	a, n := stopHookAgentWithNotifier(t,
+		config.HookConfig{Name: "lint", Command: `echo "linter crashed" >&2; exit 1`})
+
+	_, blocked := a.stopHookContinuation(t.Context(), SessionAgentCall{SessionID: "s1"}, "done")
+	require.False(t, blocked)
+	warnings := n.warnings()
+	require.Len(t, warnings, 1)
+	require.Equal(t, `Stop hook "lint" failed: exit 1: linter crashed; the turn ended without its check`, warnings[0].Message)
 }
 
 func TestStopHook_CleanHookDoesNotWarn(t *testing.T) {
@@ -203,17 +221,19 @@ func TestCompactReason(t *testing.T) {
 	require.True(t, strings.HasSuffix(got, "…"))
 }
 
-// A Stop hook answering with a word Crush does not know has failed to
-// reach a verdict, and says so — the same as one that crashed.
+// A Stop hook answering with a word Klash does not know has not reached a
+// verdict Klash can read, and says so. It meant "not done", so the turn
+// goes on, with its reason kept for the agent.
 func TestStopHook_UnknownDecisionWarns(t *testing.T) {
 	t.Parallel()
 
 	a, n := stopHookAgentWithNotifier(t,
 		config.HookConfig{Name: "gate", Command: `echo '{"decision":"denied","reason":"not done"}'`})
-	_, blocked := a.stopHookContinuation(t.Context(), SessionAgentCall{SessionID: "s1"}, "done")
-	require.False(t, blocked, "an unrecognised answer is non-blocking, like any failed hook")
+	next, blocked := a.stopHookContinuation(t.Context(), SessionAgentCall{SessionID: "s1"}, "done")
+	require.True(t, blocked, "an answer that cannot be read does not let the turn end")
+	require.Contains(t, next.Prompt, "its reason: not done")
 
 	warnings := n.warnings()
 	require.Len(t, warnings, 1)
-	require.Contains(t, warnings[0].Message, `unknown decision "denied"`)
+	require.Contains(t, warnings[0].Message, `could not evaluate: unknown decision "denied"`)
 }

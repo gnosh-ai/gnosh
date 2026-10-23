@@ -83,14 +83,17 @@ func TestRunnerHonoursClaudeCodeBlock(t *testing.T) {
 	require.Equal(t, "no rm -rf", result.Reason)
 }
 
-// A misspelt decision reaches the UI as a failure, not as OK.
+// A misspelt decision is an answer that cannot be read: it blocks, as the
+// hook that wrote "Deny" meant to, and reaches the UI as a hook that
+// could not evaluate, not as OK.
 func TestRunnerSurfacesUnknownDecision(t *testing.T) {
 	t.Parallel()
 
 	r := preRunner(t, config.HookConfig{Command: `echo '{"decision":"Deny"}'`})
 	result, err := r.Run(context.Background(), EventPreToolUse, "sess", "bash", `{}`)
 	require.NoError(t, err)
-	require.Equal(t, DecisionNone, result.Decision)
+	require.Equal(t, DecisionDeny, result.Decision)
+	require.True(t, result.Hooks[0].CouldNotEvaluate)
 	require.Contains(t, result.Hooks[0].Error, `unknown decision "Deny"`)
 }
 
@@ -254,7 +257,8 @@ func TestParseStdoutUpdatedInputObjectHasNoError(t *testing.T) {
 	}
 }
 
-// End to end: the bad rewrite reaches the UI as a failed hook.
+// End to end: a bad rewrite is an answer that cannot be read, so the call
+// is blocked rather than run as it stood, which the hook meant to change.
 func TestRunnerSurfacesNonObjectUpdatedInput(t *testing.T) {
 	t.Parallel()
 
@@ -263,6 +267,8 @@ func TestRunnerSurfacesNonObjectUpdatedInput(t *testing.T) {
 	})
 	result, err := r.Run(context.Background(), EventPreToolUse, "sess", "bash", `{"command":"ls"}`)
 	require.NoError(t, err)
-	require.Equal(t, DecisionNone, result.Decision, "the call goes to the normal permission check")
+	require.Equal(t, DecisionDeny, result.Decision, "the call must not run without the rewrite")
+	require.Empty(t, result.UpdatedInput)
+	require.True(t, result.Hooks[0].CouldNotEvaluate)
 	require.Contains(t, result.Hooks[0].Error, "updated_input must be a JSON object")
 }

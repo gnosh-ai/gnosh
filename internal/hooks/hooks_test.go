@@ -321,7 +321,8 @@ func TestRunnerTimeout(t *testing.T) {
 	result, err := r.Run(context.Background(), EventPreToolUse, "sess", "bash", `{}`)
 	elapsed := time.Since(start)
 	require.NoError(t, err)
-	require.Equal(t, DecisionNone, result.Decision)
+	require.Equal(t, DecisionDeny, result.Decision, "a hook that timed out checked nothing, so it blocks")
+	require.True(t, result.Hooks[0].CouldNotEvaluate)
 	require.Less(t, elapsed, 5*time.Second)
 }
 
@@ -856,7 +857,7 @@ func TestRunnerAbandonRaceSafety(t *testing.T) {
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
-	require.Equal(t, DecisionNone, result.Decision)
+	require.Equal(t, DecisionDeny, result.Decision, "an abandoned hook checked nothing, so it blocks")
 	// Abandon must happen at ~timeout + abandonGrace. Allow generous
 	// slack so CI noise doesn't flake the test.
 	require.Less(t, elapsed, 3500*time.Millisecond,

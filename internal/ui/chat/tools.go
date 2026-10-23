@@ -1025,14 +1025,21 @@ func renderHookLine(sty *styles.Styles, hi hooks.HookInfo, rawName, detail strin
 // hookDetail returns the styled detail text for a single hook result.
 func hookDetail(sty *styles.Styles, hi hooks.HookInfo) string {
 	const (
-		okMessage       = "OK"
-		denialMessage   = "Denied"
-		failedMessage   = "Failed"
-		rewroteMessage  = "Rewrote Output"
-		feedbackMessage = "Feedback"
+		okMessage               = "OK"
+		denialMessage           = "Denied"
+		failedMessage           = "Failed"
+		couldNotEvaluateMessage = "Could Not Evaluate"
+		rewroteMessage          = "Rewrote Output"
+		feedbackMessage         = "Feedback"
 	)
-	// A hook that never reached a verdict is not "OK": it checked
-	// nothing. It is still non-blocking, so the call went ahead, but the
+	// A hook that could not check blocked the call, or for a PostToolUse
+	// hook sent the agent its reason, as a denial would; the line says it
+	// could not check, not that it found fault.
+	if hi.CouldNotEvaluate {
+		return sty.Tool.HookDenied.Render(couldNotEvaluateMessage) + " " + sty.Tool.HookDeniedReason.Render(hi.Error)
+	}
+	// Any other hook that never reached a verdict is not "OK" either: it
+	// checked nothing. It is non-blocking, so the call went ahead, but the
 	// line has to say the hook did not run rather than vouch for it.
 	if hi.Error != "" {
 		return sty.Tool.HookDenied.Render(failedMessage) + " " + sty.Tool.HookDeniedReason.Render(hi.Error)

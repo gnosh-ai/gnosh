@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -302,6 +303,8 @@ func (r *Runner) run(
 			Reason:       results[i].Reason,
 			InputRewrite: results[i].UpdatedInput != "",
 			Error:        results[i].Error,
+
+			CouldNotEvaluate: results[i].CouldNotEvaluate,
 		}
 	}
 	slog.Info(
@@ -391,10 +394,7 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, event
 			)
 			// The goroutine may still be writing to stdout/stderr; do
 			// not read either buffer below this point.
-			return HookResult{
-				Decision: DecisionNone,
-				Error:    fmt.Sprintf("timed out after %s and did not stop", timeout),
-			}
+			return couldNotRun(hook, fmt.Sprintf("timed out after %s and did not stop", timeout))
 		}
 	}
 
@@ -406,10 +406,7 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, event
 			return HookResult{Decision: DecisionNone}
 		}
 		slog.Warn("Hook timed out", "command", hook.Command, "timeout", timeout)
-		return HookResult{
-			Decision: DecisionNone,
-			Error:    fmt.Sprintf("timed out after %s", timeout),
-		}
+		return couldNotRun(hook, fmt.Sprintf("timed out after %s", timeout))
 	}
 
 	if err != nil {
@@ -425,6 +422,16 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, event
 				Decision: DecisionDeny,
 				Reason:   reason,
 			}
+		case CouldNotEvaluateExitCode:
+			// Exit code 3 = the hook could not check. Stderr says why.
+			why := strings.TrimSpace(stderr.String())
+			slog.Warn("Hook could not evaluate", "command", hook.Command, "stderr", why)
+			return HookResult{
+				Decision:         DecisionDeny,
+				CouldNotEvaluate: true,
+				Reason:           fmt.Sprintf("hook %q could not check this: %s. %s", hook.DisplayName(), cmp.Or(strings.TrimSuffix(why, "."), "it gave no reason"), checkDidNotPass),
+				Error:            cmp.Or(firstLine(why), "it gave no reason"),
+			}
 		case HaltExitCode:
 			// Exit code 49 = halt the whole turn. Stderr is the reason.
 			reason := strings.TrimSpace(stderr.String())
@@ -437,15 +444,7 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, event
 				Reason:   reason,
 			}
 		default:
-			// Other non-zero exits are non-blocking errors.
 			stderrText := strings.TrimSpace(stderr.String())
-			slog.Warn(
-				"Hook failed with non-blocking error",
-				"command", hook.Command,
-				"exit_code", exitCode,
-				"stderr", stderrText,
-				"error", err,
-			)
 			detail := stderrText
 			if detail == "" && !shell.IsExitStatus(err) {
 				// The shell never ran the hook — most often the script
@@ -453,6 +452,27 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, event
 				// reason is in the error itself.
 				detail = err.Error()
 			}
+			if !shell.IsExitStatus(err) {
+				slog.Warn("Hook did not start", "command", hook.Command, "error", err)
+				return couldNotRun(hook, "did not start: "+firstLine(detail))
+			}
+			if exitCode == 126 || exitCode == 127 {
+				// The hook, or a command it runs, could not be found or
+				// run: it checked nothing.
+				slog.Warn("Hook could not run", "command", hook.Command, "exit_code", exitCode, "stderr", stderrText)
+				return couldNotRun(hook, hookFailureMessage(exitCode, detail))
+			}
+			// Other non-zero exits are non-blocking errors, as in Claude
+			// Code: a hook ending in a test that came out false, such as
+			// [[ $f == *.go ]] && gofmt -w "$f", exits 1 on every other
+			// file.
+			slog.Warn(
+				"Hook failed with non-blocking error",
+				"command", hook.Command,
+				"exit_code", exitCode,
+				"stderr", stderrText,
+				"error", err,
+			)
 			return HookResult{
 				Decision: DecisionNone,
 				Error:    hookFailureMessage(exitCode, detail),
@@ -465,6 +485,17 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, event
 		return HookResult{Decision: DecisionNone, Context: out}
 	}
 	result := parseStdout(stdout.String())
+	if result.Error != "" {
+		// An answer that cannot be read is no answer: a hook that wrote
+		// "decision": "Deny" meant to deny.
+		reason := fmt.Sprintf("hook %q gave an answer Klash could not read (%s)", hook.DisplayName(), result.Error)
+		if result.Reason != "" {
+			reason += "; its reason: " + result.Reason
+		}
+		result.Decision = DecisionDeny
+		result.CouldNotEvaluate = true
+		result.Reason = reason + ". An answer that cannot be read does not pass."
+	}
 	slog.Debug(
 		"Hook executed",
 		"command", hook.Command,
@@ -477,6 +508,32 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, event
 // shown on a single line in the TUI. The full stderr is in the log.
 const maxHookErrorLen = 200
 
+// checkDidNotPass ends the reason given for a hook that could not check.
+const checkDidNotPass = "A check that could not run does not pass."
+
+// couldNotRun is the result of a hook that could not run to a verdict:
+// it never started, it or a command it runs was not found or not
+// executable, or it timed out. It checked nothing, so it blocks: Klash
+// fails closed, where Claude Code lets such a hook pass.
+func couldNotRun(hook config.HookConfig, failure string) HookResult {
+	return HookResult{
+		Decision:         DecisionDeny,
+		CouldNotEvaluate: true,
+		Reason:           fmt.Sprintf("hook %q could not run (%s). %s", hook.DisplayName(), failure, checkDidNotPass),
+		Error:            failure,
+	}
+}
+
+// firstLine is the first line of s, cut to fit a status line.
+func firstLine(s string) string {
+	first, _, _ := strings.Cut(s, "\n")
+	// Truncate by rune, not byte, so a cut never splits a character.
+	if r := []rune(first); len(r) > maxHookErrorLen {
+		first = string(r[:maxHookErrorLen]) + "…"
+	}
+	return first
+}
+
 // hookFailureMessage summarises a non-blocking hook failure for display:
 // the exit code, what it usually means, and the first line of stderr.
 func hookFailureMessage(exitCode int, stderrText string) string {
@@ -487,11 +544,7 @@ func hookFailureMessage(exitCode int, stderrText string) string {
 	case 127:
 		msg += " (command not found)"
 	}
-	if first, _, _ := strings.Cut(stderrText, "\n"); first != "" {
-		// Truncate by rune, not byte, so a cut never splits a character.
-		if r := []rune(first); len(r) > maxHookErrorLen {
-			first = string(r[:maxHookErrorLen]) + "…"
-		}
+	if first := firstLine(stderrText); first != "" {
 		msg += ": " + first
 	}
 	return msg

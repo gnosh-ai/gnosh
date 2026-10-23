@@ -161,8 +161,8 @@ func (a *sessionAgent) warnFailedPromptHooks(sessionID string, ran []hooks.HookI
 			SessionID: sessionID,
 			Type:      notify.TypeHookWarning,
 			Message: fmt.Sprintf(
-				"UserPromptSubmit hook %q failed: %s; the prompt was sent without it",
-				h.Name, h.Error,
+				"UserPromptSubmit hook %q %s; the prompt was sent without it",
+				h.Name, hookFailure(h),
 			),
 		})
 	}

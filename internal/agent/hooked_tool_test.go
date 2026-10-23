@@ -149,6 +149,29 @@ func TestHookedTool_DenySkipsInnerTool(t *testing.T) {
 	require.Contains(t, resp.Content, "blocked")
 }
 
+// A PreToolUse hook that could not check, here because the command it
+// runs is missing, blocks the call: Klash fails closed where Claude Code
+// would run the tool unchecked. The model reads that the hook could not
+// run, not that the call was wrong.
+func TestHookedTool_CouldNotEvaluateBlocksTheCall(t *testing.T) {
+	t.Parallel()
+
+	for cmd, want := range map[string]string{
+		`echo "the secret scanner is not installed" >&2; exit 3`: "could not check this: the secret scanner is not installed",
+		`no_such_secret_scanner --scan`:                          "could not run (exit 127 (command not found)",
+	} {
+		inner := &fakeTool{name: "bash"}
+		tool := newHookedTool(inner, toolHooks{pre: newRunner(t, cmd)})
+
+		resp, err := tool.Run(t.Context(), fantasy.ToolCall{ID: "call-4", Name: "bash"})
+		require.NoError(t, err)
+		require.False(t, inner.called, "%s: a check that could not run must not let the call through", cmd)
+		require.True(t, resp.IsError)
+		require.Contains(t, resp.Content, want)
+		require.Contains(t, resp.Content, "A check that could not run does not pass.")
+	}
+}
+
 func TestWrapToolsWithHooks(t *testing.T) {
 	t.Parallel()
 

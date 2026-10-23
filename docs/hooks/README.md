@@ -123,8 +123,8 @@ What this means in practice:
   doesn't exist (e.g. `#!/bin/bash` on Windows), Klash falls back to a
   `PATH` lookup of the base name (`bash`) before giving up. A debug-level
   log records the fallback. If the interpreter isn't on `PATH` either, the
-  hook fails cleanly as a non-blocking warning and the agent proceeds as
-  "no opinion".
+  hook could not run, and it blocks as a hook that could not evaluate does
+  (see [Could not evaluate](#could-not-evaluate-klash-fails-closed)).
 - **Environment**: every hook sees `KLASH=1`, `AGENT=crush`, and
   `AI_AGENT=crush` on top of the `KLASH_*` hook-specific variables. These
   three markers are guaranteed and match what the `bash` tool sets, so
@@ -133,7 +133,7 @@ What this means in practice:
 - **Timeout behavior**: when a hook exceeds its timeout, Klash cancels the
   context and waits a short grace period (~1s) for the interpreter to
   yield. If the hook still hasn't returned, Klash abandons it, logs a
-  warning, and treats the result as "no opinion" so the agent can proceed.
+  warning, and treats it as a hook that could not evaluate, which blocks.
   Long-running work should honor context cancellation or run in a
   subprocess via a shebang.
 
@@ -334,8 +334,9 @@ does not run the hook again when its turn comes. While the hook runs the session
 counts as busy, and Esc stops the hook and the prompt is not sent. Prompts the
 agent sends itself (a `Stop` hook's or `/loop`'s continuation), a sub-agent's
 prompt and a channel message (from Signal, say, written by someone else) do not
-fire it. A hook that fails (any other exit code, or a timeout) is shown as a
-warning, and the prompt goes out without it.
+fire it. A hook that could not evaluate (exit `3`, or one that could not run
+or timed out) blocks the prompt; one that fails with any other exit code is
+shown as a warning, and the prompt goes out without it.
 
 **What it reads**: `prompt` is the prompt as the agent will read it: what you
 typed, followed by the text of any pasted or attached text file. A paste of more
@@ -391,8 +392,8 @@ rebuilt on later turns.
 **Blocking**: exit code `2` (or `"decision": "block"`) means the hook
 objects, but the prompt goes ahead anyway, as in Claude Code: you get the
 hook's reason as a warning. Exit `49` (or `"continue": false`) does the
-same. A hook that fails (any other exit code, or a timeout) is shown as a
-warning too, and the prompt goes ahead without it.
+same. A hook that fails or could not evaluate (any other exit code, or a
+timeout) is shown as a warning too, and the prompt goes ahead without it.
 
 **When it runs**: once per start, before the first prompt the process
 sends to the session, whether that prompt is visible or a hidden
@@ -445,7 +446,10 @@ matches nothing. Every configured `Stop` hook runs.
 **Blocking**: exit code `2` means "you are not finished" — the turn stays alive
 and your stderr is handed to the model as the reason to keep working. Exit code
 `49` means the opposite: end the turn now, even if another `Stop` hook blocked
-it.
+it. A hook that could not evaluate (exit `3`, or one that could not run or
+timed out) keeps the turn going as exit `2` does: a check that did not run has
+not passed. One that fails with any other exit code lets the turn end, and the
+user is told the check never ran.
 
 ```jsonc
 {
@@ -503,9 +507,10 @@ hook runs.
 **Blocking**: exit code `2` (or `"decision": "block"`) means "you are not
 finished" — the sub-agent stays alive and your stderr is handed to it as the
 reason to keep working. Exit code `49` means the opposite: end the sub-agent's
-work now, even if another `SubagentStop` hook blocked it. A hook that fails
-(any other exit code, or a timeout) lets the sub-agent finish, and the user is
-told the check never ran. When the hooks let the sub-agent finish, the `agent`
+work now, even if another `SubagentStop` hook blocked it. A hook that could
+not evaluate (exit `3`, or one that could not run or timed out) keeps it
+working as exit `2` does; one that fails with any other exit code lets the
+sub-agent finish, and the user is told the check never ran. When the hooks let the sub-agent finish, the `agent`
 tool hands the parent its last answer — the one after the hooks let it end.
 
 The same persistence rules as `Stop` apply: there is no cap on how many times
@@ -568,9 +573,9 @@ fires on both.
 
 **Blocking**: exit code `2` (or `"decision": "block"`) means the hook objects,
 but the summary goes ahead anyway; you get the hook's reason as a warning.
-Exit `49` (or `"continue": false`) does the same. A hook that fails (any other
-exit code, or a timeout) is also shown as a warning, and the summary goes
-ahead without it.
+Exit `49` (or `"continue": false`) does the same. A hook that fails or could
+not evaluate (any other exit code, or a timeout) is also shown as a warning,
+and the summary goes ahead without it.
 
 **Scope**: like `PreToolUse` and `Stop`, `PreCompact` fires only for the
 **top-level agent**, and not for sub-agents.
@@ -722,8 +727,10 @@ fi
 | --------- | ---------------------------------------------------------------- |
 | 0         | Success. Stdout is parsed as JSON (see fields below).            |
 | 2         | **Block the tool.** Stderr is used as the deny reason (no JSON). |
+| 3         | **Could not evaluate.** Blocks as 2 does; stderr says why.       |
 | 49        | **Halt the turn.** Stderr is used as the halt reason (no JSON).  |
-| Other     | Non-blocking error. Logged and ignored — the tool call proceeds. |
+| 126, 127  | The hook could not run. Blocks as 3 does.                        |
+| Other     | Non-blocking error. Logged and shown — the tool call proceeds.   |
 
 The difference between exit 2 and exit 49:
 
@@ -734,6 +741,39 @@ The difference between exit 2 and exit 49:
   shouldn't keep trying. 49 sits in an empty slice of the exit-code space —
   between the generic-error range (1-30), the BSD `sysexits.h` range (64-78),
   and the killed-by-signal range (128+) — so it can't be hit by accident.
+
+### Could not evaluate: Klash fails closed
+
+A check can fail to check: the tool it runs is missing, the file it reads is
+not there, the service it asks is down. Exiting `0` then passes the work
+unchecked, the way "ffmpeg exited 0" once passed for "the audio is fine". Exit
+`3` instead, with the reason on stderr:
+
+```bash
+#!/usr/bin/env bash
+# hooks/video-has-sound.sh: a rendered video must have an audio stream.
+command -v ffprobe >/dev/null || { echo "ffprobe is not installed, so the audio was not checked" >&2; exit 3; }
+...
+```
+
+Klash treats it as a block, as exit `2`, with your reason: the agent reads
+that the hook could not check, not that the work is wrong, and the hook's
+line says **Could Not Evaluate**. A hook that could not run at all counts the
+same: one that never started (its script path is wrong), one whose command
+was not found or not executable (exit `127` or `126`, also when a command
+inside the script is missing), one that timed out, and one that answered in
+JSON that Klash could not read (an unknown `decision` such as `"Deny"`, or an
+`updated_input` that is not an object). Claude Code lets all of these pass.
+
+Where a hook cannot block (`SessionStart`, `PreCompact`), it is shown as a
+warning. On `Stop` and `SubagentStop` the agent keeps working; at each
+reflection checkpoint it may judge that the check cannot run here, say why,
+and stop, and you are told.
+
+Any other exit code (`1`, say) stays a non-blocking error, as in Claude Code:
+a script whose last line is a test that came out false, such as
+`[[ $f == *.go ]] && gofmt -w "$f"`, exits `1` and means nothing by it. To fail
+closed on an error of your own, exit `3`.
 
 That said, if you need more control, or if you need to rewrite input, you can
 use JSON on stdout. Exit 0 and print a JSON object to provide context, update
@@ -824,7 +864,7 @@ When multiple hooks match the same tool call:
 ### Timeouts
 
 If a hook exceeds its timeout, Klash cancels its context and treats the
-result as a non-blocking error so the tool call proceeds. The default
+hook as one that could not evaluate, which blocks. The default
 timeout is Claude Code's for a command hook: 600 seconds, and 30 for
 `UserPromptSubmit`, which holds up the prompt just sent. Shebang-dispatched subprocesses are killed through
 `exec.CommandContext`; in-process hooks get a short grace period to yield
@@ -1018,9 +1058,9 @@ in `hookSpecificOutput` gets both; where both give a decision,
 `permissionDecision` wins, as in Claude Code.
 
 Decision values are matched exactly. Anything else — `"Deny"`, `"denied"`,
-`"reject"` — is reported as a failed hook (shown as **Failed** on the tool
-line, or as a warning for a `Stop` hook) rather than quietly treated as no
-opinion. Like any failed hook it does not block, but you will see it.
+`"reject"` — is an answer Klash could not read, so the hook could not evaluate:
+it blocks, and its line says **Could Not Evaluate**, rather than being quietly
+treated as no opinion. A hook that wrote `"Deny"` meant to deny.
 
 One intentional divergence: Klash treats `updated_input` as a shallow-merge
 patch against the original `tool_input` rather than a full replacement. Keys
@@ -1285,8 +1325,10 @@ Extends the common envelope:
 | ----- | ------------------------------------------------------------------------ |
 | `0`   | Success. Stdout is parsed as the output envelope.                        |
 | `2`   | Block this tool call. Stderr becomes the deny reason. Stdout is ignored. |
+| `3`   | Could not evaluate. Blocks as `2` does; stderr says why.                 |
 | `49`  | Halt the whole turn. Stderr becomes the halt reason. Stdout is ignored.  |
-| other | Non-blocking error. Logged and ignored; the tool call proceeds.          |
+| `126`, `127` | The hook could not run. Blocks as `3` does.                       |
+| other | Non-blocking error. Logged and shown; the tool call proceeds.            |
 
 Exit `2` blocks the tool call on `PreToolUse` and keeps the agent working on
 `Stop`. On `PostToolUse`, where the call has already run, it hands stderr to the

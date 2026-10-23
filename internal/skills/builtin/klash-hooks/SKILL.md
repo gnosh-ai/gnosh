@@ -120,13 +120,24 @@ Communicate back via exit code (+ stderr) or JSON on stdout.
 | --------- | ------------------------------------------------------------- |
 | 0         | Success. Stdout is parsed as the JSON envelope below.         |
 | 2         | Block this tool call. Stderr becomes the deny reason.         |
+| 3         | Could not evaluate. Blocks as 2 does; stderr says why.        |
 | 49        | Halt the whole turn. Stderr becomes the halt reason.          |
-| Other     | Non-blocking error. Logged and ignored; tool call proceeds.   |
+| 126, 127  | The hook could not run. Blocks as 3 does.                     |
+| Other     | Non-blocking error. Logged and shown; tool call proceeds.     |
 
 Exit 2 blocks one tool call (agent sees the reason and can try again); exit 49
 ends the whole turn (user takes over). Default to deny — reach for halt only
 when letting the agent retry is itself the problem (e.g. secrets detected,
 policy violation).
+
+**Could not evaluate: fail closed.** A check that cannot check (its tool is
+missing, its input is not there) must exit 3 with the reason on stderr, never
+exit 0: "ffmpeg exited 0" once passed for "the audio is fine". Klash blocks on
+it as on exit 2, and says the hook could not check. A hook that could not run
+counts the same: never started, not found or not executable (126, 127), timed
+out, or JSON that cannot be read (an unknown `decision`). Claude Code lets
+these pass. Any other exit code (1, say) stays non-blocking: a script ending in
+a false test (`[[ $f == *.go ]] && gofmt -w "$f"`) exits 1 for nothing.
 
 **JSON envelope (exit 0):**
 
@@ -152,8 +163,8 @@ policy violation).
 - **`updated_input`**: **shallow-merge patch** against `tool_input`, not a
   replacement. Keys you include overwrite; keys you don't are preserved.
   Nested objects are replaced wholesale, not deep-merged. Ignored on deny/halt.
-  It must be a JSON object; anything else is a failed hook, and an `allow`
-  given with it is dropped, so the normal permission check runs.
+  It must be a JSON object; anything else is an answer that cannot be read,
+  so the hook could not evaluate and the call is blocked.
 
 **On `PostToolUse`** the call has already run, so nothing is approved,
 blocked or rewritten. Exit `2` (or `"decision": "block"`/`"deny"`) hands your
@@ -168,7 +179,7 @@ beside the common fields. Plain stdout (or `context`, or Claude Code's
 `additionalContext`) is added after the prompt for the agent to read, in a
 `<user-prompt-submit-hook>` tag; the chat shows only what the user typed. Exit
 `2` (or `"decision": "block"`) blocks the prompt: it is not sent or stored, and
-the user sees the reason. `prompt` includes the text of pasted or attached text
+the user sees the reason. A hook that could not evaluate blocks it the same way. `prompt` includes the text of pasted or attached text
 files, as the agent will read it. It runs once per prompt the user sends, also
 for one queued behind a running turn, and never for the agent's own
 continuations or for channel messages; Esc while it runs cancels the prompt.
@@ -191,8 +202,8 @@ agent and vice versa. When a `UserPromptSubmit` hook blocks the first
 prompt, what `SessionStart` printed is kept and sent out with the next
 prompt to the session. As in Claude Code a hook cannot stop
 the prompt: exit `2` (or `"decision": "block"`) or `49` is shown to the user as
-a warning and the prompt goes ahead. A hook that fails is also shown as a
-warning. Plain stdout (or `context`, or Claude Code's `additionalContext`) is
+a warning and the prompt goes ahead. A hook that fails or could not evaluate
+is also shown as a warning. Plain stdout (or `context`, or Claude Code's `additionalContext`) is
 added with the prompt for the agent to read, in a `<user-prompt-submit-hook>`
 tag, and is kept with the prompt, so it is read again when the conversation is
 rebuilt on later turns. Esc while it runs cancels the prompt. It fires only for
@@ -205,8 +216,10 @@ for sub-agents started by the `agent` tool: exit `2` (or
 `"decision": "block"`) means "you are not finished" — the sub-agent keeps
 working, your stderr is its reason, and the `agent` tool eventually returns
 the sub-agent's last answer to the parent once its hooks let it finish. Exit
-`49` ends the sub-agent's work now. A failed hook lets the sub-agent finish,
-and the user is told the check never ran. There is no cap, and the
+`49` ends the sub-agent's work now. A hook that could not evaluate (exit 3,
+126, 127, a timeout) keeps it working as exit 2 does; one that fails with any
+other exit code lets the sub-agent finish, and the user is told the check
+never ran. There is no cap, and the
 sub-agent is asked to judge at every 10th consecutive block, exactly as the
 main agent is at `Stop` checkpoints. It fires only for sub-agents; the
 top-level agent's gate is `Stop`, which never fires for sub-agents.
@@ -216,8 +229,8 @@ beside the common fields. `trigger` names what set the summary going: the user
 asked (`manual`), or the context filled up (`auto`). A `matcher` on a
 `PreCompact` hook is tested against `trigger`. As in Claude Code a hook cannot
 stop the summary: exit `2` (or `"decision": "block"`) or `49` is shown to the
-user as a warning and the summary goes ahead. A hook that fails is also shown
-as a warning. It fires only for the top-level agent, not sub-agents.
+user as a warning and the summary goes ahead. A hook that fails or could not
+evaluate is also shown as a warning. It fires only for the top-level agent, not sub-agents.
 
 ## Aggregation (Multiple Hooks)
 
@@ -343,7 +356,7 @@ that wants to object only once can check `KLASH_STOP_HOOK_ACTIVE` and exit 0.
 A Claude Code-style Stop hook that prints `{"decision": "block", "reason": "…"}`
 works the same as exit `2`. Decision values are matched exactly: `allow`,
 `deny`, `approve`, `block`, or `ask` (via `hookSpecificOutput`). Any other
-value is reported as a failed hook, not silently ignored.
+value cannot be read, so the hook could not evaluate: it blocks.
 
 ## Authoring Checklist
 
@@ -357,7 +370,8 @@ value is reported as a failed hook, not silently ignored.
    exactly; anything else is a startup error.
 4. Decide intent: inject context (omit `decision`), auto-approve (`"allow"`),
    block (`exit 2`), or halt (`exit 49`). On `Stop` and `SubagentStop`,
-   `exit 2` means "keep working" and `exit 49` means "end now".
+   `exit 2` means "keep working" and `exit 49` means "end now". Wherever the
+   check cannot run, `exit 3` with the reason, never `exit 0`.
 5. On `Stop` and `SubagentStop`, check `KLASH_STOP_HOOK_ACTIVE` so a hook
    that blocks can't loop.
 6. If rewriting input, remember `updated_input` is a shallow merge — only
@@ -365,8 +379,9 @@ value is reported as a failed hook, not silently ignored.
 
 ## Debugging
 
-- Timeouts kill the hook silently and the tool call proceeds. Bump `timeout` if needed.
-- Non-zero exit codes other than 2/49 are logged but don't block — check Klash logs.
+- A timeout counts as could not evaluate: the hook blocks. Bump `timeout` if needed.
+- A missing script or command (126, 127) blocks too, with the reason on the hook's line.
+- Other non-zero exit codes (not 2, 3, 49) are logged and shown but don't block.
 - Use `echo "debug info" >&2` for logging without corrupting stdout JSON.
 - `matcher` follows Claude Code's rules: exact names separated by `|` or `,`
   (`bash`, `Edit|Write`; Claude Code's names match Klash's tools), `*` or empty

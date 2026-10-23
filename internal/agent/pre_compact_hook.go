@@ -65,7 +65,7 @@ func (a *sessionAgent) runPreCompactHooks(ctx context.Context, sessionID string,
 		)
 		return
 	}
-	if result.Halt || result.Decision == hooks.DecisionDeny {
+	if result.Objected {
 		reason := result.Reason
 		if reason == "" {
 			reason = "a hook objected"
@@ -99,7 +99,7 @@ func (a *sessionAgent) warnFailedPreCompactHooks(sessionID string, ran []hooks.H
 		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 			SessionID: sessionID,
 			Type:      notify.TypeHookWarning,
-			Message:   fmt.Sprintf("PreCompact hook %q failed: %s; the summary went ahead without it", h.Name, h.Error),
+			Message:   fmt.Sprintf("PreCompact hook %q %s; the summary went ahead without it", h.Name, hookFailure(h)),
 		})
 	}
 }

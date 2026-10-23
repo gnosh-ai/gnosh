@@ -251,8 +251,9 @@ func TestRun_SessionStartExit2DoesNotStopThePrompt(t *testing.T) {
 	require.Contains(t, warnings[0].Message, "SessionStart", "the event is named")
 }
 
-// A hook that fails (any other exit code) is shown as a hook warning,
-// and the prompt goes ahead without it.
+// A hook that fails, or here could not run, is shown as one hook warning,
+// not also as an objection, and the prompt goes ahead without it: no
+// hook can stop it.
 func TestRun_SessionStartFailedHookWarns(t *testing.T) {
 	t.Parallel()
 

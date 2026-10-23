@@ -42,6 +42,14 @@ const (
 // killed-by-signal range (128+) so it can't be hit by accident.
 const HaltExitCode = 49
 
+// CouldNotEvaluateExitCode is the exit code a hook gives when it could
+// not check what it was asked to: the tool it runs is missing, say, or
+// what it reads is not there. Klash fails closed on it, as on a hook that
+// could not run at all: it blocks as exit 2 does, so a check that did not
+// run never passes for one that did. Stderr says why. 3 is the UNKNOWN
+// of monitoring checks, beside their 0 for OK and 2 for CRITICAL.
+const CouldNotEvaluateExitCode = 3
+
 // HookMetadata is embedded in tool response metadata so the UI can
 // display a hook indicator.
 type HookMetadata struct {
@@ -70,6 +78,9 @@ type HookInfo struct {
 	// or exited non-zero with a code that is not a decision. See
 	// HookResult.Error.
 	Error string `json:"error,omitempty"`
+	// CouldNotEvaluate is set when the hook could not check what it was
+	// asked to, so it blocked. See HookResult.CouldNotEvaluate.
+	CouldNotEvaluate bool `json:"could_not_evaluate,omitempty"`
 }
 
 // Decision represents the outcome of a single hook execution.
@@ -103,14 +114,22 @@ type HookResult struct {
 	Context      string
 	UpdatedInput string // Shallow-merge patch against tool_input (opaque JSON).
 
-	// Error is set when the hook did not run to a verdict — it timed out,
-	// or exited non-zero with a code that is not a decision (127 for a
-	// command that does not exist, 126 for one that is not executable).
-	// Such a hook is still non-blocking, so Decision stays DecisionNone,
-	// but it must not be mistaken for one that ran and simply had no
-	// opinion: that is how a safety hook pointed at the wrong path came
-	// to be shown as a green "OK" on every call while checking nothing.
+	// Error is set when the hook did not run to a verdict: it could not
+	// run (see CouldNotEvaluate), or it exited non-zero with a code that
+	// is not a decision, which is a non-blocking error as in Claude Code.
+	// Either way it must not be mistaken for a hook that ran and simply
+	// had no opinion: that is how a safety hook pointed at the wrong path
+	// came to be shown as a green "OK" on every call while checking
+	// nothing.
 	Error string
+
+	// CouldNotEvaluate is set when the hook did not check what it was
+	// asked to: it said so (CouldNotEvaluateExitCode), or it could not run
+	// at all (never started, not found, not executable, timed out). Such a
+	// result is a DecisionDeny, so it blocks wherever a hook can, and its
+	// Reason says why it could not check: a check that did not run must
+	// not pass. "ffmpeg exited 0" once passed for "the audio is fine".
+	CouldNotEvaluate bool
 
 	// rewriteRejected records that the hook's tool-input rewrite was
 	// malformed, so that no allow it gives, wherever in its output, is
@@ -127,6 +146,12 @@ type AggregateResult struct {
 	Reason       string     // Concatenated deny/halt reasons (newline-separated).
 	Context      string     // Concatenated context from all hooks.
 	UpdatedInput string     // Merged tool_input JSON (empty if no patches).
+
+	// Objected is set when a hook halted or refused with a verdict of its
+	// own. A hook that could not evaluate makes Decision a deny too, so
+	// that it blocks wherever a hook can; where none can, as for
+	// SessionStart, it is a failure to report, not an objection.
+	Objected bool
 }
 
 // aggregate merges multiple HookResults into a single AggregateResult.
@@ -139,6 +164,7 @@ func aggregate(results []HookResult, origToolInput string) AggregateResult {
 	var (
 		decision Decision
 		halt     bool
+		objected bool
 		reasons  []string
 		contexts []string
 		merged   = origToolInput
@@ -157,6 +183,9 @@ func aggregate(results []HookResult, origToolInput string) AggregateResult {
 			}
 		case DecisionNone:
 			// No change.
+		}
+		if r.Halt || r.Decision == DecisionDeny && !r.CouldNotEvaluate {
+			objected = true
 		}
 		if r.Halt {
 			halt = true
@@ -187,6 +216,7 @@ func aggregate(results []HookResult, origToolInput string) AggregateResult {
 	agg := AggregateResult{
 		Decision:  decision,
 		Halt:      halt,
+		Objected:  objected,
 		HookCount: len(results),
 	}
 	if anyPatch {

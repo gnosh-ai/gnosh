@@ -216,8 +216,9 @@ func TestSummarize_PreCompactBlockDoesNotStopTheSummary(t *testing.T) {
 	require.Contains(t, warnings[0], "PreCompact", "the event is named")
 }
 
-// A hook that fails (any other exit code, or a timeout) is shown as a
-// hook warning and the summary goes ahead without it.
+// A hook that fails, or here could not run, is shown as one hook warning,
+// not also as an objection, and the summary goes ahead without it: no
+// hook can stop a summary.
 func TestSummarize_PreCompactFailedHookWarns(t *testing.T) {
 	t.Parallel()
 

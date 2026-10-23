@@ -30,6 +30,21 @@ func TestHookDetail_FailedHookIsNotOK(t *testing.T) {
 	require.NotContains(t, got, "OK", "a hook that did not run must not say it passed")
 }
 
+// A hook that could not check blocked the call, so its line says it
+// could not evaluate, not that it failed and let the call through.
+func TestHookDetail_CouldNotEvaluate(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	got := plain(hookDetail(&sty, hooks.HookInfo{
+		Name:             "video-has-sound",
+		Decision:         "deny",
+		Error:            "ffprobe is not installed",
+		CouldNotEvaluate: true,
+	}))
+	require.Equal(t, "Could Not Evaluate ffprobe is not installed", got)
+}
+
 // The ordinary cases must render exactly as they did before.
 func TestHookDetail_UnchangedForRealVerdicts(t *testing.T) {
 	t.Parallel()
