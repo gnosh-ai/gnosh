@@ -726,6 +726,11 @@ func (m *UI) PickSessionAtStart() {
 	}
 }
 
+// pickSessionMsg opens the sessions list. It is its own message because
+// dialog.ActionOpenDialog is acted on only when an open dialog returns it,
+// so sent at startup, with no dialog open, it did nothing.
+type pickSessionMsg struct{}
+
 // startupSessionPicker opens the sessions list at startup when
 // PickSessionAtStart asked for it, or says there is no session to pick
 // rather than open an empty list. Like loadInitialSession, it waits out
@@ -742,7 +747,7 @@ func (m *UI) startupSessionPicker() tea.Cmd {
 		if len(sessions) == 0 {
 			return util.NewInfoMsg("No sessions to resume here yet")
 		}
-		return dialog.ActionOpenDialog{DialogID: dialog.SessionsID}
+		return pickSessionMsg{}
 	}
 }
 
@@ -1008,6 +1013,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 		if cmd := m.dispatchPromptQueueRefresh(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case pickSessionMsg:
+		if cmd := m.openSessionsDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case loadSessionMsg:

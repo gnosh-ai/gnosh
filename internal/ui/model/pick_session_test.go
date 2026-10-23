@@ -43,7 +43,7 @@ func TestStartupSessionPicker(t *testing.T) {
 	}
 
 	ws := &pickSessionWorkspace{sessions: []session.Session{{ID: "s1", Title: "Fix the build"}}}
-	require.Equal(t, dialog.ActionOpenDialog{DialogID: dialog.SessionsID}, start(ws, true))
+	require.Equal(t, pickSessionMsg{}, start(ws, true))
 	require.Nil(t, start(ws, false), "without -r the UI starts as before")
 
 	msg, ok := start(&pickSessionWorkspace{}, true).(util.InfoMsg)
@@ -87,4 +87,20 @@ func TestStartStateLetsAnAskedForSessionPastTheInitQuestion(t *testing.T) {
 	u.PickSessionAtStart()
 	require.Equal(t, uiLanding, u.state)
 	require.NotNil(t, u.startupSessionPicker())
+}
+
+// The startup message reaches the screen: Update opens the sessions list
+// with no other dialog open. dialog.ActionOpenDialog, sent the same way,
+// was dropped, since only an open dialog's answers are acted on.
+func TestPickSessionMsgOpensTheSessionsList(t *testing.T) {
+	t.Parallel()
+
+	u := newTestUI()
+	u.dialog = dialog.NewOverlay()
+	u.com.Workspace = &pickSessionWorkspace{sessions: []session.Session{{ID: "s1", Title: "Fix the build"}}}
+	u.state = uiLanding
+	require.False(t, u.dialog.HasDialogs())
+
+	_, _ = u.Update(pickSessionMsg{})
+	require.True(t, u.dialog.ContainsDialog(dialog.SessionsID))
 }
