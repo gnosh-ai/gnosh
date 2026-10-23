@@ -817,19 +817,18 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		// What a SessionStart hook printed for the session whose earlier
 		// first prompt was refused here goes out with this one instead,
 		// so it is neither lost nor sent twice.
+		tookPending := false
 		if pending := a.takeSessionStartPendingContext(call.SessionID); pending != "" {
 			call.promptHookContext = joinHookContext(pending, call.promptHookContext)
+			tookPending = true
 		}
 		if err := a.runPromptHooks(hookCtx, &call); err != nil {
 			// The prompt is refused before it reaches the model. When
-			// this prompt ran the SessionStart hooks for the session,
-			// keep what they printed for the next prompt to it: the
-			// session is marked started, so the hooks do not run again.
-			// When it did not, an earlier prompt's output was taken for
-			// this one and was just refused with it: the hooks have not
-			// run for this start yet, so they will run for the next
-			// prompt and print it again.
-			if sessionStartRan {
+			// this prompt ran the SessionStart hooks for the session, or
+			// when it took an earlier prompt's pending context, keep
+			// what they printed for the next prompt to it: the session
+			// is marked started, so the hooks do not run again.
+			if sessionStartRan || tookPending {
 				a.setSessionStartPendingContext(call.SessionID, call.promptHookContext)
 			}
 			a.endSubmitting(call.SessionID, submit, true)

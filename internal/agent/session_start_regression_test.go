@@ -198,3 +198,49 @@ func TestRun_SessionStartBlockedFirstPromptNextCarriesContext(t *testing.T) {
 	texts := userTexts(prompts[0])
 	require.Contains(t, texts[len(texts)-1], "The build on main is red.", "the second prompt carries what the hooks printed")
 }
+
+// When two consecutive prompts are both blocked by UserPromptSubmit, the
+// SessionStart hooks' output survives both and reaches the model with the
+// third prompt. Before the fix, the second prompt (which did not run
+// SessionStart) took the pending context and was itself blocked, but the
+// context was not re-saved, so the third prompt found nothing.
+func TestRun_SessionStartTwoBlockedPromptsThirdCarriesContext(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	count := filepath.Join(dir, "count")
+	r := sessionStartAgent(t, false, "",
+		sessionStartHooks("", `echo x >> `+count+`; echo "The build on main is red."`)...)
+	// The UserPromptSubmit hook blocks the first two prompts, then
+	// allows the third.
+	r.cfg.Hooks[hooks.EventUserPromptSubmit] = promptHooks(`n=$(cat ` + dir + `/blocks 2>/dev/null || echo 0); if [ "$n" -lt 2 ]; then echo $((n+1)) > ` + dir + `/blocks; echo "no" >&2; exit 2; fi`)[hooks.EventUserPromptSubmit]
+	require.NoError(t, r.cfg.ValidateHooks())
+
+	// The first prompt runs SessionStart and is blocked.
+	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "first"})
+	require.ErrorIs(t, err, ErrPromptBlocked, "the first prompt is blocked")
+	data, err := os.ReadFile(count)
+	require.NoError(t, err)
+	require.Equal(t, "x\n", string(data), "the SessionStart hooks ran for the first prompt")
+
+	// The second prompt (no SessionStart) takes the pending context and
+	// is also blocked.
+	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "second"})
+	require.ErrorIs(t, err, ErrPromptBlocked, "the second prompt is blocked")
+	data, err = os.ReadFile(count)
+	require.NoError(t, err)
+	require.Equal(t, "x\n", string(data), "the SessionStart hooks did not run again for the second prompt")
+
+	// The third prompt is not blocked and carries what the SessionStart
+	// hooks printed for the first.
+	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "third"})
+	require.NoError(t, err, "the third prompt is not blocked")
+	data, err = os.ReadFile(count)
+	require.NoError(t, err)
+	require.Equal(t, "x\n", string(data), "the SessionStart hooks did not run again for the third prompt")
+
+	prompts := r.model.recorded()
+	require.Len(t, prompts, 1, "only the third prompt reached the model")
+	texts := userTexts(prompts[0])
+	require.Contains(t, texts[len(texts)-1], "The build on main is red.", "the third prompt carries what the hooks printed")
+}
