@@ -150,12 +150,36 @@ and project-level, with project level hooks taking precedence.
         "name": "no-rm-rf", // friendly name shown in the TUI
         "matcher": "bash", // the tool's name; see "Matchers" below
         "command": "./hooks/my-hot-hook.sh", // the path to the hook
-        "timeout": 10, // in seconds; default 60, as in Claude Code
+        "timeout": 10, // in seconds; default 60
       },
     ],
   },
 }
 ```
+
+A Claude Code `settings.json` hooks block also works pasted in as it is. Klash
+reads Claude Code's groups, a matcher and the hooks it runs, as one entry per
+command:
+
+```jsonc
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "./hooks/no-rm-rf.sh", "timeout": 10 }],
+      },
+    ],
+  },
+}
+```
+
+Klash runs `command` hooks only. `statusMessage` and `once` are accepted and
+change nothing, as are the default values of `shell` (`bash`), `async` and
+`asyncRewake` (`false`) and `onFailure` (`continue`). Anything else a Claude
+Code hook can ask for, another `type` (`http`, `mcp_tool`, `prompt`, `agent`),
+an `if` filter, `args`, a background hook, is a config error that names it,
+rather than a hook run some other way than written.
 
 > [!IMPORTANT]
 > The `command` is resolved relative to your **current working directory** —

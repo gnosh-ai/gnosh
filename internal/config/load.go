@@ -1078,6 +1078,9 @@ func loadFromConfigPaths(ctx context.Context, configPaths []string) (*Config, []
 				if !json.Valid(jsonBytes) {
 					return nil, nil, fmt.Errorf("shell config %s produced invalid JSON", path)
 				}
+				if jsonBytes, err = flattenHookGroups(jsonBytes); err != nil {
+					return nil, nil, fmt.Errorf("shell config %s: %w", path, err)
+				}
 				addTopLevelKeys(shDirKeys, dir, jsonBytes)
 				configs = append(configs, jsonBytes)
 				loaded = append(loaded, path)
@@ -1085,6 +1088,9 @@ func loadFromConfigPaths(ctx context.Context, configPaths []string) (*Config, []
 		} else {
 			if !json.Valid(data) {
 				return nil, nil, fmt.Errorf("invalid JSON in config file %s", path)
+			}
+			if data, err = flattenHookGroups(data); err != nil {
+				return nil, nil, fmt.Errorf("config file %s: %w", path, err)
 			}
 			addTopLevelKeys(jsonDirKeys, dir, data)
 			configs = append(configs, data)
@@ -1589,6 +1595,9 @@ func mergeWorkspaceConfig(cfg *Config, path, workingDir string) (bool, error) {
 	}
 	if !json.Valid(wsData) {
 		return false, fmt.Errorf("invalid JSON in config file %s", path)
+	}
+	if wsData, err = flattenHookGroups(wsData); err != nil {
+		return false, fmt.Errorf("config file %s: %w", path, err)
 	}
 	merged, err := loadFromBytes(append([][]byte{mustMarshalConfig(cfg)}, wsData))
 	if err != nil {

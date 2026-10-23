@@ -362,9 +362,11 @@ value is reported as a failed hook, not silently ignored.
 
 Klash also accepts Claude Code's `hookSpecificOutput` envelope, and reads
 matchers as Claude Code does, with Claude Code's tool names (`Bash`, `Read`,
-`Edit|Write`, `mcp__server__tool`) matching Klash's tools. Two divergences:
-Klash treats `updated_input` as shallow-merge, Claude Code replaces; and Klash
-reads only its own flat hook entries (`{"matcher": …, "command": …}`), not
-Claude Code's groups (`{"matcher": …, "hooks": [{"type": "command", …}]}`), so
-copy each command out of a Claude Code group. The payload's `tool_name` is
-Klash's name (`bash`), not Claude Code's (`Bash`).
+`Edit|Write`, `mcp__server__tool`) matching Klash's tools. It reads Claude
+Code's groups (`{"matcher": …, "hooks": [{"type": "command", …}]}`) as well as
+its own flat entries (`{"matcher": …, "command": …}`), so a Claude Code hooks
+block can be pasted in as it is; only `command` hooks run, and a hook asking for
+more (`if`, `args`, `async`, another `type`) is a config error naming it.
+Divergences: Klash treats `updated_input` as shallow-merge, Claude Code
+replaces; and the payload's `tool_name` is Klash's name (`bash`), not Claude
+Code's (`Bash`).
