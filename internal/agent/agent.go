@@ -984,7 +984,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	}()
 
 	// Copy mutable fields under lock to avoid races with SetTools/SetModels.
-	agentTools := a.requestTools(call.Channel)
+	agentTools := a.requestTools(ctx, call.Channel)
 	largeModel := a.largeModel.Get()
 	systemPrompt := a.requestSystemPrompt()
 	promptPrefix := a.systemPromptPrefix.Get()
@@ -1086,12 +1086,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			}
 
 			// Use latest tools (updated by SetTools when MCP tools
-			// change), filtered for the session's channel and minus MCP
-			// servers disabled for this repository.
-			prepared.Tools = a.filterDisabledMCPTools(
-				callContext,
-				filterToolsForChannel(a.tools.Copy(), call.Channel, mcp.GetStates()),
-			)
+			// change).
+			prepared.Tools = a.requestTools(callContext, call.Channel)
 
 			// Drain queued follow-up prompts for this step. Calls covered
 			// by a cancel recorded while they sat in the queue are dropped:
@@ -1698,7 +1694,7 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel string,
 	}
 	// The tools are listed but cannot run: the model is told not to call
 	// them, and one it calls anyway does nothing.
-	agentTools := a.filterDisabledMCPTools(ctx, a.requestTools(channel))
+	agentTools := a.requestTools(ctx, channel)
 	listedTools := make([]fantasy.AgentTool, len(agentTools))
 	for i, t := range agentTools {
 		listedTools[i] = unrunnableTool{t}
@@ -1830,16 +1826,34 @@ func (a *sessionAgent) requestSystemPrompt() string {
 	return systemPrompt
 }
 
-// requestTools is the agent's tools scoped to a turn's channel, the last
-// one marked for prompt caching.
-func (a *sessionAgent) requestTools(channel string) []fantasy.AgentTool {
-	agentTools := filterToolsForChannel(a.tools.Copy(), channel, mcp.GetStates())
+// requestTools is the tools a request of a turn in channel lists: the
+// agent's latest, filtered for the channel and minus MCP servers disabled
+// for this repository, the last one marked for prompt caching.
+//
+// The mark is the request's own. It used to be set on the agent's tool,
+// which every request in every session shares, and stayed there: after
+// a turn whose last tool was another (a channel's turn, say), a request
+// carried two tool marks, and with the system prompt's and the last two
+// messages' that is five, one more than Anthropic takes.
+func (a *sessionAgent) requestTools(ctx context.Context, channel string) []fantasy.AgentTool {
+	agentTools := a.filterDisabledMCPTools(ctx, filterToolsForChannel(a.tools.Copy(), channel, mcp.GetStates()))
 	if len(agentTools) > 0 {
-		// Add Anthropic caching to the last tool.
-		agentTools[len(agentTools)-1].SetProviderOptions(a.getCacheControlOptions())
+		last := len(agentTools) - 1
+		agentTools[last] = cacheMarkedTool{AgentTool: agentTools[last], options: a.getCacheControlOptions()}
 	}
 	return agentTools
 }
+
+// cacheMarkedTool is a tool marked for prompt caching in one request,
+// leaving the tool itself as it was.
+type cacheMarkedTool struct {
+	fantasy.AgentTool
+	options fantasy.ProviderOptions
+}
+
+func (t cacheMarkedTool) ProviderOptions() fantasy.ProviderOptions { return t.options }
+
+func (t cacheMarkedTool) Unwrap() fantasy.AgentTool { return t.AgentTool }
 
 // prepareRequestMessages readies a request's messages as every request
 // in a session sends them, a turn's steps and a summary alike, so that
