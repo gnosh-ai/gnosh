@@ -285,7 +285,7 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 // given prompt, printing to stdout.
 // RunNonInteractive runs one prompt without the TUI, writing the answer to
 // output. onSession, when set, is told the session the run uses.
-func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner, traceTools bool, continueSessionID string, useLast bool, onSession func(sessionID string)) error {
+func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner, traceTools bool, continueSessionID string, useLast bool, onSession func(sessionID string), onMessage func(message.Message)) error {
 	slog.Info("Running in non-interactive mode")
 
 	// Re-initialize the coder agent without interactive-only tools.
@@ -456,6 +456,56 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 		_, _ = fmt.Fprintln(output)
 	}()
 
+	// handle takes one message event: it traces the run's tool calls and
+	// its sub-agents', hands the run's own messages to onMessage, and
+	// prints the new text of its assistant messages.
+	handle := func(msg message.Message) error {
+		if msg.SessionID != sess.ID {
+			// A sub-agent works in a session of its own, under the
+			// run's. Its tool calls are traced too, indented, so a long
+			// stretch of delegated work does not leave the trace silent.
+			if trace != nil && isSubSession(msg.SessionID) {
+				traceToolCalls(trace, msg, true)
+			}
+			return nil
+		}
+		traceToolCalls(trace, msg, false)
+		if onMessage != nil {
+			onMessage(msg)
+		}
+		if msg.Role != message.Assistant {
+			return nil
+		}
+
+		if len(msg.Parts) == 0 {
+			return nil
+		}
+
+		stopSpinner()
+
+		content := msg.Content().String()
+		readBytes := messageReadBytes[msg.ID]
+
+		if len(content) < readBytes {
+			slog.Error("Non-interactive: message content is shorter than read bytes", "message_length", len(content), "read_bytes", readBytes)
+			return fmt.Errorf("message content is shorter than read bytes: %d < %d", len(content), readBytes)
+		}
+
+		part := content[readBytes:]
+		// Trim leading whitespace. Sometimes the LLM includes leading
+		// formatting and indentation, which we don't want here.
+		if readBytes == 0 {
+			part = strings.TrimLeft(part, " \t")
+		}
+		// Ignore initial whitespace-only messages.
+		if printed || strings.TrimSpace(part) != "" {
+			printed = true
+			fmt.Fprint(output, part)
+		}
+		messageReadBytes[msg.ID] = len(content)
+		return nil
+	}
+
 	for {
 		if progress && stderrTTY {
 			// HACK: Reinitialize the terminal progress bar on every iteration
@@ -466,6 +516,13 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 		select {
 		case result := <-done:
 			stopSpinner()
+			// The turn's last message updates are published before Run
+			// returns, so they can still be waiting: select picks among
+			// ready cases at random, and returning first could drop the end
+			// of the answer, and a stream-json run its last message.
+			if err := drainMessageEvents(messageEvents, handle); err != nil {
+				return err
+			}
 			// A Stop hook's warning is published just before the turn
 			// ends, so it may still be waiting here.
 			for drained := false; !drained; {
@@ -486,47 +543,9 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 			return nil
 
 		case event := <-messageEvents:
-			msg := event.Payload
-			if msg.SessionID != sess.ID {
-				// A sub-agent works in a session of its own, under the
-				// run's. Its tool calls are traced too, indented, so a long
-				// stretch of delegated work does not leave the trace silent.
-				if trace != nil && isSubSession(msg.SessionID) {
-					traceToolCalls(trace, msg, true)
-				}
-				continue
+			if err := handle(event.Payload); err != nil {
+				return err
 			}
-			traceToolCalls(trace, msg, false)
-			if msg.Role != message.Assistant {
-				continue
-			}
-
-			if len(msg.Parts) == 0 {
-				continue
-			}
-
-			stopSpinner()
-
-			content := msg.Content().String()
-			readBytes := messageReadBytes[msg.ID]
-
-			if len(content) < readBytes {
-				slog.Error("Non-interactive: message content is shorter than read bytes", "message_length", len(content), "read_bytes", readBytes)
-				return fmt.Errorf("message content is shorter than read bytes: %d < %d", len(content), readBytes)
-			}
-
-			part := content[readBytes:]
-			// Trim leading whitespace. Sometimes the LLM includes leading
-			// formatting and indentation, which we don't want here.
-			if readBytes == 0 {
-				part = strings.TrimLeft(part, " \t")
-			}
-			// Ignore initial whitespace-only messages.
-			if printed || strings.TrimSpace(part) != "" {
-				printed = true
-				fmt.Fprint(output, part)
-			}
-			messageReadBytes[msg.ID] = len(content)
 
 		case event := <-notifications:
 			warn(event.Payload)
@@ -557,6 +576,24 @@ func traceToolCalls(trace *format.ToolTrace, msg message.Message, sub bool) {
 			} else {
 				trace.Call(call.ID, call.Name, call.Summary())
 			}
+		}
+	}
+}
+
+// drainMessageEvents hands handle every message event already waiting in
+// events, without waiting for more.
+func drainMessageEvents(events <-chan pubsub.Event[message.Message], handle func(message.Message) error) error {
+	for {
+		select {
+		case event, ok := <-events:
+			if !ok {
+				return nil
+			}
+			if err := handle(event.Payload); err != nil {
+				return err
+			}
+		default:
+			return nil
 		}
 	}
 }

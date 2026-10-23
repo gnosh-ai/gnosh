@@ -108,6 +108,10 @@ crash run --continue "Follow up on your last response"
 			return err
 		}
 
+		if output.stream != nil && useClientServer() {
+			return fmt.Errorf("--output-format stream-json is not supported with %s=1 yet; use text or json", "CRASH_CLIENT_SERVER")
+		}
+
 		event.SetNonInteractive(true)
 
 		switch {
@@ -185,8 +189,8 @@ crash run --continue "Follow up on your last response"
 		}
 		hideSpinner, traceTools := runOutputFlags(quiet, verbose)
 		return output.finish(appWs.App().RunNonInteractive(ctx, output.w, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, func(id string) {
-			output.sessionID = id
-		}))
+			output.started(id, appWs.WorkingDir(), appWs.App().AgentCoordinator.Model().ModelCfg.Model)
+		}, output.message))
 	},
 }
 
@@ -212,7 +216,7 @@ func addRunFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it")
 	cmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	cmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
-	cmd.Flags().String("output-format", "text", "How the answer is printed: text, as it streams, or json, one result object at the end (as Claude Code's -p --output-format json)")
+	cmd.Flags().String("output-format", "text", "How the answer is printed: text, as it streams; json, one result object at the end; or stream-json, a JSON line per message and the result at the end (as Claude Code's -p --output-format)")
 	// The yolo flags are accepted so that Claude Code's
 	// `-p --dangerously-skip-permissions` works, and change nothing: run
 	// already accepts its own session's permission requests, and keeps
@@ -947,9 +951,11 @@ func setThinking(ws workspace.Workspace, enabled bool, out io.Writer) error {
 // runOutput is where crash run writes its answer, by --output-format:
 // streamed as it comes for text, or collected and printed as one result
 // object at the end for json, as Claude Code's -p --output-format json
-// does, for scripts that read the answer and the session to resume.
+// does, for scripts that read the answer and the session to resume;
+// stream-json adds a line per message before it (see streamJSON).
 type runOutput struct {
-	json      bool
+	json      bool          // json or stream-json: a result object at the end
+	stream    *streamJSON   // stream-json: a line per message as it comes
 	w         io.Writer     // what the run writes the answer to
 	answer    *bytes.Buffer // json: the answer, collected
 	stdout    io.Writer     // json: where the result object goes
@@ -965,9 +971,26 @@ func newRunOutput(format string, stdout io.Writer) (*runOutput, error) {
 		answer := &bytes.Buffer{}
 		return &runOutput{json: true, w: answer, answer: answer, stdout: stdout, start: time.Now()}, nil
 	case "stream-json":
-		return nil, fmt.Errorf("--output-format stream-json is not supported yet; use text or json")
+		answer := &bytes.Buffer{}
+		return &runOutput{json: true, stream: newStreamJSON(stdout), w: answer, answer: answer, stdout: stdout, start: time.Now()}, nil
 	default:
-		return nil, fmt.Errorf("--output-format %q: expected text or json", format)
+		return nil, fmt.Errorf("--output-format %q: expected text, json or stream-json", format)
+	}
+}
+
+// started records the run's session, once it is known, and for
+// stream-json writes the init line.
+func (o *runOutput) started(sessionID, cwd, model string) {
+	o.sessionID = sessionID
+	if o.stream != nil {
+		o.stream.start(sessionID, cwd, model)
+	}
+}
+
+// message takes each update of the run's own messages.
+func (o *runOutput) message(msg message.Message) {
+	if o.stream != nil {
+		o.stream.message(msg)
 	}
 }
 
@@ -977,6 +1000,9 @@ func (o *runOutput) finish(runErr error) error {
 	if !o.json {
 		return runErr
 	}
+	if o.stream != nil {
+		o.stream.flush()
+	}
 	res := struct {
 		Type       string `json:"type"`
 		Subtype    string `json:"subtype"`
@@ -984,6 +1010,7 @@ func (o *runOutput) finish(runErr error) error {
 		Result     string `json:"result"`
 		SessionID  string `json:"session_id,omitempty"`
 		DurationMS int64  `json:"duration_ms"`
+		NumTurns   int    `json:"num_turns,omitempty"`
 	}{
 		Type:       "result",
 		Subtype:    "success",
@@ -995,6 +1022,12 @@ func (o *runOutput) finish(runErr error) error {
 		res.Subtype = "error_during_execution"
 		res.IsError = true
 		res.Result = runErr.Error()
+	}
+	if o.stream != nil {
+		res.NumTurns = o.stream.turns
+		if o.stream.err != nil {
+			return errors.Join(runErr, o.stream.err)
+		}
 	}
 	if err := json.NewEncoder(o.stdout).Encode(res); err != nil {
 		return errors.Join(runErr, err)

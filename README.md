@@ -164,6 +164,7 @@ Claude Code's names work here too.
 | -------------------------------- | -------------------------------------------------- | ----------------------------------------------------------- |
 | `claude -p "…"`                  | `crash run "…"`, or `crash -p "…"`                 | Answer one prompt without the TUI                           |
 | `-p --output-format json`        | `crash run --output-format json`                   | Print one JSON result at the end                            |
+| `-p --output-format stream-json` | `crash run --output-format stream-json`            | A JSON line per message and tool result, then the result    |
 | `claude -r <id>`                 | `crash -s <id>`, or `crash -r <id>`                | Continue a session by ID                                    |
 | `claude -r`                      | `crash -r`                                         | Pick a session to continue from a list                      |
 | `claude -c`                      | `crash -C`                                         | Continue the last session; `-c` sets the working directory |
