@@ -88,6 +88,13 @@ func TestHookScriptProblem(t *testing.T) {
 	require.Empty(t, hookScriptProblem("bash ./missing.sh", dir), "the shell runs it; bash is a bare name")
 	require.Empty(t, hookScriptProblem(`echo '{"decision":"allow"}'`, dir))
 	require.Empty(t, hookScriptProblem("$HOME/bin/x", dir), "a variable is the shell's to expand")
+
+	// Claude Code's commands name their scripts by the project directory,
+	// often quoted. They were skipped for the $, and a missing one fails
+	// its hook each time, which lets the call go ahead.
+	require.Equal(t, "${CLAUDE_PROJECT_DIR}/missing.sh does not exist", hookScriptProblem(`"${CLAUDE_PROJECT_DIR}/missing.sh"`, dir))
+	require.Equal(t, "$KLASH_PROJECT_DIR/missing.sh does not exist", hookScriptProblem("$KLASH_PROJECT_DIR/missing.sh arg", dir))
+	require.Empty(t, hookScriptProblem(`"${CLAUDE_PROJECT_DIR}/ok.sh"`, dir))
 }
 
 // The report names the hook whose script is missing.

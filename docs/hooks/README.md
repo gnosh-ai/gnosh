@@ -157,7 +157,7 @@ and project-level, with project level hooks taking precedence.
 }
 ```
 
-A Claude Code `settings.json` hooks block also works pasted in as it is. Klash
+A Claude Code `settings.json` hooks block can also be pasted in as it is. Klash
 reads Claude Code's groups, a matcher and the hooks it runs, as one entry per
 command:
 
@@ -179,7 +179,10 @@ change nothing, as are the default values of `shell` (`bash`), `async` and
 `asyncRewake` (`false`) and `onFailure` (`continue`). Anything else a Claude
 Code hook can ask for, another `type` (`http`, `mcp_tool`, `prompt`, `agent`),
 an `if` filter, `args`, a background hook, is a config error that names it,
-rather than a hook run some other way than written.
+rather than a hook run some other way than written. So are a hook on an event
+Klash does not fire (`Notification`, `SessionEnd`, …), a matcher on an event
+that takes none (Claude Code ignores it), and a regular expression Go cannot
+read (lookahead such as `(?!…)`): take those entries out, or rewrite them.
 
 > [!IMPORTANT]
 > The `command` is resolved relative to your **current working directory** —

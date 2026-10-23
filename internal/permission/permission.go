@@ -342,8 +342,6 @@ func (s *permissionService) SkipRequests() bool {
 	return s.skip.Load()
 }
 
-// inAddedDir reports whether path lies in one of the directories added
-// with --add-dir.
 // addedDirTools are the tools whose reads and listings are approved under
 // a directory added with --add-dir, each with the action it asks for:
 // view reading a file, ls listing a directory. Only theirs: the MCP
@@ -354,6 +352,8 @@ func (s *permissionService) SkipRequests() bool {
 // the real tools against an added directory.
 var addedDirTools = map[string]string{"view": "read", "ls": "list"}
 
+// inAddedDir reports whether path lies in one of the directories added
+// with --add-dir.
 func (s *permissionService) inAddedDir(path string) bool {
 	for _, dir := range s.addedDirs {
 		if rel, err := filepath.Rel(dir, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {

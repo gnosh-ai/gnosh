@@ -140,19 +140,34 @@ func doctorReport(store *config.ConfigStore, lookPath func(string) (string, erro
 
 // hookScriptProblem says what is wrong with the script a hook command
 // runs, when the command starts with a path to one (./hooks/check.sh,
-// ~/bin/gate): it does not exist, is a directory, or is not executable.
-// Hooks run in dir. A command that starts with a bare name is left alone,
-// since the hook shell has builtins of its own.
+// ~/bin/gate, Claude Code's "${CLAUDE_PROJECT_DIR}/.claude/hooks/x.sh"):
+// it does not exist, is a directory, or is not executable. Hooks run in
+// dir, the project, which is what the project-directory variables hold.
+// A command that starts with a bare name is left alone, since the hook
+// shell has builtins of its own, and so is one that needs any other
+// variable, the shell's to expand.
 func hookScriptProblem(command, dir string) string {
 	fields := strings.Fields(command)
 	if len(fields) == 0 {
 		return ""
 	}
 	script := fields[0]
-	if !strings.Contains(script, "/") || strings.ContainsAny(script, "$`\"'") {
+	if len(script) > 1 && script[0] == '"' && script[len(script)-1] == '"' {
+		script = script[1 : len(script)-1]
+	}
+	other := false
+	expanded := os.Expand(script, func(name string) string {
+		switch name {
+		case "CLAUDE_PROJECT_DIR", "KLASH_PROJECT_DIR", "CRUSH_PROJECT_DIR":
+			return dir
+		}
+		other = true
+		return ""
+	})
+	if other || !strings.Contains(expanded, "/") || strings.ContainsAny(expanded, "$`\"'") {
 		return ""
 	}
-	path := home.Long(script)
+	path := home.Long(expanded)
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(dir, path)
 	}

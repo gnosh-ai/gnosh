@@ -367,7 +367,9 @@ matchers as Claude Code does, with Claude Code's tool names (`Bash`, `Read`,
 Code's groups (`{"matcher": …, "hooks": [{"type": "command", …}]}`) as well as
 its own flat entries (`{"matcher": …, "command": …}`), so a Claude Code hooks
 block can be pasted in as it is; only `command` hooks run, and a hook asking for
-more (`if`, `args`, `async`, another `type`) is a config error naming it.
+more (`if`, `args`, `async`, another `type`), one on an event Klash does not
+fire (`Notification`, `SessionEnd`), a matcher on an event that takes none, or a
+regex Go cannot read (lookahead) is a config error naming it.
 Divergences: Klash treats `updated_input` as shallow-merge, Claude Code
 replaces; and the payload's `tool_name` is Klash's name (`bash`), not Claude
 Code's (`Bash`).

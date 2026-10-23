@@ -73,6 +73,16 @@ func TestHookAddRejectsMatcherOnStop(t *testing.T) {
 	require.ErrorContains(t, err, "Stop")
 }
 
+// "*" matches everything, as no matcher does; the loader takes it on any
+// event, as Claude Code does, and so does the builtin.
+func TestHookAddTakesAStarOnStop(t *testing.T) {
+	t.Parallel()
+
+	result := loadScript(t, `hook add Stop --command "echo stop" --matcher "*"`)
+	arr := result["hooks"].(map[string]any)["Stop"].([]any)
+	require.Equal(t, "*", arr[0].(map[string]any)["matcher"])
+}
+
 func TestHookAddAllowsMatcherOnPreToolUse(t *testing.T) {
 	t.Parallel()
 

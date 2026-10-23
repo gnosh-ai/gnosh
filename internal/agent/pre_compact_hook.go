@@ -28,8 +28,9 @@ const (
 // block, a halt or a failure is shown to the user as a hook warning, and
 // the summary goes ahead.
 func (a *sessionAgent) runPreCompactHooks(ctx context.Context, sessionID string, trigger preCompactTrigger) {
-	// Sub-agents never fire hooks, mirroring wrapToolsWithHooks; cfg is
-	// nil in tests and wherever config-backed features are disabled.
+	// A sub-agent's summary runs no PreCompact hooks: they are the main
+	// agent's, as SessionStart's are. cfg is nil in tests and wherever
+	// config-backed features are disabled.
 	if a.isSubAgent || a.cfg == nil {
 		return
 	}
