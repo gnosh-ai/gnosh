@@ -1,18 +1,21 @@
 # Klash
 
-**A security-first coding agent for your terminal, built for gno.land.**
+**A security-first harness for coding agents, in your terminal.**
 
 Klash is a fork of Charm's [Crush](https://github.com/charmbracelet/crush):
 the same terminal UI, sessions, LSP and MCP support, and any model you like,
-from a hosted API to one running on your own machine. On top of that it keeps
-your keys and your work to itself, knows Gno and gno.land natively, speaks
-Claude Code's flags and hooks, and fixes a long list of things that broke,
-hung or failed without saying so.
+from a hosted API to one running on your own machine. On top of that it closes
+doors a coding agent usually leaves open: nothing phones home, text from a tool
+cannot pose as the conversation, the sub-agent that reads web pages for it
+cannot read your files, a misspelt guard stops it instead of being ignored,
+and passwords never reach the model. It also speaks Claude Code's flags and
+hooks, fixes a long list of things that broke, hung or failed without saying
+so, and knows Gno and gno.land.
 
 - [Security first](#security-first)
-- [Built for gno.land](#built-for-gnoland)
 - [Coming from Claude Code](#coming-from-claude-code)
 - [What else changed from Crush](#what-else-changed-from-crush)
+- [Built for gno.land](#built-for-gnoland)
 - [Installation](#installation)
 
 ## Security first
@@ -37,30 +40,6 @@ the catalog fetch, Klash uses the list built into the binary, and
 `klash update-providers` refreshes it by hand. `DO_NOT_TRACK=1` keeps metrics
 off whatever else is set. [Metrics](#metrics) is the detail.
 
-### Your keys never reach the model
-
-Signing a gno.land transaction needs a key's password. Klash's `gnokey` tool
-shows you the exact command, then asks for the password in a masked prompt.
-What you type goes straight to gnokey's standard input and is scrubbed from
-its output. The model never sees it, and it is not saved with the session.
-Paying for a web resource [with x402](#built-for-gnoland) works the same way:
-you see the price first, and gnokey signs.
-
-That prompt is the only route to a signature, and the agent cannot step
-around it:
-
-- The shell tool refuses gnokey's password-on-stdin flag, so the agent
-  cannot feed a password in by another door.
-- Key management (`gnokey add`, `delete`, `export` and the rest) is refused
-  outright and stays in your own terminal.
-- A run with nobody there to type, such as `klash run`, has no signing tool
-  at all, so the agent prints the command for you to run yourself.
-
-So every signature is one you saw and typed for. To let something sign
-without you, give it a [session account](#built-for-gnoland) instead: you
-authorize it once, at the prompt, and the chain holds it to its limits from
-then on.
-
 ### Untrusted text stays untrusted
 
 Web pages, command output and server replies can carry a model's own control
@@ -69,6 +48,10 @@ conversation from inside a tool result. Klash defuses them before the model
 reads them. Tool output is capped by its raw size, so a runaway command cannot
 flood the context.
 
+`agentic_fetch` hands web pages to a sub-agent that fetches without asking, so
+that sub-agent's file tools read only the pages it fetched. A page cannot talk
+it into reading your keys or a `.env` and sending them off in a URL.
+
 ### Mistakes fail closed
 
 - A hook with a misspelt event name, or a `klashrc` option Klash does not
@@ -76,6 +59,16 @@ flood the context.
   such a hook, so a misspelt guard simply never ran.
 - A hook whose answer is malformed cannot approve a tool call by accident, and
   a deny it gave still holds.
+
+### Your keys never reach the model
+
+When Klash signs a gno.land transaction for you, it asks for the key's
+password in a masked prompt that goes straight to gnokey. The model never sees
+it, and the agent has no other route to a signature. To let it sign without
+you, give it a session account instead of your key: the chain itself holds a
+session to an expiry, a spending cap and the realms you allow, so a confused or
+hijacked agent can spend no more than that, and revoking it is one command.
+[Built for gno.land](#built-for-gnoland) has the detail.
 
 ### What still leaves your machine
 
@@ -87,77 +80,6 @@ flood the context.
 - The `sourcegraph` tool sends the agent's code search to sourcegraph.com
   without asking. Turn it off with `permissions deny sourcegraph`.
 - MCP servers you add reach whatever they reach.
-
-## Built for gno.land
-
-[gno.land](https://gno.land) is a smart-contract platform whose contracts,
-called realms, are written in Gno, an interpreted and deterministic Go. Klash
-knows it the way it knows Go.
-
-**The gno skill.** A built-in skill loads itself whenever a task touches
-`.gno` files, `gnomod.toml`, gnokey or gnodev. It teaches the agent how Gno
-differs from Go, how realms keep state, and how a realm tells who is calling
-it (`cur realm`, `cross(cur)`, `cur.Previous()`). It covers testing with
-`gno test` and filetests, running a local chain with `gnodev`, querying any
-chain for free, and deploying and calling realms. It carries the review
-checklist from gno's own guide for realm authors, and the chain ids and
-endpoints of every network, with mainnet called out because its coins are
-real.
-
-**Deploy and call with your key, never the model's.** The `gnokey` tool runs
-`maketx addpkg`, `call`, `send` and `run`, `sign` and `broadcast`, through the
-masked password prompt above. You see the full command before anything is
-signed. Read-only queries need no password.
-
-**Session accounts.** gno.land lets a master key authorize a separate signing
-key, a session, within limits the chain itself enforces:
-
-- **An expiry**, after which the key is dead.
-- **A spend limit per period**, counted across every coin that leaves the
-  master's account, gas and storage deposits included. Refunds never top it
-  back up.
-- **The messages it may send, and the realms it may call**, by path prefix.
-- **A floor no setting overrides**: a session can never create or revoke
-  sessions, and never add a package.
-
-Realms see the master as the caller, so nothing on the realm side changes.
-Klash's `gnokey` tool creates and revokes sessions (`gnokey maketx session
-create`, `revoke`, `revokeall`) through the same masked prompt. You can give a
-browser wallet, a device or a script bounded authority instead of your master
-key. A leaked session key costs at most what is left of its limit before it
-expires, and revoking it is one command. Sessions are live on mainnet and on
-the onyx testnet.
-
-**Pay for what you fetch, with x402.** Some web resources charge per request
-through [x402](https://x402.org): they answer `402 Payment Required` with a
-price on a gno.land chain. When you tell the agent to pay, its `x402_fetch`
-tool shows you the price, the payee, the chain and the network fee, and asks
-for the key's password in the masked prompt above. gnokey signs one bank send
-of exactly that price, the seller's facilitator settles it, and the agent gets
-the resource and the transaction hash. Klash checks the signature before the
-payment leaves, pays only in ugnot, at most 1 GNOT at a time plus a network
-fee of at most 1 GNOT, and only on local and test chains: x402 on gno.land is
-unaudited, testnet-only work, so mainnet is refused. Pay from a session key and
-the chain caps what it can spend as well. Nothing is paid without you at the
-prompt: a run with nobody there to type has no paying tool. Klash signs these
-payments with the Go x402 client from
-[jaekwon/x402](https://github.com/jaekwon/x402).
-
-**gnopls.** Install the [Gno language server](https://github.com/gnoverse/gnopls)
-and Klash starts it for `.gno` files on its own, as it does gopls for Go.
-
-**gno-mcp.** The gno team's MCP server, [gno-mcp](https://mcp.gno.dev), runs in
-Klash like any other:
-
-```bash
-# klashrc
-mcp add gnomcp --command gnomcp
-```
-
-It adds tools for reading realms, packages, accounts and history. Its own
-safety rules confine its writes to local and test chains, keep mainnet
-read-only, and never hand it your key: to act as you, it proposes a session
-that you sign with gnokey yourself.
 
 ## Coming from Claude Code
 
@@ -237,6 +159,91 @@ or failed without saying so. The ones you will notice:
 section instead of failing. `grep` can ignore case, and can search for a
 pattern that starts with a dash. Bash points the agent to the file tools for
 file work, since they keep track of what it has read.
+
+## Built for gno.land
+
+[gno.land](https://gno.land) is a smart-contract platform whose contracts,
+called realms, are written in Gno, an interpreted and deterministic Go. Klash
+knows it the way it knows Go.
+
+**The gno skill.** A built-in skill loads itself whenever a task touches
+`.gno` files, `gnomod.toml`, gnokey or gnodev. It teaches the agent how Gno
+differs from Go, how realms keep state, and how a realm tells who is calling
+it (`cur realm`, `cross(cur)`, `cur.Previous()`). It covers testing with
+`gno test` and filetests, running a local chain with `gnodev`, querying any
+chain for free, and deploying and calling realms. It carries the review
+checklist from gno's own guide for realm authors, and the chain ids and
+endpoints of every network, with mainnet called out because its coins are
+real.
+
+**Deploy and call with your key, never the model's.** The `gnokey` tool runs
+`maketx addpkg`, `call`, `send` and `run`, `sign` and `broadcast`. It shows you
+the exact command, then asks for the key's password in a masked prompt. What
+you type goes straight to gnokey's standard input and is scrubbed from its
+output; the model never sees it, and it is not saved with the session.
+Read-only queries need no password.
+
+That prompt is the only route to a signature, and the agent cannot step around
+it:
+
+- The shell tool refuses gnokey's password-on-stdin flag, so the agent cannot
+  feed a password in by another door.
+- Key management (`gnokey add`, `delete`, `export` and the rest) is refused
+  outright and stays in your own terminal.
+- A run with nobody there to type, such as `klash run`, has no signing tool at
+  all, so the agent prints the command for you to run yourself.
+
+So every signature is one you saw and typed for.
+
+**Session accounts.** gno.land lets a master key authorize a separate signing
+key, a session, within limits the chain itself enforces:
+
+- **An expiry**, after which the key is dead.
+- **A spend limit per period**, counted across every coin that leaves the
+  master's account, gas and storage deposits included. Refunds never top it
+  back up.
+- **The messages it may send, and the realms it may call**, by path prefix.
+- **A floor no setting overrides**: a session can never create or revoke
+  sessions, and never add a package.
+
+Realms see the master as the caller, so nothing on the realm side changes.
+Klash's `gnokey` tool creates and revokes sessions (`gnokey maketx session
+create`, `revoke`, `revokeall`) through the same masked prompt. You can give a
+browser wallet, a device or a script bounded authority instead of your master
+key. A leaked session key costs at most what is left of its limit before it
+expires, and revoking it is one command. Sessions are live on mainnet and on
+the onyx testnet.
+
+**Pay for what you fetch, with x402.** Some web resources charge per request
+through [x402](https://x402.org): they answer `402 Payment Required` with a
+price on a gno.land chain. When you tell the agent to pay, its `x402_fetch`
+tool shows you the price, the payee, the chain and the network fee, and asks
+for the key's password in the masked prompt above. gnokey signs one bank send
+of exactly that price, the seller's facilitator settles it, and the agent gets
+the resource and the transaction hash. Klash checks the signature before the
+payment leaves, pays only in ugnot, at most 1 GNOT at a time plus a network
+fee of at most 1 GNOT, and only on local and test chains: x402 on gno.land is
+unaudited, testnet-only work, so mainnet is refused. Pay from a session key and
+the chain caps what it can spend as well. Nothing is paid without you at the
+prompt: a run with nobody there to type has no paying tool. Klash signs these
+payments with the Go x402 client from
+[jaekwon/x402](https://github.com/jaekwon/x402).
+
+**gnopls.** Install the [Gno language server](https://github.com/gnoverse/gnopls)
+and Klash starts it for `.gno` files on its own, as it does gopls for Go.
+
+**gno-mcp.** The gno team's MCP server, [gno-mcp](https://mcp.gno.dev), runs in
+Klash like any other:
+
+```bash
+# klashrc
+mcp add gnomcp --command gnomcp
+```
+
+It adds tools for reading realms, packages, accounts and history. Its own
+safety rules confine its writes to local and test chains, keep mainnet
+read-only, and never hand it your key: to act as you, it proposes a session
+that you sign with gnokey yourself.
 
 ## Installation
 
