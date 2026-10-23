@@ -210,6 +210,9 @@ var optionSpecs = map[string]optionSpec{
 	"notifications":  {jsonKey: "notifications", kind: optString},
 	"data-directory": {jsonKey: "data_directory", kind: optString},
 	"initialize-as":  {jsonKey: "initialize_as", kind: optString},
+	"metrics-url":    {jsonKey: "metrics_url", kind: optString},
+	"metrics-key":    {jsonKey: "metrics_key", kind: optString},
+	"update-repo":    {jsonKey: "update_repo", kind: optString},
 
 	// Integer fields.
 	"request-timeout":     {jsonKey: "request_timeout", kind: optInt},

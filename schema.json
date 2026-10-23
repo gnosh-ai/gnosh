@@ -598,8 +598,20 @@
         },
         "disable_metrics": {
           "type": "boolean",
-          "description": "Disable sending usage metrics to Charm's analytics (data.charm.land). Unset none are sent; set false to send them",
+          "description": "Disable sending usage metrics. Unset none are sent; set false to send them to metrics_url (never to Charm)",
           "default": true
+        },
+        "metrics_url": {
+          "type": "string",
+          "description": "Where opted-in usage metrics go: a PostHog-compatible endpoint such as https://klash.gno.run. Empty sends nowhere; Charm is never a default."
+        },
+        "metrics_key": {
+          "type": "string",
+          "description": "Project key sent with metrics to metrics_url; a self-hosted collector may ignore it. Defaults to klash when metrics_url is set."
+        },
+        "update_repo": {
+          "type": "string",
+          "description": "GitHub owner/repo whose latest release the update check compares against (e.g. jaekwon/klash). Empty disables the check; Charm's repo is never a default."
         },
         "initialize_as": {
           "type": "string",

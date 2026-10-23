@@ -647,6 +647,19 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 		c.Options.DisableDefaultProviders, _ = strconv.ParseBool(str)
 	}
 
+	// The fork's own endpoints, replacing Charm's: where metrics go, and
+	// whose releases the update check reads. Each is empty by default, so
+	// nothing is sent or checked until it is set.
+	if v, ok := env.LookupEnv("KLASH_METRICS_URL"); ok {
+		c.Options.MetricsURL = v
+	}
+	if v, ok := env.LookupEnv("KLASH_METRICS_KEY"); ok {
+		c.Options.MetricsKey = v
+	}
+	if v, ok := env.LookupEnv("KLASH_UPDATE_REPO"); ok {
+		c.Options.UpdateRepo = v
+	}
+
 	if c.Options.Attribution == nil {
 		c.Options.Attribution = &Attribution{
 			TrailerStyle:  TrailerStyleAssistedBy,

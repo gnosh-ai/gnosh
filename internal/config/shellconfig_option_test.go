@@ -162,3 +162,21 @@ func TestShellConfigOptionResetRejectsNonList(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not one")
 }
+
+// The fork's own endpoints are plain string options, and default to empty so
+// nothing is sent or checked until they are set (and never to Charm).
+func TestShellConfigKlashEndpoints(t *testing.T) {
+	bare := loadCrushSh(t, `option debug true`).Config().Options
+	require.Empty(t, bare.MetricsURL)
+	require.Empty(t, bare.UpdateRepo)
+	url, key := bare.MetricsSink()
+	require.Empty(t, url)
+	require.Empty(t, key)
+
+	set := loadCrushSh(t, `option metrics-url https://klash.gno.run
+option update-repo jaekwon/klash`).Config().Options
+	gotURL, gotKey := set.MetricsSink()
+	require.Equal(t, "https://klash.gno.run", gotURL)
+	require.Equal(t, "klash", gotKey, "a sink with no key defaults to klash")
+	require.Equal(t, "jaekwon/klash", set.UpdateCheckRepo())
+}

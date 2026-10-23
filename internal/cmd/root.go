@@ -465,7 +465,7 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	}
 
 	if shouldEnableMetrics(cfg) {
-		event.Init()
+		event.Init(cfg.Options.MetricsSink())
 	}
 
 	ws := workspace.NewAppWorkspace(appInstance, store)
@@ -574,7 +574,7 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 	}
 
 	if shouldEnableMetrics(ws.Config) {
-		event.Init()
+		event.Init(ws.Config.Options.MetricsSink())
 	}
 
 	if ws.Config != nil {
@@ -1048,9 +1048,9 @@ func startDetachedServer(cmd *cobra.Command, hostURL *url.URL) error {
 	return nil
 }
 
-// shouldEnableMetrics reports whether to send usage metrics to Charm's
-// analytics. Upstream Crush sends them unless told not to; this fork sends
-// none unless asked. DO_NOT_TRACK=1 always wins, then
+// shouldEnableMetrics reports whether to send usage metrics at all. Upstream Crush sends them unless told not to; this fork sends
+// none unless asked, and only to the configured metrics_url, never to Charm.
+// DO_NOT_TRACK=1 always wins, then
 // KLASH_DISABLE_METRICS when it holds a value, then option metrics.
 func shouldEnableMetrics(cfg *config.Config) bool {
 	if v, _ := strconv.ParseBool(os.Getenv("DO_NOT_TRACK")); v {
