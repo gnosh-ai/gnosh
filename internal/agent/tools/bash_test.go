@@ -289,3 +289,36 @@ func TestBashTool_GnokeyPasswordFlagIsRefusedByTheRealShell(t *testing.T) {
 		require.Contains(t, resp.Content, "not allowed for security reasons", "command: %s", command)
 	}
 }
+
+// Claude Code's timeout, in milliseconds, is how long a command runs in
+// the foreground before it moves to the background, rounded up to whole
+// seconds and at most ten minutes.
+func TestBashTool_TimeoutIsClaudeCodes(t *testing.T) {
+	require.Equal(t, 0, timeoutSeconds(0))
+	require.Equal(t, 0, timeoutSeconds(-5))
+	require.Equal(t, 1, timeoutSeconds(1))
+	require.Equal(t, 1, timeoutSeconds(1000))
+	require.Equal(t, 2, timeoutSeconds(1001))
+	require.Equal(t, 600, timeoutSeconds(600000))
+	require.Equal(t, 600, timeoutSeconds(900000))
+
+	workingDir := t.TempDir()
+	tool := newBashToolForTest(workingDir)
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+	background := func(params BashParams) bool {
+		t.Helper()
+		resp := runBashTool(t, tool, ctx, params)
+		require.False(t, resp.IsError, resp.Content)
+		var meta BashResponseMetadata
+		require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+		if meta.Background {
+			require.NoError(t, shell.GetBackgroundShellManager().Kill(meta.ShellID))
+		}
+		return meta.Background
+	}
+
+	require.True(t, background(BashParams{Description: "short timeout", Command: "sleep 3 && echo done", Timeout: 1000}),
+		"a one second timeout moves a three second command to the background")
+	require.True(t, background(BashParams{Description: "both", Command: "sleep 1.5 && echo done", AutoBackgroundAfter: 1, Timeout: 600000}),
+		"auto_background_after wins")
+}

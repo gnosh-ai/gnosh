@@ -28,6 +28,24 @@ type BashParams struct {
 	WorkingDir          string `json:"working_dir,omitempty" description:"The working directory to execute the command in (defaults to current directory)"`
 	RunInBackground     bool   `json:"run_in_background,omitempty" description:"Set to true (boolean) to run this command in the background. Use job_output to read the output later."`
 	AutoBackgroundAfter int    `json:"auto_background_after,omitempty" description:"Seconds to wait before automatically moving the command to a background job (default: 60)"`
+	Timeout             int    `json:"timeout,omitempty" description:"Milliseconds to wait for the command before it moves to a background job, at most 600000; auto_background_after wins if both are set"`
+}
+
+// maxBashTimeoutSeconds bounds a bash call's timeout, Claude Code's
+// 600000 ms.
+const maxBashTimeoutSeconds = 600
+
+// timeoutSeconds is a timeout in milliseconds, Claude Code's bash
+// parameter, as the whole seconds to wait before a command moves to the
+// background: rounded up, at most maxBashTimeoutSeconds, 0 for none. A
+// model used to Claude Code's Bash gives a long test run timeout 600000,
+// and Klash dropped it: the run moved to the background after a minute,
+// to be read with job_output, a model round trip each time.
+func timeoutSeconds(ms int) int {
+	if ms <= 0 {
+		return 0
+	}
+	return min((ms+999)/1000, maxBashTimeoutSeconds)
 }
 
 type BashPermissionsParams struct {
@@ -36,6 +54,7 @@ type BashPermissionsParams struct {
 	WorkingDir          string `json:"working_dir"`
 	RunInBackground     bool   `json:"run_in_background"`
 	AutoBackgroundAfter int    `json:"auto_background_after"`
+	Timeout             int    `json:"timeout"`
 }
 
 type BashResponseMetadata struct {
@@ -326,7 +345,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			ticker := time.NewTicker(100 * time.Millisecond)
 			defer ticker.Stop()
 
-			autoBackgroundAfter := cmp.Or(params.AutoBackgroundAfter, DefaultAutoBackgroundAfter)
+			autoBackgroundAfter := cmp.Or(params.AutoBackgroundAfter, timeoutSeconds(params.Timeout), DefaultAutoBackgroundAfter)
 			autoBackgroundThreshold := time.Duration(autoBackgroundAfter) * time.Second
 			timeout := time.After(autoBackgroundThreshold)
 
