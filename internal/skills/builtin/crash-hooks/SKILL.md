@@ -40,7 +40,7 @@ too, and every configured hook for those events runs.
       {
         "matcher": "^bash$",              // regex against tool name (optional; omit to match all)
         "command": "./hooks/my-hook.sh",   // required: shell command to run
-        "timeout": 10                     // optional: seconds, default 30
+        "timeout": 10                     // optional: seconds, default 60
       }
     ]
   }

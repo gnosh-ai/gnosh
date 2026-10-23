@@ -128,7 +128,7 @@
         "timeout": {
           "type": "integer",
           "description": "Timeout in seconds for the hook command",
-          "default": 30
+          "default": 60
         }
       },
       "additionalProperties": false,

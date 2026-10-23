@@ -891,8 +891,8 @@ type HookConfig struct {
 	Matcher string `json:"matcher,omitempty" jsonschema:"description=Regex pattern tested against the tool name. Empty means match all tools."`
 	// Shell command to execute.
 	Command string `json:"command" jsonschema:"required,description=Shell command to execute when the hook fires"`
-	// Timeout in seconds. Default 30.
-	Timeout int `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds for the hook command,default=30"`
+	// Timeout in seconds. Default 60, as in Claude Code.
+	Timeout int `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds for the hook command,default=60"`
 }
 
 // DisplayName returns the hook name for display purposes. It returns Name
@@ -905,10 +905,11 @@ func (h *HookConfig) DisplayName() string {
 }
 
 // TimeoutDuration returns the hook timeout as a time.Duration, defaulting
-// to 30s.
+// to 60s, Claude Code's default: a Claude Code hook that takes 40 seconds
+// was killed here at 30, as a failed hook.
 func (h *HookConfig) TimeoutDuration() time.Duration {
 	if h.Timeout <= 0 {
-		return 30 * time.Second
+		return 60 * time.Second
 	}
 	return time.Duration(h.Timeout) * time.Second
 }

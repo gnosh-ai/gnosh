@@ -146,7 +146,7 @@ and project-level, with project level hooks taking precedence.
         "name": "no-rm-rf", // friendly name shown in the TUI
         "matcher": "bash", // regex tested against the tool name
         "command": "./hooks/my-hot-hook.sh", // the path to the hook
-        "timeout": 10, // in seconds; default 30
+        "timeout": 10, // in seconds; default 60, as in Claude Code
       },
     ],
   },
@@ -584,7 +584,7 @@ When multiple hooks match the same tool call:
 
 If a hook exceeds its timeout, Crash cancels its context and treats the
 result as a non-blocking error so the tool call proceeds. The default
-timeout is 30 seconds. Shebang-dispatched subprocesses are killed through
+timeout is 60 seconds, as in Claude Code. Shebang-dispatched subprocesses are killed through
 `exec.CommandContext`; in-process hooks get a short grace period to yield
 and are then abandoned (the agent moves on regardless). Long-running work
 should honor context cancellation or run out-of-process via a shebang.
@@ -814,7 +814,7 @@ Each entry under a `hooks.<EventName>` array:
   // string. Required. Shell command to run.
   "command": "./hooks/my-hook.sh",
 
-  // number. Optional. Seconds before the hook is killed. Defaults to 30.
+  // number. Optional. Seconds before the hook is killed. Defaults to 60.
   "timeout": 10,
 }
 ```
