@@ -9,11 +9,11 @@ func TestMetricsSink(t *testing.T) {
 		opts          *Options
 		wantURL, wKey string
 	}{
-		{"nil", nil, "", ""},
-		{"empty sends nowhere", &Options{}, "", ""},
-		{"url with no key defaults to klash", &Options{MetricsURL: "https://klash.gno.run"}, "https://klash.gno.run", "klash"},
-		{"url and key", &Options{MetricsURL: "https://klash.gno.run", MetricsKey: "k1"}, "https://klash.gno.run", "k1"},
-		{"a key without a url still sends nowhere", &Options{MetricsKey: "k1"}, "", "k1"},
+		{"nil defaults to klash's analytics", nil, DefaultMetricsURL, "klash"},
+		{"opted-in with no url goes to klash's analytics", &Options{}, DefaultMetricsURL, "klash"},
+		{"a custom url overrides the default", &Options{MetricsURL: "https://my.collector"}, "https://my.collector", "klash"},
+		{"url and key", &Options{MetricsURL: "https://my.collector", MetricsKey: "k1"}, "https://my.collector", "k1"},
+		{"a key but no url still goes to the default", &Options{MetricsKey: "k1"}, DefaultMetricsURL, "k1"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

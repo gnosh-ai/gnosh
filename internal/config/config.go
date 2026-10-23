@@ -559,15 +559,18 @@ func (o *Options) MetricsOptedIn() bool {
 	return o != nil && o.DisableMetrics != nil && !*o.DisableMetrics
 }
 
-// MetricsSink is where opted-in metrics are sent: the configured metrics_url
-// (with a default key when none is set), or "" meaning nowhere. Charm's
-// endpoint is never a default, so with no metrics_url nothing is ever sent.
+// MetricsSink is where opted-in metrics are sent. It is read only once the
+// metrics gate is on (DO_NOT_TRACK off, and either an explicit opt-in or this
+// machine's stored consent). The configured metrics_url wins; with none, the
+// default is klash's own analytics (DefaultMetricsURL), never Charm's.
 func (o *Options) MetricsSink() (url, key string) {
-	if o == nil {
-		return "", ""
+	if o != nil {
+		url, key = o.MetricsURL, o.MetricsKey
 	}
-	url, key = o.MetricsURL, o.MetricsKey
-	if url != "" && key == "" {
+	if url == "" {
+		url = DefaultMetricsURL
+	}
+	if key == "" {
 		key = "klash"
 	}
 	return url, key

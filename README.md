@@ -26,13 +26,16 @@ only traffic is to the model provider you chose.
 
 | Upstream Crush does this unless switched off           | Klash does it only when turned on                                             |
 | ------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| Sends usage metrics to `data.charm.land`               | `option metrics true`, or `KLASH_DISABLE_METRICS=0`                           |
+| Sends usage metrics to Charm                           | The first-run question, `option metrics true`, or `KLASH_DISABLE_METRICS=0` — and only ever to your own collector |
 | Fetches the provider catalog from Charm's servers      | `option provider-auto-update true`, or `KLASH_DISABLE_PROVIDER_AUTO_UPDATE=0` |
 | Checks GitHub for a newer release of upstream Crush    | `KLASH_DISABLE_UPDATE_CHECK=0`                                                |
 
-Without the fetch, Klash uses the provider catalog built into the binary, and
+The first time you run Klash on a machine it asks, once, whether to allow
+anonymous analytics. Pressing Enter declines, and the answer is remembered, so
+nothing is sent until you say yes and nothing goes to Charm either way. Without
+the catalog fetch, Klash uses the list built into the binary, and
 `klash update-providers` refreshes it by hand. `DO_NOT_TRACK=1` keeps metrics
-off whatever else is set. [Metrics](#metrics) lists what they would contain.
+off whatever else is set. [Metrics](#metrics) is the detail.
 
 ### Your keys never reach the model
 
@@ -1047,10 +1050,19 @@ klash update-providers --help
 
 ## Metrics
 
-Klash sends no usage metrics unless you opt in, where upstream Crush sends
-them to Charm's analytics service by default. Turned on with
-`option metrics true`, or `KLASH_DISABLE_METRICS=0`, Klash sends Charm
-pseudonymous events keyed to a hash of your machine's ID:
+Klash sends no usage metrics unless you allow them, and never to Charm. The
+first time you run Klash on a machine, it asks once:
+
+> Allow anonymous analytics? [y/N] (press Enter to decline)
+
+Pressing Enter, or anything but yes, declines, and the answer is stored per
+machine so you are not asked again. A run with no terminal (a pipe, `klash
+run`) never asks and sends nothing. You can change the answer any time with
+`option metrics true` or `false`, and `DO_NOT_TRACK=1` or
+`KLASH_DISABLE_METRICS=1` force it off.
+
+When allowed, Klash sends pseudonymous events keyed to a hash of your machine's
+ID:
 
 - when it starts and exits, and how long it ran;
 - sessions created, switched and deleted;
@@ -1058,9 +1070,12 @@ pseudonymous events keyed to a hash of your machine's ID:
   whether yolo mode is on, and the tokens used;
 - errors, your OS and CPU architecture, terminal, shell and Klash's version.
 
-Prompts, replies and code are never sent. `DO_NOT_TRACK=1` keeps metrics off
-whatever else is set. The events are defined in
-[internal/event](internal/event) and [internal/agent/event.go](internal/agent/event.go).
+Prompts, replies and code are never sent. The events go to Klash's own
+collector, `https://klash.gno.run`, or to a `metrics-url` you set instead;
+Charm's analytics is not a destination. The collector is a small open service
+(a small Go service, klash-metrics); run your own and point `metrics-url` at it to keep the
+data yourself. The events are defined in [internal/event](internal/event) and
+[internal/agent/event.go](internal/agent/event.go).
 
 ## Q&A
 

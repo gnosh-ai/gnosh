@@ -169,14 +169,16 @@ func TestShellConfigKlashEndpoints(t *testing.T) {
 	bare := loadCrushSh(t, `option debug true`).Config().Options
 	require.Empty(t, bare.MetricsURL)
 	require.Empty(t, bare.UpdateRepo)
+	// MetricsSink is read only once the gate is on; with no custom url it is
+	// klash's own analytics, never Charm.
 	url, key := bare.MetricsSink()
-	require.Empty(t, url)
-	require.Empty(t, key)
+	require.Equal(t, "https://klash.gno.run", url)
+	require.Equal(t, "klash", key)
 
-	set := loadCrushSh(t, `option metrics-url https://klash.gno.run
+	set := loadCrushSh(t, `option metrics-url https://my.collector
 option update-repo jaekwon/klash`).Config().Options
 	gotURL, gotKey := set.MetricsSink()
-	require.Equal(t, "https://klash.gno.run", gotURL)
+	require.Equal(t, "https://my.collector", gotURL)
 	require.Equal(t, "klash", gotKey, "a sink with no key defaults to klash")
 	require.Equal(t, "jaekwon/klash", set.UpdateCheckRepo())
 }
