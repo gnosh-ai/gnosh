@@ -170,6 +170,7 @@ Claude Code's names work here too.
 | `claude -c`                      | `klash -C`                                         | Continue the last session; `-c` sets the working directory |
 | `--dangerously-skip-permissions` | `--yolo`, or `--dangerously-skip-permissions`      | Skip every permission prompt                                |
 | `--permission-mode plan`         | `--permission-mode plan` (or `acceptEdits`, `bypassPermissions`) | Start in plan mode; or let edits, or everything, run without asking |
+| `--add-dir ../other`            | `--add-dir ../other` (repeatable)                  | Let the agent read another directory without asking         |
 | `--allowedTools Read Grep`       | `--allowedTools "Read Grep"`, or `Read,Grep`       | Let these tools run without asking                          |
 | `--disallowedTools Bash Edit`    | `--disallowedTools "Bash Edit"`, or `Bash,Edit`    | Do not give the agent these tools                           |
 | `--tools "Read,Grep"`            | `--tools "Read,Grep"` (`""`: none)                 | Give the agent only these built-in tools                    |

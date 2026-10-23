@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -112,6 +113,10 @@ type permissionService struct {
 	autoApproveSessionsMu sync.RWMutex
 	skip                  atomic.Bool
 	allowedTools          []string
+	// addedDirs are the directories added with --add-dir (Claude Code's):
+	// reading or listing under them needs no permission, as under the
+	// working directory. Edits there are asked about as usual.
+	addedDirs []string
 
 	// used to make sure we only process one request at a time
 	requestMu       sync.Mutex
@@ -196,6 +201,10 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 	// Check if the tool/action combination is in the allowlist
 	commandKey := opts.ToolName + ":" + opts.Action
 	if slices.Contains(s.allowedTools, commandKey) || slices.Contains(s.allowedTools, opts.ToolName) {
+		return true, nil
+	}
+
+	if (opts.Action == "read" || opts.Action == "list") && s.inAddedDir(opts.Path) {
 		return true, nil
 	}
 
@@ -333,7 +342,21 @@ func (s *permissionService) SkipRequests() bool {
 	return s.skip.Load()
 }
 
-func NewPermissionService(workingDir string, skip bool, allowedTools []string) Service {
+// inAddedDir reports whether path lies in one of the directories added
+// with --add-dir.
+func (s *permissionService) inAddedDir(path string) bool {
+	for _, dir := range s.addedDirs {
+		if rel, err := filepath.Rel(dir, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
+			return true
+		}
+	}
+	return false
+}
+
+// NewPermissionService makes the permission service for a workspace in
+// workingDir. addedDirs are the directories added with --add-dir, as
+// absolute paths.
+func NewPermissionService(workingDir string, skip bool, allowedTools []string, addedDirs ...string) Service {
 	svc := &permissionService{
 		Broker:              pubsub.NewBroker[PermissionRequest](),
 		notificationBroker:  pubsub.NewBroker[PermissionNotification](),
@@ -342,6 +365,7 @@ func NewPermissionService(workingDir string, skip bool, allowedTools []string) S
 		autoApproveSessions: make(map[string]bool),
 		allowedTools:        allowedTools,
 		pendingRequests:     csync.NewMap[string, chan bool](),
+		addedDirs:           addedDirs,
 	}
 	svc.skip.Store(skip)
 	return svc

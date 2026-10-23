@@ -86,6 +86,10 @@ type RuntimeOverrides struct {
 	// MainAgent is the agent the session starts with: AgentPlan for
 	// Claude Code's --permission-mode plan, "" for the coder.
 	MainAgent string
+	// AddedDirs are the directories added with --add-dir, as absolute
+	// paths: read without asking, as the working directory, and named in
+	// the system prompt's environment.
+	AddedDirs []string
 }
 
 // ConfigStore is the single entry point for all config access. It owns the

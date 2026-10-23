@@ -229,6 +229,7 @@ func addRunFlags(cmd *cobra.Command) {
 	addToolFlags(cmd)
 	addSystemPromptFlags(cmd)
 	addPermissionModeFlag(cmd)
+	addAddDirFlag(cmd)
 	cmd.Flags().Lookup("yolo").Usage = "Accepted for Claude Code's sake; changes nothing, as klash run already accepts its session's permission requests"
 	cmd.Flags().Lookup("dangerously-skip-permissions").Usage = "Same as --yolo"
 }

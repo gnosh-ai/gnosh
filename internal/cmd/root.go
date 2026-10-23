@@ -65,6 +65,7 @@ func init() {
 	addToolFlags(rootCmd)
 	addSystemPromptFlags(rootCmd)
 	addPermissionModeFlag(rootCmd)
+	addAddDirFlag(rootCmd)
 	rootCmd.PersistentFlags().StringSlice("channels", nil, "MCP servers to enable as channels (repeatable), e.g. --channels server:webhook")
 	_ = rootCmd.PersistentFlags().MarkHidden("channels")
 	addSessionFlags(rootCmd)
@@ -415,6 +416,10 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	if permissionMode == permissionModeAcceptEdits {
 		allowedTools = append(allowedTools, acceptEditsTools...)
 	}
+	addedDirs, err := addDirFlag(cmd)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	store, err := config.Init(cwd, dataDir, debug)
 	if err != nil {
@@ -429,6 +434,7 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	if permissionMode == permissionModePlan {
 		store.Overrides().MainAgent = config.AgentPlan
 	}
+	store.Overrides().AddedDirs = addedDirs
 	if len(allowedTools) > 0 || len(disallowedTools) > 0 {
 		store.Overrides().AllowedTools = allowedTools
 		store.Overrides().DisabledTools = disallowedTools
@@ -539,6 +545,11 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 		return nil, nil, nil, err
 	} else if len(allowed) > 0 || len(disallowed) > 0 {
 		return nil, nil, nil, fmt.Errorf("tools named with --allowed-tools or --disallowed-tools cannot reach the server's config with %s=1 yet; set options.disabled_tools or permissions.allowed_tools in the project's klash.json instead", "KLASH_CLIENT_SERVER")
+	}
+	if dirs, err := addDirFlag(cmd); err != nil {
+		return nil, nil, nil, err
+	} else if len(dirs) > 0 {
+		return nil, nil, nil, fmt.Errorf("--add-dir cannot reach the server's permissions with %s=1 yet", "KLASH_CLIENT_SERVER")
 	}
 	if mode, err := permissionModeFlag(cmd); err != nil {
 		return nil, nil, nil, err

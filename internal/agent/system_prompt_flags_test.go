@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 )
@@ -107,4 +108,22 @@ func TestNewCoordinatorStartsWithThePlanAgent(t *testing.T) {
 		require.Equal(t, want, name)
 		require.Same(t, coord.agents[want], agent)
 	}
+}
+
+// Directories added with --add-dir are named in the coder's environment,
+// so the model knows it may work there, as Claude Code's prompt names them.
+func TestCoderPromptNamesTheAddedDirs(t *testing.T) {
+	store := config.NewTestStore(&config.Config{Options: &config.Options{}})
+	p, err := coderPrompt(prompt.WithWorkingDir(t.TempDir()))
+	require.NoError(t, err)
+
+	plain, err := p.Build(t.Context(), "", "", store)
+	require.NoError(t, err)
+	require.NotContains(t, plain, "Additional working directories")
+
+	store.Overrides().AddedDirs = []string{"/src/gno", "/src/bubblerumble"}
+	withDirs, err := p.Build(t.Context(), "", "", store)
+	require.NoError(t, err)
+	require.Contains(t, withDirs, "Working directory: ")
+	require.Contains(t, withDirs, "\nAdditional working directories: /src/gno, /src/bubblerumble\nIs directory a git repo:")
 }
