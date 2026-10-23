@@ -807,9 +807,23 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// session is marked started, so the hooks do not run again for the
 	// prompt that follows.
 	var sessionStartRan bool
+	var tookPending bool
 	if sessionStart {
 		sessionStartRan = a.runSessionStartHooks(hookCtx, &call)
 		if sessionStartRan && hookCtx.Err() == nil {
+			a.markSessionStarted(call.SessionID)
+		}
+	} else if hookCtx == nil || hookCtx.Err() == nil {
+		// Not a first prompt: a hidden continuation that is the next
+		// prompt to the session takes the pending context, so what the
+		// SessionStart hooks printed is not lost.
+		if pending := a.takeSessionStartPendingContext(call.SessionID); pending != "" {
+			call.promptHookContext = joinHookContext(pending, call.promptHookContext)
+			tookPending = true
+			// The context is being delivered with this prompt, so
+			// promptHookBlock and createUserMessage must send it even
+			// if the prompt is a hidden continuation.
+			call.sessionStartHookRan = true
 			a.markSessionStarted(call.SessionID)
 		}
 	}
@@ -817,10 +831,13 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		// What a SessionStart hook printed for the session whose earlier
 		// first prompt was refused here goes out with this one instead,
 		// so it is neither lost nor sent twice.
-		tookPending := false
 		if pending := a.takeSessionStartPendingContext(call.SessionID); pending != "" {
 			call.promptHookContext = joinHookContext(pending, call.promptHookContext)
 			tookPending = true
+			// The context is being delivered with this prompt, so
+			// promptHookBlock and createUserMessage must send it even
+			// if the prompt is a hidden continuation.
+			call.sessionStartHookRan = true
 		}
 		if err := a.runPromptHooks(hookCtx, &call); err != nil {
 			// The prompt is refused before it reaches the model. When

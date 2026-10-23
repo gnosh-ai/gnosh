@@ -244,3 +244,50 @@ func TestRun_SessionStartTwoBlockedPromptsThirdCarriesContext(t *testing.T) {
 	texts := userTexts(prompts[0])
 	require.Contains(t, texts[len(texts)-1], "The build on main is red.", "the third prompt carries what the hooks printed")
 }
+
+// When a hidden continuation prompt is the one that takes the pending
+// SessionStart context (after a blocked first prompt), it must carry the
+// context to the model. Before the fix, promptHookBlock dropped the
+// context of hidden prompts that did not run SessionStart themselves,
+// so the context was lost for that turn.
+func TestRun_SessionStartHiddenContinuationCarriesPendingContext(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	count := filepath.Join(dir, "count")
+	// SessionStart hooks only: no UserPromptSubmit hooks, so the
+	// hidden continuation does not take the submit lock and the
+	// pending-context path in the else branch of Run is exercised.
+	r := sessionStartAgent(t, false, "",
+		sessionStartHooks("", `echo x >> `+count+`; echo "The build on main is red."`)...)
+
+	// The first prompt runs SessionStart. Simulate it being blocked by
+	// saving its context as pending and marking the session started.
+	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "first"})
+	require.NoError(t, err)
+	data, err := os.ReadFile(count)
+	require.NoError(t, err)
+	require.Equal(t, "x\n", string(data), "the SessionStart hooks ran for the first prompt")
+
+	// Simulate the first prompt being blocked: save its context as
+	// pending, mark the session started, and reset the hooks' output.
+	r.agent.setSessionStartPendingContext(r.sessionID, "The build on main is red.")
+	r.agent.markSessionStarted(r.sessionID)
+
+	// A hidden continuation prompt (a Stop hook's, /loop's) is the next
+	// prompt. It takes the pending context and carries it to the model.
+	_, err = r.agent.Run(t.Context(), SessionAgentCall{
+		SessionID:         r.sessionID,
+		Prompt:            "keep working",
+		HiddenUserMessage: true,
+	})
+	require.NoError(t, err, "the hidden continuation is not blocked")
+	data, err = os.ReadFile(count)
+	require.NoError(t, err)
+	require.Equal(t, "x\n", string(data), "the SessionStart hooks did not run again for the continuation")
+
+	prompts := r.model.recorded()
+	require.Len(t, prompts, 2, "both prompts reached the model")
+	texts := userTexts(prompts[1])
+	require.Contains(t, texts[len(texts)-1], "The build on main is red.", "the hidden continuation carries what the hooks printed")
+}
