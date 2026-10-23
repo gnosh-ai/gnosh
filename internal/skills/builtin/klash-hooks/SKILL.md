@@ -45,9 +45,9 @@ hook is a config error too, and every configured hook for those events runs.
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "^bash$",              // regex against tool name (optional; omit to match all)
+        "matcher": "bash",                // tool name, exact (optional; omit or "*" to match all)
         "command": "./hooks/my-hook.sh",   // required: shell command to run
-        "timeout": 10                     // optional: seconds, default 60
+        "timeout": 10                     // optional: seconds, default 600 (30 for UserPromptSubmit)
       }
     ]
   }
@@ -75,6 +75,7 @@ the input/output contract is identical regardless of language.
 | `KLASH_SESSION_ID`           | Current session ID                       |
 | `KLASH_CWD`                  | Working directory                        |
 | `KLASH_PROJECT_DIR`          | Project root directory                   |
+| `CLAUDE_PROJECT_DIR`         | The same, Claude Code's name for it      |
 | `KLASH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command      |
 | `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
 | `KLASH_TOOL_USE_ID`          | The tool call's ID, the same in its `PreToolUse` and `PostToolUse` hooks |
@@ -353,12 +354,20 @@ value is reported as a failed hook, not silently ignored.
 - Timeouts kill the hook silently and the tool call proceeds. Bump `timeout` if needed.
 - Non-zero exit codes other than 2/49 are logged but don't block — check Klash logs.
 - Use `echo "debug info" >&2` for logging without corrupting stdout JSON.
-- `matcher` is a regex against the tool name. Use `^bash$` (not `bash`) if you
-  don't also want to match `mcp_something_bash`.
+- `matcher` follows Claude Code's rules: exact names separated by `|` or `,`
+  (`bash`, `Edit|Write`; Claude Code's names match Klash's tools), `*` or empty
+  for all, and anything else is an unanchored regex (`^mcp_github_`). A plain
+  name is exact: `edit` does not match `multiedit`.
 
 ## Claude Code Compatibility
 
-Klash also accepts Claude Code's `hookSpecificOutput` envelope. One intentional
-divergence: Klash treats `updated_input` as shallow-merge, Claude Code replaces.
-Existing Claude Code hooks work without modification for the matcher/decision
-parts; revisit any that relied on `updatedInput` fully replacing tool input.
+Klash also accepts Claude Code's `hookSpecificOutput` envelope, and reads
+matchers as Claude Code does, with Claude Code's tool names (`Bash`, `Read`,
+`Edit|Write`, `mcp__server__tool`) matching Klash's tools. It reads Claude
+Code's groups (`{"matcher": …, "hooks": [{"type": "command", …}]}`) as well as
+its own flat entries (`{"matcher": …, "command": …}`), so a Claude Code hooks
+block can be pasted in as it is; only `command` hooks run, and a hook asking for
+more (`if`, `args`, `async`, another `type`) is a config error naming it.
+Divergences: Klash treats `updated_input` as shallow-merge, Claude Code
+replaces; and the payload's `tool_name` is Klash's name (`bash`), not Claude
+Code's (`Bash`).

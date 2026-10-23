@@ -118,6 +118,20 @@ func FromClaudeCode(name string) string {
 	return claudeCodeNames[name]
 }
 
+// ClaudeCodeNamesOf returns the names Claude Code gives the built-in tool
+// name, sorted: none for a tool Claude Code has no counterpart of, two
+// for the agent tool (Agent and Task).
+func ClaudeCodeNamesOf(name string) []string {
+	var names []string
+	for claudeCode, ours := range claudeCodeNames {
+		if ours == name {
+			names = append(names, claudeCode)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
 // IsMCPToolName reports whether name has the shape of an MCP tool name.
 func IsMCPToolName(name string) bool {
 	return len(name) > len(MCPPrefix) && name[:len(MCPPrefix)] == MCPPrefix

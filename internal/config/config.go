@@ -916,12 +916,15 @@ func (t ToolGlob) GetTimeout() time.Duration {
 type HookConfig struct {
 	// Friendly display name shown in the TUI. Falls back to Command when empty.
 	Name string `json:"name,omitempty" jsonschema:"description=Friendly display name shown in the TUI for this hook"`
-	// Regex pattern tested against the tool name. Empty means match all.
-	Matcher string `json:"matcher,omitempty" jsonschema:"description=Regex pattern tested against the tool name. Empty means match all tools."`
+	// Matcher picks the tools (or the SessionStart source, the PreCompact
+	// trigger) the hook runs for, as in Claude Code: empty or "*" for all,
+	// exact names separated by | or , ("Bash", "edit|write"), or else an
+	// unanchored regular expression ("^mcp_github_"). See HookMatcher.
+	Matcher string `json:"matcher,omitempty" jsonschema:"description=Which tools the hook runs for as in Claude Code: empty or * for all; exact names separated by | such as Bash|edit (klash's or Claude Code's names); anything else is an unanchored regular expression."`
 	// Shell command to execute.
 	Command string `json:"command" jsonschema:"required,description=Shell command to execute when the hook fires"`
 	// Timeout in seconds. Default 60, as in Claude Code.
-	Timeout int `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds for the hook command,default=60"`
+	Timeout int `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds for the hook command. As in Claude Code it defaults to 600\\, or 30 for UserPromptSubmit.,default=600"`
 }
 
 // DisplayName returns the hook name for display purposes. It returns Name
@@ -933,14 +936,20 @@ func (h *HookConfig) DisplayName() string {
 	return h.Command
 }
 
-// TimeoutDuration returns the hook timeout as a time.Duration, defaulting
-// to 60s, Claude Code's default: a Claude Code hook that takes 40 seconds
-// was killed here at 30, as a failed hook.
-func (h *HookConfig) TimeoutDuration() time.Duration {
-	if h.Timeout <= 0 {
-		return 60 * time.Second
+// TimeoutDuration returns the hook's timeout for event: the one it sets,
+// or else Claude Code's default for a command hook, 600 seconds, and 30
+// on UserPromptSubmit, which holds up the prompt the user just sent. The
+// default was 60 here, called Claude Code's, and a Claude Code Stop hook
+// that runs the tests for longer was killed as a failed hook, which lets
+// the turn end unchecked.
+func (h *HookConfig) TimeoutDuration(event string) time.Duration {
+	switch {
+	case h.Timeout > 0:
+		return time.Duration(h.Timeout) * time.Second
+	case event == EventUserPromptSubmit:
+		return 30 * time.Second
 	}
-	return time.Duration(h.Timeout) * time.Second
+	return 600 * time.Second
 }
 
 // Config holds the configuration for crush.

@@ -7,6 +7,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/db"
+	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
 )
@@ -38,6 +39,29 @@ func TestFilterToolsForChannel(t *testing.T) {
 	other := filterToolsForChannel([]fantasy.AgentTool{channelTool, plainTool}, "switchboard", states)
 	require.Len(t, other, 1)
 	require.Equal(t, "plain", other[0].Info().Name)
+}
+
+// A channel turn's tools are kept to its own channel when every tool is
+// wrapped, as it is once hooks or user tool descriptions are configured.
+// The wrappers hid an MCP tool's MCP method, so another channel's tools
+// passed for built-in ones.
+func TestFilterToolsForChannelSeesThroughWrappers(t *testing.T) {
+	t.Parallel()
+	states := map[string]mcp.ClientInfo{"signal": {Channel: true}}
+	runner := newRunner(t, "exit 0")
+	wrapped := applyHooksAndDescription(&channelTestTool{name: "send", mcpName: "signal"}, runner)
+	plain := applyHooksAndDescription(&fakeTool{name: "plain"}, runner)
+
+	other := filterToolsForChannel([]fantasy.AgentTool{wrapped, plain}, "switchboard", states)
+	require.Len(t, other, 1)
+	require.Equal(t, "plain", other[0].Info().Name)
+	require.Len(t, filterToolsForChannel([]fantasy.AgentTool{wrapped, plain}, "signal", states), 2)
+}
+
+// applyHooksAndDescription wraps tool as buildTools and applyUserTools do
+// when hooks and a user description are configured.
+func applyHooksAndDescription(tool fantasy.AgentTool, runner *hooks.Runner) fantasy.AgentTool {
+	return describedTool{AgentTool: wrapToolsWithHooks([]fantasy.AgentTool{tool}, toolHooks{pre: runner})[0], description: "the user's"}
 }
 
 type channelTestTool struct {

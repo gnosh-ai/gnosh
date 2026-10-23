@@ -4,7 +4,9 @@ package testenv
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
+	"testing"
 )
 
 // prefixes are the environment variable prefixes the program is configured
@@ -12,7 +14,7 @@ import (
 var prefixes = []string{"CRUSH_", "KLASH_"}
 
 // ClearConfigVars unsets every CRUSH_* and KLASH_* variable in the process
-// environment. Call it first thing in a package's TestMain.
+// environment. Run calls it; a package's TestMain should call Run.
 //
 // The program is configured through these variables, and everything it runs
 // inherits them — including `go test`, run from inside it by an agent
@@ -39,4 +41,29 @@ func ClearConfigVars() {
 		}
 	}
 	os.Setenv("KLASH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+}
+
+// Run runs a package's tests, as its TestMain, os.Exit(testenv.Run(m)):
+// on a clean slate (ClearConfigVars), with the global config and data
+// directories in a temp dir of their own, removed after.
+//
+// Without that, a test reads the user's own config directory: the coder
+// prompt template a user keeps there, their tool descriptions, their
+// klash.json. The AI box's self-improvement runs work as a user with its
+// own coder.md.tpl, and under it TestCoderPromptNamesTheAddedDirs failed,
+// though it passed as root; the run was then held at its Stop hook by a
+// test it never touched.
+//
+// The directories go in the CRUSH_ names, which the KLASH_ names win
+// over, so a test that sets either name itself still decides.
+func Run(m *testing.M) int {
+	ClearConfigVars()
+	home, err := os.MkdirTemp("", "klash-test")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(home)
+	os.Setenv("CRUSH_GLOBAL_CONFIG", filepath.Join(home, "config"))
+	os.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(home, "data"))
+	return m.Run()
 }

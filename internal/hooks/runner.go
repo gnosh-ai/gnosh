@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -28,11 +27,11 @@ const abandonGrace = time.Second
 // depending on the scheduling behavior of the real interpreter.
 var runShell = shell.Run
 
-// compiledHook pairs a HookConfig with its compiled matcher regex. A nil
+// compiledHook pairs a HookConfig with its compiled matcher. A nil
 // matcher means "match every tool".
 type compiledHook struct {
 	cfg     config.HookConfig
-	matcher *regexp.Regexp
+	matcher *config.HookMatcher
 }
 
 // Runner executes hook commands and aggregates their results.
@@ -53,21 +52,17 @@ type Runner struct {
 func NewRunner(hooks []config.HookConfig, cwd, projectDir string) *Runner {
 	compiled := make([]compiledHook, 0, len(hooks))
 	for _, h := range hooks {
-		ch := compiledHook{cfg: h}
-		if h.Matcher != "" {
-			re, err := regexp.Compile(h.Matcher)
-			if err != nil {
-				slog.Warn(
-					"Hook matcher failed to compile; skipping hook",
-					"matcher", h.Matcher,
-					"command", h.Command,
-					"error", err,
-				)
-				continue
-			}
-			ch.matcher = re
+		matcher, err := config.CompileHookMatcher(h.Matcher)
+		if err != nil {
+			slog.Warn(
+				"Hook matcher failed to compile; skipping hook",
+				"matcher", h.Matcher,
+				"command", h.Command,
+				"error", err,
+			)
+			continue
 		}
-		compiled = append(compiled, ch)
+		compiled = append(compiled, compiledHook{cfg: h, matcher: matcher})
 	}
 	return &Runner{
 		hooks:      compiled,
@@ -98,7 +93,7 @@ func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolIn
 	p := toolPayload(eventName, session, r.cwd, toolName, toolInputJSON)
 	p.ToolUseID = id
 	p.AgentID, p.AgentType = agentID, agentType
-	return r.run(ctx, r.matchingHooks(toolName, tooldefs.LegacyName(toolName)), eventName, toolName, toolInputJSON, envVars, marshalPayload(p))
+	return r.run(ctx, r.matchingHooks(toolNames(ctx, toolName)...), eventName, toolName, toolInputJSON, envVars, marshalPayload(p))
 }
 
 // RunPostToolUse executes the PostToolUse hooks whose matcher matches
@@ -119,7 +114,7 @@ func (r *Runner) RunPostToolUse(ctx context.Context, sessionID, toolName, toolIn
 	p.ToolUseID = id
 	p.AgentID, p.AgentType = agentID, agentType
 	p.DurationMS = took.Milliseconds()
-	agg, err := r.run(ctx, r.matchingHooks(toolName, tooldefs.LegacyName(toolName)), EventPostToolUse, toolName, toolInputJSON, envVars, marshalPayload(p))
+	agg, err := r.run(ctx, r.matchingHooks(toolNames(ctx, toolName)...), EventPostToolUse, toolName, toolInputJSON, envVars, marshalPayload(p))
 	return afterTheCall(agg), err
 }
 
@@ -139,7 +134,7 @@ func (r *Runner) RunPostToolUseFailure(ctx context.Context, sessionID, toolName,
 	p.Error = errText
 	p.IsInterrupt = interrupted
 	p.DurationMS = took.Milliseconds()
-	agg, err := r.run(ctx, r.matchingHooks(toolName, tooldefs.LegacyName(toolName)), EventPostToolUseFailure, toolName, toolInputJSON, envVars, marshalPayload(p))
+	agg, err := r.run(ctx, r.matchingHooks(toolNames(ctx, toolName)...), EventPostToolUseFailure, toolName, toolInputJSON, envVars, marshalPayload(p))
 	return afterTheCall(agg), err
 }
 
@@ -228,7 +223,7 @@ func (r *Runner) RunUserPromptSubmit(ctx context.Context, sessionID, prompt stri
 func (r *Runner) RunSessionStart(ctx context.Context, sessionID, model, source string) (AggregateResult, error) {
 	envVars := append(BuildEnv(EventSessionStart, "", sessionID, r.cwd, r.projectDir, ""), hookVar("SESSION_START_SOURCE", source)...)
 	payload := BuildSessionStartPayload(sessionID, r.cwd, model, source)
-	agg, err := r.run(ctx, r.matchingHooks(source, ""), EventSessionStart, "", "", envVars, payload)
+	agg, err := r.run(ctx, r.matchingHooks(source), EventSessionStart, "", "", envVars, payload)
 	agg.UpdatedInput = ""
 	return agg, err
 }
@@ -247,7 +242,7 @@ func (r *Runner) RunSessionStart(ctx context.Context, sessionID, model, source s
 func (r *Runner) RunPreCompact(ctx context.Context, sessionID, trigger string) (AggregateResult, error) {
 	envVars := append(BuildEnv(EventPreCompact, "", sessionID, r.cwd, r.projectDir, ""), hookVar("PRE_COMPACT_TRIGGER", trigger)...)
 	payload := BuildPreCompactPayload(sessionID, r.cwd, trigger)
-	agg, err := r.run(ctx, r.matchingHooks(trigger, ""), EventPreCompact, "", "", envVars, payload)
+	agg, err := r.run(ctx, r.matchingHooks(trigger), EventPreCompact, "", "", envVars, payload)
 	agg.UpdatedInput = ""
 	return agg, err
 }
@@ -284,7 +279,7 @@ func (r *Runner) run(
 	for i, h := range deduped {
 		go func(idx int, hook config.HookConfig) {
 			defer wg.Done()
-			results[idx] = r.runOne(ctx, hook, envVars, payload, eventName == EventUserPromptSubmit || eventName == EventSessionStart)
+			results[idx] = r.runOne(ctx, hook, eventName, envVars, payload)
 		}(i, h)
 	}
 	wg.Wait()
@@ -313,19 +308,27 @@ func (r *Runner) run(
 	return agg, nil
 }
 
-// matchingHooks returns hooks whose matcher matches the tool name (or has
-// no matcher, which matches everything). A matcher written for the name a
-// tool had before the rename (^crush_logs$) still matches it. matchName
-// is the tool's legacy name, or "" for events with no legacy name.
-func (r *Runner) matchingHooks(toolName, matchName string) []config.HookConfig {
+// matchingHooks returns the hooks whose matcher matches any of names (a
+// tool's, see toolNames, or a SessionStart source or PreCompact trigger),
+// or that have no matcher, which matches everything.
+func (r *Runner) matchingHooks(names ...string) []config.HookConfig {
 	var matched []config.HookConfig
 	for _, h := range r.hooks {
-		if h.matcher == nil || h.matcher.MatchString(toolName) ||
-			(matchName != "" && h.matcher.MatchString(matchName)) {
+		if h.matcher.Matches(names...) {
 			matched = append(matched, h.cfg)
 		}
 	}
 	return matched
+}
+
+// toolNames are the names a tool call's matchers are tested against: the
+// tool's, the name it had before the rename, and Claude Code's names for
+// it, so that a hook written for Claude Code ("Bash", "Edit|Write",
+// "Read", "mcp__github__.*") matches what it matches there.
+func toolNames(ctx context.Context, toolName string) []string {
+	names := []string{toolName, tooldefs.LegacyName(toolName)}
+	names = append(names, tooldefs.ClaudeCodeNamesOf(toolName)...)
+	return append(names, toolAliases(ctx)...)
 }
 
 // runOne executes a single hook command and returns its result.
@@ -345,10 +348,11 @@ func (r *Runner) matchingHooks(toolName, matchName string) []config.HookConfig {
 //   - on the abandon path, the goroutine may still be writing and the
 //     outer frame must not touch them again.
 //
-// plainStdoutIsContext makes stdout that is not a JSON object the hook's
-// context, as Claude Code reads a UserPromptSubmit hook's output.
-func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, envVars []string, payload []byte, plainStdoutIsContext bool) HookResult {
-	timeout := hook.TimeoutDuration()
+// On UserPromptSubmit and SessionStart, stdout that is not a JSON object
+// is the hook's context, as Claude Code reads those hooks' output.
+func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, eventName string, envVars []string, payload []byte) HookResult {
+	plainStdoutIsContext := eventName == EventUserPromptSubmit || eventName == EventSessionStart
+	timeout := hook.TimeoutDuration(eventName)
 	ctx, cancel := context.WithTimeout(parentCtx, timeout)
 	defer cancel()
 

@@ -133,6 +133,22 @@ func toolUseID(ctx context.Context) string {
 	return id
 }
 
+// toolAliasesKey is the context key WithToolAliases stores names under.
+type toolAliasesKey struct{}
+
+// WithToolAliases returns a context giving the tool call that hooks run
+// for more names to match against, such as an MCP tool's Claude Code
+// name, mcp__<server>__<tool>, which its own name, mcp_<server>_<tool>,
+// cannot be turned back into: server names have underscores too.
+func WithToolAliases(ctx context.Context, names ...string) context.Context {
+	return context.WithValue(ctx, toolAliasesKey{}, names)
+}
+
+func toolAliases(ctx context.Context) []string {
+	names, _ := ctx.Value(toolAliasesKey{}).([]string)
+	return names
+}
+
 // subAgentKey is the context key WithSubAgent stores a sub-agent under.
 type subAgentKey struct{}
 
@@ -334,6 +350,11 @@ func BuildEnv(eventName, toolName, sessionID, cwd, projectDir, toolInputJSON str
 	env = append(env, hookVar("SESSION_ID", sessionID)...)
 	env = append(env, hookVar("CWD", cwd)...)
 	env = append(env, hookVar("PROJECT_DIR", projectDir)...)
+	// Claude Code's name for it, which its hook commands are written
+	// with: "${CLAUDE_PROJECT_DIR}/.claude/hooks/check.sh". Without it
+	// such a command ran /.claude/hooks/check.sh, failed to start, and a
+	// hook that fails lets the call go ahead.
+	env = append(env, "CLAUDE_PROJECT_DIR="+projectDir)
 
 	// Extract tool-specific env vars from the JSON input.
 	if toolInputJSON != "" {

@@ -119,7 +119,7 @@
         },
         "matcher": {
           "type": "string",
-          "description": "Regex pattern tested against the tool name. Empty means match all tools."
+          "description": "Which tools the hook runs for as in Claude Code: empty or * for all; exact names separated by | such as Bash|edit (klash's or Claude Code's names); anything else is an unanchored regular expression."
         },
         "command": {
           "type": "string",
@@ -127,8 +127,8 @@
         },
         "timeout": {
           "type": "integer",
-          "description": "Timeout in seconds for the hook command",
-          "default": 60
+          "description": "Timeout in seconds for the hook command. As in Claude Code it defaults to 600, or 30 for UserPromptSubmit.",
+          "default": 600
         }
       },
       "additionalProperties": false,

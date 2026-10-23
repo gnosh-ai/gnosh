@@ -58,3 +58,5 @@ func (*NopCoordinator) GenerateTitle(context.Context, string, string)  {}
 func (*NopCoordinator) ToolInfos(context.Context) ([]fantasy.ToolInfo, error) {
 	return nil, nil
 }
+
+func (*NopCoordinator) ToolNames() []string { return nil }
