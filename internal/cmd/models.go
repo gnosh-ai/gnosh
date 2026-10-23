@@ -131,10 +131,19 @@ klash models gpt5`,
 		sort.Strings(providerIDs)
 
 		if len(providerIDs) == 0 && len(args) == 0 {
-			return fmt.Errorf("no providers found")
+			// Configured providers left out when the config loaded (a
+			// model server that did not answer, a missing key) are why
+			// the list is empty, and noProviderError says which; "no
+			// providers found" said there were none.
+			return noProviderError(cfg.Config())
 		}
 		if len(providerIDs) == 0 {
 			return fmt.Errorf("no providers found matching %q", term)
+		}
+		// A configured provider left out has no models to list; say so
+		// rather than leave it missing without a word.
+		if why := cfg.Config().SkippedProvidersSummary(); why != "" {
+			fmt.Fprintln(os.Stderr, "Left out: "+why)
 		}
 
 		if !isatty.IsTerminal(os.Stdout.Fd()) {
