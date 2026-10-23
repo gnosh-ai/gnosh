@@ -133,11 +133,12 @@ for the key's password in the masked prompt above. gnokey signs one bank send
 of exactly that price, the seller's facilitator settles it, and the agent gets
 the resource and the transaction hash. Crash checks the signature before the
 payment leaves, pays only in ugnot, at most 1 GNOT at a time plus a network
-fee of at most 1 GNOT, and only on local and test chains: x402 on gno.land
-([gnoverse/x402](https://github.com/gnoverse/x402)) is unaudited, testnet-only
-work, so mainnet is refused. Pay from a session key and the chain caps what it
-can spend as well. Nothing is paid without you at the prompt: a run with
-nobody there to type has no paying tool.
+fee of at most 1 GNOT, and only on local and test chains: x402 on gno.land is
+unaudited, testnet-only work, so mainnet is refused. Pay from a session key and
+the chain caps what it can spend as well. Nothing is paid without you at the
+prompt: a run with nobody there to type has no paying tool. Crash signs these
+payments with the Go x402 client from
+[jaekwon/x402](https://github.com/jaekwon/x402).
 
 **gnopls.** Install the [Gno language server](https://github.com/gnoverse/gnopls)
 and Crash starts it for `.gno` files on its own, as it does gopls for Go.
