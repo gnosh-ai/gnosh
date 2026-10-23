@@ -36,7 +36,7 @@ func TestViewAndLsNeedNoPermissionInAnAddedDir(t *testing.T) {
 		require.NoError(t, err)
 		return resp.Content
 	}
-	require.Contains(t, run(NewViewTool(nil, perms, mockFileTracker{}, nil, t.TempDir()), ViewParams{FilePath: filepath.Join(added, "notes.txt")}), "added notes")
+	require.Contains(t, run(NewViewTool(nil, perms, mockFileTracker{}, nil, nil, t.TempDir()), ViewParams{FilePath: filepath.Join(added, "notes.txt")}), "added notes")
 	require.Contains(t, run(NewLsTool(perms, t.TempDir(), config.ToolLs{}), LSParams{Path: added}), "notes.txt")
 	select {
 	case e := <-asked:

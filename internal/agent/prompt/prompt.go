@@ -211,12 +211,7 @@ func projectContextFiles(paths []string, store *config.ConfigStore) []ContextFil
 	l := newContextLoader(store)
 	workingDir := store.WorkingDir()
 	if workingDir != "" {
-		var relative []string
-		for _, p := range paths {
-			if expanded := expandPath(p, store); !filepathext.SmartIsAbs(expanded) {
-				relative = append(relative, expanded)
-			}
-		}
+		relative := relativeContextPaths(paths, store)
 		var above []string
 		for dir := filepath.Dir(workingDir); ; dir = filepath.Dir(dir) {
 			above = append(above, dir)
@@ -225,15 +220,57 @@ func projectContextFiles(paths []string, store *config.ConfigStore) []ContextFil
 			}
 		}
 		for i := len(above) - 1; i >= 0; i-- {
-			inDir := make([]string, len(relative))
-			for j, p := range relative {
-				inDir[j] = filepath.Join(above[i], p)
-			}
-			l.load(inDir, above[i], ownedByUserOrRoot)
+			l.load(pathsIn(above[i], relative), above[i], ownedByUserOrRoot)
 		}
 	}
 	l.load(paths, cmp.Or(workingDir, "."), nil)
 	return l.files
+}
+
+// SubdirectoryContextFiles returns the context files at paths in the
+// directories from the working directory down to file's, not counting
+// the working directory, whose files the system prompt has: the
+// outermost first, each file's imports staying inside its directory.
+// They are what Claude Code loads once it reads a file in a subdirectory
+// with a CLAUDE.md of its own.
+func SubdirectoryContextFiles(paths []string, store *config.ConfigStore, file string) []ContextFile {
+	workingDir := store.WorkingDir()
+	if workingDir == "" {
+		return nil
+	}
+	rel, err := filepath.Rel(workingDir, filepath.Dir(file))
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil
+	}
+	relative := relativeContextPaths(paths, store)
+	l := newContextLoader(store)
+	dir := workingDir
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		dir = filepath.Join(dir, part)
+		l.load(pathsIn(dir, relative), dir, nil)
+	}
+	return l.files
+}
+
+// relativeContextPaths returns those of paths that name a file relative
+// to a directory, as CLAUDE.md does, expanded.
+func relativeContextPaths(paths []string, store *config.ConfigStore) []string {
+	var relative []string
+	for _, p := range paths {
+		if expanded := expandPath(p, store); !filepathext.SmartIsAbs(expanded) {
+			relative = append(relative, expanded)
+		}
+	}
+	return relative
+}
+
+// pathsIn returns paths, each relative, joined to dir.
+func pathsIn(dir string, paths []string) []string {
+	joined := make([]string, len(paths))
+	for i, p := range paths {
+		joined[i] = filepath.Join(dir, p)
+	}
+	return joined
 }
 
 // ownedByUserOrRoot reports whether the file at path belongs to the user

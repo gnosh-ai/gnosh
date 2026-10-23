@@ -185,6 +185,12 @@ type coordinator struct {
 	// hooks, so sharing it with them changes nothing.
 	sessionStarts *sessionStartState
 
+	// subdirectoryGiven records the subdirectories' context files each
+	// session has been given since its last summary; see
+	// subdirectoryContext. Nil, nothing is given.
+	subdirectoryMu    sync.Mutex
+	subdirectoryGiven map[string]bool
+
 	// Skills discovery results (session-start snapshot).
 	allSkills    []*skills.Skill // Pre-filter: all discovered after dedup.
 	activeSkills []*skills.Skill // Post-filter: active skills only.
@@ -242,6 +248,8 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		activeSkills:  activeSkills,
 		skillTracker:  skillTracker,
 		interactive:   opts.Interactive,
+
+		subdirectoryGiven: map[string]bool{},
 	}
 
 	agentCfg, ok := opts.Config.Config().Agents[config.AgentCoder]
@@ -294,6 +302,42 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		c.mainAgentName = config.AgentPlan
 	}
 	return c, nil
+}
+
+// subdirectoryContext returns, for a file a session views, the
+// instructions in the context files of the subdirectories between the
+// working directory and the file that the session has not been given
+// since its last summary, as Claude Code loads a subdirectory's
+// CLAUDE.md once it reads a file there. Started at the root of Jae's gno
+// checkout, Klash never read misc/gnoe2e's own AGENTS.md.
+func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePath string) string {
+	if c.subdirectoryGiven == nil {
+		return ""
+	}
+	files := prompt.SubdirectoryContextFiles(c.cfg.Config().Options.ContextPaths, c.cfg, filePath)
+	if len(files) == 0 {
+		return ""
+	}
+	// A summary leaves behind what the session was given before it.
+	var summary string
+	if sess, err := c.sessions.Get(ctx, sessionID); err == nil {
+		summary = sess.SummaryMessageID
+	}
+	var b strings.Builder
+	c.subdirectoryMu.Lock()
+	for _, f := range files {
+		key := sessionID + "\x00" + summary + "\x00" + f.Path
+		if c.subdirectoryGiven[key] {
+			continue
+		}
+		c.subdirectoryGiven[key] = true
+		fmt.Fprintf(&b, "<file path=\"%s\">\n%s\n</file>\n", f.Path, f.Content)
+	}
+	c.subdirectoryMu.Unlock()
+	if b.Len() == 0 {
+		return ""
+	}
+	return "\n<project_context>\nThis file's directory has context files of its own. Follow their instructions for the files there:\n" + b.String() + "</project_context>\n"
 }
 
 // permissionMode is a session's permission mode as Claude Code names it
@@ -965,7 +1009,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 		tools.NewLsTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Tools.Ls),
 		tools.NewSourcegraphTool(nil),
 		tools.NewTodosTool(c.sessions),
-		tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, c.skillTracker, c.cfg.WorkingDir(), c.cfg.Config().Options.SkillsPaths...),
+		tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, c.skillTracker, c.subdirectoryContext, c.cfg.WorkingDir(), c.cfg.Config().Options.SkillsPaths...),
 		tools.NewWriteTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir()),
 	)
 

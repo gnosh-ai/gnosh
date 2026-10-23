@@ -91,11 +91,19 @@ func (e contentTooLargeError) Error() string {
 	return fmt.Sprintf("content section is too large (%d bytes). Maximum size is %d bytes", e.Size, e.Max)
 }
 
+// SubdirectoryContext returns what a session reads with a file it views:
+// the instructions of the subdirectories between the working directory
+// and the file that it has not been given yet, or "".
+type SubdirectoryContext func(ctx context.Context, sessionID, filePath string) string
+
+// NewViewTool returns the view tool. subdirectoryContext, when not nil,
+// adds what it returns to the file read.
 func NewViewTool(
 	lspManager *lsp.Manager,
 	permissions permission.Service,
 	filetracker filetracker.Service,
 	skillTracker *skills.Tracker,
+	subdirectoryContext SubdirectoryContext,
 	workingDir string,
 	skillsPaths ...string,
 ) fantasy.AgentTool {
@@ -268,6 +276,9 @@ func NewViewTool(
 			}
 			output += "\n</file>\n"
 			output += getDiagnostics(filePath, lspManager)
+			if subdirectoryContext != nil {
+				output += subdirectoryContext(ctx, sessionID, absFilePath)
+			}
 			filetracker.RecordRead(ctx, sessionID, filePath)
 
 			meta := ViewResponseMetadata{

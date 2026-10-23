@@ -282,7 +282,7 @@ func (m mockFileTracker) ListReadFiles(ctx context.Context, sessionID string) ([
 
 func newViewToolForTest(workingDir string) fantasy.AgentTool {
 	permissions := &mockViewPermissionService{Broker: pubsub.NewBroker[permission.PermissionRequest]()}
-	return NewViewTool(nil, permissions, mockFileTracker{}, nil, workingDir)
+	return NewViewTool(nil, permissions, mockFileTracker{}, nil, nil, workingDir)
 }
 
 func runViewTool(t *testing.T, tool fantasy.AgentTool, ctx context.Context, params ViewParams) fantasy.ToolResponse {
@@ -417,4 +417,24 @@ func TestViewToolReturnsAnOrdinaryFileWhole(t *testing.T) {
 	require.False(t, resp.IsError, resp.Content)
 	require.Contains(t, resp.Content, "// line 600")
 	require.NotContains(t, resp.Content, "File has more lines")
+}
+
+// What the subdirectory context gives for a file goes after the file read.
+func TestViewToolAddsTheSubdirectoryContext(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.go")
+	require.NoError(t, os.WriteFile(path, []byte("package a\n"), 0o644))
+	var asked string
+	permissions := &mockViewPermissionService{Broker: pubsub.NewBroker[permission.PermissionRequest]()}
+	tool := NewViewTool(nil, permissions, mockFileTracker{}, nil, func(_ context.Context, sessionID, filePath string) string {
+		asked = sessionID + " " + filePath
+		return "THE SUB RULES"
+	}, dir)
+
+	resp := runViewTool(t, tool, context.WithValue(t.Context(), SessionIDContextKey, "s1"), ViewParams{FilePath: path})
+	require.Contains(t, resp.Content, "package a")
+	require.True(t, strings.HasSuffix(strings.TrimSpace(resp.Content), "THE SUB RULES"), resp.Content)
+	require.Equal(t, "s1 "+path, asked)
 }

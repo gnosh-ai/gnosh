@@ -206,3 +206,28 @@ func TestProjectContextFilesTrustOnlyTheUserOrRootAbove(t *testing.T) {
 
 	require.Equal(t, []string{"work/AGENTS.md"}, filesUnder(projectContextFiles([]string{"AGENTS.md"}, store), base))
 }
+
+// A file in a subdirectory of the working directory brings the context
+// files of the subdirectories down to it, the outermost first, as Claude
+// Code loads a subdirectory's CLAUDE.md once it reads a file there; the
+// working directory's own are the system prompt's. A subdirectory's
+// imports stay inside it, and a file in the working directory, or
+// outside it, brings none.
+func TestSubdirectoryContextFiles(t *testing.T) {
+	t.Parallel()
+
+	work := t.TempDir()
+	e2e := filepath.Join(work, "misc", "gnoe2e")
+	require.NoError(t, os.MkdirAll(e2e, 0o755))
+	writeContextFile(t, work, "AGENTS.md", "the project's")
+	writeContextFile(t, filepath.Join(work, "misc"), "AGENTS.md", "misc's")
+	writeContextFile(t, e2e, "CLAUDE.md", "@notes.md @../../AGENTS.md")
+	writeContextFile(t, e2e, "notes.md", "the e2e notes")
+	store := config.NewTestStoreIn(&config.Config{Options: &config.Options{}}, work)
+	paths := []string{"CLAUDE.md", "AGENTS.md"}
+
+	files := SubdirectoryContextFiles(paths, store, filepath.Join(e2e, "main_test.go"))
+	require.Equal(t, []string{"misc/AGENTS.md", "misc/gnoe2e/notes.md", "misc/gnoe2e/CLAUDE.md"}, filesUnder(files, work))
+	require.Empty(t, SubdirectoryContextFiles(paths, store, filepath.Join(work, "main.go")))
+	require.Empty(t, SubdirectoryContextFiles(paths, store, filepath.Join(t.TempDir(), "main.go")))
+}
