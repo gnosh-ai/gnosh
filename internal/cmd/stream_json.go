@@ -28,7 +28,6 @@ type streamJSON struct {
 	latest    map[string]message.Message // the newest copy of each
 	callOwner map[string]string          // tool call ID -> its assistant message
 	written   map[string]bool            // written assistant messages and tool results
-	turns     int
 	err       error
 }
 
@@ -191,7 +190,6 @@ func (s *streamJSON) writeAssistant(id string) {
 	case len(msg.ToolCalls()) > 0:
 		stopReason = string(message.FinishReasonToolUse)
 	}
-	s.turns++
 	s.write(map[string]any{
 		"type": "assistant",
 		"message": map[string]any{

@@ -1030,7 +1030,8 @@ func (o *runOutput) message(msg message.Message) {
 	if o.stream != nil {
 		o.stream.message(msg)
 	}
-	if msg.Role != message.Assistant || msg.IsSummaryMessage {
+	// Only the run's own messages: not a sub-agent's, nor a summary.
+	if msg.Role != message.Assistant || msg.IsSummaryMessage || (o.sessionID != "" && msg.SessionID != o.sessionID) {
 		return
 	}
 	if o.assistants == nil {
@@ -1063,13 +1064,16 @@ func (o *runOutput) finish(runErr error) error {
 		Result     string `json:"result"`
 		SessionID  string `json:"session_id,omitempty"`
 		DurationMS int64  `json:"duration_ms"`
-		NumTurns   int    `json:"num_turns,omitempty"`
+		NumTurns   int    `json:"num_turns"`
 	}{
 		Type:       "result",
 		Subtype:    "success",
 		Result:     cmp.Or(o.final, strings.TrimSpace(o.answer.String())),
 		SessionID:  o.sessionID,
 		DurationMS: time.Since(o.start).Milliseconds(),
+		// The run's own assistant messages, as Claude Code's json and
+		// stream-json results count them; json left it out.
+		NumTurns: len(o.assistants),
 	}
 	if runErr != nil {
 		res.Subtype = "error_during_execution"
@@ -1077,7 +1081,6 @@ func (o *runOutput) finish(runErr error) error {
 		res.Result = runErr.Error()
 	}
 	if o.stream != nil {
-		res.NumTurns = o.stream.turns
 		if o.stream.err != nil {
 			return errors.Join(runErr, o.stream.err)
 		}

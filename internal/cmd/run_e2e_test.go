@@ -122,6 +122,7 @@ func TestRunEndToEnd(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &res), out)
 	require.Equal(t, "There are two text files.", res["result"])
 	require.Equal(t, false, res["is_error"])
+	require.Equal(t, float64(2), res["num_turns"], "json counts the turns too, as Claude Code's does")
 
 	out, err = runForTest(t, "--output-format", "stream-json", "list the files here")
 	require.NoError(t, err)
