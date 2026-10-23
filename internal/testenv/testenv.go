@@ -54,8 +54,12 @@ func ClearConfigVars() {
 // though it passed as root; the run was then held at its Stop hook by a
 // test it never touched.
 //
-// The directories go in the CRUSH_ names, which the KLASH_ names win
-// over, so a test that sets either name itself still decides.
+// The directories go in the XDG variables, which every other way of
+// naming them wins over: a test's own XDG_CONFIG_HOME or XDG_DATA_HOME
+// (the tests that set HOME set these too), and KLASH_GLOBAL_* or
+// CRUSH_GLOBAL_*. Set in CRUSH_GLOBAL_* at first, they won over a test's
+// own XDG_DATA_HOME, and tests that isolated that way shared one
+// directory.
 func Run(m *testing.M) int {
 	ClearConfigVars()
 	home, err := os.MkdirTemp("", "klash-test")
@@ -63,7 +67,8 @@ func Run(m *testing.M) int {
 		panic(err)
 	}
 	defer os.RemoveAll(home)
-	os.Setenv("CRUSH_GLOBAL_CONFIG", filepath.Join(home, "config"))
-	os.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(home, "data"))
+	os.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	os.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+	os.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))
 	return m.Run()
 }
