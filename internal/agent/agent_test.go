@@ -27,8 +27,7 @@ import (
 
 func TestMain(m *testing.M) {
 	slog.SetLogLoggerLevel(slog.LevelError)
-	testenv.ClearConfigVars()
-	m.Run()
+	os.Exit(testenv.Run(m))
 }
 
 var modelPairs = []modelPair{
