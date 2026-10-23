@@ -76,6 +76,13 @@ you let it open cannot redirect it there.
   those calls, so a hook that refused to read a key file could be walked
   around by handing the read to a helper (the `agent` tool, or
   `agentic_fetch`).
+- A guard copied from Claude Code also covers the Klash tools Claude Code has
+  nothing like. A hook on `Edit|Write` also stops `multiedit`, `lsp_rename`
+  and `lsp_replace_symbol`, which change files, and `download`, which writes
+  one; a hook on `WebFetch` also stops `download` and `x402_fetch`. Before,
+  the agent could walk around the guard through those tools. Such a hook can
+  stop them but not approve them: a hook that approves every Write does not
+  let a download run without asking.
 - A project's `klash.json` written by another user, with sudo say, stops
   Klash and says whose it is and what to do, instead of being skipped without
   a word along with any tools it turned off.

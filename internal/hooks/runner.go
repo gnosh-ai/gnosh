@@ -95,7 +95,7 @@ func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolIn
 	p.ToolUseID = id
 	p.AgentID, p.AgentType = agentID, agentType
 	p.PermissionMode = permissionMode(ctx)
-	return r.run(ctx, r.matchingHooks(toolNames(ctx, toolName)...), eventName, toolName, toolInputJSON, envVars, marshalPayload(p))
+	return r.run(ctx, r.toolHooks(ctx, toolName), eventName, toolName, toolInputJSON, envVars, marshalPayload(p))
 }
 
 // RunPostToolUse executes the PostToolUse hooks whose matcher matches
@@ -117,7 +117,7 @@ func (r *Runner) RunPostToolUse(ctx context.Context, sessionID, toolName, toolIn
 	p.AgentID, p.AgentType = agentID, agentType
 	p.PermissionMode = permissionMode(ctx)
 	p.DurationMS = took.Milliseconds()
-	agg, err := r.run(ctx, r.matchingHooks(toolNames(ctx, toolName)...), EventPostToolUse, toolName, toolInputJSON, envVars, marshalPayload(p))
+	agg, err := r.run(ctx, r.toolHooks(ctx, toolName), EventPostToolUse, toolName, toolInputJSON, envVars, marshalPayload(p))
 	return afterTheCall(agg), err
 }
 
@@ -138,7 +138,7 @@ func (r *Runner) RunPostToolUseFailure(ctx context.Context, sessionID, toolName,
 	p.Error = errText
 	p.IsInterrupt = interrupted
 	p.DurationMS = took.Milliseconds()
-	agg, err := r.run(ctx, r.matchingHooks(toolNames(ctx, toolName)...), EventPostToolUseFailure, toolName, toolInputJSON, envVars, marshalPayload(p))
+	agg, err := r.run(ctx, r.toolHooks(ctx, toolName), EventPostToolUseFailure, toolName, toolInputJSON, envVars, marshalPayload(p))
 	return afterTheCall(agg), err
 }
 
@@ -170,7 +170,7 @@ func (r *Runner) RunStop(ctx context.Context, sessionID, lastAssistantMessage st
 	envVars := BuildStopEnv(sessionID, r.cwd, r.projectDir, stopHookActive)
 	p := stopPayload(sessionID, r.cwd, lastAssistantMessage, stopHookActive)
 	p.PermissionMode = permissionMode(ctx)
-	agg, err := r.run(ctx, r.Hooks(), EventStop, "", "", envVars, marshalPayload(p))
+	agg, err := r.run(ctx, r.everyHook(), EventStop, "", "", envVars, marshalPayload(p))
 	agg.UpdatedInput = ""
 	return agg, err
 }
@@ -190,7 +190,7 @@ func (r *Runner) RunSubagentStop(ctx context.Context, sessionID, agentID, agentT
 	envVars := BuildSubagentStopEnv(sessionID, agentID, agentType, r.cwd, r.projectDir, stopHookActive)
 	p := subagentStopPayload(sessionID, agentID, agentType, r.cwd, lastAssistantMessage, stopHookActive)
 	p.PermissionMode = permissionMode(ctx)
-	agg, err := r.run(ctx, r.Hooks(), EventSubagentStop, "", "", envVars, marshalPayload(p))
+	agg, err := r.run(ctx, r.everyHook(), EventSubagentStop, "", "", envVars, marshalPayload(p))
 	agg.UpdatedInput = ""
 	return agg, err
 }
@@ -208,7 +208,7 @@ func (r *Runner) RunUserPromptSubmit(ctx context.Context, sessionID, prompt stri
 	envVars := BuildEnv(EventUserPromptSubmit, "", sessionID, r.cwd, r.projectDir, "")
 	p := userPromptSubmitPayload(sessionID, r.cwd, prompt, attachments)
 	p.PermissionMode = permissionMode(ctx)
-	agg, err := r.run(ctx, r.Hooks(), EventUserPromptSubmit, "", "", envVars, marshalPayload(p))
+	agg, err := r.run(ctx, r.everyHook(), EventUserPromptSubmit, "", "", envVars, marshalPayload(p))
 	agg.UpdatedInput = ""
 	return agg, err
 }
@@ -277,7 +277,7 @@ func (r *Runner) RunSessionEnd(ctx context.Context, sessionID, reason string) (A
 // and environment for the event.
 func (r *Runner) run(
 	ctx context.Context,
-	matching []config.HookConfig,
+	matching []matchedHook,
 	eventName, toolName, toolInputJSON string,
 	envVars []string,
 	payload []byte,
@@ -286,14 +286,16 @@ func (r *Runner) run(
 		return AggregateResult{Decision: DecisionNone}, nil
 	}
 
-	// Deduplicate by command string.
-	seen := make(map[string]bool, len(matching))
-	var deduped []config.HookConfig
+	// Deduplicate by command string. A command is a guard only if it
+	// matched as nothing more anywhere.
+	index := make(map[string]int, len(matching))
+	var deduped []matchedHook
 	for _, h := range matching {
-		if seen[h.Command] {
+		if i, ok := index[h.Command]; ok {
+			deduped[i].guardOnly = deduped[i].guardOnly && h.guardOnly
 			continue
 		}
-		seen[h.Command] = true
+		index[h.Command] = len(deduped)
 		deduped = append(deduped, h)
 	}
 
@@ -302,9 +304,14 @@ func (r *Runner) run(
 	wg.Add(len(deduped))
 
 	for i, h := range deduped {
-		go func(idx int, hook config.HookConfig) {
+		go func(idx int, hook matchedHook) {
 			defer wg.Done()
-			results[idx] = r.runOne(ctx, hook, eventName, envVars, payload)
+			results[idx] = r.runOne(ctx, hook.HookConfig, eventName, envVars, payload)
+			if hook.guardOnly && results[idx].Decision == DecisionAllow {
+				results[idx].Decision = DecisionNone
+				slog.Info("A hook matched this tool only as a guard, by the name of a Claude Code tool that takes other input, so its allow does not approve the call",
+					"hook", hook.DisplayName(), "matcher", hook.Matcher, "tool", toolName)
+			}
 		}(i, h)
 	}
 	wg.Wait()
@@ -336,14 +343,56 @@ func (r *Runner) run(
 	return agg, nil
 }
 
+// matchedHook is a hook that matched an event.
+type matchedHook struct {
+	config.HookConfig
+
+	// guardOnly is set for a hook that matched a tool call only by the
+	// name of a Claude Code tool whose job the tool does with input of
+	// another shape (see toolHooks): it can block the call, but its allow
+	// does not approve it.
+	guardOnly bool
+}
+
+// everyHook returns every hook, for an event matchers do not apply to.
+func (r *Runner) everyHook() []matchedHook {
+	matched := make([]matchedHook, len(r.hooks))
+	for i, h := range r.hooks {
+		matched[i] = matchedHook{HookConfig: h.cfg}
+	}
+	return matched
+}
+
 // matchingHooks returns the hooks whose matcher matches any of names (a
-// tool's, see toolNames, or a SessionStart source or PreCompact trigger),
-// or that have no matcher, which matches everything.
-func (r *Runner) matchingHooks(names ...string) []config.HookConfig {
-	var matched []config.HookConfig
+// SessionStart source, a PreCompact trigger or a SessionEnd reason), or
+// that have no matcher, which matches everything.
+func (r *Runner) matchingHooks(names ...string) []matchedHook {
+	var matched []matchedHook
 	for _, h := range r.hooks {
 		if h.matcher.Matches(names...) {
-			matched = append(matched, h.cfg)
+			matched = append(matched, matchedHook{HookConfig: h.cfg})
+		}
+	}
+	return matched
+}
+
+// toolHooks returns the hooks a call of toolName runs, in config order:
+// those whose matcher matches one of its names (see toolNames), and, as
+// guards only, those that match the name of a Claude Code tool whose job
+// it does with input of another shape (tooldefs.ClaudeCodeGuardNamesOf).
+// So a hook guarding Claude Code's Edit|Write also guards lsp_rename,
+// which Claude Code has no tool like, while one approving Write calls,
+// having checked Write's input, does not approve a download.
+func (r *Runner) toolHooks(ctx context.Context, toolName string) []matchedHook {
+	names := toolNames(ctx, toolName)
+	guardNames := tooldefs.ClaudeCodeGuardNamesOf(toolName)
+	var matched []matchedHook
+	for _, h := range r.hooks {
+		switch {
+		case h.matcher.Matches(names...):
+			matched = append(matched, matchedHook{HookConfig: h.cfg})
+		case len(guardNames) > 0 && h.matcher.Matches(guardNames...):
+			matched = append(matched, matchedHook{HookConfig: h.cfg, guardOnly: true})
 		}
 	}
 	return matched

@@ -188,6 +188,22 @@ func TestPostToolUseResyncsAFileAHookRewrote(t *testing.T) {
 		require.Contains(t, resp.Content, "A PostToolUse hook changed "+file+" after this call")
 	})
 
+	// lsp_replace_symbol writes the file it names, and records a read of
+	// it, as edit does; a formatter's Edit hook now runs after it too.
+	t.Run("rewritten after lsp_replace_symbol", func(t *testing.T) {
+		files := &readRecorder{}
+		replace := &funcTool{name: tools.ReplaceSymbolToolName, run: edit.run}
+		tool := newHookedTool(replace, toolHooks{
+			post:       newPostRunner(t, `printf 'package main\n\n' > `+file),
+			files:      files,
+			workingDir: dir,
+		})
+		resp, err := tool.Run(sessionCtx(t), fantasy.ToolCall{ID: "c2", Name: tools.ReplaceSymbolToolName, Input: `{"symbol":"main","file_path":"main.go"}`})
+		require.NoError(t, err)
+		require.Equal(t, []string{file}, files.reads)
+		require.Contains(t, resp.Content, "A PostToolUse hook changed "+file+" after this call")
+	})
+
 	t.Run("touched, same content", func(t *testing.T) {
 		files := &readRecorder{}
 		tool := newHookedTool(edit, toolHooks{post: newPostRunner(t, `touch `+file), files: files, workingDir: dir})

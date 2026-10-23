@@ -66,10 +66,10 @@ func TestValidateHooksAcceptsAStar(t *testing.T) {
 func TestNamesSomeTool(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"bash", "Bash", "Read", "crush_logs", "klash_logs", "web_fetch", "web_search", "WebSearch", "mcp_github_create_issue", "mcp__github__create_issue"} {
+	for _, name := range []string{"bash", "Bash", "Read", "crush_logs", "klash_logs", "web_fetch", "web_search", "WebSearch", "LSP", "TaskStop", "mcp_github_create_issue", "mcp__github__create_issue"} {
 		require.Truef(t, namesSomeTool(name), name)
 	}
-	for _, name := range []string{"Notebook", "bassh", "mcp_github", "mcp__github", "mcp_", "mcp__github__"} {
+	for _, name := range []string{"Notebook", "NotebookEdit", "bassh", "mcp_github", "mcp__github", "mcp_", "mcp__github__"} {
 		require.Falsef(t, namesSomeTool(name), name)
 	}
 }

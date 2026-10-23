@@ -229,15 +229,39 @@ written for Claude Code matches here too.
 
 - empty, or `*`: every tool;
 - only letters, digits, `_`, `-`, spaces, `,` and `|`: exact names, separated
-  by `|` or `,` (`bash`, `Edit|Write`, `edit, write`). `Edit` does not match
-  `MultiEdit`, and `mcp_github` matches no tool (Klash logs a warning);
+  by `|` or `,` (`bash`, `Edit|Write`, `edit, write`). `Bash` does not match
+  `BashOutput`, and `mcp_github` matches no tool (Klash logs a warning);
 - anything else: a regular expression, unanchored (`^mcp_github_`,
   `mcp__github__.*`, `Notebook.*`).
 
-Claude Code's names Klash knows: `Agent` and `Task` (agent), `Bash`,
-`BashOutput` (job_output), `Edit`, `Glob`, `Grep`, `KillShell` (job_kill),
-`LS`, `MultiEdit`, `Read` (view), `TodoWrite` (todos), `WebFetch` (fetch) and
-`Write`. The payload's `tool_name` is Klash's name, `bash` not `Bash`.
+Claude Code's names Klash knows, today's and older ones: `Agent` and `Task`
+(agent), `AskUserQuestion` (question), `Bash`, `BashOutput` and `TaskOutput`
+(job_output), `Edit`, `Glob`, `Grep`, `KillShell` and `TaskStop` (job_kill),
+`ListMcpResourcesTool` (list_mcp_resources), `LS`, `MultiEdit`, `Read` (view),
+`ReadMcpResourceTool` (read_mcp_resource), `TodoWrite` (todos), `WebFetch`
+(fetch, and agentic_fetch and its sub-agent's web_fetch), `WebSearch`
+(agentic_fetch and its sub-agent's web_search) and `Write`. The payload's
+`tool_name` is Klash's name, `bash` not `Bash`.
+
+**Tools Claude Code has nothing like** match the name of the Claude Code tool
+whose job they do, so a guard written for Claude Code cannot be walked around
+through them:
+
+| Klash tool                                      | Also matches                                |
+| ----------------------------------------------- | ------------------------------------------- |
+| `multiedit`, `lsp_rename`, `lsp_replace_symbol` | `Edit`: they change files                   |
+| `download`                                      | `WebFetch` and `Write`: it saves a URL      |
+| `x402_fetch`                                    | `WebFetch`: it fetches a page, and pays     |
+| `sourcegraph`                                   | `WebSearch`: it searches code on the web    |
+| the other `lsp_` tools                          | `LSP`: each does part of what LSP does      |
+
+A hook matched only by one of these names is a guard: it can block the call,
+add context or rewrite the input, but its `allow` counts as no opinion, and the
+call asks for permission as usual. What the hook checked before approving was
+another tool's input: a hook that approves every `Write` has not approved a
+download, which also fetches. To approve one of these tools from a hook, name
+it: `download`, `Edit|lsp_rename`, or `MultiEdit`, multiedit's own Claude Code
+name.
 
 > [!IMPORTANT]
 > Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
@@ -289,8 +313,9 @@ if ! out=$(gofumpt -w "$f" 2>&1); then
 fi
 ```
 
-**Formatters**: a hook that changes the file the agent just wrote would make
-the agent's next edit of it fail as "modified since it was last read". Klash
+**Formatters**: a hook that changes the file the agent just wrote (with edit,
+multiedit, write or lsp_replace_symbol) would make the agent's next edit of it
+fail as "modified since it was last read". Klash
 records a fresh read of the file instead, and tells the model the hook changed
 it, so it can view it again before editing near what changed. Claude Code does
 the same.

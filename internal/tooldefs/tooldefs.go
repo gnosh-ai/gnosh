@@ -95,21 +95,29 @@ func IsKnown(name string) bool {
 // claudeCodeNames maps the names Claude Code gives its tools to the
 // built-in tools that do the same job here, so a Claude Code user's
 // --allowedTools Read or --disallowedTools Bash means what they meant.
+// The names older versions of Claude Code used (BashOutput, KillShell,
+// LS, MultiEdit, Task, TaskOutput) stay, since configs written for them
+// still use them.
 var claudeCodeNames = map[string]string{
-	"Agent":      "agent",
-	"Bash":       "bash",
-	"BashOutput": "job_output",
-	"Edit":       "edit",
-	"Glob":       "glob",
-	"Grep":       "grep",
-	"KillShell":  "job_kill",
-	"LS":         "ls",
-	"MultiEdit":  "multiedit",
-	"Read":       "view",
-	"Task":       "agent",
-	"TodoWrite":  "todos",
-	"WebFetch":   "fetch",
-	"Write":      "write",
+	"Agent":                "agent",
+	"AskUserQuestion":      "question",
+	"Bash":                 "bash",
+	"BashOutput":           "job_output",
+	"Edit":                 "edit",
+	"Glob":                 "glob",
+	"Grep":                 "grep",
+	"KillShell":            "job_kill",
+	"LS":                   "ls",
+	"ListMcpResourcesTool": "list_mcp_resources",
+	"MultiEdit":            "multiedit",
+	"Read":                 "view",
+	"ReadMcpResourceTool":  "read_mcp_resource",
+	"Task":                 "agent",
+	"TaskOutput":           "job_output",
+	"TaskStop":             "job_kill",
+	"TodoWrite":            "todos",
+	"WebFetch":             "fetch",
+	"Write":                "write",
 }
 
 // FromClaudeCode returns the built-in tool Claude Code calls name, or ""
@@ -147,16 +155,51 @@ func ClaudeCodeNamesOf(name string) []string {
 	return slices.Compact(names)
 }
 
+// claudeCodeGuardedAs are the Claude Code tools whose job a built-in tool
+// does with input of another shape, where Claude Code has no tool of its
+// own for it: multiedit, lsp_rename and lsp_replace_symbol change files,
+// as Edit does; download fetches a page, as WebFetch does, and writes it
+// to a file, as Write does; x402_fetch fetches one, paying for it;
+// sourcegraph searches code on the web; and the other lsp_ tools each do
+// part of what Claude Code's one LSP tool does. A hook written for Claude
+// Code cannot name these tools, so it guards them by these names.
+var claudeCodeGuardedAs = map[string][]string{
+	"download":           {"WebFetch", "Write"},
+	"lsp_call_hierarchy": {"LSP"},
+	"lsp_definition":     {"LSP"},
+	"lsp_diagnostics":    {"LSP"},
+	"lsp_references":     {"LSP"},
+	"lsp_rename":         {"Edit"},
+	"lsp_replace_symbol": {"Edit"},
+	"lsp_restart":        {"LSP"},
+	"lsp_symbols":        {"LSP"},
+	"multiedit":          {"Edit"},
+	"sourcegraph":        {"WebSearch"},
+	"x402_fetch":         {"WebFetch"},
+}
+
+// ClaudeCodeGuardNamesOf returns the names of the Claude Code tools whose
+// job the tool name does with input of another shape (see
+// claudeCodeGuardedAs). A hook matcher that matches the tool only by one
+// of them can block a call but not approve it: what such a hook checked
+// before approving was input of another shape, or for a smaller job, so
+// a hook approving Write calls does not approve a download.
+func ClaudeCodeGuardNamesOf(name string) []string {
+	return slices.Clone(claudeCodeGuardedAs[name])
+}
+
 // NamesATool reports whether name, a hook matcher's exact name, can be a
 // built-in tool's: its name, its name before the rename, a sub-agent
-// tool's, or a name Claude Code gives one.
+// tool's, or a name Claude Code gives one or a tool whose job it does.
 func NamesATool(name string) bool {
 	if IsKnown(name) || slices.Contains(subAgentNames, name) || FromClaudeCode(name) != "" {
 		return true
 	}
-	for _, claudeCode := range claudeCodeMatchedAs {
-		if slices.Contains(claudeCode, name) {
-			return true
+	for _, table := range []map[string][]string{claudeCodeMatchedAs, claudeCodeGuardedAs} {
+		for _, claudeCode := range table {
+			if slices.Contains(claudeCode, name) {
+				return true
+			}
 		}
 	}
 	return false

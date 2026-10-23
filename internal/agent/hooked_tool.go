@@ -214,7 +214,7 @@ func (h *hookedTool) writtenFile(call fantasy.ToolCall) string {
 		return ""
 	}
 	switch call.Name {
-	case tools.EditToolName, tools.MultiEditToolName, tools.WriteToolName:
+	case tools.EditToolName, tools.MultiEditToolName, tools.WriteToolName, tools.ReplaceSymbolToolName:
 	default:
 		return ""
 	}
