@@ -299,7 +299,9 @@ func TestSessionEndsEachTimeItIsLeft(t *testing.T) {
 
 	data, err := os.ReadFile(filepath.Join(dir, "ended"))
 	require.NoError(t, err)
-	require.Equal(t, 2, strings.Count(string(data), "s1\n"), "s1 was left twice: %q", data)
+	// Count the ids, not lines: two hooks appending at once can write
+	// "s1s1\n\n", as the shell writes an echo's text and its newline apart.
+	require.Equal(t, 2, strings.Count(string(data), "s1"), "s1 was left twice: %q", data)
 }
 
 // A session that is reported open again after it ended ends again, and
@@ -329,6 +331,7 @@ func TestSessionEndsAgainAfterReopen(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var err error
 		data, err = os.ReadFile(filepath.Join(dir, "ended"))
-		return err == nil && strings.Count(string(data), "s1\n") == 2 && strings.Count(string(data), "s2\n") == 1
+		// Ids, not lines: s2's hook and s1's second can run at once.
+		return err == nil && strings.Count(string(data), "s1") == 2 && strings.Count(string(data), "s2") == 1
 	}, 2*time.Second, 10*time.Millisecond, "s1 ended twice and s2 once")
 }
