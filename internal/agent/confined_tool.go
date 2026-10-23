@@ -30,6 +30,8 @@ func confine(dir string, tool fantasy.AgentTool) fantasy.AgentTool {
 	return confinedTool{AgentTool: tool, dir: dir}
 }
 
+func (t confinedTool) Unwrap() fantasy.AgentTool { return t.AgentTool }
+
 func (t confinedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 	var input struct {
 		FilePath string `json:"file_path"`

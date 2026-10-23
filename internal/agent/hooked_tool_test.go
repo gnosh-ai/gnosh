@@ -72,6 +72,14 @@ func TestHookedTool_MatchesAnMCPToolByItsClaudeCodeName(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, inner.called, "the hook blocked the call")
 	require.Contains(t, resp.Content, "no github")
+
+	// Under another of Klash's wrappers too.
+	inner = fakeMCPTool{fakeTool: &fakeTool{name: "mcp_github_create_issue"}, server: "github", tool: "create_issue"}
+	tool = newHookedTool(describedTool{AgentTool: inner, description: "the user's"}, toolHooks{pre: runner})
+	resp, err = tool.Run(t.Context(), fantasy.ToolCall{ID: "call-2", Name: "mcp_github_create_issue", Input: "{}"})
+	require.NoError(t, err)
+	require.False(t, inner.called)
+	require.Contains(t, resp.Content, "no github")
 }
 
 func TestHookedTool_AllowStampsHookApproval(t *testing.T) {

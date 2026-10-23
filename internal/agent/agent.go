@@ -208,7 +208,7 @@ func filterToolsForChannel(agentTools []fantasy.AgentTool, channel string, state
 	}
 	filtered := make([]fantasy.AgentTool, 0, len(agentTools))
 	for _, agentTool := range agentTools {
-		mcpTool, ok := agentTool.(interface{ MCP() string })
+		mcpTool, ok := innermostTool(agentTool).(interface{ MCP() string })
 		if !ok {
 			filtered = append(filtered, agentTool)
 			continue

@@ -62,6 +62,25 @@ func (h *hookedTool) Info() fantasy.ToolInfo {
 	return h.inner.Info()
 }
 
+func (h *hookedTool) Unwrap() fantasy.AgentTool { return h.inner }
+
+// innermostTool is tool without the wrappers Klash puts around tools
+// (hooks, user descriptions, the fetch agent's confinement), each of which
+// says what it wraps with Unwrap: the tool itself, with the methods a
+// wrapper does not pass on, such as an MCP tool's MCP. With hooks or user
+// descriptions configured, every tool is wrapped, and a channel turn's
+// tools were no longer kept to its own channel: filterToolsForChannel
+// could not tell an MCP tool from a built-in one.
+func innermostTool(tool fantasy.AgentTool) fantasy.AgentTool {
+	for {
+		w, ok := tool.(interface{ Unwrap() fantasy.AgentTool })
+		if !ok {
+			return tool
+		}
+		tool = w.Unwrap()
+	}
+}
+
 func (h *hookedTool) ProviderOptions() fantasy.ProviderOptions {
 	return h.inner.ProviderOptions()
 }
@@ -74,7 +93,7 @@ func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 	sessionID := tools.GetSessionFromContext(ctx)
 	ctx = hooks.WithToolUseID(ctx, call.ID)
 	// An MCP tool's matchers also see its Claude Code name.
-	if m, ok := h.inner.(interface {
+	if m, ok := innermostTool(h.inner).(interface {
 		MCP() string
 		MCPToolName() string
 	}); ok {
