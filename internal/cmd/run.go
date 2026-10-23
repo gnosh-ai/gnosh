@@ -83,7 +83,7 @@ crash run --continue "Follow up on your last response"
 		// sessionID is read from --session or --resume.
 		sessionID := sessionFlag(cmd)
 		if sessionID == pickSession {
-			return errors.New("crash run needs the ID of the session to continue after -r; crash -r on its own lists them to pick from")
+			return errors.New("a session ID must follow -r in crash run; `crash -r` on its own lists the sessions to pick from")
 		}
 
 		// Cancel on SIGINT or SIGTERM.

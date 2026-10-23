@@ -67,3 +67,24 @@ func TestStartupSessionPickerWaitsOutOnboarding(t *testing.T) {
 	u.PickSessionAtStart()
 	require.Nil(t, u.startupSessionPicker())
 }
+
+// A session asked for on the command line is not put behind the question
+// whether to initialize the project: answering it either way dropped the
+// session, so `crash -C` in such a project came up without it.
+func TestStartStateLetsAnAskedForSessionPastTheInitQuestion(t *testing.T) {
+	t.Parallel()
+
+	needsInit := func() bool { return true }
+	noInit := func() bool { return false }
+	require.Equal(t, uiOnboarding, startState(false, needsInit, true))
+	require.Equal(t, uiInitialize, startState(true, needsInit, false))
+	require.Equal(t, uiLanding, startState(true, needsInit, true))
+	require.Equal(t, uiLanding, startState(true, noInit, false))
+
+	u := newTestUI()
+	u.com.Workspace = &pickSessionWorkspace{sessions: []session.Session{{ID: "s1"}}}
+	u.state = uiInitialize
+	u.PickSessionAtStart()
+	require.Equal(t, uiLanding, u.state)
+	require.NotNil(t, u.startupSessionPicker())
+}

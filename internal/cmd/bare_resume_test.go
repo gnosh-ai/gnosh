@@ -38,5 +38,5 @@ func TestRunRefusesABareResume(t *testing.T) {
 	cmd.SilenceUsage, cmd.SilenceErrors = true, true
 	err := cmd.Execute()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "needs the ID of the session to continue after -r")
+	require.Contains(t, err.Error(), "a session ID must follow -r in crash run")
 }

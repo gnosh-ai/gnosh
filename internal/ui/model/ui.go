@@ -610,13 +610,11 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	// set onboarding state defaults
 	ui.onboarding.yesInitializeSelected = true
 
-	desiredState := uiLanding
+	desiredState := startState(com.Config().IsConfigured(), func() bool {
+		n, _ := com.Workspace.ProjectNeedsInitialization()
+		return n
+	}, initialSessionID != "" || continueLast)
 	desiredFocus := uiFocusEditor
-	if !com.Config().IsConfigured() {
-		desiredState = uiOnboarding
-	} else if n, _ := com.Workspace.ProjectNeedsInitialization(); n {
-		desiredState = uiInitialize
-	}
 
 	// set initial state
 	ui.setState(desiredState, desiredFocus)
@@ -701,11 +699,31 @@ func (m *UI) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// startState is the screen the UI starts on: onboarding until a provider
+// can be used; then, in a project never initialized, the question whether
+// to initialize it, unless the command line asked for a session to
+// continue, which either answer to the question used to drop (it is asked
+// on the next start instead); else the landing page.
+func startState(configured bool, needsInit func() bool, sessionAsked bool) uiState {
+	switch {
+	case !configured:
+		return uiOnboarding
+	case !sessionAsked && needsInit():
+		return uiInitialize
+	default:
+		return uiLanding
+	}
+}
+
 // PickSessionAtStart makes the UI open the list of sessions to pick from
 // as it starts, for a bare `crash -r`, as Claude Code's `claude -r` opens
-// its picker.
+// its picker. Like a session named on the command line, it goes before
+// the question whether to initialize the project (see startState).
 func (m *UI) PickSessionAtStart() {
 	m.pickSessionAtStart = true
+	if m.state == uiInitialize {
+		m.setState(uiLanding, uiFocusEditor)
+	}
 }
 
 // startupSessionPicker opens the sessions list at startup when
