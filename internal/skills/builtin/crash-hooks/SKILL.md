@@ -18,7 +18,8 @@ need to author correct hooks.
 
 `PreToolUse` fires before every tool call. `PostToolUse` fires after a tool
 call succeeds, and `PostToolUseFailure` after one fails. `UserPromptSubmit`
-fires when the user sends a prompt, before the agent sees it. `Stop` fires when
+fires when the user sends a prompt, before the agent sees it. `SessionStart`
+fires before the first prompt a process sends to a session. `Stop` fires when
 the agent is about to finish its turn. `PreCompact` fires just before a
 session's conversation is summarized, manual or automatic.
 
@@ -28,11 +29,12 @@ to start on an event name it doesn't fire, rather than accepting a hook that
 would look configured and silently never run.
 
 A `matcher` only makes sense for `PreToolUse`, `PostToolUse`,
-`PostToolUseFailure` and `PreCompact`. The first three match against the tool
-name; `PreCompact` matches against its trigger (`manual` or `auto`). There is
-nothing to match when a prompt is sent or a turn ends, so a `matcher` on a
-`UserPromptSubmit` or `Stop` hook is a config error too, and every configured
-hook for those events runs.
+`PostToolUseFailure`, `PreCompact` and `SessionStart`. The first three match
+against the tool name; `PreCompact` matches against its trigger (`manual` or
+`auto`); `SessionStart` matches against its source (`startup`, `resume`,
+`clear` or `compact`). There is nothing to match when a prompt is sent or a
+turn ends, so a `matcher` on a `UserPromptSubmit` or `Stop` hook is a config
+error too, and every configured hook for those events runs.
 
 ## Configuration
 
@@ -76,6 +78,7 @@ the input/output contract is identical regardless of language.
 | `CRASH_TOOL_USE_ID`          | The tool call's ID, the same in its `PreToolUse` and `PostToolUse` hooks |
 | `CRASH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` if an earlier `Stop` hook is why the turn is still running |
 | `CRASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, as in the payload's `trigger` field |
+| `CRASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, as in the payload's `source` field |
 
 Each is also set under its `CRASH_` name (`CRASH_EVENT`, ...), the name after
 the rename; either works.
@@ -158,6 +161,23 @@ the user sees the reason. `prompt` includes the text of pasted or attached text
 files, as the agent will read it. It runs once per prompt the user sends, also
 for one queued behind a running turn, and never for the agent's own
 continuations or for channel messages; Esc while it runs cancels the prompt.
+
+**On `SessionStart`** the input is `{"model": "…", "source": "startup"|"resume"|"clear"|"compact"}`
+beside the common fields. `model` is the ID of the model answering; `source`
+names what started the session: a new one in a process that has started none
+(`startup`), one that already has messages (`resume`), a fresh one in a running
+process, the TUI's New Session, say (`clear`), or the first prompt after a
+summary (`compact`, Crash's own source). A `matcher` on a `SessionStart` hook
+is tested against `source`. It fires once, before the process's first prompt to
+the session, and not for later prompts except the first one after a summary,
+which runs it again with source `compact`. As in Claude Code a hook cannot stop
+the prompt: exit `2` (or `"decision": "block"`) or `49` is shown to the user as
+a warning and the prompt goes ahead. A hook that fails is also shown as a
+warning. Plain stdout (or `context`, or Claude Code's `additionalContext`) is
+added with the prompt for the agent to read, in a `<user-prompt-submit-hook>`
+tag, and is kept with the prompt, so it is read again when the conversation is
+rebuilt on later turns. Esc while it runs cancels the prompt. It fires only for
+the top-level agent, not sub-agents.
 
 **On `PreCompact`** the input is `{"trigger": "manual"|"auto", "custom_instructions": ""}`
 beside the common fields. `trigger` names what set the summary going: the user
@@ -298,9 +318,10 @@ value is reported as a failed hook, not silently ignored.
 1. Add `#!/usr/bin/env bash` and `set -euo pipefail` (for shell scripts).
 2. `chmod +x` the script.
 3. Add the entry under `hooks.PreToolUse` or `hooks.PostToolUse` (with the
-   right matcher), `hooks.Stop` (no matcher), or `hooks.PreCompact` (matcher
-   against `manual`/`auto`) in `crash.json`. Spell the event name exactly;
-   anything else is a startup error.
+   right matcher), `hooks.Stop` (no matcher), `hooks.PreCompact` (matcher
+   against `manual`/`auto`), or `hooks.SessionStart` (matcher against
+   `startup`/`resume`/`clear`/`compact`) in `crash.json`. Spell the event name
+   exactly; anything else is a startup error.
 4. Decide intent: inject context (omit `decision`), auto-approve (`"allow"`),
    block (`exit 2`), or halt (`exit 49`). On `Stop`, `exit 2` means "keep
    working" and `exit 49` means "end now".

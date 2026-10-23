@@ -183,6 +183,28 @@ func (r *Runner) RunUserPromptSubmit(ctx context.Context, sessionID, prompt stri
 	return agg, err
 }
 
+// RunSessionStart executes the SessionStart hooks whose matcher matches
+// source, before the first prompt the process sends to the session.
+// Source is the SessionStartSourceClear, SessionStartSourceResume,
+// SessionStartSourceStartup or SessionStartSourceCompact name of what
+// started the session; hooks with no matcher match every source, as in
+// Claude Code.
+//
+// A SessionStart hook cannot stop the prompt, as in Claude Code: the
+// caller sends the prompt whatever the aggregated result says, and
+// tells the user about any hook that objected or did not run to a
+// verdict. Context is what the hooks want the agent to read with the
+// prompt, as for UserPromptSubmit: a hook's plain-text stdout counts as
+// context too. UpdatedInput is meaningless without a tool call and is
+// always cleared.
+func (r *Runner) RunSessionStart(ctx context.Context, sessionID, model, source string) (AggregateResult, error) {
+	envVars := append(BuildEnv(EventSessionStart, "", sessionID, r.cwd, r.projectDir, ""), hookVar("SESSION_START_SOURCE", source)...)
+	payload := BuildSessionStartPayload(sessionID, r.cwd, model, source)
+	agg, err := r.run(ctx, r.matchingHooks(source, ""), EventSessionStart, "", "", envVars, payload)
+	agg.UpdatedInput = ""
+	return agg, err
+}
+
 // RunPreCompact executes the PreCompact hooks whose matcher matches the
 // summary's trigger, just before a session's conversation is
 // summarized. Trigger is the PreCompactTriggerManual or
@@ -234,7 +256,7 @@ func (r *Runner) run(
 	for i, h := range deduped {
 		go func(idx int, hook config.HookConfig) {
 			defer wg.Done()
-			results[idx] = r.runOne(ctx, hook, envVars, payload, eventName == EventUserPromptSubmit)
+			results[idx] = r.runOne(ctx, hook, envVars, payload, eventName == EventUserPromptSubmit || eventName == EventSessionStart)
 		}(i, h)
 	}
 	wg.Wait()

@@ -25,6 +25,13 @@ const (
 	// or block the prompt so it is not sent. As in Claude Code, hooks for
 	// it may not carry a Matcher.
 	EventUserPromptSubmit = "UserPromptSubmit"
+	// EventSessionStart fires before the first prompt a process sends to a
+	// session: at startup, on resume, on a new session in a running
+	// process, and once after a summary. A hook for it can add context
+	// the agent reads with that prompt, but, as in Claude Code, it cannot
+	// stop the prompt: a block or a failure is shown as a warning while
+	// the prompt goes ahead. Its Matcher is tested against the source.
+	EventSessionStart = "SessionStart"
 	// EventStop fires when the agent is about to finish its turn. A
 	// hook that blocks it sends the agent back to work instead of
 	// letting the turn end. There is no tool in play, so hooks for it
@@ -43,7 +50,7 @@ const (
 
 // knownHookEvents lists every recognised event name, in the order they
 // are reported to the user.
-var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventStop, EventPreCompact}
+var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventPreCompact}
 
 // KnownHookEvents returns the recognised hook event names.
 func KnownHookEvents() []string {
@@ -57,7 +64,7 @@ func IsKnownHookEvent(name string) bool {
 
 // HookEventSupportsMatcher reports whether hooks for the given event may
 // carry a Matcher. Tool events match against the tool name; PreCompact
-// against its trigger.
+// against its trigger; SessionStart against its source.
 func HookEventSupportsMatcher(event string) bool {
-	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact
+	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventSessionStart
 }

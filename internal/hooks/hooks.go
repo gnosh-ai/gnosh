@@ -23,6 +23,9 @@ const (
 	EventPostToolUseFailure = config.EventPostToolUseFailure
 	// EventUserPromptSubmit fires when the user sends a prompt.
 	EventUserPromptSubmit = config.EventUserPromptSubmit
+	// EventSessionStart fires before the first prompt a process sends to a
+	// session; its matcher is tested against the source.
+	EventSessionStart = config.EventSessionStart
 	// EventStop fires when the agent is about to finish its turn.
 	EventStop = config.EventStop
 	// EventPreCompact fires just before a session's conversation is

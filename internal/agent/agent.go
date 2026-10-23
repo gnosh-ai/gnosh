@@ -323,6 +323,11 @@ type sessionAgent struct {
 	// across the agent. Cancel uses its current value as the per-session
 	// high-water mark.
 	acceptSeqGen uint64
+	// sessionStarted records, per session, that this process has sent a
+	// prompt to it, so its SessionStart hooks run once, for the first
+	// prompt, and not for later ones. sessionStartMu guards it.
+	sessionStarted *csync.Map[string, bool]
+	sessionStartMu sync.Mutex
 }
 
 type SessionAgentOptions struct {
@@ -365,6 +370,7 @@ func NewSessionAgent(
 		submitting:           csync.NewMap[string, []*activeCancel](),
 		acceptedRuns:         csync.NewMap[string, int](),
 		cancelMark:           csync.NewMap[string, uint64](),
+		sessionStarted:       csync.NewMap[string, bool](),
 	}
 }
 
@@ -960,6 +966,34 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		if msgs, err = a.getSessionMessages(ctx, currentSession); err != nil {
 			return nil, fmt.Errorf("failed to reload session messages: %w", err)
 		}
+	}
+
+	// The process's first prompt to the session goes past its
+	// SessionStart hooks first, once. They cannot stop the prompt, as in
+	// Claude Code: whatever they say, it goes ahead. What they print
+	// goes to the model with the prompt, as for UserPromptSubmit. While
+	// they run the prompt is submitting, as for UserPromptSubmit: the
+	// session reads as busy, and a Cancel stops the hooks and the
+	// prompt is not sent.
+	if a.wantsSessionStartHooks(call) {
+		source := a.sessionStartSourceFor(call.SessionID, msgs)
+		hookCtx, submit := a.beginSubmitting(ctx, call.SessionID)
+		a.runSessionStartHooks(hookCtx, &call, source)
+		a.endSubmitting(call.SessionID, submit, false)
+		cancelledInHooks := hookCtx.Err() != nil
+		submit.cancel()
+		if cancelledInHooks {
+			// The prompt is not sent: its hooks were stopped by a Cancel,
+			// as for UserPromptSubmit. Persist the canceled turn and end
+			// here, before the user message is added to the session.
+			skipRunComplete = true
+			call.Accepted.Close()
+			if err := a.persistCanceledTurn(ctx, call, false); err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}
+		a.markSessionStarted(call.SessionID)
 	}
 
 	// Generate title from the first real (non-shell) user prompt.
@@ -1692,6 +1726,10 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	if err != nil {
 		return err
 	}
+
+	// The next prompt to this session runs its SessionStart hooks again,
+	// with source "compact", as in Claude Code.
+	a.markSessionSummarized(sessionID)
 
 	// Release the active request before processing queued messages so that
 	// Run() does not see the session as busy.

@@ -17,14 +17,15 @@ forward.
 - Hooks are Claude Code-compatible
 - Crash ships with a builtin `crash-hook` skill write, edit, and configure
   hooks; just tell Crash how to configure Crash
-- Crash supports six hooks: `PreToolUse`, which fires before a tool call,
+- Crash supports seven hooks: `PreToolUse`, which fires before a tool call,
   `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
   fails, `UserPromptSubmit`, which fires when you send a prompt and can add
-  context to it or block it, `Stop`, which fires when the agent is about to
-  finish its turn and can refuse to let it end, and `PreCompact`, which fires
-  just before the session is summarized and can object to it; plans are to
-  support the full gamut, so please let us know which hooks you'd like to see
-  next
+  context to it or block it, `SessionStart`, which fires before the first
+  prompt to a session and can add context to it, `Stop`, which fires when
+  the agent is about to finish its turn and can refuse to let it end, and
+  `PreCompact`, which fires just before the session is summarized and can
+  object to it; plans are to support the full gamut, so please let us know
+  which hooks you'd like to see next
 - Hooks run in parallel for speed, but their results compose in config order
   for determinism
 
@@ -311,6 +312,69 @@ if jq -r .prompt | grep -qE 'sk-[A-Za-z0-9]{20,}'; then
 fi
 ```
 
+### SessionStart
+
+This hook fires before the first prompt a process sends to a session, so it
+can hand the agent context for the session up front: what the branch is, what
+the last failure was, what your notes say about the repo. Use it instead of
+typing the same preamble into every new session.
+
+**Matched against**: the source, `"startup"`, `"resume"`, `"clear"` or
+`"compact"`. A `matcher` on a `SessionStart` hook is tested against that
+source, so a hook matched on `^resume$` only fires when you go back to a
+session that already has messages, and a hook with no matcher fires for
+every source.
+
+- `"startup"` — the session is new and this process has started no session
+  of its own yet.
+- `"resume"` — the session already has messages: you went back to it, with
+  `--continue`, `--session`, or the session list.
+- `"clear"` — the session is new, but this process has already started
+  another session: the TUI's New Session command, say.
+- `"compact"` — Crash's own source, with no Claude Code counterpart: the
+  first prompt after the session's conversation was summarized.
+
+**Context**: whatever the hook prints on stdout, as plain text, is what the
+agent reads with the first prompt, inside a `<user-prompt-submit-hook>` tag,
+as for `UserPromptSubmit`. JSON output works too: Crash's `context`, or
+Claude Code's `hookSpecificOutput.additionalContext`. The context is kept
+with the prompt, so the agent reads it again when the conversation is
+rebuilt on later turns.
+
+**Blocking**: exit code `2` (or `"decision": "block"`) means the hook
+objects, but the prompt goes ahead anyway, as in Claude Code: you get the
+hook's reason as a warning. Exit `49` (or `"continue": false`) does the
+same. A hook that fails (any other exit code, or a timeout) is shown as a
+warning too, and the prompt goes ahead without it.
+
+**When it runs**: once, before the first prompt the process sends to the
+session. Later prompts to the same session do not run it, except the first
+one after a summary, which runs it again with source `"compact"`. While the
+hooks run the prompt counts as submitting, as for `UserPromptSubmit`: the
+session reads as busy, and Esc stops the hooks and the prompt is not sent.
+
+**Scope**: like `PreToolUse` and `Stop`, `SessionStart` fires only for the
+**top-level agent**, and not for sub-agents.
+
+```jsonc
+{
+  "hooks": {
+    "SessionStart": [
+      { "command": "./hooks/session-context.sh" },
+      { "matcher": "^resume$", "command": "./hooks/what-was-I-doing.sh" }
+    ]
+  }
+}
+```
+
+```bash
+#!/usr/bin/env bash
+# hooks/session-context.sh — tell the agent where it is, on every new
+# session.
+echo "Current branch: $(git branch --show-current)"
+echo "Last commit: $(git log -1 --format='%h %s')"
+```
+
 ### Stop
 
 This hook fires when the agent is about to finish its turn. Use it to refuse the
@@ -459,6 +523,7 @@ The available environment variables are:
 | `CRASH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
 | `CRASH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` when the turn is only still running because an earlier `Stop` hook blocked it, else `0`. |
 | `CRASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, the same as the `trigger` field in the payload. |
+| `CRASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, the same as the `source` field in the payload. |
 
 Crash was called Crush, so every `CRASH_` variable above is also set under its
 `CRUSH_` name (`CRUSH_EVENT`, `CRUSH_TOOL_NAME`, and so on), and `CRUSH=1`
@@ -853,7 +918,8 @@ Each entry under a `hooks.<EventName>` array:
   "name": "no-rm-rf",
 
   // string. Optional. Regex tested against the tool name, or against the
-  // PreCompact trigger. Omit to match all.
+  // PreCompact trigger, or against the SessionStart source. Omit to match
+  // all.
   // A matcher on a Stop or UserPromptSubmit hook is a config error,
   // because there is nothing to match when a turn ends or a prompt is
   // sent.
@@ -961,6 +1027,26 @@ Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
 
   // array of strings. The names of the files sent with it, if any.
   "attachments": ["screenshot.png"],
+}
+```
+
+### Stdin payload — SessionStart
+
+Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
+
+```jsonc
+{
+  // ...common fields...
+
+  // string. The ID of the model answering.
+  "model": "gpt-5",
+
+  // string. "startup" for a new session in a process that has started no
+  // session of its own, "resume" for a session that already has messages,
+  // "clear" for a fresh session in a running process, and "compact" for
+  // the first prompt after a summary. A matcher on a SessionStart hook is
+  // tested against this.
+  "source": "startup",
 }
 ```
 

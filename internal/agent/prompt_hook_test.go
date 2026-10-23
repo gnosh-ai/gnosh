@@ -20,7 +20,9 @@ import (
 )
 
 // promptRecordingModel answers every turn with "ok" and keeps the prompt
-// (the whole message list) each turn was sent.
+// (the whole message list) each turn was sent. Title requests are
+// filtered out: they are the agent's own side effect, not prompts the
+// test sent.
 type promptRecordingModel struct {
 	fakeLanguageModel
 	mu      sync.Mutex
@@ -28,6 +30,14 @@ type promptRecordingModel struct {
 }
 
 func (m *promptRecordingModel) Stream(_ context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
+	if isTitleRequest(call) {
+		return func(yield func(fantasy.StreamPart) bool) {
+			yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextStart, ID: "t1"})
+			yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextDelta, ID: "t1", Delta: "title"})
+			yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextEnd, ID: "t1"})
+			yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeFinish, FinishReason: fantasy.FinishReasonStop})
+		}, nil
+	}
 	m.mu.Lock()
 	m.prompts = append(m.prompts, call.Prompt)
 	m.mu.Unlock()
@@ -37,6 +47,23 @@ func (m *promptRecordingModel) Stream(_ context.Context, call fantasy.Call) (fan
 		yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextEnd, ID: "t1"})
 		yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeFinish, FinishReason: fantasy.FinishReasonStop})
 	}, nil
+}
+
+// isTitleRequest reports whether call is the agent's own title
+// generation, which carries that prompt in its last user message.
+func isTitleRequest(call fantasy.Call) bool {
+	for i := len(call.Prompt) - 1; i >= 0; i-- {
+		msg := call.Prompt[i]
+		if msg.Role != fantasy.MessageRoleUser {
+			continue
+		}
+		for _, part := range msg.Content {
+			if text, ok := fantasy.AsMessagePart[fantasy.TextPart](part); ok {
+				return strings.HasPrefix(text.Text, "Generate a concise title for the following content:")
+			}
+		}
+	}
+	return false
 }
 
 func (m *promptRecordingModel) recorded() []fantasy.Prompt {

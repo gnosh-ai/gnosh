@@ -70,6 +70,14 @@ type Payload struct {
 	// It is a pointer so that it is left out of every other event's
 	// payload, while a PreCompact payload has it even when empty.
 	CustomInstructions *string `json:"custom_instructions,omitempty"`
+
+	// Model is set on an EventSessionStart payload: the ID of the model
+	// answering, as Claude Code's SessionStart input carries it.
+	Model string `json:"model,omitempty"`
+	// Source is set on an EventSessionStart payload: what started the
+	// session, as Claude Code's SessionStart input carries it. A matcher
+	// on a SessionStart hook is tested against it.
+	Source string `json:"source,omitempty"`
 }
 
 // ToolResponse is what a tool call returned, as a PostToolUse hook sees
@@ -170,6 +178,35 @@ func BuildUserPromptSubmitPayload(sessionID, cwd, prompt string, attachments []s
 		ToolInput:     json.RawMessage("{}"),
 		Prompt:        prompt,
 		Attachments:   attachments,
+	})
+}
+
+// SessionStart sources, as in Claude Code: a new session in a running
+// process, resuming one that already has messages, or starting a
+// fresh one when the process starts.
+const (
+	SessionStartSourceClear   = "clear"
+	SessionStartSourceResume  = "resume"
+	SessionStartSourceStartup = "startup"
+	// SessionStartSourceCompact is Crash's own: the first prompt after a
+	// session's conversation was summarized. Claude Code's SessionStart
+	// has no compact source; it has no summarization at all.
+	SessionStartSourceCompact = "compact"
+)
+
+// BuildSessionStartPayload constructs the JSON stdin payload for an
+// EventSessionStart hook. There is no tool in play, so tool_name is empty
+// and tool_input is an empty object. Model is the ID of the model
+// answering; source names what started the session.
+func BuildSessionStartPayload(sessionID, cwd, model, source string) []byte {
+	return marshalPayload(Payload{
+		Event:         EventSessionStart,
+		HookEventName: EventSessionStart,
+		SessionID:     sessionID,
+		CWD:           cwd,
+		ToolInput:     json.RawMessage("{}"),
+		Model:         model,
+		Source:        source,
 	})
 }
 
