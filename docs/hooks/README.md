@@ -17,15 +17,16 @@ forward.
 - Hooks are Claude Code-compatible
 - Klash ships with a builtin `klash-hook` skill write, edit, and configure
   hooks; just tell Klash how to configure Klash
-- Klash supports seven hooks: `PreToolUse`, which fires before a tool call,
+- Klash supports eight hooks: `PreToolUse`, which fires before a tool call,
   `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
   fails, `UserPromptSubmit`, which fires when you send a prompt and can add
   context to it or block it, `SessionStart`, which fires before the first
   prompt to a session and can add context to it, `Stop`, which fires when
-  the agent is about to finish its turn and can refuse to let it end, and
-  `PreCompact`, which fires just before the session is summarized and can
-  object to it; plans are to support the full gamut, so please let us know
-  which hooks you'd like to see next
+  the agent is about to finish its turn and can refuse to let it end,
+  `SubagentStop`, which fires when a sub-agent is about to finish and can
+  refuse to let it end, and `PreCompact`, which fires just before the
+  session is summarized and can object to it; plans are to support the full
+  gamut, so please let us know which hooks you'd like to see next
 - Hooks run in parallel for speed, but their results compose in config order
   for determinism
 
@@ -431,6 +432,70 @@ environment) is set when the turn is only still running because an earlier
 not for sub-agents. It is also skipped when the turn is being continued for
 auto-summarization, since that turn isn't ending either.
 
+### SubagentStop
+
+This hook fires when a **sub-agent** — one started by the `agent` tool — is
+about to finish. It works exactly the way `Stop` does for the main agent:
+use it to refuse the stop, check the sub-agent's work, and send it back to
+work if the job isn't done. It fires only for sub-agents, and never for the
+main agent.
+
+**Matched against**: nothing, as for `Stop`. There is no tool in play when a
+sub-agent finishes, so a `matcher` on a `SubagentStop` hook is a config error
+rather than a setting that matches nothing. Every configured `SubagentStop`
+hook runs.
+
+**Blocking**: exit code `2` (or `"decision": "block"`) means "you are not
+finished" — the sub-agent stays alive and your stderr is handed to it as the
+reason to keep working. Exit code `49` means the opposite: end the sub-agent's
+work now, even if another `SubagentStop` hook blocked it. A hook that fails
+(any other exit code, or a timeout) lets the sub-agent finish, and the user is
+told the check never ran. When the hooks let the sub-agent finish, the `agent`
+tool hands the parent its last answer — the one after the hooks let it end.
+
+The same persistence rules as `Stop` apply: there is no cap on how many times
+a `SubagentStop` hook may object, and at every 10th consecutive block the
+sub-agent is asked to judge whether there is a genuine reason to stop (the
+task cannot be done as asked, it is blocked on something only the user can
+provide or decide, the check cannot pass in this environment, or it is
+repeating itself without progress). If it finds one, it explains why and
+finishes, and Klash shows a warning quoting its reason and the hook's last
+objection. Otherwise it keeps working. A hook that wants to object only once
+can stand down on its own: `stop_hook_active` in the payload (and
+`KLASH_STOP_HOOK_ACTIVE` in the environment) is set when the sub-agent is only
+still working because an earlier `SubagentStop` hook blocked it.
+
+**Payload**: the stdin JSON carries, beside the common fields,
+`"hook_event_name": "SubagentStop"`, the sub-agent's own session as
+`session_id`, the session that started it as `parent_session_id`,
+`stop_hook_active` as in a `Stop` payload, and `last_assistant_message`, the
+text of the answer the sub-agent is about to finish on.
+
+```jsonc
+{
+  "hooks": {
+    "SubagentStop": [
+      { "command": "./hooks/subagent-must-verify.sh" }
+    ]
+  }
+}
+```
+
+```bash
+#!/usr/bin/env bash
+# hooks/subagent-must-verify.sh — don't let a sub-agent finish without
+# having actually checked its work.
+read -r input
+msg=$(echo "$input" | jq -r '.last_assistant_message')
+if ! echo "$msg" | grep -qi 'verified'; then
+  echo "You have not verified your work yet; do that before finishing." >&2
+  exit 2
+fi
+```
+
+**Scope**: `SubagentStop` fires only for **sub-agents**, and never for the
+top-level agent — whose gate is `Stop`.
+
 ### PreCompact
 
 This hook fires just before a session's conversation is summarized: when you
@@ -522,7 +587,8 @@ The available environment variables are:
 | `KLASH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command being run. |
 | `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
 | `KLASH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
-| `KLASH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` when the turn is only still running because an earlier `Stop` hook blocked it, else `0`. |
+| `KLASH_STOP_HOOK_ACTIVE`     | `Stop` and `SubagentStop` only: `1` when the turn is only still running because an earlier hook for the event blocked it, else `0`. |
+| `KLASH_PARENT_SESSION_ID`    | `SubagentStop` only: the ID of the session that started the sub-agent, the same as the `parent_session_id` field in the payload. |
 | `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, the same as the `trigger` field in the payload. |
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, the same as the `source` field in the payload. |
 

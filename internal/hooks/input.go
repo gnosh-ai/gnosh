@@ -78,6 +78,11 @@ type Payload struct {
 	// session, as Claude Code's SessionStart input carries it. A matcher
 	// on a SessionStart hook is tested against it.
 	Source string `json:"source,omitempty"`
+
+	// ParentSessionID is set on an EventSubagentStop payload: the ID of
+	// the session that started the sub-agent, as Claude Code's
+	// SubagentStop input carries it.
+	ParentSessionID string `json:"parent_session_id,omitempty"`
 }
 
 // ToolResponse is what a tool call returned, as a PostToolUse hook sees
@@ -166,6 +171,28 @@ func BuildStopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActiv
 	return marshalPayload(p)
 }
 
+// BuildSubagentStopPayload constructs the JSON stdin payload for an
+// EventSubagentStop hook, which fires when a sub-agent is about to
+// finish. There is no tool in play, so tool_name is empty and
+// tool_input is an empty object. sessionID is the sub-agent's own
+// session; parentSessionID is the session that started it, as Claude
+// Code's SubagentStop input carries it. stopHookActive, as on a Stop
+// payload, is set when the sub-agent's turn is only still running
+// because an earlier SubagentStop hook blocked it.
+func BuildSubagentStopPayload(sessionID, parentSessionID, cwd, lastAssistantMessage string, stopHookActive bool) []byte {
+	p := Payload{
+		Event:                EventSubagentStop,
+		HookEventName:        EventSubagentStop,
+		SessionID:            sessionID,
+		CWD:                  cwd,
+		ParentSessionID:      parentSessionID,
+		ToolInput:            json.RawMessage("{}"),
+		StopHookActive:       stopHookActive,
+		LastAssistantMessage: lastAssistantMessage,
+	}
+	return marshalPayload(p)
+}
+
 // BuildUserPromptSubmitPayload constructs the JSON stdin payload for an
 // EventUserPromptSubmit hook. There is no tool in play, so tool_name is
 // empty and tool_input is an empty object.
@@ -243,6 +270,20 @@ func BuildStopEnv(sessionID, cwd, projectDir string, stopHookActive bool) []stri
 		active = "1"
 	}
 	return append(env, hookVar("STOP_HOOK_ACTIVE", active)...)
+}
+
+// BuildSubagentStopEnv constructs the environment variable slice for an
+// EventSubagentStop hook command. As for a Stop hook, it carries the
+// STOP_HOOK_ACTIVE flag; PARENT_SESSION_ID names the session that
+// started the sub-agent, as the parent_session_id field in the payload.
+func BuildSubagentStopEnv(sessionID, parentSessionID, cwd, projectDir string, stopHookActive bool) []string {
+	env := BuildEnv(EventSubagentStop, "", sessionID, cwd, projectDir, "")
+	active := "0"
+	if stopHookActive {
+		active = "1"
+	}
+	env = append(env, hookVar("STOP_HOOK_ACTIVE", active)...)
+	return append(env, hookVar("PARENT_SESSION_ID", parentSessionID)...)
 }
 
 // BuildEnv constructs the environment variable slice for a hook command.

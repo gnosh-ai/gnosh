@@ -1248,6 +1248,7 @@ func nextRecentModels(cfg *Config, modelType SelectedModelType, model SelectedMo
 func NewTestStore(cfg *Config, loadedPaths ...string) *ConfigStore {
 	return &ConfigStore{
 		config:      cfg,
+		workingDir:  ".",
 		loadedPaths: loadedPaths,
 		resolver:    NewShellVariableResolver(env.New()),
 	}

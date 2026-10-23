@@ -37,6 +37,14 @@ const (
 	// letting the turn end. There is no tool in play, so hooks for it
 	// may not carry a Matcher.
 	EventStop = "Stop"
+	// EventSubagentStop fires when a sub-agent is about to finish, and
+	// works exactly as EventStop does for the main agent: a hook that
+	// blocks it sends the sub-agent back to work. It fires only for
+	// sub-agents, never for the main agent, and its payload carries
+	// the sub-agent's session_id and the parent_session_id that
+	// started it. There is no tool in play, so hooks for it may not
+	// carry a Matcher.
+	EventSubagentStop = "SubagentStop"
 	// EventPreCompact fires just before a session's conversation is
 	// summarized: when the user asks for the summary, or automatically
 	// when the context is nearly full. As in Claude Code, a hook cannot
@@ -50,7 +58,7 @@ const (
 
 // knownHookEvents lists every recognised event name, in the order they
 // are reported to the user.
-var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventPreCompact}
+var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStop, EventPreCompact}
 
 // KnownHookEvents returns the recognised hook event names.
 func KnownHookEvents() []string {
