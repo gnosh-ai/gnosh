@@ -281,10 +281,17 @@ false`) does the same.
 
 **When it runs**: once, when the prompt is sent. A prompt sent while the agent is
 working runs its hook then and waits in the queue with what the hook added; it
-does not run the hook again when its turn comes. Prompts the agent sends itself
-(a `Stop` hook's or `/loop`'s continuation) and a sub-agent's prompt do not fire
-it. A hook that fails (any other exit code, or a timeout) is shown as a warning,
-and the prompt goes out without it.
+does not run the hook again when its turn comes. While the hook runs the session
+counts as busy, and Esc stops the hook and the prompt is not sent. Prompts the
+agent sends itself (a `Stop` hook's or `/loop`'s continuation), a sub-agent's
+prompt and a channel message (from Signal, say, written by someone else) do not
+fire it. A hook that fails (any other exit code, or a timeout) is shown as a
+warning, and the prompt goes out without it.
+
+**What it reads**: `prompt` is the prompt as the agent will read it: what you
+typed, followed by the text of any pasted or attached text file. A paste of more
+than ten lines becomes an attachment, so a hook that looks for secrets sees it
+too.
 
 ```bash
 #!/usr/bin/env bash
@@ -900,7 +907,8 @@ Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
 {
   // ...common fields...
 
-  // string. The prompt as you sent it.
+  // string. The prompt as the agent will read it: what you typed, then the
+  // text of any pasted or attached text file.
   "prompt": "fix the login flow",
 
   // array of strings. The names of the files sent with it, if any.

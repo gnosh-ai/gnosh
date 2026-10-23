@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
@@ -67,6 +68,8 @@ type promptHookRun struct {
 	env       fakeEnv
 	model     *promptRecordingModel
 	sessionID string
+	cfg       *config.Config
+	notifier  *recordingNotifier
 }
 
 // promptHookAgent builds a session agent with the given hooks configured,
@@ -79,6 +82,7 @@ func promptHookAgent(t *testing.T, cfgHooks map[string][]config.HookConfig) prom
 	require.NoError(t, cfg.ValidateHooks())
 	llm := &promptRecordingModel{}
 	model := Model{Model: llm, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000}}
+	notifier := &recordingNotifier{}
 	a := NewSessionAgent(SessionAgentOptions{
 		LargeModel:           model,
 		SmallModel:           model,
@@ -88,7 +92,7 @@ func promptHookAgent(t *testing.T, cfgHooks map[string][]config.HookConfig) prom
 		Sessions:             env.sessions,
 		Messages:             env.messages,
 		Cfg:                  config.NewTestStore(cfg),
-		Notify:               &recordingNotifier{},
+		Notify:               notifier,
 	}).(*sessionAgent)
 	sess, err := env.sessions.Create(t.Context(), "prompt hooks")
 	require.NoError(t, err)
@@ -97,7 +101,7 @@ func promptHookAgent(t *testing.T, cfgHooks map[string][]config.HookConfig) prom
 		Parts: []message.ContentPart{message.TextContent{Text: "earlier prompt"}},
 	})
 	require.NoError(t, err)
-	return promptHookRun{agent: a, env: env, model: llm, sessionID: sess.ID}
+	return promptHookRun{agent: a, env: env, model: llm, sessionID: sess.ID, cfg: cfg, notifier: notifier}
 }
 
 func promptHooks(commands ...string) map[string][]config.HookConfig {
@@ -198,7 +202,9 @@ func TestRun_UserPromptSubmitHookSeesThePrompt(t *testing.T) {
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal([]byte(readFileForTest(t, payloadPath)), &payload))
 	require.Equal(t, "UserPromptSubmit", payload["hook_event_name"])
-	require.Equal(t, "fix the build", payload["prompt"])
+	prompt, _ := payload["prompt"].(string)
+	require.True(t, strings.HasPrefix(prompt, "fix the build"), prompt)
+	require.Contains(t, prompt, "FAIL", "with the attached file's text, as the model reads it")
 	require.Equal(t, r.sessionID, payload["session_id"])
 	require.Equal(t, []any{"build.log"}, payload["attachments"])
 }
@@ -283,4 +289,150 @@ func TestRun_UserPromptSubmitHookRunsOnceForAQueuedPrompt(t *testing.T) {
 	require.Len(t, prompts, 2)
 	texts := userTexts(prompts[1])
 	require.Equal(t, "second\n\n<user-prompt-submit-hook>\nhook context\n</user-prompt-submit-hook>", texts[len(texts)-1])
+}
+
+// An Esc while a prompt is in its UserPromptSubmit hooks stops the hooks,
+// and the prompt is not sent. The session reads as busy meanwhile, which
+// is what sends the TUI's Esc to Cancel at all. Before, a prompt in its
+// hooks was registered nowhere: the Cancel found nothing, and the prompt
+// ran when the hooks finished.
+func TestRun_CancelWhileAPromptHookRuns(t *testing.T) {
+	t.Parallel()
+
+	r := promptHookAgent(t, promptHooks(`sleep 5; echo "late context"`))
+	done := make(chan error, 1)
+	go func() {
+		_, err := r.agent.Run(context.Background(), SessionAgentCall{SessionID: r.sessionID, Prompt: "do the thing"})
+		done <- err
+	}()
+	require.Eventually(t, func() bool { return r.agent.IsSessionBusy(r.sessionID) }, 3*time.Second, 10*time.Millisecond,
+		"a prompt in its hooks makes the session busy")
+
+	start := time.Now()
+	r.agent.Cancel(r.sessionID)
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(4 * time.Second):
+		t.Fatal("Run did not return after the cancel")
+	}
+	require.Less(t, time.Since(start), 4*time.Second, "the cancel stops the hook rather than waiting it out")
+	require.Empty(t, r.model.recorded(), "the cancelled prompt is not sent")
+	require.False(t, r.agent.IsSessionBusy(r.sessionID))
+}
+
+// The hooks run when a prompt is sent. One queued while no hook was
+// configured is not checked by a hook added before its turn comes: that
+// blocked it at the turn-end handoff, without releasing its accept
+// reservation or ending its run, and made the turn before it report the
+// block as its own error.
+func TestRun_HookAddedWhileAPromptIsQueuedDoesNotRunForIt(t *testing.T) {
+	t.Parallel()
+
+	r := promptHookAgent(t, map[string][]config.HookConfig{})
+	gated := &gatedModel{entered: make(chan struct{}), release: make(chan struct{})}
+	r.agent.largeModel.Set(Model{Model: gated, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000}})
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := r.agent.Run(context.Background(), SessionAgentCall{SessionID: r.sessionID, Prompt: "first"})
+		done <- err
+	}()
+	<-gated.entered
+	_, err := r.agent.Run(context.Background(), SessionAgentCall{SessionID: r.sessionID, Prompt: "second"})
+	require.NoError(t, err)
+
+	r.cfg.Hooks[hooks.EventUserPromptSubmit] = []config.HookConfig{{Command: `echo "no" >&2; exit 2`}}
+	close(gated.release)
+	require.NoError(t, <-done, "the first turn ends without the second prompt's block as its error")
+
+	prompts := gated.recorded()
+	require.Len(t, prompts, 2, "the queued prompt runs")
+	texts := userTexts(prompts[1])
+	require.Equal(t, "second", texts[len(texts)-1])
+	accepted, _ := r.agent.acceptedRuns.Get(r.sessionID)
+	require.Zero(t, accepted, "no accept reservation is left behind")
+}
+
+// The hook reads the prompt as the model will, pasted text included: a
+// paste of more than a few lines becomes a text attachment.
+func TestRun_UserPromptSubmitHookSeesPastedText(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	payloadPath := filepath.Join(dir, "payload.json")
+	r := promptHookAgent(t, promptHooks(`cat > `+payloadPath))
+	_, err := r.agent.Run(t.Context(), SessionAgentCall{
+		SessionID:   r.sessionID,
+		Prompt:      "why does this fail?",
+		Attachments: []message.Attachment{{FileName: "paste_1.txt", FilePath: "paste_1.txt", MimeType: "text/plain", Content: []byte("OPENAI_API_KEY=sk-live-123")}},
+	})
+	require.NoError(t, err)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(readFileForTest(t, payloadPath)), &payload))
+	require.Contains(t, payload["prompt"], "why does this fail?")
+	require.Contains(t, payload["prompt"], "sk-live-123", "the pasted text is in the prompt the hook reads")
+}
+
+// A channel message (Signal, say) was written by someone else, and a block
+// would drop it with no reply, so it does not fire the hook.
+func TestRun_ChannelMessagesSkipPromptHooks(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	count := filepath.Join(dir, "count")
+	r := promptHookAgent(t, promptHooks(`echo x >> `+count))
+	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: `<channel source="signal">hi</channel>`, Channel: "signal"})
+	require.NoError(t, err)
+	_, statErr := os.Stat(count)
+	require.True(t, os.IsNotExist(statErr), "the hook did not run")
+}
+
+// A continuation is the agent's own and carries none of the user's hook
+// context; the auto-summarize continuation is not hidden, so it re-sent
+// the first prompt's context.
+func TestQueueContinuationDropsPromptHookContext(t *testing.T) {
+	t.Parallel()
+
+	a := NewSessionAgent(SessionAgentOptions{}).(*sessionAgent)
+	a.queueContinuation(SessionAgentCall{SessionID: "s1", Prompt: "go on", promptHookContext: "The build is red.", promptHooksRan: true})
+	queued, _ := a.messageQueue.Get("s1")
+	require.Len(t, queued, 1)
+	require.Empty(t, queued[0].promptHookContext)
+	require.True(t, queued[0].promptHooksRan)
+}
+
+// When one hook blocks the prompt, another hook's failure is not reported
+// as "the prompt was sent without it": nothing was sent.
+func TestBlockedPromptIsNotReportedAsSent(t *testing.T) {
+	t.Parallel()
+
+	r := promptHookAgent(t, promptHooks(`echo "no" >&2; exit 2`, `exit 1`))
+	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "hi"})
+	require.ErrorIs(t, err, ErrPromptBlocked)
+	for _, n := range r.notifier.warnings() {
+		require.NotContains(t, n.Message, "sent without it")
+	}
+}
+
+// A prompt with space around it reaches the model as it will be rebuilt
+// from the session on the next turn, so the server's prompt cache holds.
+func TestRun_PromptIsSentAsItIsRebuilt(t *testing.T) {
+	t.Parallel()
+
+	r := promptHookAgent(t, map[string][]config.HookConfig{})
+	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "  fix the build\n\n"})
+	require.NoError(t, err)
+	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "and the tests"})
+	require.NoError(t, err)
+
+	prompts := r.model.recorded()
+	require.Len(t, prompts, 2)
+	first := userTexts(prompts[0])
+	require.Equal(t, "fix the build", first[len(first)-1])
+	require.Contains(t, userTexts(prompts[1]), "fix the build")
+
+	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: " \n "})
+	require.ErrorIs(t, err, ErrEmptyPrompt, "a prompt of only space is empty")
 }

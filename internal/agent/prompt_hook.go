@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -18,10 +19,12 @@ import (
 
 // wantsPromptHooks reports whether call is a prompt the user sent whose
 // UserPromptSubmit hooks have yet to run. A hidden continuation is the
-// agent's own, a sub-agent's prompt comes from its parent, and a queued
-// call already went past the hooks when it was sent.
+// agent's own, a sub-agent's prompt comes from its parent, a queued call
+// already went past the hooks when it was sent, and a channel message
+// (Signal, say) was written by someone else: a block would drop it with
+// no reply to its sender.
 func (a *sessionAgent) wantsPromptHooks(call SessionAgentCall) bool {
-	if call.HiddenUserMessage || call.promptHooksRan || a.isSubAgent || a.cfg == nil {
+	if call.HiddenUserMessage || call.promptHooksRan || call.Channel != "" || a.isSubAgent || a.cfg == nil {
 		return false
 	}
 	return len(a.cfg.Config().Hooks[hooks.EventUserPromptSubmit]) > 0
@@ -49,7 +52,6 @@ func (a *sessionAgent) sessionSubmitMu(sessionID string) *sync.Mutex {
 // A hook that fails is reported and the prompt is sent without it, as a
 // failed Stop hook lets the turn end.
 func (a *sessionAgent) runPromptHooks(ctx context.Context, call *SessionAgentCall) error {
-	call.promptHooksRan = true
 	workingDir := a.cfg.WorkingDir()
 	if workingDir == "" {
 		wd, err := os.Getwd()
@@ -68,8 +70,12 @@ func (a *sessionAgent) runPromptHooks(ctx context.Context, call *SessionAgentCal
 	for _, att := range call.Attachments {
 		attachments = append(attachments, cmp.Or(att.FileName, filepath.Base(att.FilePath)))
 	}
-	result, err := runner.RunUserPromptSubmit(ctx, call.SessionID, call.Prompt, attachments)
-	a.warnFailedPromptHooks(call.SessionID, result.Hooks)
+	// The hooks read the prompt as the model will: with the text of any
+	// pasted or attached text file after it. A paste of more than a few
+	// lines becomes an attachment, and a hook that saw only its name
+	// missed a key in a pasted log.
+	prompt := message.PromptWithTextAttachments(call.Prompt, call.Attachments)
+	result, err := runner.RunUserPromptSubmit(ctx, call.SessionID, prompt, attachments)
 	if err != nil {
 		slog.Warn("UserPromptSubmit hook execution error; sending the prompt without it",
 			"session_id", call.SessionID,
@@ -85,8 +91,59 @@ func (a *sessionAgent) runPromptHooks(ctx context.Context, call *SessionAgentCal
 		slog.Info("UserPromptSubmit hook blocked the prompt", "session_id", call.SessionID, "reason", reason)
 		return fmt.Errorf("%w: %s", ErrPromptBlocked, reason)
 	}
+	a.warnFailedPromptHooks(call.SessionID, result.Hooks)
 	call.promptHookContext = strings.TrimSpace(result.Context)
 	return nil
+}
+
+// beginSubmitting records that a prompt sent to the session is about to
+// go through its UserPromptSubmit hooks, and returns the context to run
+// them under, which Cancel ends. Until endSubmitting the session reads as
+// busy. Without it a prompt in its hooks was registered nowhere: an Esc
+// found nothing to cancel, and the prompt ran when the hooks finished.
+func (a *sessionAgent) beginSubmitting(ctx context.Context, sessionID string) (context.Context, *activeCancel) {
+	hookCtx, cancel := context.WithCancel(ctx)
+	s := &activeCancel{cancel: cancel}
+	mu := a.sessionMu(sessionID)
+	mu.Lock()
+	defer mu.Unlock()
+	list, _ := a.submitting.Get(sessionID)
+	a.submitting.Set(sessionID, append(slices.Clip(list), s))
+	return hookCtx, s
+}
+
+// endSubmitting removes s from the session's prompts in their hooks and
+// releases its context. lock takes the dispatch lock; Run passes false
+// when it already holds it.
+func (a *sessionAgent) endSubmitting(sessionID string, s *activeCancel, lock bool) {
+	if lock {
+		mu := a.sessionMu(sessionID)
+		mu.Lock()
+		defer mu.Unlock()
+	}
+	list, _ := a.submitting.Get(sessionID)
+	list = slices.DeleteFunc(slices.Clone(list), func(x *activeCancel) bool { return x == s })
+	if len(list) == 0 {
+		a.submitting.Del(sessionID)
+	} else {
+		a.submitting.Set(sessionID, list)
+	}
+}
+
+// cancelSubmitting stops the hooks of every prompt being sent to the
+// session. Cancel calls it holding the dispatch lock.
+func (a *sessionAgent) cancelSubmitting(sessionID string) {
+	list, _ := a.submitting.Get(sessionID)
+	for _, s := range list {
+		s.cancel()
+	}
+}
+
+// isSubmitting reports whether a prompt sent to the session is in its
+// UserPromptSubmit hooks.
+func (a *sessionAgent) isSubmitting(sessionID string) bool {
+	list, ok := a.submitting.Get(sessionID)
+	return ok && len(list) > 0
 }
 
 // warnFailedPromptHooks tells the user about each UserPromptSubmit hook

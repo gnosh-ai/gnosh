@@ -150,8 +150,10 @@ beside the common fields. Plain stdout (or `context`, or Claude Code's
 `additionalContext`) is added after the prompt for the agent to read, in a
 `<user-prompt-submit-hook>` tag; the chat shows only what the user typed. Exit
 `2` (or `"decision": "block"`) blocks the prompt: it is not sent or stored, and
-the user sees the reason. It runs once per prompt the user sends, also for one
-queued behind a running turn, and never for the agent's own continuations.
+the user sees the reason. `prompt` includes the text of pasted or attached text
+files, as the agent will read it. It runs once per prompt the user sends, also
+for one queued behind a running turn, and never for the agent's own
+continuations or for channel messages; Esc while it runs cancels the prompt.
 
 ## Aggregation (Multiple Hooks)
 

@@ -288,6 +288,10 @@ type sessionAgent struct {
 	// they were sent while their UserPromptSubmit hooks run; see
 	// sessionSubmitMu.
 	submitMu *csync.Map[string, *sync.Mutex]
+	// submitting holds, per session, the cancel of each prompt whose
+	// UserPromptSubmit hooks are running; see beginSubmitting. Changed
+	// only under the session's dispatch lock.
+	submitting *csync.Map[string, []*activeCancel]
 	// acceptedRuns counts dispatched-but-not-yet-active runs per
 	// session. A counter > 0 means a dispatched prompt is in flight
 	// and has not yet completed the dispatch handoff in Run. Only
@@ -358,6 +362,7 @@ func NewSessionAgent(
 		activeRequests:       csync.NewMap[string, *activeCancel](),
 		dispatchMu:           csync.NewMap[string, *sync.Mutex](),
 		submitMu:             csync.NewMap[string, *sync.Mutex](),
+		submitting:           csync.NewMap[string, []*activeCancel](),
 		acceptedRuns:         csync.NewMap[string, int](),
 		cancelMark:           csync.NewMap[string, uint64](),
 	}
@@ -466,6 +471,9 @@ func (a *sessionAgent) sessionMu(sessionID string) *sync.Mutex {
 // goes to enqueueCall — and an interleaving would drop one of the two
 // appends, losing a prompt the user had already sent.
 func (a *sessionAgent) queueContinuation(call SessionAgentCall) {
+	// A continuation is the agent's own; what the user's hooks added to
+	// the prompt it continues went to the model with that prompt.
+	call.promptHookContext = ""
 	mu := a.sessionMu(call.SessionID)
 	mu.Lock()
 	defer mu.Unlock()
@@ -695,6 +703,12 @@ func ValidateCall(call SessionAgentCall) error {
 }
 
 func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *fantasy.AgentResult, retErr error) {
+	// The model reads the prompt trimmed whenever the conversation is
+	// rebuilt (ToAIMessage), so it is sent trimmed now too. Sent as typed,
+	// a prompt with a trailing newline, as `crash run` makes from piped
+	// stdin, differed from its rebuilt copy, and the local server's prompt
+	// cache missed from that message on.
+	call.Prompt = strings.TrimSpace(call.Prompt)
 	if err := ValidateCall(call); err != nil {
 		return nil, err
 	}
@@ -716,15 +730,30 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// first, once, whether it starts a turn or waits in the queue. The
 	// submit lock, held until the dispatch lock below is taken, keeps
 	// prompts sent one after another in that order while hooks run.
-	var submitMu *sync.Mutex
+	// While they run the prompt counts as submitting: the session reads
+	// as busy and a Cancel stops the hooks, and the prompt is then not
+	// sent; see beginSubmitting.
+	var (
+		submitMu *sync.Mutex
+		submit   *activeCancel
+		hookCtx  context.Context
+	)
 	if a.wantsPromptHooks(call) {
 		submitMu = a.sessionSubmitMu(call.SessionID)
 		submitMu.Lock()
-		if err := a.runPromptHooks(ctx, &call); err != nil {
+		hookCtx, submit = a.beginSubmitting(ctx, call.SessionID)
+		if err := a.runPromptHooks(hookCtx, &call); err != nil {
+			a.endSubmitting(call.SessionID, submit, true)
+			submit.cancel()
 			submitMu.Unlock()
+			call.Accepted.Close()
 			return nil, err
 		}
 	}
+	// Sent, with or without hooks: a queued copy of this call, or a
+	// continuation made from it, does not run them again, even if some
+	// are configured by the time it runs.
+	call.promptHooksRan = true
 
 	// Serialize the dispatch decision (cancel-on-entry | queued | active)
 	// against a concurrent Cancel. Cancel takes the same per-session lock, so
@@ -736,11 +765,18 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// and start two runs on the same session.
 	sessMu := a.sessionMu(call.SessionID)
 	sessMu.Lock()
-	if submitMu != nil {
+	// A Cancel while the hooks ran ended hookCtx. The prompt stops being
+	// submitting only now, under the dispatch lock, so a Cancel after the
+	// hooks finished either saw it submitting or sees it queued or active.
+	cancelledInHooks := false
+	if submit != nil {
+		a.endSubmitting(call.SessionID, submit, false)
 		submitMu.Unlock()
+		cancelledInHooks = hookCtx.Err() != nil
+		submit.cancel()
 	}
 
-	if call.Accepted != nil && a.canceledBySeq(call.SessionID, call.Accepted.seq) {
+	if cancelledInHooks || (call.Accepted != nil && a.canceledBySeq(call.SessionID, call.Accepted.seq)) {
 		// Cancel-on-entry: a cancel arrived while this accepted run was
 		// dispatched but not yet active, and this handle's accept sequence
 		// is at or below the session's cancel mark. The mark is left in
@@ -769,7 +805,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		return nil, nil
 	}
 
-	if a.IsSessionBusy(call.SessionID) {
+	if a.hasActiveRun(call.SessionID) {
 		// Busy: an earlier prompt is active. Queue this call so it is
 		// folded into (or sequenced after) the active turn, and release any
 		// accept reservation. A Cancel arriving after this point sees the
@@ -2258,6 +2294,9 @@ func (a *sessionAgent) Cancel(sessionID string) {
 		slog.Debug("Clearing queued prompts", "session_id", sessionID)
 		a.clearQueueAndNotify(sessionID)
 	}
+
+	// A prompt still in its UserPromptSubmit hooks is not sent either.
+	a.cancelSubmitting(sessionID)
 }
 
 func (a *sessionAgent) ClearQueue(sessionID string) {
@@ -2307,10 +2346,19 @@ func (a *sessionAgent) IsBusy() bool {
 			break
 		}
 	}
-	return busy
+	return busy || a.submitting.Len() > 0
 }
 
+// IsSessionBusy reports whether a turn is running in the session, or a
+// prompt sent to it is still in its UserPromptSubmit hooks.
 func (a *sessionAgent) IsSessionBusy(sessionID string) bool {
+	return a.hasActiveRun(sessionID) || a.isSubmitting(sessionID)
+}
+
+// hasActiveRun reports whether a turn is running in the session. Run's
+// dispatch asks this, not IsSessionBusy: a prompt counts as submitting
+// while its own hooks run, and must not then queue behind itself.
+func (a *sessionAgent) hasActiveRun(sessionID string) bool {
 	_, busy := a.activeRequests.Get(sessionID)
 	return busy
 }
