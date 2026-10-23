@@ -7,10 +7,12 @@ the same terminal UI, sessions, LSP and MCP support, and any model you like,
 from a hosted API to one running on your own machine. On top of that it closes
 doors a coding agent usually leaves open: nothing phones home, text from a tool
 cannot pose as the conversation, the sub-agent that reads web pages for it
-cannot read your files, a misspelt guard stops it instead of being ignored,
-and passwords never reach the model. It also speaks Claude Code's flags and
-hooks, fixes a long list of things that broke, hung or failed without saying
-so, and knows Gno and gno.land.
+cannot read your files, and a misspelt guard stops it instead of being
+ignored. It also speaks Claude Code's flags and hooks, fixes a long list of
+things that broke, hung or failed without saying so, and knows Gno and
+gno.land. There every signature waits for you to type the key's password,
+which the model never sees, and a session key caps what even a transaction
+you approved can spend.
 
 - [Security first](#security-first)
 - [Coming from Claude Code](#coming-from-claude-code)
@@ -59,16 +61,6 @@ it into reading your keys or a `.env` and sending them off in a URL.
   such a hook, so a misspelt guard simply never ran.
 - A hook whose answer is malformed cannot approve a tool call by accident, and
   a deny it gave still holds.
-
-### Your keys never reach the model
-
-When Klash signs a gno.land transaction for you, it asks for the key's
-password in a masked prompt that goes straight to gnokey. The model never sees
-it, and the agent has no other route to a signature. To let it sign without
-you, give it a session account instead of your key: the chain itself holds a
-session to an expiry, a spending cap and the realms you allow, so a confused or
-hijacked agent can spend no more than that, and revoking it is one command.
-[Built for gno.land](#built-for-gnoland) has the detail.
 
 ### What still leaves your machine
 
@@ -208,11 +200,13 @@ key, a session, within limits the chain itself enforces:
 
 Realms see the master as the caller, so nothing on the realm side changes.
 Klash's `gnokey` tool creates and revokes sessions (`gnokey maketx session
-create`, `revoke`, `revokeall`) through the same masked prompt. You can give a
-browser wallet, a device or a script bounded authority instead of your master
-key. A leaked session key costs at most what is left of its limit before it
-expires, and revoking it is one command. Sessions are live on mainnet and on
-the onyx testnet.
+create`, `revoke`, `revokeall`) through the same masked prompt. Sign with a
+session key instead of your master key, and the chain bounds the damage when a
+confused or hijacked agent gets you to approve the wrong transaction, or the
+key leaks: no more than what is left of the session's limit, only the messages
+and realms it allows, and only until it expires. Revoking it is one command. A
+browser wallet, a device or a script can hold a session key the same way.
+Sessions are live on mainnet and on the onyx testnet.
 
 **Pay for what you fetch, with x402.** Some web resources charge per request
 through [x402](https://x402.org): they answer `402 Payment Required` with a
