@@ -118,18 +118,48 @@ func FromClaudeCode(name string) string {
 	return claudeCodeNames[name]
 }
 
-// ClaudeCodeNamesOf returns the names Claude Code gives the built-in tool
-// name, sorted: none for a tool Claude Code has no counterpart of, two
-// for the agent tool (Agent and Task).
+// subAgentNames are the tools only agentic_fetch's sub-agent has. No
+// config gives them to the main agent, but a hook can match them.
+var subAgentNames = []string{"web_fetch", "web_search"}
+
+// claudeCodeMatchedAs are Claude Code's names a hook matcher can give a
+// tool besides the one claudeCodeNames maps to it, which --allowedTools
+// also reads: WebFetch fetches a page, as fetch, agentic_fetch and its
+// sub-agent's web_fetch do, and WebSearch searches, as agentic_fetch and
+// web_search do. So a Claude Code hook guarding WebFetch guards them all.
+var claudeCodeMatchedAs = map[string][]string{
+	"agentic_fetch": {"WebFetch", "WebSearch"},
+	"web_fetch":     {"WebFetch"},
+	"web_search":    {"WebSearch"},
+}
+
+// ClaudeCodeNamesOf returns the names Claude Code gives the tool name, as
+// a hook matcher sees them, sorted: none for a tool Claude Code has no
+// counterpart of, two for the agent tool (Agent and Task).
 func ClaudeCodeNamesOf(name string) []string {
-	var names []string
+	names := slices.Clone(claudeCodeMatchedAs[name])
 	for claudeCode, ours := range claudeCodeNames {
 		if ours == name {
 			names = append(names, claudeCode)
 		}
 	}
 	slices.Sort(names)
-	return names
+	return slices.Compact(names)
+}
+
+// NamesATool reports whether name, a hook matcher's exact name, can be a
+// built-in tool's: its name, its name before the rename, a sub-agent
+// tool's, or a name Claude Code gives one.
+func NamesATool(name string) bool {
+	if IsKnown(name) || slices.Contains(subAgentNames, name) || FromClaudeCode(name) != "" {
+		return true
+	}
+	for _, claudeCode := range claudeCodeMatchedAs {
+		if slices.Contains(claudeCode, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsMCPToolName reports whether name has the shape of an MCP tool name.

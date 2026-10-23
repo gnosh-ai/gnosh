@@ -17,7 +17,7 @@ func TestClaudeCodeMatchersMatchKlashTools(t *testing.T) {
 	t.Parallel()
 
 	var cfgs []config.HookConfig
-	for _, m := range []string{"Bash", "Edit|Write", "Read", "edit", "Task", "mcp__srv__.*", "*", "^bash$"} {
+	for _, m := range []string{"Bash", "Edit|Write", "Read", "edit", "Task", "WebFetch", "WebSearch", "mcp__srv__.*", "*", "^bash$"} {
 		cfgs = append(cfgs, config.HookConfig{Command: m, Matcher: m})
 	}
 	r := NewRunner(cfgs, t.TempDir(), t.TempDir())
@@ -36,6 +36,10 @@ func TestClaudeCodeMatchersMatchKlashTools(t *testing.T) {
 	require.ElementsMatch(t, []string{"*"}, fired(ctx, "multiedit"))
 	require.ElementsMatch(t, []string{"Read", "*"}, fired(ctx, "view"))
 	require.ElementsMatch(t, []string{"Task", "*"}, fired(ctx, "agent"))
+	require.ElementsMatch(t, []string{"WebFetch", "*"}, fired(ctx, "fetch"))
+	require.ElementsMatch(t, []string{"WebFetch", "WebSearch", "*"}, fired(ctx, "agentic_fetch"))
+	require.ElementsMatch(t, []string{"WebFetch", "*"}, fired(ctx, "web_fetch"), "agentic_fetch's sub-agent fetches too")
+	require.ElementsMatch(t, []string{"WebSearch", "*"}, fired(ctx, "web_search"))
 	require.ElementsMatch(t, []string{"*"}, fired(ctx, "mcp_srv_tool"), "an MCP tool's own name is not Claude Code's")
 	require.ElementsMatch(t, []string{"mcp__srv__.*", "*"}, fired(WithToolAliases(ctx, "mcp__srv__tool"), "mcp_srv_tool"))
 }

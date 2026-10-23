@@ -1806,7 +1806,7 @@ func (c *Config) ValidateHooks() error {
 // Code's mcp__<server>__<tool>, which is not checked further, since MCP
 // servers' tools come and go.
 func namesSomeTool(name string) bool {
-	if tooldefs.IsKnown(name) || tooldefs.FromClaudeCode(name) != "" {
+	if tooldefs.NamesATool(name) {
 		return true
 	}
 	rest, ok := strings.CutPrefix(name, tooldefs.MCPPrefix)

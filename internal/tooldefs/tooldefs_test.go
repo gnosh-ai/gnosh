@@ -42,3 +42,22 @@ func TestIsMCPToolName(t *testing.T) {
 	require.False(t, IsMCPToolName("bash"))
 	require.False(t, IsMCPToolName(""))
 }
+
+// A hook matcher can use Claude Code's names for a tool, including those
+// for the fetch tools beyond --allowedTools' one each.
+func TestClaudeCodeNamesOf(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, []string{"Agent", "Task"}, ClaudeCodeNamesOf("agent"))
+	require.Equal(t, []string{"WebFetch"}, ClaudeCodeNamesOf("fetch"))
+	require.Equal(t, []string{"WebFetch", "WebSearch"}, ClaudeCodeNamesOf("agentic_fetch"))
+	require.Equal(t, []string{"WebFetch"}, ClaudeCodeNamesOf("web_fetch"))
+	require.Equal(t, []string{"WebSearch"}, ClaudeCodeNamesOf("web_search"))
+	require.Empty(t, ClaudeCodeNamesOf("gnokey"))
+	require.Equal(t, "fetch", FromClaudeCode("WebFetch"), "--allowedTools WebFetch is still fetch")
+
+	for _, name := range []string{"web_fetch", "web_search", "WebSearch", "WebFetch", "Bash", "bash", "crush_logs"} {
+		require.Truef(t, NamesATool(name), name)
+	}
+	require.False(t, NamesATool("Notebook"))
+}
