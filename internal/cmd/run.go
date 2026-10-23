@@ -128,6 +128,7 @@ klash run --continue "Follow up on your last response"
 				return err
 			}
 			defer cleanup()
+			reportRetiredNames(os.Stderr, ws.Path)
 
 			event.AppInitialized()
 
@@ -164,9 +165,7 @@ klash run --continue "Follow up on your last response"
 			return err
 		}
 		defer cleanup()
-		if names := config.RetiredNames(ws.WorkingDir()); len(names) > 0 {
-			fmt.Fprintln(os.Stderr, "klash: not read since the rename to Klash: "+strings.Join(names, ", "))
-		}
+		reportRetiredNames(os.Stderr, ws.WorkingDir())
 
 		event.AppInitialized()
 
@@ -212,6 +211,16 @@ klash run --continue "Follow up on your last response"
 			})
 		}, output.message))
 	},
+}
+
+// reportRetiredNames tells w what lies about or is set under the names
+// from before the rename to Klash, which are not read (config.RetiredNames),
+// for a run in workingDir, on either path: the client/server one returned
+// before saying it.
+func reportRetiredNames(w io.Writer, workingDir string) {
+	if names := config.RetiredNames(workingDir); len(names) > 0 {
+		fmt.Fprintln(w, "klash: not read since the rename to Klash: "+strings.Join(names, ", "))
+	}
 }
 
 // runOutputFlags maps run's --quiet and --verbose to what a run shows on
