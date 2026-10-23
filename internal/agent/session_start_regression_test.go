@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/catwalk/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/stretchr/testify/require"
 )
@@ -76,36 +78,65 @@ func TestRun_SessionStartSharedAcrossAgents(t *testing.T) {
 
 	dir := t.TempDir()
 	count := filepath.Join(dir, "count")
-	source := filepath.Join(dir, "source")
-	hookCfgs := sessionStartHooks("", `echo x >> `+count+`; echo "$KLASH_SESSION_START_SOURCE" > `+source)
+	hookCfgs := sessionStartHooks("", `echo x >> `+count)
 
-	coderAgent := sessionStartAgent(t, false, "", hookCfgs...)
-	planAgent := sessionStartAgent(t, false, "", hookCfgs...)
-
-	// Share the state between the two agents, as a coordinator does.
+	// Build one agent in the shared environment, as a coordinator does:
+	// the coder and the plan agent share the session store and the
+	// SessionStart state.
+	env := testEnv(t)
+	cfg := &config.Config{Hooks: map[string][]config.HookConfig{hooks.EventSessionStart: hookCfgs}}
+	require.NoError(t, cfg.ValidateHooks())
+	llm := &promptRecordingModel{}
+	model := Model{
+		Model:      llm,
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000},
+		ModelCfg:   config.SelectedModel{Model: "test-model", Provider: "test"},
+	}
+	store := config.NewTestStore(cfg, env.workingDir)
 	state := newSessionStartState()
-	coderAgent.agent.SetSessionStartState(state)
-	planAgent.agent.SetSessionStartState(state)
+	coderAgent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:           model,
+		SmallModel:           model,
+		SystemPrompt:         "test",
+		IsYolo:               true,
+		DisableAutoSummarize: true,
+		Sessions:             env.sessions,
+		Messages:             env.messages,
+		Cfg:                  store,
+		Notify:               &recordingNotifier{},
+	}).(*sessionAgent)
+	planAgent := NewSessionAgent(SessionAgentOptions{
+		LargeModel:           model,
+		SmallModel:           model,
+		SystemPrompt:         "plan",
+		IsYolo:               true,
+		DisableAutoSummarize: true,
+		Sessions:             env.sessions,
+		Messages:             env.messages,
+		Cfg:                  store,
+		Notify:               &recordingNotifier{},
+	}).(*sessionAgent)
+	coderAgent.SetSessionStartState(state)
+	planAgent.SetSessionStartState(state)
 
-	_, err := coderAgent.agent.Run(t.Context(), SessionAgentCall{SessionID: coderAgent.sessionID, Prompt: "first"})
+	sess, err := env.sessions.Create(t.Context(), "shared session")
+	require.NoError(t, err)
+
+	// The coder sends the first prompt to the session, which runs the
+	// hooks and marks the session started in the shared state.
+	_, err = coderAgent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "first"})
 	require.NoError(t, err)
 	data, err := os.ReadFile(count)
 	require.NoError(t, err)
 	require.Equal(t, "x\n", string(data), "the hooks ran for the coder's first prompt")
 
-	// The plan agent sends a prompt to a session in its own environment.
-	// The session is started (by the coder), so the hooks do not run
-	// again.
-	sess, err := planAgent.env.sessions.Create(t.Context(), "shared session")
-	require.NoError(t, err)
-	// Mark the session as started in the shared state, as the coder's
-	// first prompt would have.
-	state.markStarted(sess.ID)
-	_, err = planAgent.agent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "second"})
+	// The plan agent sends a prompt to the same session. The session is
+	// started, so the hooks do not run again.
+	_, err = planAgent.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "second"})
 	require.NoError(t, err)
 	data, err = os.ReadFile(count)
 	require.NoError(t, err)
-	require.Equal(t, "x\n", string(data), "the plan agent's prompt does not run the hooks again")
+	require.Equal(t, "x\n", string(data), "the plan agent's prompt to the same session does not run the hooks again")
 }
 
 // A hidden prompt that runs the SessionStart hooks carries their output
