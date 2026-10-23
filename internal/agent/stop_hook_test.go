@@ -35,6 +35,27 @@ func stopHookAgentOpts(t *testing.T, opts SessionAgentOptions, commands ...strin
 	return NewSessionAgent(opts).(*sessionAgent)
 }
 
+// A Stop hook runs in the project's directory, the store's working
+// directory, which a test gives it with config.NewTestStoreIn.
+func TestStopHookContinuation_RunsInTheWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
+	project := t.TempDir()
+	cfg := &config.Config{Hooks: map[string][]config.HookConfig{hooks.EventStop: {{Command: "pwd > ran-in"}}}}
+	require.NoError(t, cfg.ValidateHooks())
+	a := NewSessionAgent(SessionAgentOptions{Cfg: config.NewTestStoreIn(cfg, project)}).(*sessionAgent)
+
+	_, blocked := a.stopHookContinuation(t.Context(), SessionAgentCall{SessionID: "s1"}, "done")
+	require.False(t, blocked)
+	out, err := os.ReadFile(filepath.Join(project, "ran-in"))
+	require.NoError(t, err)
+	got, err := filepath.EvalSymlinks(strings.TrimSpace(string(out)))
+	require.NoError(t, err)
+	want, err := filepath.EvalSymlinks(project)
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}
+
 func TestStopHookContinuation_NoHooksConfigured(t *testing.T) {
 	t.Parallel()
 

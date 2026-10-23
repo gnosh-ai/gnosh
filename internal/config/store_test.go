@@ -15,6 +15,16 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+// NewTestStoreIn's store has the test's directory as its working
+// directory; NewTestStore's has none, whatever paths it is given.
+func TestNewTestStoreIn(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.Equal(t, dir, NewTestStoreIn(&Config{}, dir).WorkingDir())
+	require.Empty(t, NewTestStore(&Config{}, filepath.Join(dir, "klash.json")).WorkingDir())
+}
+
 func TestConfigStore_ConfigPath_GlobalAlwaysWorks(t *testing.T) {
 	t.Parallel()
 
