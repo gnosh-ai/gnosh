@@ -64,6 +64,7 @@ func init() {
 	addYoloFlags(rootCmd)
 	addToolFlags(rootCmd)
 	addSystemPromptFlags(rootCmd)
+	addPermissionModeFlag(rootCmd)
 	rootCmd.PersistentFlags().StringSlice("channels", nil, "MCP servers to enable as channels (repeatable), e.g. --channels server:webhook")
 	_ = rootCmd.PersistentFlags().MarkHidden("channels")
 	addSessionFlags(rootCmd)
@@ -141,6 +142,9 @@ klash --continue
 		model := ui.New(com, sessionID, continueLast)
 		if pick {
 			model.PickSessionAtStart()
+		}
+		if mode, _ := permissionModeFlag(cmd); mode == permissionModePlan {
+			model.StartInPlanMode()
 		}
 
 		inputFilter := ui.NewFilter()
@@ -325,7 +329,7 @@ func addYoloFlags(cmd *cobra.Command) {
 func yoloFlag(cmd *cobra.Command) bool {
 	yolo, _ := cmd.Flags().GetBool("yolo")
 	skip, _ := cmd.Flags().GetBool("dangerously-skip-permissions")
-	return yolo || skip
+	return yolo || skip || flagValue(cmd, "permission-mode") == permissionModeBypass
 }
 
 // workspaceYolo reports whether the workspace cmd sets up accepts every
@@ -404,6 +408,13 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	if err != nil {
 		return nil, nil, err
 	}
+	permissionMode, err := permissionModeFlag(cmd)
+	if err != nil {
+		return nil, nil, err
+	}
+	if permissionMode == permissionModeAcceptEdits {
+		allowedTools = append(allowedTools, acceptEditsTools...)
+	}
 
 	store, err := config.Init(cwd, dataDir, debug)
 	if err != nil {
@@ -415,6 +426,9 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	store.Overrides().EnabledChannels = channels
 	store.Overrides().SystemPrompt = systemPrompt
 	store.Overrides().AppendSystemPrompt = appendSystemPrompt
+	if permissionMode == permissionModePlan {
+		store.Overrides().MainAgent = config.AgentPlan
+	}
 	if len(allowedTools) > 0 || len(disallowedTools) > 0 {
 		store.Overrides().AllowedTools = allowedTools
 		store.Overrides().DisabledTools = disallowedTools
@@ -525,6 +539,11 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 		return nil, nil, nil, err
 	} else if len(allowed) > 0 || len(disallowed) > 0 {
 		return nil, nil, nil, fmt.Errorf("tools named with --allowed-tools or --disallowed-tools cannot reach the server's config with %s=1 yet; set options.disabled_tools or permissions.allowed_tools in the project's klash.json instead", "KLASH_CLIENT_SERVER")
+	}
+	if mode, err := permissionModeFlag(cmd); err != nil {
+		return nil, nil, nil, err
+	} else if mode == permissionModeAcceptEdits || mode == permissionModePlan {
+		return nil, nil, nil, fmt.Errorf("--permission-mode %s cannot reach the server's agent with %s=1 yet", mode, "KLASH_CLIENT_SERVER")
 	}
 	if replace, appended, err := systemPromptFlags(cmd); err != nil {
 		return nil, nil, nil, err

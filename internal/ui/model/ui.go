@@ -721,6 +721,14 @@ func startState(configured bool, needsInit func() bool, sessionAsked bool) uiSta
 	}
 }
 
+// StartInPlanMode shows the UI in plan mode from the start, for Claude
+// Code's --permission-mode plan; the coordinator already starts with the
+// plan agent (RuntimeOverrides.MainAgent).
+func (m *UI) StartInPlanMode() {
+	m.mode = uiInputModePlan
+	m.setEditorPrompt(m.yoloModeCached())
+}
+
 // PickSessionAtStart makes the UI open the list of sessions to pick from
 // as it starts, for a bare `klash -r`, as Claude Code's `claude -r` opens
 // its picker. Like a session named on the command line, it goes before

@@ -83,6 +83,9 @@ type RuntimeOverrides struct {
 	// second goes at the end of the coder and plan agents' system prompts.
 	SystemPrompt       string
 	AppendSystemPrompt string
+	// MainAgent is the agent the session starts with: AgentPlan for
+	// Claude Code's --permission-mode plan, "" for the coder.
+	MainAgent string
 }
 
 // ConfigStore is the single entry point for all config access. It owns the

@@ -277,6 +277,10 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 
 	c.mainAgent = agent
 	c.mainAgentName = config.AgentCoder
+	if overrides.MainAgent == config.AgentPlan {
+		c.mainAgent = planAgent
+		c.mainAgentName = config.AgentPlan
+	}
 	return c, nil
 }
 
