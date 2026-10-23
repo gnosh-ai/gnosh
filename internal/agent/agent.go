@@ -942,30 +942,10 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	}()
 
 	// Copy mutable fields under lock to avoid races with SetTools/SetModels.
-	agentTools := filterToolsForChannel(a.tools.Copy(), call.Channel, mcp.GetStates())
+	agentTools := a.requestTools(call.Channel)
 	largeModel := a.largeModel.Get()
-	systemPrompt := a.systemPrompt.Get()
+	systemPrompt := a.requestSystemPrompt()
 	promptPrefix := a.systemPromptPrefix.Get()
-	var instructions strings.Builder
-
-	for _, server := range mcp.GetStates() {
-		if server.State != mcp.StateConnected {
-			continue
-		}
-		if s := server.Client.InitializeResult().Instructions; s != "" {
-			instructions.WriteString(s)
-			instructions.WriteString("\n\n")
-		}
-	}
-
-	if s := instructions.String(); s != "" {
-		systemPrompt += "\n\n<mcp-instructions>\n" + s + "\n</mcp-instructions>"
-	}
-
-	if len(agentTools) > 0 {
-		// Add Anthropic caching to the last tool.
-		agentTools[len(agentTools)-1].SetProviderOptions(a.getCacheControlOptions())
-	}
 
 	agent := fantasy.NewAgent(
 		largeModel.Model,
@@ -1092,31 +1072,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				prepared.Messages = append(prepared.Messages, userMessage.ToAIMessage()...)
 			}
 
-			prepared.Messages = dropEmptyToolMedia(prepared.Messages)
-			// Neutralize model control tokens that untrusted tool output or pasted text
-			// may contain, so a vision-enabled server cannot read them as image/turn markers.
-			prepared.Messages = sanitizeControlTokens(prepared.Messages)
-			prepared.Messages = a.workaroundProviderMediaLimitations(prepared.Messages, largeModel)
-
-			lastSystemRoleInx := 0
-			systemMessageUpdated := false
-			for i, msg := range prepared.Messages {
-				// Only add cache control to the last message.
-				if msg.Role == fantasy.MessageRoleSystem {
-					lastSystemRoleInx = i
-				} else if !systemMessageUpdated {
-					prepared.Messages[lastSystemRoleInx].ProviderOptions = a.getCacheControlOptions()
-					systemMessageUpdated = true
-				}
-				// Than add cache control to the last 2 messages.
-				if i > len(prepared.Messages)-3 {
-					prepared.Messages[i].ProviderOptions = a.getCacheControlOptions()
-				}
-			}
-
-			if promptPrefix != "" {
-				prepared.Messages = append([]fantasy.Message{fantasy.NewSystemMessage(promptPrefix)}, prepared.Messages...)
-			}
+			prepared.Messages = a.prepareRequestMessages(prepared.Messages, largeModel, promptPrefix)
 
 			sessionLock.Lock()
 			stepMessages = cloneFantasyMessages(prepared.Messages)
@@ -1413,7 +1369,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 
 	if shouldSummarize {
 		a.activeRequests.Del(call.SessionID)
-		if summarizeErr := a.Summarize(genCtx, call.SessionID, call.ProviderOptions, call.OnAuthRefresh, preCompactTriggerAuto); summarizeErr != nil {
+		if summarizeErr := a.summarize(genCtx, call.SessionID, call.Channel, call.ProviderOptions, call.OnAuthRefresh, preCompactTriggerAuto); summarizeErr != nil {
 			return nil, summarizeErr
 		}
 		// If the agent wasn't done...
@@ -1583,6 +1539,20 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 }
 
 func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) error {
+	return a.summarize(ctx, sessionID, "", opts, onAuthRefresh, trigger)
+}
+
+// summarize replaces the session's conversation with a summary of it.
+// The request asking for it is the session's next turn as the provider
+// sees it: the same system prompt and tools, scoped to the channel of
+// the turn being cut short ("" when the user asked), the conversation
+// prepared as a turn prepares it, and the summary instructions as the
+// last user message. So the provider's prompt cache covers the whole
+// conversation. It was sent with a system prompt of its own and no
+// tools: on a local server that differed from the cached conversation
+// within its first tokens, and a full session waited twenty minutes
+// while the server read all of it again.
+func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) error {
 	// A turn running in the session stops a summary. A prompt that is
 	// still in its UserPromptSubmit hooks does not: IsSessionBusy counts
 	// it, and the summary at the end of a turn failed as busy when the
@@ -1627,11 +1597,6 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		}
 	}()
 
-	agent := fantasy.NewAgent(
-		largeModel.Model,
-		fantasy.WithSystemPrompt(string(summaryPrompt)),
-		fantasy.WithUserAgent(userAgent),
-	)
 	summaryMessage, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
 		Role:             message.Assistant,
 		Model:            largeModel.ModelCfg.Model,
@@ -1642,43 +1607,68 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		return err
 	}
 
-	summaryPromptText := buildSummaryPrompt(currentSession.Todos)
-
-	resp, err := agent.Stream(genCtx, fantasy.AgentStreamCall{
-		Prompt:          summaryPromptText,
-		Messages:        aiMsgs,
-		Headers:         sessionHeaders(sessionID),
-		ProviderOptions: opts,
-		OnAuthRefresh:   onAuthRefresh,
-		ModelProvider: func() fantasy.LanguageModel {
-			return a.largeModel.Get().Model
-		},
-		PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
-			prepared.Messages = options.Messages
-			if systemPromptPrefix != "" {
-				prepared.Messages = append([]fantasy.Message{fantasy.NewSystemMessage(systemPromptPrefix)}, prepared.Messages...)
-			}
-			return callContext, prepared, nil
-		},
-		OnReasoningDelta: func(id string, text string) error {
-			summaryMessage.AppendReasoningContent(text)
-			return a.messages.Update(genCtx, summaryMessage)
-		},
-		OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
-			// Handle anthropic signature.
-			if anthropicData, ok := reasoning.ProviderMetadata["anthropic"]; ok {
-				if signature, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && signature.Signature != "" {
-					summaryMessage.AppendReasoningSignature(signature.Signature)
+	noTools := fantasy.ToolChoiceNone
+	ask := func(systemPrompt string, tools []fantasy.AgentTool) (*fantasy.AgentResult, error) {
+		agent := fantasy.NewAgent(
+			largeModel.Model,
+			fantasy.WithSystemPrompt(systemPrompt),
+			fantasy.WithTools(tools...),
+			fantasy.WithUserAgent(userAgent),
+		)
+		return agent.Stream(genCtx, fantasy.AgentStreamCall{
+			Prompt:          buildSummaryPrompt(currentSession.Todos),
+			Messages:        aiMsgs,
+			Headers:         sessionHeaders(sessionID),
+			ProviderOptions: opts,
+			OnAuthRefresh:   onAuthRefresh,
+			ToolChoice:      &noTools,
+			StopWhen:        []fantasy.StopCondition{fantasy.StepCountIs(1)},
+			ModelProvider: func() fantasy.LanguageModel {
+				return a.largeModel.Get().Model
+			},
+			PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
+				prepared.Messages = options.Messages
+				for i := range prepared.Messages {
+					prepared.Messages[i].ProviderOptions = nil
 				}
-			}
-			summaryMessage.FinishThinking()
-			return a.messages.Update(genCtx, summaryMessage)
-		},
-		OnTextDelta: func(id, text string) error {
-			summaryMessage.AppendContent(text)
-			return a.messages.Update(genCtx, summaryMessage)
-		},
-	})
+				prepared.Messages = a.prepareRequestMessages(prepared.Messages, largeModel, systemPromptPrefix)
+				return callContext, prepared, nil
+			},
+			OnReasoningDelta: func(id string, text string) error {
+				summaryMessage.AppendReasoningContent(text)
+				return a.messages.Update(genCtx, summaryMessage)
+			},
+			OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
+				// Handle anthropic signature.
+				if anthropicData, ok := reasoning.ProviderMetadata["anthropic"]; ok {
+					if signature, ok := anthropicData.(*anthropic.ReasoningOptionMetadata); ok && signature.Signature != "" {
+						summaryMessage.AppendReasoningSignature(signature.Signature)
+					}
+				}
+				summaryMessage.FinishThinking()
+				return a.messages.Update(genCtx, summaryMessage)
+			},
+			OnTextDelta: func(id, text string) error {
+				summaryMessage.AppendContent(text)
+				return a.messages.Update(genCtx, summaryMessage)
+			},
+		})
+	}
+	// The tools are listed but cannot run: the model is told not to call
+	// them, and one it calls anyway does nothing.
+	agentTools := a.filterDisabledMCPTools(ctx, a.requestTools(channel))
+	listedTools := make([]fantasy.AgentTool, len(agentTools))
+	for i, t := range agentTools {
+		listedTools[i] = unrunnableTool{t}
+	}
+	resp, err := ask(a.requestSystemPrompt(), listedTools)
+	if tooLongForContext(err) {
+		// The system prompt and tools take room that a conversation filled
+		// up by its last step may not have left. Without them, as it was
+		// asked for before, the summary reads the whole conversation again
+		// but fits.
+		resp, err = ask("", nil)
+	}
 	if err != nil {
 		isCancelErr := errors.Is(err, context.Canceled)
 		if isCancelErr {
@@ -1689,6 +1679,17 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		// Mark the summary message as finished with an error so the UI
 		// stops spinning.
 		summaryMessage.AddFinish(message.FinishReasonError, "Summarization Error", err.Error())
+		if updateErr := a.messages.Update(ctx, summaryMessage); updateErr != nil {
+			return updateErr
+		}
+		return err
+	}
+	// A reply with no summary in it, a tool call or thinking that used up
+	// the output, would leave the session nothing to go on. The
+	// conversation is kept as it is instead.
+	if strings.TrimSpace(summaryMessage.Content().Text) == "" {
+		err := errors.New("the model wrote no summary")
+		summaryMessage.AddFinish(message.FinishReasonError, "Summarization Error", "The model wrote no summary; the conversation is kept as it is.")
 		if updateErr := a.messages.Update(ctx, summaryMessage); updateErr != nil {
 			return updateErr
 		}
@@ -1752,6 +1753,87 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	mu.Unlock()
 	_, qErr := a.Run(ctx, firstQueuedMessage)
 	return qErr
+}
+
+// requestSystemPrompt is the system prompt a session's requests send:
+// the agent's, then the instructions of the MCP servers connected now.
+func (a *sessionAgent) requestSystemPrompt() string {
+	systemPrompt := a.systemPrompt.Get()
+	var instructions strings.Builder
+	for _, server := range mcp.GetStates() {
+		if server.State != mcp.StateConnected {
+			continue
+		}
+		if s := server.Client.InitializeResult().Instructions; s != "" {
+			instructions.WriteString(s)
+			instructions.WriteString("\n\n")
+		}
+	}
+	if s := instructions.String(); s != "" {
+		systemPrompt += "\n\n<mcp-instructions>\n" + s + "\n</mcp-instructions>"
+	}
+	return systemPrompt
+}
+
+// requestTools is the agent's tools scoped to a turn's channel, the last
+// one marked for prompt caching.
+func (a *sessionAgent) requestTools(channel string) []fantasy.AgentTool {
+	agentTools := filterToolsForChannel(a.tools.Copy(), channel, mcp.GetStates())
+	if len(agentTools) > 0 {
+		// Add Anthropic caching to the last tool.
+		agentTools[len(agentTools)-1].SetProviderOptions(a.getCacheControlOptions())
+	}
+	return agentTools
+}
+
+// prepareRequestMessages readies a request's messages as every request
+// in a session sends them, a turn's steps and a summary alike, so that
+// each starts as the one before it did.
+func (a *sessionAgent) prepareRequestMessages(msgs []fantasy.Message, largeModel Model, promptPrefix string) []fantasy.Message {
+	msgs = dropEmptyToolMedia(msgs)
+	// Neutralize model control tokens that untrusted tool output or pasted text
+	// may contain, so a vision-enabled server cannot read them as image/turn markers.
+	msgs = sanitizeControlTokens(msgs)
+	msgs = a.workaroundProviderMediaLimitations(msgs, largeModel)
+
+	lastSystemRoleInx := 0
+	systemMessageUpdated := false
+	for i, msg := range msgs {
+		// Only add cache control to the last message.
+		if msg.Role == fantasy.MessageRoleSystem {
+			lastSystemRoleInx = i
+		} else if !systemMessageUpdated {
+			msgs[lastSystemRoleInx].ProviderOptions = a.getCacheControlOptions()
+			systemMessageUpdated = true
+		}
+		// Than add cache control to the last 2 messages.
+		if i > len(msgs)-3 {
+			msgs[i].ProviderOptions = a.getCacheControlOptions()
+		}
+	}
+
+	if promptPrefix != "" {
+		msgs = append([]fantasy.Message{fantasy.NewSystemMessage(promptPrefix)}, msgs...)
+	}
+	return msgs
+}
+
+// tooLongForContext reports whether err is the provider refusing a
+// request that does not fit the model's context. Fantasy recognizes the
+// hosted providers' refusals; a llama.cpp server's is its own.
+func tooLongForContext(err error) bool {
+	var providerErr *fantasy.ProviderError
+	if !errors.As(err, &providerErr) {
+		return false
+	}
+	return providerErr.IsContextTooLarge() || strings.Contains(providerErr.Message, "exceeds the available context size")
+}
+
+// unrunnableTool lists a tool in a request without letting it run.
+type unrunnableTool struct{ fantasy.AgentTool }
+
+func (unrunnableTool) Run(context.Context, fantasy.ToolCall) (fantasy.ToolResponse, error) {
+	return fantasy.NewTextErrorResponse("Tools do not run while the conversation is summarized."), nil
 }
 
 func (a *sessionAgent) getCacheControlOptions() fantasy.ProviderOptions {
@@ -2663,10 +2745,11 @@ func (a *sessionAgent) workaroundProviderMediaLimitations(messages []fantasy.Mes
 	return convertedMessages
 }
 
-// buildSummaryPrompt constructs the prompt text for session summarization.
+// buildSummaryPrompt is the message asking for a session's summary: how
+// to write it, then the session's todos to carry over.
 func buildSummaryPrompt(todos []session.Todo) string {
 	var sb strings.Builder
-	sb.WriteString("Provide a detailed summary of our conversation above.")
+	sb.WriteString(strings.TrimSpace(string(summaryPrompt)))
 	if len(todos) > 0 {
 		sb.WriteString("\n\n## Current Todo List\n\n")
 		for _, t := range todos {
