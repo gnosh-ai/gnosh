@@ -46,8 +46,17 @@ func viewDescription() string {
 
 type ViewParams struct {
 	FilePath string `json:"file_path" description:"The path to the file to read"`
-	Offset   int    `json:"offset,omitempty" description:"The line number to start reading from (0-based)"`
+	Offset   int    `json:"offset,omitempty" description:"The line number to start reading from, the first line being 1"`
 	Limit    int    `json:"limit,omitempty" description:"The number of lines to read (defaults to 2000)"`
+}
+
+// Skipped is how many lines come before the first one read. Offset is a
+// line number, as the lines are numbered and as Claude Code's Read takes
+// it, so offset 120 starts at line 120; it used to count lines to skip,
+// and a model that asked for the line a search had found started at the
+// line after it.
+func (p ViewParams) Skipped() int {
+	return max(p.Offset-1, 0)
 }
 
 type ViewPermissionsParams struct {
@@ -245,7 +254,8 @@ func NewViewTool(
 			if isSkillFile {
 				maxContentSize = 0
 			}
-			content, hasMore, err := readTextFile(filePath, params.Offset, params.Limit, maxContentSize)
+			skipped := params.Skipped()
+			content, hasMore, err := readTextFile(filePath, skipped, params.Limit, maxContentSize)
 			if err != nil {
 				var tooLarge contentTooLargeError
 				if errors.As(err, &tooLarge) {
@@ -261,17 +271,16 @@ func NewViewTool(
 			openInLSPs(ctx, lspManager, filePath)
 			waitForLSPDiagnostics(ctx, lspManager, filePath, 300*time.Millisecond)
 			output := "<file>\n"
-			output += addLineNumbers(content, params.Offset+1)
+			output += addLineNumbers(content, skipped+1)
 
 			if hasMore {
-				shown := len(strings.Split(content, "\n"))
-				if shown < params.Limit {
+				last := skipped + len(strings.Split(content, "\n"))
+				if last-skipped < params.Limit {
 					// Cut short at the size limit, not at the line limit.
 					output += fmt.Sprintf("\n\n(Stopped after line %d: one read returns at most %dKB. To read on, use offset %d)",
-						params.Offset+shown, maxContentSize/1024, params.Offset+shown)
+						last, maxContentSize/1024, last+1)
 				} else {
-					output += fmt.Sprintf("\n\n(File has more lines. Use 'offset' parameter to read beyond line %d)",
-						params.Offset+shown)
+					output += fmt.Sprintf("\n\n(File has more lines. To read on, use offset %d)", last+1)
 				}
 			}
 			output += "\n</file>\n"
@@ -495,8 +504,8 @@ func readBuiltinFile(params ViewParams, skillTracker *skills.Tracker) (fantasy.T
 	}
 
 	lines := strings.Split(content, "\n")
-	offset := min(params.Offset, len(lines))
-	lines = lines[offset:]
+	skipped := min(params.Skipped(), len(lines))
+	lines = lines[skipped:]
 
 	hasMore := len(lines) > limit
 	if hasMore {
@@ -504,10 +513,9 @@ func readBuiltinFile(params ViewParams, skillTracker *skills.Tracker) (fantasy.T
 	}
 
 	output := "<file>\n"
-	output += addLineNumbers(strings.Join(lines, "\n"), offset+1)
+	output += addLineNumbers(strings.Join(lines, "\n"), skipped+1)
 	if hasMore {
-		output += fmt.Sprintf("\n\n(File has more lines. Use 'offset' parameter to read beyond line %d)",
-			offset+len(lines))
+		output += fmt.Sprintf("\n\n(File has more lines. To read on, use offset %d)", skipped+len(lines)+1)
 	}
 	output += "\n</file>\n"
 

@@ -120,7 +120,7 @@ func TestViewToolAllowsSmallSectionsOfLargeFiles(t *testing.T) {
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
 	resp := runViewTool(t, tool, ctx, ViewParams{
 		FilePath: filePath,
-		Offset:   1,
+		Offset:   2,
 		Limit:    1,
 	})
 
@@ -160,12 +160,40 @@ func TestViewToolCutsOversizedSectionsAtTheSizeLimit(t *testing.T) {
 	shown := strings.Count(meta.Content, "\n") + 1
 	require.Less(t, shown, DefaultReadLimit)
 	require.Contains(t, resp.Content, fmt.Sprintf("Stopped after line %d", shown))
-	require.Contains(t, resp.Content, fmt.Sprintf("To read on, use offset %d", shown))
+	require.Contains(t, resp.Content, fmt.Sprintf("To read on, use offset %d", shown+1))
 
 	// Reading on from there picks up the next line.
-	resp = runViewTool(t, tool, ctx, ViewParams{FilePath: filePath, Offset: shown, Limit: 1})
+	resp = runViewTool(t, tool, ctx, ViewParams{FilePath: filePath, Offset: shown + 1, Limit: 1})
 	require.False(t, resp.IsError, resp.Content)
 	require.Contains(t, resp.Content, fmt.Sprintf("%6d|aaa", shown+1))
+}
+
+// Offset is the number of the line to start at, as Claude Code's Read
+// takes it: a model that viewed from the line a search had found got the
+// line after it. 0 and 1 both start at the top, and the hint at the end
+// names the offset that reads on.
+func TestViewToolOffsetIsALineNumber(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	filePath := filepath.Join(workingDir, "lines.txt")
+	require.NoError(t, os.WriteFile(filePath, []byte("one\ntwo\nthree\nfour\n"), 0o644))
+	tool := newViewToolForTest(workingDir)
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+
+	resp := runViewTool(t, tool, ctx, ViewParams{FilePath: filePath, Offset: 3, Limit: 1})
+	require.False(t, resp.IsError, resp.Content)
+	require.Contains(t, resp.Content, "     3|three")
+	require.NotContains(t, resp.Content, "two")
+	require.Contains(t, resp.Content, "To read on, use offset 4")
+
+	resp = runViewTool(t, tool, ctx, ViewParams{FilePath: filePath, Offset: 4, Limit: 1})
+	require.Contains(t, resp.Content, "     4|four")
+
+	for _, offset := range []int{0, 1} {
+		resp = runViewTool(t, tool, ctx, ViewParams{FilePath: filePath, Offset: offset, Limit: 1})
+		require.Contains(t, resp.Content, "     1|one", "offset %d", offset)
+	}
 }
 
 func TestViewToolBlocksOversizedImages(t *testing.T) {
@@ -359,9 +387,12 @@ func TestReadBuiltinFile(t *testing.T) {
 		resp, err := readBuiltinFile(ViewParams{
 			FilePath: "klash://skills/klash-config/SKILL.md",
 			Offset:   5,
+			Limit:    2,
 		}, nil)
 		require.NoError(t, err)
-		require.NotContains(t, resp.Content, "     1|")
+		require.NotContains(t, resp.Content, "     4|")
+		require.Contains(t, resp.Content, "     5|")
+		require.Contains(t, resp.Content, "To read on, use offset 7")
 	})
 }
 

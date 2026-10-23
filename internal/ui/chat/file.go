@@ -93,7 +93,7 @@ func (v *ViewToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 	}
 
 	// Render code content with syntax highlighting.
-	body := toolOutputCodeContent(sty, params.FilePath, content, params.Offset, cappedWidth, opts.ExpandedContent)
+	body := toolOutputCodeContent(sty, params.FilePath, content, params.Skipped(), cappedWidth, opts.ExpandedContent)
 	return joinToolParts(header, body)
 }
 
