@@ -75,6 +75,7 @@ the input/output contract is identical regardless of language.
 | `KLASH_SESSION_ID`           | Current session ID                       |
 | `KLASH_CWD`                  | Working directory                        |
 | `KLASH_PROJECT_DIR`          | Project root directory                   |
+| `CLAUDE_PROJECT_DIR`         | The same, Claude Code's name for it      |
 | `KLASH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command      |
 | `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
 | `KLASH_TOOL_USE_ID`          | The tool call's ID, the same in its `PreToolUse` and `PostToolUse` hooks |

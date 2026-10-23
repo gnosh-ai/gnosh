@@ -628,6 +628,7 @@ The available environment variables are:
 | `KLASH_SESSION_ID`           | Current session ID.                            |
 | `KLASH_CWD`                  | Working directory.                             |
 | `KLASH_PROJECT_DIR`          | Project root directory.                        |
+| `CLAUDE_PROJECT_DIR`         | The same, under Claude Code's name, so its hook commands (`"${CLAUDE_PROJECT_DIR}/.claude/hooks/check.sh"`) work unchanged. |
 | `KLASH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command being run. |
 | `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
 | `KLASH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
