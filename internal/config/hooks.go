@@ -58,11 +58,19 @@ const (
 	// ahead. Hooks for it may carry a Matcher, tested against that
 	// trigger.
 	EventPreCompact = "PreCompact"
+	// EventSessionEnd fires when a session ends: when the user starts a
+	// new one ("clear"), switches to another ("other"), or the process
+	// exits with the session open ("prompt_input_exit" for the TUI,
+	// "other" for klash run). As in Claude Code, a hook cannot stop
+	// the exit and what it prints is ignored; a hook that fails is
+	// logged. Its Matcher is tested against the reason, as a
+	// SessionStart's is tested against the source.
+	EventSessionEnd = "SessionEnd"
 )
 
 // knownHookEvents lists every recognised event name, in the order they
 // are reported to the user.
-var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStop, EventPreCompact}
+var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStop, EventPreCompact, EventSessionEnd}
 
 // KnownHookEvents returns the recognised hook event names.
 func KnownHookEvents() []string {
@@ -76,9 +84,10 @@ func IsKnownHookEvent(name string) bool {
 
 // HookEventSupportsMatcher reports whether hooks for the given event may
 // carry a Matcher. Tool events match against the tool name; PreCompact
-// against its trigger; SessionStart against its source.
+// against its trigger; SessionStart against its source; SessionEnd
+// against its reason.
 func HookEventSupportsMatcher(event string) bool {
-	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventSessionStart
+	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventSessionStart || event == EventSessionEnd
 }
 
 // HookMatcher is a hook's matcher read as Claude Code reads one: "*" (or

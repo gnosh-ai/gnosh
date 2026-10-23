@@ -78,6 +78,10 @@ type Payload struct {
 	// session, as Claude Code's SessionStart input carries it. A matcher
 	// on a SessionStart hook is tested against it.
 	Source string `json:"source,omitempty"`
+	// Reason is set on an EventSessionEnd payload: why the session ended,
+	// as Claude Code's SessionEnd input carries it. A matcher on a
+	// SessionEnd hook is tested against it.
+	Reason string `json:"reason,omitempty"`
 
 	// AgentID and AgentType are set when a hook fires for a sub-agent (a
 	// SubagentStop hook, or one around a sub-agent's tool call), as
@@ -352,6 +356,37 @@ func BuildPreCompactPayload(sessionID, cwd, trigger string) []byte {
 		Trigger:            trigger,
 		CustomInstructions: new(string),
 	})
+}
+
+// SessionEnd reasons, as in Claude Code: the user started a new session,
+// the process exits with the session open, or the session ended some
+// other way.
+const (
+	SessionEndReasonClear           = "clear"
+	SessionEndReasonOther           = "other"
+	SessionEndReasonPromptInputExit = "prompt_input_exit"
+)
+
+// BuildSessionEndPayload constructs the JSON stdin payload for an
+// EventSessionEnd hook. There is no tool in play, so tool_name is empty
+// and tool_input is an empty object. Reason names why the session ended.
+func BuildSessionEndPayload(sessionID, cwd, reason string) []byte {
+	return marshalPayload(Payload{
+		Event:         EventSessionEnd,
+		HookEventName: EventSessionEnd,
+		SessionID:     sessionID,
+		CWD:           cwd,
+		ToolInput:     json.RawMessage("{}"),
+		Reason:        reason,
+	})
+}
+
+// BuildSessionEndEnv constructs the environment variable slice for an
+// EventSessionEnd hook command: a hook's, with SESSION_END_REASON as the
+// payload's reason.
+func BuildSessionEndEnv(sessionID, cwd, projectDir, reason string) []string {
+	env := BuildEnv(EventSessionEnd, "", sessionID, cwd, projectDir, "")
+	return append(env, hookVar("SESSION_END_REASON", reason)...)
 }
 
 // BuildStopEnv constructs the environment variable slice for an

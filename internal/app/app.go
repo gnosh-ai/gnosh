@@ -29,6 +29,7 @@ import (
 	"github.com/charmbracelet/crush/internal/format"
 	"github.com/charmbracelet/crush/internal/herdr"
 	"github.com/charmbracelet/crush/internal/history"
+	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/log"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
@@ -89,6 +90,30 @@ type App struct {
 	// herdrClient reports agent state to herdr when running inside
 	// a herdr-managed pane. Nil when not in a herdr environment.
 	herdrClient *herdr.Client
+
+	// currentSessionID is the session the user is in, reported through
+	// ReportCurrentSession and ended with SessionEnd hooks when it
+	// changes or the process exits (see sessionEndReason and
+	// endSession). Guarded by sessionEndMu.
+	currentSessionID string
+	sessionEndMu     sync.Mutex
+	// sessionEnded names the sessions this process has ended, so a
+	// session ends once: endSession consults it before starting hooks,
+	// and waitForSessionEndHooks drops an entry once its hook has
+	// finished, so the set does not grow with the number of sessions the
+	// user has had in a long-lived TUI process.
+	sessionEnded map[string]chan struct{}
+	// sessionEndHooks is the set of in-flight SessionEnd hook goroutines;
+	// each entry is closed when its hook has finished, so
+	// waitForSessionEndHooks can wait on the channels rather than on a
+	// WaitGroup, which can return before the shell's buffered output is
+	// visible to a reader on another goroutine.
+	sessionEndHooks []chan struct{}
+
+	// nonInteractive is set for klash run, whose exit ends the open
+	// session with reason "other" instead of the TUI's
+	// "prompt_input_exit".
+	nonInteractive bool
 }
 
 // New initializes a new application instance. skillsMgr carries the
@@ -126,6 +151,8 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 		tuiWG:              &sync.WaitGroup{},
 		agentNotifications: pubsub.NewBroker[notify.Notification](),
 		runCompletions:     pubsub.NewBroker[notify.RunComplete](),
+
+		sessionEnded: map[string]chan struct{}{},
 	}
 
 	app.setupEvents()
@@ -246,8 +273,192 @@ func (app *App) RunCompletions() *pubsub.Broker[notify.RunComplete] {
 // to call when not running inside a herdr pane; the underlying client
 // is nil-safe. Call this whenever the active session changes (load,
 // new, or select).
+//
+// It also ends the session the user leaves, with SessionEnd hooks: a
+// report of "" ends it with reason "clear", as the TUI reports the
+// landing screen after a New Session, and a report of another session
+// ends it with reason "other". A session ends once: reporting the
+// same session again, or ending it and then exiting, does not end it
+// again. A session that was never reported open does not end at all,
+// which is what keeps the new, still empty session from ending.
 func (app *App) ReportCurrentSession(sessionID string) {
+	if sessionID != "" {
+		app.endSessionIfLeft(sessionEndReasonOther, sessionID)
+	} else if prev := app.takeCurrentSessionID(); prev != "" {
+		app.endSession(prev, sessionEndReasonClear)
+	}
 	app.herdrClient.SetSessionID(sessionID)
+}
+
+// sessionEndReason names why a session ended, as the SessionEnd payload
+// and its matcher carry it.
+type sessionEndReason string
+
+// sessionEndReasonOther covers a session ending any way this one does not
+// name: the user switched to another session, or klash run exited with it
+// open.
+const sessionEndReasonOther sessionEndReason = hooks.SessionEndReasonOther
+
+// sessionEndReasonClear is the user's New Session: the TUI reports ""
+// after a session.
+const sessionEndReasonClear sessionEndReason = hooks.SessionEndReasonClear
+
+// sessionEndReasonPromptInputExit is the TUI exiting with a session open.
+const sessionEndReasonPromptInputExit sessionEndReason = hooks.SessionEndReasonPromptInputExit
+
+// takeCurrentSessionID swaps the reported session out for "" and returns
+// it; "" when nothing was reported. The swap is what makes a session end
+// once: a second end finds no current session and ends nothing.
+func (app *App) takeCurrentSessionID() string {
+	app.sessionEndMu.Lock()
+	defer app.sessionEndMu.Unlock()
+	sid := app.currentSessionID
+	app.currentSessionID = ""
+	return sid
+}
+
+// endSessionIfLeft ends the session the user leaves for id, with
+// reason. Reporting the same session again leaves it to itself: the
+// user is still in it, so it does not end. The swap happens under
+// sessionEndMu so two reports in a race end at most one session.
+func (app *App) endSessionIfLeft(reason sessionEndReason, id string) {
+	app.sessionEndMu.Lock()
+	prev := app.currentSessionID
+	app.currentSessionID = id
+	app.sessionEndMu.Unlock()
+	if prev == "" || prev == id {
+		return
+	}
+	app.endSession(prev, reason)
+}
+
+// endSession records that id ended, so it does not end again, and runs
+// its SessionEnd hooks with reason when it has one and hooks are
+// configured. The hooks run asynchronously so that a session switch or a
+// new session does not block on them; Shutdown waits for them to finish
+// before the process exits.
+//
+// The ended set maps a session id to the channel of the end that is in
+// flight for it, if any. A session ends once: a second end of the same
+// id while the first end's hook is still running is skipped, because the
+// session is still ended from the process's point of view, and the
+// first end's hook is what runs for it. Once the hook has finished, the
+// entry is pruned, so a session reported open again after it ended ends
+// again and its hooks run again. The check-and-set happens under
+// sessionEndMu, so two ends of the same id in a race end at most one
+// session, as two reports of the same session do.
+func (app *App) endSession(id string, reason sessionEndReason) {
+	// The hooks are read from the config and run in a goroutine that may
+	// outlive the caller; snapshot them here, in the caller, so a config
+	// reload that swaps the Config pointer while the hook is starting
+	// cannot race the goroutine's read.
+	cfgs := app.config.Config().Hooks[hooks.EventSessionEnd]
+	if len(cfgs) == 0 {
+		return
+	}
+	done := make(chan struct{})
+	app.sessionEndMu.Lock()
+	if _, ended := app.sessionEnded[id]; ended {
+		app.sessionEndMu.Unlock()
+		return
+	}
+	app.sessionEnded[id] = done
+	app.sessionEndHooks = append(app.sessionEndHooks, done)
+	// The hook runs under the process's context, not a fresh
+	// Background: a cancelled run can stop it, instead of only its own
+	// (default 1.5s, capped 60s) timeout being able to. It is not a
+	// child of the Shutdown's 5-second budget, because the budget
+	// belongs to the process exit, not to the hook: a hook at its own
+	// cap may run a little past the budget, which is what keeps the
+	// hook's timeout the effective bound for it.
+	ctx, cancel := context.WithCancel(app.globalCtx)
+	app.sessionEndMu.Unlock()
+	go func() {
+		defer cancel()
+		app.runSessionEndHooks(ctx, cfgs, id, reason)
+		// Close the channel only after the hook has finished, then prune
+		// the id from sessionEnded: a session that is reported open again
+		// after it ended — the TUI's session list re-opens a session,
+		// say — ends again, and its hooks must run again. Pruning here,
+		// in the goroutine that owns the channel, closes the gap where a
+		// second end of the same id in the same process was skipped
+		// because the entry was only pruned by waitForSessionEndHooks,
+		// which a session switch does not call.
+		close(done)
+		app.sessionEndMu.Lock()
+		if app.sessionEnded[id] == done {
+			delete(app.sessionEnded, id)
+		}
+		app.sessionEndMu.Unlock()
+	}()
+}
+
+// waitForSessionEndHooks blocks until every SessionEnd hook started by
+// endSession has finished, or until bound is done, whichever is first.
+// The wait is on the channels endSession records, which close after the
+// hook's goroutine has returned, which is after shell.Run has returned
+// and the shell's buffered output has been written; a bare
+// WaitGroup.Wait returns as soon as the goroutine's deferred Done runs,
+// which can be before that, so the channel is what makes the wait
+// reliable.
+//
+// The snapshot-and-replace is atomic under the lock, so a hook that
+// ends between the replace and the wait below lands in a fresh slice
+// and is drained by a later wait, not lost: endSession appends only to
+// the current slice, and the replace happens before any wait, so the
+// hook's channel is always in exactly one slice that some wait drains.
+//
+// bound, when non-nil, is the deadline the wait is released at: the
+// Shutdown's 5-second budget, so a slow hook does not hold the exit
+// open. The wait is released at the deadline even if the hook is still
+// running: the hook's context is not the budget (it is the process's
+// context, so the hook's own timeout is what bounds the hook itself),
+// so a hook at its cap may finish a little after the exit, but the exit
+// is not held up for it.
+//
+// The ended set is pruned by the hook goroutines themselves, once each
+// hook has finished, so a session reported open again after it ended
+// ends again and its hooks run again; the wait does not need to prune
+// it.
+func (app *App) waitForSessionEndHooks(bound context.Context) {
+	app.sessionEndMu.Lock()
+	hooks := app.sessionEndHooks
+	app.sessionEndHooks = nil
+	app.sessionEndMu.Unlock()
+	for _, done := range hooks {
+		if bound != nil {
+			select {
+			case <-done:
+			case <-bound.Done():
+			}
+		} else {
+			<-done
+		}
+	}
+}
+
+// runSessionEndHooks runs the SessionEnd hooks for the session that just
+// ended, with the reason it ended. As in Claude Code a hook cannot stop
+// the exit and what it prints is ignored; a hook that fails is logged
+// (runOne already warns about it). Their default timeout is Claude
+// Code's 1.5 seconds, so exiting Klash is not held up for long.
+func (app *App) runSessionEndHooks(ctx context.Context, cfgs []config.HookConfig, id string, reason sessionEndReason) {
+	workingDir := app.config.WorkingDir()
+	if workingDir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			slog.Warn("SessionEnd hooks are configured but no working directory is available; skipping them",
+				"session_id", id,
+				"error", err,
+			)
+			return
+		}
+		workingDir = wd
+	}
+	runner := hooks.NewRunner(cfgs, workingDir, workingDir)
+	if _, err := runner.RunSessionEnd(ctx, id, string(reason)); err != nil {
+		slog.Warn("SessionEnd hook execution error", "session_id", id, "reason", string(reason), "error", err)
+	}
 }
 
 // resolveSession resolves which session to use for a non-interactive run
@@ -288,7 +499,9 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner, traceTools bool, continueSessionID string, useLast bool, onSession func(sessionID string), onMessage func(message.Message)) error {
 	slog.Info("Running in non-interactive mode")
 
-	// Re-initialize the coder agent without interactive-only tools.
+	// Re-initialize the coder agent without interactive-only tools. The
+	// reinitialization sets nonInteractive, which Shutdown reads to pick
+	// the SessionEnd reason for the open session.
 	if err := app.InitCoderAgentNonInteractive(ctx); err != nil {
 		return fmt.Errorf("failed to reinitialize agent for non-interactive mode: %w", err)
 	}
@@ -984,13 +1197,28 @@ func (app *App) subscribeMustDeliver[T any](
 	})
 }
 
+// setNonInteractive records whether the next agent initialization is for
+// a klash run (true) or the TUI (false). The flag is what Shutdown reads
+// to pick the SessionEnd reason for the open session: "other" for a run,
+// "prompt_input_exit" for the TUI.
+func (app *App) setNonInteractive(nonInteractive bool) {
+	app.sessionEndMu.Lock()
+	app.nonInteractive = nonInteractive
+	app.sessionEndMu.Unlock()
+}
+
 func (app *App) InitCoderAgent(ctx context.Context) error {
+	// The interactive agent is for the TUI, which exits with reason
+	// prompt_input_exit; reset the flag a klash run may have set so a
+	// TUI session that follows a run on the same App is not mislabeled.
+	app.setNonInteractive(false)
 	return app.initCoderAgent(ctx, true)
 }
 
 // InitCoderAgentNonInteractive initializes the coder agent without
 // interactive-only tools (e.g. question).
 func (app *App) InitCoderAgentNonInteractive(ctx context.Context) error {
+	app.setNonInteractive(true)
 	return app.initCoderAgent(ctx, false)
 }
 
@@ -1059,15 +1287,39 @@ func (app *App) Shutdown() {
 	start := time.Now()
 	defer func() { slog.Debug("Shutdown took " + time.Since(start).String()) }()
 
-	// First, cancel all agents and wait for them to finish. This must complete
-	// before closing the DB so agents can finish writing their state.
+	// Shared shutdown context for all timeout-bounded cleanup, created
+	// first so the SessionEnd wait below is inside it, not ahead of it.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// The process exits with the reported session open: end it, with the
+	// reason it is exiting. "prompt_input_exit" for the TUI, "other" for
+	// klash run, which is not in a prompt input loop. The reason is read
+	// under sessionEndMu, the same lock setNonInteractive writes it
+	// under, so a TUI reinitializing its agent concurrently with the
+	// exit cannot read a half-updated flag. A session already ended —
+	// switched away from, say — does not end again.
+	app.sessionEndMu.Lock()
+	reason := sessionEndReasonPromptInputExit
+	if app.nonInteractive {
+		reason = sessionEndReasonOther
+	}
+	app.sessionEndMu.Unlock()
+	if id := app.takeCurrentSessionID(); id != "" {
+		app.endSession(id, reason)
+	}
+	// The hooks run asynchronously; wait for them inside the shutdown
+	// budget, so the process does not exit before they have run, but a
+	// slow hook does not hold the exit past the budget: at the deadline
+	// the wait is released, and the hook goes on under its own timeout.
+	app.waitForSessionEndHooks(shutdownCtx)
+
+	// First, cancel all agents and wait for them to finish. This must
+	// complete before closing the DB so agents can finish writing their
+	// state.
 	if app.AgentCoordinator != nil {
 		app.AgentCoordinator.CancelAll()
 	}
-
-	// Shared shutdown context for all timeout-bounded cleanup.
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
 	// Drain any debounced message updates before the DB-close cleanup
 	// runs in the parallel block below. message.Service buffers

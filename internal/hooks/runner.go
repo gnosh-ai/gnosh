@@ -254,6 +254,24 @@ func (r *Runner) RunPreCompact(ctx context.Context, sessionID, trigger string) (
 	return agg, err
 }
 
+// RunSessionEnd executes the SessionEnd hooks whose matcher matches the
+// reason, when a session ends. Reason is the
+// SessionEndReasonClear, SessionEndReasonOther or
+// SessionEndReasonPromptInputExit name of why the session ended; hooks
+// with no matcher match every reason, as in Claude Code.
+//
+// As in Claude Code a SessionEnd hook cannot stop anything and what it
+// prints is ignored: the caller exits whatever the aggregated result
+// says. A hook that fails is logged by runOne. UpdatedInput is
+// meaningless without a tool call and is always cleared.
+func (r *Runner) RunSessionEnd(ctx context.Context, sessionID, reason string) (AggregateResult, error) {
+	envVars := BuildSessionEndEnv(sessionID, r.cwd, r.projectDir, reason)
+	payload := BuildSessionEndPayload(sessionID, r.cwd, reason)
+	agg, err := r.run(ctx, r.matchingHooks(reason), EventSessionEnd, "", "", envVars, payload)
+	agg.UpdatedInput = ""
+	return agg, err
+}
+
 // run executes the given hooks concurrently and aggregates their
 // results. Callers choose which hooks apply and build the stdin payload
 // and environment for the event.

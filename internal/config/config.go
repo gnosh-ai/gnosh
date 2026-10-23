@@ -946,15 +946,25 @@ func (h *HookConfig) DisplayName() string {
 }
 
 // TimeoutDuration returns the hook's timeout for event: the one it sets,
-// or else Claude Code's default for a command hook, 600 seconds, and 30
-// on UserPromptSubmit, which holds up the prompt the user just sent. The
+// capped at 60 on SessionEnd, which runs while the process exits and
+// should not hold the exit up for long; or else Claude Code's default for
+// a command hook, 600 seconds, 1.5 on SessionEnd, and 30 on
+// UserPromptSubmit, which holds up the prompt the user just sent. The
 // default was 60 here, called Claude Code's, and a Claude Code Stop hook
 // that runs the tests for longer was killed as a failed hook, which lets
 // the turn end unchecked.
 func (h *HookConfig) TimeoutDuration(event string) time.Duration {
 	switch {
 	case h.Timeout > 0:
+		if event == EventSessionEnd {
+			if d := time.Duration(h.Timeout) * time.Second; d <= 60*time.Second {
+				return d
+			}
+			return 60 * time.Second
+		}
 		return time.Duration(h.Timeout) * time.Second
+	case event == EventSessionEnd:
+		return 1500 * time.Millisecond
 	case event == EventUserPromptSubmit:
 		return 30 * time.Second
 	}

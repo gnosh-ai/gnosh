@@ -34,6 +34,9 @@ const (
 	// EventPreCompact fires just before a session's conversation is
 	// summarized, manual or automatic.
 	EventPreCompact = config.EventPreCompact
+	// EventSessionEnd fires when a session ends; its matcher is tested
+	// against the reason.
+	EventSessionEnd = config.EventSessionEnd
 )
 
 // HaltExitCode is the exit code that halts the whole turn. 2 blocks the

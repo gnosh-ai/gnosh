@@ -23,7 +23,9 @@ fires before the first prompt a process sends to a session. `Stop` fires when
 the agent is about to finish its turn. `SubagentStop` fires when a sub-agent
 is about to finish, and works exactly like `Stop` but for sub-agents.
 `PreCompact` fires just before a session's conversation is summarized, manual
-or automatic.
+or automatic. `SessionEnd` fires when a session ends: when the user starts a
+new one (`clear`), switches to another (`other`), or the process exits with
+the session open (`prompt_input_exit` for the TUI, `other` for `klash run`).
 
 Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
 `PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Klash refuses
@@ -31,12 +33,14 @@ to start on an event name it doesn't fire, rather than accepting a hook that
 would look configured and silently never run.
 
 A `matcher` only makes sense for `PreToolUse`, `PostToolUse`,
-`PostToolUseFailure`, `PreCompact` and `SessionStart`. The first three match
-against the tool name; `PreCompact` matches against its trigger (`manual` or
-`auto`); `SessionStart` matches against its source (`startup`, `resume`,
-`clear` or `compact`). There is nothing to match when a prompt is sent or a
-turn ends, so a `matcher` on a `UserPromptSubmit`, `Stop` or `SubagentStop`
-hook is a config error too, and every configured hook for those events runs.
+`PostToolUseFailure`, `PreCompact`, `SessionStart` and `SessionEnd`. The
+first three match against the tool name; `PreCompact` matches against its
+trigger (`manual` or `auto`); `SessionStart` matches against its source
+(`startup`, `resume`, `clear` or `compact`); `SessionEnd` matches against
+its reason (`clear`, `other` or `prompt_input_exit`). There is nothing to
+match when a prompt is sent or a turn ends, so a `matcher` on a
+`UserPromptSubmit`, `Stop` or `SubagentStop` hook is a config error too,
+and every configured hook for those events runs.
 
 ## Configuration
 
@@ -84,6 +88,7 @@ the input/output contract is identical regardless of language.
 | `KLASH_AGENT_TYPE`           | `SubagentStop`, and a sub-agent's tool calls: its type (`agent_type`), `task` or `agentic_fetch` |
 | `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, as in the payload's `trigger` field |
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, as in the payload's `source` field |
+| `KLASH_SESSION_END_REASON`   | `SessionEnd` only: `clear`, `other` or `prompt_input_exit`, as in the payload's `reason` field |
 
 Each is also set under its `KLASH_` name (`KLASH_EVENT`, ...), the name after
 the rename; either works.
@@ -235,6 +240,19 @@ stop the summary: exit `2` (or `"decision": "block"`) or `49` is shown to the
 user as a warning and the summary goes ahead. A hook that fails or could not
 evaluate is also shown as a warning. It fires only for the top-level agent, not sub-agents.
 
+**On `SessionEnd`** the input is `{"reason": "clear"|"other"|"prompt_input_exit"}`
+beside the common fields. `reason` names why the session ended: the user
+started a new one (`clear`), switched to another one or `klash run` exited
+with it open (`other`), or the TUI exited with it open
+(`prompt_input_exit`). A `matcher` on a `SessionEnd` hook is tested against
+`reason`. As in Claude Code a hook cannot stop anything and what it prints is
+ignored: the exit goes ahead whatever the hook says. A hook that fails is
+logged, and the exit goes ahead without it. Its default timeout is 1.5
+seconds, or its own `timeout` up to a cap of 60 seconds, so exiting Klash is
+not held up for long. It fires only for the top-level agent, not sub-agents,
+and a session ends once: switching away and then exiting does not end it
+again, and a session that was never open does not end at all.
+
 ## Aggregation (Multiple Hooks)
 
 Composed in **config order**:
@@ -368,9 +386,10 @@ value cannot be read, so the hook could not evaluate: it blocks.
 3. Add the entry under `hooks.PreToolUse` or `hooks.PostToolUse` (with the
    right matcher), `hooks.Stop` (no matcher), `hooks.SubagentStop` (no
    matcher; sub-agents only), `hooks.PreCompact` (matcher against
-   `manual`/`auto`), or `hooks.SessionStart` (matcher against
-   `startup`/`resume`/`clear`/`compact`) in `klash.json`. Spell the event name
-   exactly; anything else is a startup error.
+   `manual`/`auto`), `hooks.SessionStart` (matcher against
+   `startup`/`resume`/`clear`/`compact`), or `hooks.SessionEnd` (matcher
+   against `clear`/`other`/`prompt_input_exit`) in `klash.json`. Spell the
+   event name exactly; anything else is a startup error.
 4. Decide intent: inject context (omit `decision`), auto-approve (`"allow"`),
    block (`exit 2`), or halt (`exit 49`). On `Stop` and `SubagentStop`,
    `exit 2` means "keep working" and `exit 49` means "end now". Wherever the
@@ -401,7 +420,7 @@ Code's groups (`{"matcher": …, "hooks": [{"type": "command", …}]}`) as well 
 its own flat entries (`{"matcher": …, "command": …}`), so a Claude Code hooks
 block can be pasted in as it is; only `command` hooks run, and a hook asking for
 more (`if`, `args`, `async`, another `type`), one on an event Klash does not
-fire (`Notification`, `SessionEnd`), a matcher on an event that takes none, or a
+fire (`Notification`), a matcher on an event that takes none, or a
 regex Go cannot read (lookahead) is a config error naming it.
 Divergences: Klash treats `updated_input` as shallow-merge, Claude Code
 replaces; and the payload's `tool_name` is Klash's name (`bash`), not Claude

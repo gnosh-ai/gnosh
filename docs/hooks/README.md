@@ -17,15 +17,16 @@ forward.
 - Hooks are Claude Code-compatible
 - Klash ships with a builtin `klash-hook` skill write, edit, and configure
   hooks; just tell Klash how to configure Klash
-- Klash supports eight hooks: `PreToolUse`, which fires before a tool call,
+- Klash supports nine hooks: `PreToolUse`, which fires before a tool call,
   `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
   fails, `UserPromptSubmit`, which fires when you send a prompt and can add
   context to it or block it, `SessionStart`, which fires before the first
   prompt to a session and can add context to it, `Stop`, which fires when
   the agent is about to finish its turn and can refuse to let it end,
   `SubagentStop`, which fires when a sub-agent is about to finish and can
-  refuse to let it end, and `PreCompact`, which fires just before the
-  session is summarized and can object to it; plans are to support the full
+  refuse to let it end, `PreCompact`, which fires just before the session
+  is summarized and can object to it, and `SessionEnd`, which fires when a
+  session ends; plans are to support the full
   gamut, so please let us know which hooks you'd like to see next
 - Hooks run in parallel for speed, but their results compose in config order
   for determinism
@@ -180,7 +181,7 @@ change nothing, as are the default values of `shell` (`bash`), `async` and
 Code hook can ask for, another `type` (`http`, `mcp_tool`, `prompt`, `agent`),
 an `if` filter, `args`, a background hook, is a config error that names it,
 rather than a hook run some other way than written. So are a hook on an event
-Klash does not fire (`Notification`, `SessionEnd`, …), a matcher on an event
+Klash does not fire (`Notification`, …), a matcher on an event
 that takes none (Claude Code ignores it), and a regular expression Go cannot
 read (lookahead such as `(?!…)`): take those entries out, or rewrite them.
 
@@ -555,6 +556,55 @@ fi
 **Scope**: `SubagentStop` fires only for **sub-agents**, and never for the
 top-level agent — whose gate is `Stop`.
 
+### SessionEnd
+
+This hook fires when a session ends, as in Claude Code. Use it to log the
+session, clean up, or record how it ended.
+
+**Matched against**: the reason, `"clear"`, `"other"` or
+`"prompt_input_exit"`. A `matcher` on a `SessionEnd` hook is tested against
+that reason, so a hook matched on `^clear$` only fires when the user starts
+a new session, and a hook with no matcher fires on every reason.
+
+- `"clear"` — the user started a new session: the TUI's New Session
+  command, say.
+- `"other"` — the user switched to another session, or Klash exited with
+  the session open under `klash run`.
+- `"prompt_input_exit"` — Klash exited with the session open under the TUI.
+
+**Blocking**: none. As in Claude Code, a `SessionEnd` hook cannot stop
+anything and what it prints is ignored: the exit goes ahead whatever the
+hook says. A hook that could not evaluate (it could not run, timed out, or
+failed with a reason on stderr) is logged, and the exit goes ahead without it.
+
+**Timeout**: Claude Code's default for this event is 1.5 seconds, so
+exiting Klash is not held up for long. A hook that sets its own `timeout`
+gets it, up to a cap of 60 seconds.
+
+**Scope**: `SessionEnd` fires only for the **top-level agent**, and not for
+sub-agents. A session ends once: switching away from it and then exiting
+does not end it again, and a session that was never open — the new, still
+empty one — does not end at all.
+
+```jsonc
+{
+  "hooks": {
+    "SessionEnd": [
+      { "command": "./hooks/log-session-end.sh" },
+      { "matcher": "clear", "command": "./hooks/on-new-session.sh" }
+    ]
+  }
+}
+```
+
+```bash
+#!/usr/bin/env bash
+# hooks/log-session-end.sh — record how the session ended.
+read -r input
+reason=$(echo "$input" | jq -r '.reason')
+echo "Session $KLASH_SESSION_ID ended: $reason" >> ~/.local/share/klash/session-ends.log
+```
+
 ### PreCompact
 
 This hook fires just before a session's conversation is summarized: when you
@@ -651,6 +701,7 @@ The available environment variables are:
 | `KLASH_AGENT_TYPE`           | `SubagentStop`, and the tool hooks of a sub-agent's call: the sub-agent's type, as `agent_type` in the payload (`task`, or `agentic_fetch`). |
 | `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, the same as the `trigger` field in the payload. |
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, the same as the `source` field in the payload. |
+| `KLASH_SESSION_END_REASON`   | `SessionEnd` only: `clear`, `other` or `prompt_input_exit`, the same as the `reason` field in the payload. |
 
 Klash was called Crush, so every `KLASH_` variable above is also set under its
 `CRUSH_` name (`CRUSH_EVENT`, `CRUSH_TOOL_NAME`, and so on), and `CRUSH=1`
@@ -1093,11 +1144,12 @@ Each entry under a `hooks.<EventName>` array:
 
   // string. Optional. Tested against the tool name (Klash's or Claude
   // Code's), or against the PreCompact trigger, or against the SessionStart
-  // source, as in Claude Code: exact names separated by | or ,, or else a
-  // regular expression. Omit it, or use *, to match all.
-  // A matcher on a Stop or UserPromptSubmit hook is a config error,
-  // because there is nothing to match when a turn ends or a prompt is
-  // sent.
+  // source, or against the SessionEnd reason, as in Claude Code: exact
+  // names separated by | or ,, or else a regular expression. Omit it, or
+  // use *, to match all.
+  // A matcher on a Stop, UserPromptSubmit or SubagentStop hook is a config
+  // error, because there is nothing to match when a turn ends or a prompt
+  // is sent.
   "matcher": "^bash$",
 
   // string. Required. Shell command to run.
@@ -1236,6 +1288,22 @@ Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
   // the first prompt after a summary. A matcher on a SessionStart hook is
   // tested against this.
   "source": "startup",
+}
+```
+
+### Stdin payload — SessionEnd
+
+Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
+
+```jsonc
+{
+  // ...common fields...
+
+  // string. "clear" when the user started a new session, "other" when
+  // they switched to another one or klash run exited with the session
+  // open, and "prompt_input_exit" when the TUI exited with it open.
+  // A matcher on a SessionEnd hook is tested against this.
+  "reason": "clear",
 }
 ```
 
