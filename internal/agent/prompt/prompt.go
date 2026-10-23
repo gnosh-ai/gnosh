@@ -124,15 +124,62 @@ func (p *Prompt) Build(ctx context.Context, provider, model string, store *confi
 	return sb.String(), nil
 }
 
+// maxContextFileSize is the largest context file that is read: as Claude
+// Code skips a CLAUDE.md over 4 MiB and loads none of it.
+const maxContextFileSize = 4 << 20
+
+// processFile reads a context file as the model gets it: without its
+// block-level HTML comments, and not at all when it is over
+// maxContextFileSize.
 func processFile(filePath string) *ContextFile {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return nil
+	}
+	if info.Size() > maxContextFileSize {
+		slog.Warn("A context file is over 4 MiB; it is not read", "file", filePath, "size", info.Size())
+		return nil
+	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil
 	}
 	return &ContextFile{
 		Path:    filePath,
-		Content: string(content),
+		Content: stripHTMLComments(string(content)),
 	}
+}
+
+// stripHTMLComments removes a context file's block-level HTML comments,
+// as Claude Code does before the model reads the file: notes left for
+// the people who keep it, which cost the model tokens and would import
+// what they name. A comment block starts a line, after at most three
+// spaces, with <!-- and runs to the line with -->, which goes too, as a
+// Markdown HTML block does. A comment in a fenced code block, or within
+// a line of text, stays.
+func stripHTMLComments(content string) string {
+	if !strings.Contains(content, "<!--") {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	kept := lines[:0]
+	fenced, inComment := false, false
+	for _, line := range lines {
+		if inComment {
+			inComment = !strings.Contains(line, "-->")
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			fenced = !fenced
+		} else if indent := len(line) - len(strings.TrimLeft(line, " ")); !fenced && indent <= 3 && strings.HasPrefix(line[indent:], "<!--") {
+			// From after "<!", so that "<!-->", an empty comment, ends here.
+			inComment = !strings.Contains(line[indent+len("<!"):], "-->")
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
 }
 
 func processContextPath(p string, store *config.ConfigStore) []ContextFile {

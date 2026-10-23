@@ -26,6 +26,62 @@ func contextPaths(files []ContextFile) []string {
 	return paths
 }
 
+// A context file's block-level HTML comments are notes for the people who
+// keep it: the model does not get them, as in Claude Code, and an import
+// one names is not followed. A comment in a fenced code block, one within
+// a line of text, and one indented as code stay.
+func TestLoadContextFilesStripHTMLComments(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeContextFile(t, dir, "notes.md", "the maintainers' notes")
+	claude := writeContextFile(t, dir, "CLAUDE.md", strings.Join([]string{
+		"# Rules",
+		"<!-- keep this list short -->",
+		"Use tabs.",
+		"  <!--",
+		"  old rule: @notes.md",
+		"  -->",
+		"Say why <!-- inline --> in commits.",
+		"```html",
+		"<!-- an example comment -->",
+		"```",
+		"    <!-- indented as code -->",
+		"Done.",
+	}, "\n"))
+	store := config.NewTestStore(&config.Config{Options: &config.Options{}})
+
+	files := loadContextFiles([]string{claude}, store, dir)
+	require.Equal(t, []string{"CLAUDE.md"}, contextPaths(files), "the commented-out import was followed")
+	require.Equal(t, strings.Join([]string{
+		"# Rules",
+		"Use tabs.",
+		"Say why <!-- inline --> in commits.",
+		"```html",
+		"<!-- an example comment -->",
+		"```",
+		"    <!-- indented as code -->",
+		"Done.",
+	}, "\n"), files[0].Content)
+
+	require.Equal(t, "no comments here", stripHTMLComments("no comments here"))
+	require.Equal(t, "a\nb", stripHTMLComments("a\n<!-->\nb"), "an empty comment ends on its own line")
+}
+
+// A context file over 4 MiB is not read at all, as Claude Code skips one.
+func TestLoadContextFilesSkipAFileOver4MiB(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	big := writeContextFile(t, dir, "CLAUDE.md", "")
+	require.NoError(t, os.Truncate(big, maxContextFileSize+1))
+	exact := writeContextFile(t, dir, "AGENTS.md", "")
+	require.NoError(t, os.Truncate(exact, maxContextFileSize))
+	store := config.NewTestStore(&config.Config{Options: &config.Options{}})
+
+	require.Equal(t, []string{"AGENTS.md"}, contextPaths(loadContextFiles([]string{big, exact}, store, dir)))
+}
+
 // Context files come in the order their paths are configured, every time.
 // They used to come in map order, so a rebuilt system prompt could list
 // them differently, and a model server's prompt cache then had to read
