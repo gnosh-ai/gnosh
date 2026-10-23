@@ -1503,6 +1503,14 @@ func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
 	if err := cfg.configureProviders(ctx, s, env, resolver, providers); err != nil {
 		return fmt.Errorf("failed to configure providers during reload: %w", err)
 	}
+	// A reload that would leave no provider because the configured ones
+	// were left out, a model server not answering for a moment say, keeps
+	// the config in use rather than take every model from under a running
+	// session. The first load goes on with none instead, to say why (see
+	// configureProviders).
+	if cfg.Providers.Len() == 0 && len(cfg.skippedProviders) > 0 {
+		return fmt.Errorf("no configured provider can be used, so the config in use is kept: %s", cfg.SkippedProvidersSummary())
+	}
 
 	// Update store state BEFORE running model/agent setup (so they see new config)
 	s.setConfig(cfg)

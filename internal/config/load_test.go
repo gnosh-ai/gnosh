@@ -1770,7 +1770,8 @@ func TestConfig_configureProvidersDisableDefaultProviders(t *testing.T) {
 		})
 		resolver := NewShellVariableResolver(env)
 		err := cfg.configureProviders(context.Background(), testStore(cfg), env, resolver, knownProviders)
-		require.ErrorContains(t, err, "no custom providers")
+		require.NoError(t, err, "a provider left out is reported, not a failed load")
+		require.Equal(t, "it has no base_url", cfg.SkippedProviders()["openai"])
 
 		// openai should NOT be present because it lacks base_url and models.
 		require.Equal(t, 0, cfg.Providers.Len())
@@ -1895,7 +1896,8 @@ func TestConfig_configureProvidersDisableDefaultProviders(t *testing.T) {
 		env := env.NewFromMap(map[string]string{})
 		resolver := NewShellVariableResolver(env)
 		err := cfg.configureProviders(context.Background(), testStore(cfg), env, resolver, []catwalk.Provider{})
-		require.ErrorContains(t, err, "no custom providers")
+		require.NoError(t, err, "a provider left out is reported, not a failed load")
+		require.Contains(t, cfg.SkippedProviders()["my-llm"], "its model server did not answer")
 
 		// Discovery fails (unreachable URL) so provider is removed.
 		require.Equal(t, 0, cfg.Providers.Len())
@@ -1919,10 +1921,24 @@ func TestConfig_configureProvidersDisableDefaultProviders(t *testing.T) {
 		env := env.NewFromMap(map[string]string{})
 		resolver := NewShellVariableResolver(env)
 		err := cfg.configureProviders(context.Background(), testStore(cfg), env, resolver, []catwalk.Provider{})
-		require.ErrorContains(t, err, "no custom providers")
+		require.NoError(t, err, "a provider left out is reported, not a failed load")
+		require.Equal(t, "it has no base_url", cfg.SkippedProviders()["my-llm"])
 
 		// Provider should be rejected for missing base_url.
 		require.Equal(t, 0, cfg.Providers.Len())
+	})
+
+	t.Run("when enabled and no provider is configured at all, the load fails", func(t *testing.T) {
+		cfg := &Config{
+			Options:   &Options{DisableDefaultProviders: true},
+			Providers: csync.NewMap[string, ProviderConfig](),
+		}
+		cfg.setDefaults("/tmp", "")
+
+		env := env.NewFromMap(map[string]string{})
+		resolver := NewShellVariableResolver(env)
+		err := cfg.configureProviders(context.Background(), testStore(cfg), env, resolver, []catwalk.Provider{})
+		require.EqualError(t, err, "default providers are disabled and no custom providers are configured")
 	})
 }
 

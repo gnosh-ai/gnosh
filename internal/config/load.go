@@ -531,8 +531,13 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 		c.Providers.Set(id, providerConfig)
 	}
 
-	if c.Providers.Len() == 0 && c.Options.DisableDefaultProviders {
-		return fmt.Errorf("default providers are disabled and there are no custom providers are configured")
+	// Providers that were configured but left out (a model server that did
+	// not answer, a missing base_url) do not fail the load: the TUI, klash
+	// run and klash doctor then say which and why (SkippedProvidersSummary).
+	// Failing here said none were configured, and klash doctor could not
+	// show which one failed.
+	if c.Providers.Len() == 0 && c.Options.DisableDefaultProviders && len(c.skippedProviders) == 0 {
+		return fmt.Errorf("default providers are disabled and no custom providers are configured")
 	}
 
 	return nil
