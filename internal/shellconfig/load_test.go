@@ -309,10 +309,10 @@ fi`
 }
 
 // TestLoadShellConfig_CrushVersionEnv verifies that the running version is
-// exposed to the script so it can feature-detect it, as CRASH_VERSION and as
+// exposed to the script so it can feature-detect it, as KLASH_VERSION and as
 // CRUSH_VERSION, its name before the rename.
 func TestLoadShellConfig_CrushVersionEnv(t *testing.T) {
-	for _, name := range []string{"CRASH_VERSION", "CRUSH_VERSION"} {
+	for _, name := range []string{"KLASH_VERSION", "CRUSH_VERSION"} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			script := `provider add openai --api-key "$` + name + `"`

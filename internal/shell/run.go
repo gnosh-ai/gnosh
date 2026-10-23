@@ -202,7 +202,7 @@ func newRunner(cwd string, env []string, stdin io.Reader, stdout, stderr io.Writ
 // interp.DefaultExecHandler as the final handler, which lacks process group
 // isolation. Without isolation, shells like zsh that set up job control
 // when sourcing framework files can send SIGINT/SIGTERM to Crush's process
-// group and crash the parent.
+// group and klash the parent.
 func execHandlerOption(blockFuncs []BlockFunc) interp.RunnerOption {
 	base := processGroupExecHandler(defaultKillTimeout)
 	handler := base

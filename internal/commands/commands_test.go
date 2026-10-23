@@ -75,12 +75,12 @@ func TestLoadAll_FirstOfTheSameNameWins(t *testing.T) {
 	require.Equal(t, "user:other", cmds[1].ID)
 }
 
-// A commands directory under the crash name must not hide the commands in
+// A commands directory under the klash name must not hide the commands in
 // the crush one.
 func TestBuildCommandSources_ReadsBothNames(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
-	for name, cmd := range map[string]string{"crash": "new.md", "crush": "old.md"} {
+	for name, cmd := range map[string]string{"klash": "new.md", "crush": "old.md"} {
 		dir := filepath.Join(xdg, name, "commands")
 		require.NoError(t, os.MkdirAll(dir, 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, cmd), []byte(name), 0o644))

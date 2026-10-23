@@ -285,13 +285,13 @@ func readFileForTest(t *testing.T, path string) string {
 	return string(raw)
 }
 
-// The stop marker from before the rename to Crash still counts, and is
+// The stop marker from before the rename to Klash still counts, and is
 // stripped like the current one: a session or prompt older than the
 // rename may still have the agent write it.
 func TestLegacyStopMarker(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "<!-- CRASH_STOP -->", StopMarker)
+	require.Equal(t, "<!-- KLASH_STOP -->", StopMarker)
 	require.True(t, stopMarkerPresent("reason\n<!-- CRUSH_STOP -->"))
 	require.Equal(t, "reason", StripStopMarker("reason\n<!-- CRUSH_STOP -->"))
 	require.Equal(t, "reason", StripStopMarker("reason\n"+StopMarker))

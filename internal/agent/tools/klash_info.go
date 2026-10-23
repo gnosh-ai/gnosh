@@ -15,14 +15,14 @@ import (
 	"github.com/charmbracelet/crush/internal/skills"
 )
 
-const CrashInfoToolName = "crash_info"
+const KlashInfoToolName = "klash_info"
 
-//go:embed crash_info.md
-var crashInfoDescription string
+//go:embed klash_info.md
+var klashInfoDescription string
 
-type CrashInfoParams struct{}
+type KlashInfoParams struct{}
 
-func NewCrashInfoTool(
+func NewKlashInfoTool(
 	cfg *config.ConfigStore,
 	lspManager *lsp.Manager,
 	allSkills []*skills.Skill,
@@ -30,15 +30,15 @@ func NewCrashInfoTool(
 	skillTracker *skills.Tracker,
 ) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
-		CrashInfoToolName,
-		crashInfoDescription,
-		func(ctx context.Context, _ CrashInfoParams, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
-			return fantasy.NewTextResponse(buildCrashInfo(cfg, lspManager, allSkills, activeSkills, skillTracker)), nil
+		KlashInfoToolName,
+		klashInfoDescription,
+		func(ctx context.Context, _ KlashInfoParams, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			return fantasy.NewTextResponse(buildKlashInfo(cfg, lspManager, allSkills, activeSkills, skillTracker)), nil
 		},
 	)
 }
 
-func buildCrashInfo(cfg *config.ConfigStore, lspManager *lsp.Manager, allSkills []*skills.Skill, activeSkills []*skills.Skill, skillTracker *skills.Tracker) string {
+func buildKlashInfo(cfg *config.ConfigStore, lspManager *lsp.Manager, allSkills []*skills.Skill, activeSkills []*skills.Skill, skillTracker *skills.Tracker) string {
 	var b strings.Builder
 
 	writeConfigFiles(&b, cfg)

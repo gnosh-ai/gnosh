@@ -33,14 +33,14 @@ func TestLoadContextFilesKeepsTheConfiguredOrder(t *testing.T) {
 
 	dir := t.TempDir()
 	var paths []string
-	for _, name := range []string{"CLAUDE.md", "GEMINI.md", "CRASH.md", "CRUSH.md", "AGENTS.md"} {
+	for _, name := range []string{"CLAUDE.md", "GEMINI.md", "KLASH.md", "CRUSH.md", "AGENTS.md"} {
 		paths = append(paths, writeContextFile(t, dir, name, "about "+name))
 	}
 	store := config.NewTestStore(&config.Config{Options: &config.Options{}})
 
 	for range 20 {
 		require.Equal(t,
-			[]string{"CLAUDE.md", "GEMINI.md", "CRASH.md", "CRUSH.md", "AGENTS.md"},
+			[]string{"CLAUDE.md", "GEMINI.md", "KLASH.md", "CRUSH.md", "AGENTS.md"},
 			contextPaths(loadContextFiles(paths, store)))
 	}
 }

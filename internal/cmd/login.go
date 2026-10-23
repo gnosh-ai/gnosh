@@ -20,24 +20,24 @@ var loginCmd = &cobra.Command{
 	Aliases: []string{"auth"},
 	Use:     "login [platform]",
 	Short:   "Login " + version.Name + " to a platform",
-	Long: `Login Crash to a specified platform.
+	Long: `Login Klash to a specified platform.
 	The platform should be provided as an argument.
 	Available platforms are: hyper, copilot, openai (chatgpt), grok (xai).`,
 	Example: `
 	# Authenticate with Charm Hyper
-	crash login
+	klash login
 
 	# Authenticate with GitHub Copilot
-	crash login copilot
+	klash login copilot
 
 	# Authenticate with a ChatGPT (OpenAI) account
-	crash login openai
+	klash login openai
 
 	# Authenticate with a Grok (xAI) account
-	crash login grok
+	klash login grok
 
 	# Force re-authentication even if already logged in
-	crash login -f copilot
+	klash login -f copilot
 	`,
 	ValidArgs: []cobra.Completion{
 		"hyper",

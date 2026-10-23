@@ -33,7 +33,7 @@ var (
 )
 
 // file to cache provider data. It resolves through GlobalConfigData so the
-// catalog follows CRASH_GLOBAL_DATA like the rest of the data directory.
+// catalog follows KLASH_GLOBAL_DATA like the rest of the data directory.
 func cachePathFor(name string) string {
 	return filepath.Join(filepath.Dir(GlobalConfigData()), name+".json")
 }
@@ -191,7 +191,7 @@ func Providers(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider, er
 			items, err := catwalkSyncer.Get(ctx)
 			if err != nil {
 				catwalkURL := fmt.Sprintf("%s/v2/providers", cmp.Or(os.Getenv("CATWALK_URL"), defaultCatwalkURL))
-				catwalkErr = fmt.Errorf(version.Name+" was unable to fetch an updated list of providers from %s. Consider setting CRASH_DISABLE_PROVIDER_AUTO_UPDATE=1 to use the embedded providers bundled at the time of this release. You can also update providers manually. For more info see "+version.Command+" update-providers --help.\n\nCause: %w", catwalkURL, err) //nolint:staticcheck
+				catwalkErr = fmt.Errorf(version.Name+" was unable to fetch an updated list of providers from %s. Consider setting KLASH_DISABLE_PROVIDER_AUTO_UPDATE=1 to use the embedded providers bundled at the time of this release. You can also update providers manually. For more info see "+version.Command+" update-providers --help.\n\nCause: %w", catwalkURL, err) //nolint:staticcheck
 			}
 			providers.Append(items...)
 		})

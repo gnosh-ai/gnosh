@@ -24,7 +24,7 @@ func doctorConfig() *config.Config {
 		},
 		Hooks:   map[string][]config.HookConfig{config.EventStop: {{Command: "true"}}, config.EventUserPromptSubmit: {{Command: "a"}, {Command: "b"}}},
 		LSP:     config.LSPs{"gopls": {Command: "gopls"}, "off": {Command: "nope", Disabled: true}},
-		Options: &config.Options{DataDirectory: "/tmp/proj/.crash"},
+		Options: &config.Options{DataDirectory: "/tmp/proj/.klash"},
 	}
 }
 

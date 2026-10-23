@@ -419,6 +419,53 @@ func LetterYAlt(stretch bool) string {
 	)
 }
 
+// LetterK renders the letter K in a stylized way. It takes an integer that
+// determines how many cells to stretch the letter. If the stretch is less than
+// 1, it defaults to no stretching.
+func LetterK(stretch bool) string {
+	// Here's what we're making:
+	//
+	// █ ▄▀
+	// █▀
+	// ▀ ▀▄
+	_ = stretch
+	return heredoc.Doc(`
+		█ ▄▀
+		█▀
+		▀ ▀▄
+	`)
+}
+
+// LetterL renders the letter L in a stylized way. It takes an integer that
+// determines how many cells to stretch the letter. If the stretch is less than
+// 1, it defaults to no stretching.
+func LetterL(stretch bool) string {
+	// Here's what we're making:
+	//
+	// █
+	// █
+	// ▀▀▀▀
+	side := heredoc.Doc(`
+		█
+		█
+		▀
+	`)
+	middle := heredoc.Doc(`
+
+
+		▀
+	`)
+	return joinLetterform(
+		side,
+		stretchLetterformPart(middle, letterformProps{
+			stretch:    stretch,
+			width:      4,
+			minStretch: 7,
+			maxStretch: 12,
+		}),
+	)
+}
+
 func joinLetterform(letters ...string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, letters...)
 }

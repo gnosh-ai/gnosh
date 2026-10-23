@@ -1,11 +1,11 @@
 ---
-name: crash-hooks
-description: Use when the user wants to add, write, debug, or configure a Crash hook — gating or blocking tool calls, approving or rewriting tool input before execution, running a formatter or linter after a tool call, injecting context into tool results, or troubleshooting hook behavior in crash.json.
+name: klash-hooks
+description: Use when the user wants to add, write, debug, or configure a Klash hook — gating or blocking tool calls, approving or rewriting tool input before execution, running a formatter or linter after a tool call, injecting context into tool results, or troubleshooting hook behavior in klash.json.
 ---
 
-# Crash Hooks
+# Klash Hooks
 
-Hooks are user-defined commands in `crash.json` that fire at specific points
+Hooks are user-defined commands in `klash.json` that fire at specific points
 during execution, giving deterministic control over tool behavior. They run
 **before** permission checks and **only on the top-level agent's** tool calls —
 sub-agent calls (task tool, agentic_fetch, etc.) are not intercepted, though
@@ -23,7 +23,7 @@ the agent is about to finish its turn. `PreCompact` fires just before a
 session's conversation is summarized, manual or automatic.
 
 Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
-`PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Crash refuses
+`PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Klash refuses
 to start on an event name it doesn't fire, rather than accepting a hook that
 would look configured and silently never run.
 
@@ -66,18 +66,18 @@ the input/output contract is identical regardless of language.
 
 | Variable                     | Description                              |
 | ---------------------------- | ---------------------------------------- |
-| `CRASH_EVENT`                | Event name (`PreToolUse`, `PostToolUse` or `Stop`) |
-| `CRASH_TOOL_NAME`            | Tool being called; empty on `Stop`       |
-| `CRASH_SESSION_ID`           | Current session ID                       |
-| `CRASH_CWD`                  | Working directory                        |
-| `CRASH_PROJECT_DIR`          | Project root directory                   |
-| `CRASH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command      |
-| `CRASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
-| `CRASH_TOOL_USE_ID`          | The tool call's ID, the same in its `PreToolUse` and `PostToolUse` hooks |
-| `CRASH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` if an earlier `Stop` hook is why the turn is still running |
-| `CRASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, as in the payload's `trigger` field |
+| `KLASH_EVENT`                | Event name (`PreToolUse`, `PostToolUse` or `Stop`) |
+| `KLASH_TOOL_NAME`            | Tool being called; empty on `Stop`       |
+| `KLASH_SESSION_ID`           | Current session ID                       |
+| `KLASH_CWD`                  | Working directory                        |
+| `KLASH_PROJECT_DIR`          | Project root directory                   |
+| `KLASH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command      |
+| `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
+| `KLASH_TOOL_USE_ID`          | The tool call's ID, the same in its `PreToolUse` and `PostToolUse` hooks |
+| `KLASH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` if an earlier `Stop` hook is why the turn is still running |
+| `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, as in the payload's `trigger` field |
 
-Each is also set under its `CRASH_` name (`CRASH_EVENT`, ...), the name after
+Each is also set under its `KLASH_` name (`KLASH_EVENT`, ...), the name after
 the rename; either works.
 
 **JSON on stdin:**
@@ -184,7 +184,7 @@ Composed in **config order**:
 #!/usr/bin/env bash
 set -euo pipefail
 
-if echo "$CRASH_TOOL_INPUT_COMMAND" | grep -qE 'rm\s+-(rf|fr)\s+/'; then
+if echo "$KLASH_TOOL_INPUT_COMMAND" | grep -qE 'rm\s+-(rf|fr)\s+/'; then
   echo "Refusing to run rm -rf against root" >&2
   exit 2
 fi
@@ -208,7 +208,7 @@ Emit only `context` — omit `decision` so the normal permission flow still runs
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$CRASH_TOOL_INPUT_FILE_PATH" == *.go ]]; then
+if [[ "$KLASH_TOOL_INPUT_FILE_PATH" == *.go ]]; then
   echo '{"context": "Remember: run gofumpt after editing Go files."}'
 else
   echo '{}'
@@ -247,7 +247,7 @@ preserved.
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-f="$CRASH_TOOL_INPUT_FILE_PATH"
+f="$KLASH_TOOL_INPUT_FILE_PATH"
 [[ "$f" == *.go ]] || exit 0
 if ! out=$(gofumpt -w "$f" 2>&1); then
   echo "gofumpt failed on $f: $out" >&2
@@ -255,7 +255,7 @@ if ! out=$(gofumpt -w "$f" 2>&1); then
 fi
 ```
 
-When a hook changes the file the agent just wrote, Crash records a fresh
+When a hook changes the file the agent just wrote, Klash records a fresh
 read of it, so the agent's next edit isn't refused as "modified since it was
 read", and tells the agent the file changed.
 
@@ -284,9 +284,9 @@ There is no cap on how many times a Stop hook may block: if the work is not
 done, it is not done. Every 10th consecutive block, the agent is instead asked
 to judge whether there is a genuine reason to stop (impossible as asked,
 blocked on the user, a check that cannot pass here, no progress). If so it
-explains why and ends its reply with `<!-- CRASH_STOP -->` on its own line;
-Crash ends the turn and warns the user. Otherwise it keeps working. A hook
-that wants to object only once can check `CRASH_STOP_HOOK_ACTIVE` and exit 0.
+explains why and ends its reply with `<!-- KLASH_STOP -->` on its own line;
+Klash ends the turn and warns the user. Otherwise it keeps working. A hook
+that wants to object only once can check `KLASH_STOP_HOOK_ACTIVE` and exit 0.
 
 A Claude Code-style Stop hook that prints `{"decision": "block", "reason": "…"}`
 works the same as exit `2`. Decision values are matched exactly: `allow`,
@@ -299,26 +299,26 @@ value is reported as a failed hook, not silently ignored.
 2. `chmod +x` the script.
 3. Add the entry under `hooks.PreToolUse` or `hooks.PostToolUse` (with the
    right matcher), `hooks.Stop` (no matcher), or `hooks.PreCompact` (matcher
-   against `manual`/`auto`) in `crash.json`. Spell the event name exactly;
+   against `manual`/`auto`) in `klash.json`. Spell the event name exactly;
    anything else is a startup error.
 4. Decide intent: inject context (omit `decision`), auto-approve (`"allow"`),
    block (`exit 2`), or halt (`exit 49`). On `Stop`, `exit 2` means "keep
    working" and `exit 49` means "end now".
-5. On `Stop`, check `CRASH_STOP_HOOK_ACTIVE` so a hook that blocks can't loop.
+5. On `Stop`, check `KLASH_STOP_HOOK_ACTIVE` so a hook that blocks can't loop.
 6. If rewriting input, remember `updated_input` is a shallow merge — only
    include the keys you want to change (`PreToolUse` only).
 
 ## Debugging
 
 - Timeouts kill the hook silently and the tool call proceeds. Bump `timeout` if needed.
-- Non-zero exit codes other than 2/49 are logged but don't block — check Crash logs.
+- Non-zero exit codes other than 2/49 are logged but don't block — check Klash logs.
 - Use `echo "debug info" >&2` for logging without corrupting stdout JSON.
 - `matcher` is a regex against the tool name. Use `^bash$` (not `bash`) if you
   don't also want to match `mcp_something_bash`.
 
 ## Claude Code Compatibility
 
-Crash also accepts Claude Code's `hookSpecificOutput` envelope. One intentional
-divergence: Crash treats `updated_input` as shallow-merge, Claude Code replaces.
+Klash also accepts Claude Code's `hookSpecificOutput` envelope. One intentional
+divergence: Klash treats `updated_input` as shallow-merge, Claude Code replaces.
 Existing Claude Code hooks work without modification for the matcher/decision
 parts; revisit any that relied on `updatedInput` fully replacing tool input.

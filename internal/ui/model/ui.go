@@ -226,7 +226,7 @@ type UI struct {
 	// continueLastSession is set to continue the most recent session on startup.
 	continueLastSession bool
 	// pickSessionAtStart opens the sessions list on startup, for a bare
-	// `crash -r` (see PickSessionAtStart).
+	// `klash -r` (see PickSessionAtStart).
 	pickSessionAtStart bool
 
 	lastUserMessageTime int64
@@ -716,7 +716,7 @@ func startState(configured bool, needsInit func() bool, sessionAsked bool) uiSta
 }
 
 // PickSessionAtStart makes the UI open the list of sessions to pick from
-// as it starts, for a bare `crash -r`, as Claude Code's `claude -r` opens
+// as it starts, for a bare `klash -r`, as Claude Code's `claude -r` opens
 // its picker. Like a session named on the command line, it goes before
 // the question whether to initialize the project (see startState).
 func (m *UI) PickSessionAtStart() {
@@ -3871,7 +3871,7 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}
 
 	// Debugging rendering (visually see when the tui rerenders)
-	if env.Getenv("CRASH_UI_DEBUG") == "true" {
+	if env.Getenv("KLASH_UI_DEBUG") == "true" {
 		debugView := lipgloss.NewStyle().Background(lipgloss.ANSIColor(rand.Intn(256))).Width(4).Height(2)
 		debug := uv.NewStyledString(debugView.String())
 		debug.Draw(scr, image.Rectangle{

@@ -8,10 +8,10 @@ import (
 )
 
 // prefixes are the environment variable prefixes the program is configured
-// through: CRUSH_*, and CRASH_* for the name it is being renamed to.
-var prefixes = []string{"CRUSH_", "CRASH_"}
+// through: CRUSH_*, and KLASH_* for the name it is being renamed to.
+var prefixes = []string{"CRUSH_", "KLASH_"}
 
-// ClearConfigVars unsets every CRUSH_* and CRASH_* variable in the process
+// ClearConfigVars unsets every CRUSH_* and KLASH_* variable in the process
 // environment. Call it first thing in a package's TestMain.
 //
 // The program is configured through these variables, and everything it runs
@@ -26,7 +26,7 @@ var prefixes = []string{"CRUSH_", "CRASH_"}
 // the catalog from Charm's servers (catwalk and Hyper): the network is no
 // part of a unit test, and Jae runs the program with that fetch off. A test
 // of the fetch itself opts back in with
-// t.Setenv("CRASH_DISABLE_PROVIDER_AUTO_UPDATE", "0") and points it at a
+// t.Setenv("KLASH_DISABLE_PROVIDER_AUTO_UPDATE", "0") and points it at a
 // local server.
 func ClearConfigVars() {
 	for _, kv := range os.Environ() {
@@ -38,5 +38,5 @@ func ClearConfigVars() {
 			}
 		}
 	}
-	os.Setenv("CRASH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	os.Setenv("KLASH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
 }

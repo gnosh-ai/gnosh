@@ -982,7 +982,7 @@ func updateState(name string, state State, err error, client *ClientSession, cou
 		// A session that has errored is dead to us: close it so the child
 		// process and its stdio pipes are released, and clear its registry
 		// entries so the agent stops advertising capabilities it can no
-		// longer call (without that, crash_info / the `/mcp` menu and the
+		// longer call (without that, klash_info / the `/mcp` menu and the
 		// tool list handed to the LLM diverge). Crucially, close exactly the
 		// session that errored (the client argument): if the registry
 		// already holds a DIFFERENT session — a newer, healthy one another

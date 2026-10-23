@@ -66,7 +66,7 @@ func TestGlobalIgnorePatternsReadsBothNames(t *testing.T) {
 	t.Parallel()
 
 	configDir := t.TempDir()
-	for app, pattern := range map[string]string{"crash": "*.log", "crush": "secret/"} {
+	for app, pattern := range map[string]string{"klash": "*.log", "crush": "secret/"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(configDir, app), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(configDir, app, "ignore"), []byte(pattern+"\n"), 0o644))
 	}
@@ -81,7 +81,7 @@ func TestGlobalIgnorePatternsReadsBothNames(t *testing.T) {
 		}
 		return false
 	}
-	require.True(t, matches("debug.log", false), "the crash ignore file counts")
+	require.True(t, matches("debug.log", false), "the klash ignore file counts")
 	require.True(t, matches("secret", true), "and so does the crush one")
 	require.False(t, matches("main.go", false))
 

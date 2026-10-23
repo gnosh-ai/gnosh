@@ -142,30 +142,30 @@ func TestMapEnv_EnvFormat(t *testing.T) {
 	require.True(t, found["spaces"], "Should handle values with spaces")
 }
 
-// While Crush is renamed Crash, a CRASH_ setting falls back to the CRUSH_
+// While Crush is renamed Klash, a KLASH_ setting falls back to the CRUSH_
 // one it replaces, and wins when both are set.
 func TestLookupEnvFallsBackToTheNameBeforeTheRename(t *testing.T) {
 	t.Run("only the old name", func(t *testing.T) {
 		t.Setenv("CRUSH_ENV_TEST_SETTING", "old")
-		v, ok := LookupEnv("CRASH_ENV_TEST_SETTING")
+		v, ok := LookupEnv("KLASH_ENV_TEST_SETTING")
 		require.True(t, ok)
 		require.Equal(t, "old", v)
-		require.Equal(t, "old", Getenv("CRASH_ENV_TEST_SETTING"))
+		require.Equal(t, "old", Getenv("KLASH_ENV_TEST_SETTING"))
 	})
 	t.Run("both names, the new one wins", func(t *testing.T) {
 		t.Setenv("CRUSH_ENV_TEST_SETTING", "old")
-		t.Setenv("CRASH_ENV_TEST_SETTING", "new")
-		require.Equal(t, "new", Getenv("CRASH_ENV_TEST_SETTING"))
+		t.Setenv("KLASH_ENV_TEST_SETTING", "new")
+		require.Equal(t, "new", Getenv("KLASH_ENV_TEST_SETTING"))
 	})
 	t.Run("the new name set empty still wins", func(t *testing.T) {
 		t.Setenv("CRUSH_ENV_TEST_SETTING", "1")
-		t.Setenv("CRASH_ENV_TEST_SETTING", "")
-		v, ok := LookupEnv("CRASH_ENV_TEST_SETTING")
+		t.Setenv("KLASH_ENV_TEST_SETTING", "")
+		v, ok := LookupEnv("KLASH_ENV_TEST_SETTING")
 		require.True(t, ok)
 		require.Empty(t, v)
 	})
 	t.Run("neither name", func(t *testing.T) {
-		_, ok := LookupEnv("CRASH_ENV_TEST_UNSET")
+		_, ok := LookupEnv("KLASH_ENV_TEST_UNSET")
 		require.False(t, ok)
 	})
 	t.Run("other names have no fallback", func(t *testing.T) {
@@ -193,12 +193,12 @@ func TestLookupBool(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("CRUSH_LOOKUP_BOOL_TEST", "")
 			os.Unsetenv("CRUSH_LOOKUP_BOOL_TEST")
-			t.Setenv("CRASH_LOOKUP_BOOL_TEST", "")
-			os.Unsetenv("CRASH_LOOKUP_BOOL_TEST")
+			t.Setenv("KLASH_LOOKUP_BOOL_TEST", "")
+			os.Unsetenv("KLASH_LOOKUP_BOOL_TEST")
 			if tt.value != nil {
-				t.Setenv("CRASH_LOOKUP_BOOL_TEST", *tt.value)
+				t.Setenv("KLASH_LOOKUP_BOOL_TEST", *tt.value)
 			}
-			got, set := LookupBool("CRASH_LOOKUP_BOOL_TEST")
+			got, set := LookupBool("KLASH_LOOKUP_BOOL_TEST")
 			if got != tt.want || set != tt.set {
 				t.Fatalf("LookupBool = (%v, %v), want (%v, %v)", got, set, tt.want, tt.set)
 			}
@@ -209,10 +209,10 @@ func TestLookupBool(t *testing.T) {
 // TestLookupBoolFallsBackToCrush keeps a setup that still exports the old
 // CRUSH_ name working, as LookupEnv does.
 func TestLookupBoolFallsBackToCrush(t *testing.T) {
-	t.Setenv("CRASH_LOOKUP_BOOL_FALLBACK", "")
-	os.Unsetenv("CRASH_LOOKUP_BOOL_FALLBACK")
+	t.Setenv("KLASH_LOOKUP_BOOL_FALLBACK", "")
+	os.Unsetenv("KLASH_LOOKUP_BOOL_FALLBACK")
 	t.Setenv("CRUSH_LOOKUP_BOOL_FALLBACK", "1")
-	got, set := LookupBool("CRASH_LOOKUP_BOOL_FALLBACK")
+	got, set := LookupBool("KLASH_LOOKUP_BOOL_FALLBACK")
 	if !got || !set {
 		t.Fatalf("LookupBool = (%v, %v), want (true, true) from the CRUSH_ name", got, set)
 	}

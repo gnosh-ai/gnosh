@@ -22,7 +22,7 @@
         },
         "generated_with": {
           "type": "boolean",
-          "description": "Add Generated with Crash line to commit messages and issues and PRs",
+          "description": "Add Generated with Klash line to commit messages and issues and PRs",
           "default": true
         }
       },
@@ -354,7 +354,7 @@
         },
         "sessionless": {
           "type": "boolean",
-          "description": "Mark a sessionless MCP server (no Mcp-Session-Id) so Crash skips the subscriptions/listen stream it would otherwise reject. Leave unset to auto-detect known sessionless servers (e.g. GitHub MCP)",
+          "description": "Mark a sessionless MCP server (no Mcp-Session-Id) so Klash skips the subscriptions/listen stream it would otherwise reject. Leave unset to auto-detect known sessionless servers (e.g. GitHub MCP)",
           "default": false
         },
         "headers": {
@@ -584,7 +584,7 @@
         },
         "disable_provider_auto_update": {
           "type": "boolean",
-          "description": "Disable fetching the provider catalog from Charm's servers (catwalk.charm.land and hyper.charm.land). Unset it is not fetched and the catalog built into Crash is used; set false to fetch it",
+          "description": "Disable fetching the provider catalog from Charm's servers (catwalk.charm.land and hyper.charm.land). Unset it is not fetched and the catalog built into Klash is used; set false to fetch it",
           "default": true
         },
         "disable_default_providers": {
@@ -638,7 +638,7 @@
           "items": {
             "type": "string",
             "examples": [
-              "crash-config"
+              "klash-config"
             ]
           },
           "type": "array",
@@ -930,7 +930,7 @@
             "compact",
             "none"
           ],
-          "description": "Exit banner style after quitting Crash",
+          "description": "Exit banner style after quitting Klash",
           "default": "default"
         }
       },

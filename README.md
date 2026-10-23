@@ -1,8 +1,8 @@
-# Crash
+# Klash
 
 **A security-first coding agent for your terminal, built for gno.land.**
 
-Crash is a fork of Charm's [Crush](https://github.com/charmbracelet/crush):
+Klash is a fork of Charm's [Crush](https://github.com/charmbracelet/crush):
 the same terminal UI, sessions, LSP and MCP support, and any model you like,
 from a hosted API to one running on your own machine. On top of that it keeps
 your keys and your work to itself, knows Gno and gno.land natively, speaks
@@ -21,22 +21,22 @@ hung or failed without saying so.
 
 Upstream Crush talks to Charm from its first start: usage metrics to its
 analytics service, the provider catalog from its servers, and a release check
-on GitHub. Crash does none of that unless you ask. With a fresh config, the
+on GitHub. Klash does none of that unless you ask. With a fresh config, the
 only traffic is to the model provider you chose.
 
-| Upstream Crush does this unless switched off           | Crash does it only when turned on                                             |
+| Upstream Crush does this unless switched off           | Klash does it only when turned on                                             |
 | ------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| Sends usage metrics to `data.charm.land`               | `option metrics true`, or `CRASH_DISABLE_METRICS=0`                           |
-| Fetches the provider catalog from Charm's servers      | `option provider-auto-update true`, or `CRASH_DISABLE_PROVIDER_AUTO_UPDATE=0` |
-| Checks GitHub for a newer release of upstream Crush    | `CRASH_DISABLE_UPDATE_CHECK=0`                                                |
+| Sends usage metrics to `data.charm.land`               | `option metrics true`, or `KLASH_DISABLE_METRICS=0`                           |
+| Fetches the provider catalog from Charm's servers      | `option provider-auto-update true`, or `KLASH_DISABLE_PROVIDER_AUTO_UPDATE=0` |
+| Checks GitHub for a newer release of upstream Crush    | `KLASH_DISABLE_UPDATE_CHECK=0`                                                |
 
-Without the fetch, Crash uses the provider catalog built into the binary, and
-`crash update-providers` refreshes it by hand. `DO_NOT_TRACK=1` keeps metrics
+Without the fetch, Klash uses the provider catalog built into the binary, and
+`klash update-providers` refreshes it by hand. `DO_NOT_TRACK=1` keeps metrics
 off whatever else is set. [Metrics](#metrics) lists what they would contain.
 
 ### Your keys never reach the model
 
-Signing a gno.land transaction needs a key's password. Crash's `gnokey` tool
+Signing a gno.land transaction needs a key's password. Klash's `gnokey` tool
 shows you the exact command, then asks for the password in a masked prompt.
 What you type goes straight to gnokey's standard input and is scrubbed from
 its output. The model never sees it, and it is not saved with the session.
@@ -50,7 +50,7 @@ around it:
   cannot feed a password in by another door.
 - Key management (`gnokey add`, `delete`, `export` and the rest) is refused
   outright and stays in your own terminal.
-- A run with nobody there to type, such as `crash run`, has no signing tool
+- A run with nobody there to type, such as `klash run`, has no signing tool
   at all, so the agent prints the command for you to run yourself.
 
 So every signature is one you saw and typed for. To let something sign
@@ -62,13 +62,13 @@ then on.
 
 Web pages, command output and server replies can carry a model's own control
 tokens, such as `<|im_start|>` or llama.cpp's media marker, to rewrite the
-conversation from inside a tool result. Crash defuses them before the model
+conversation from inside a tool result. Klash defuses them before the model
 reads them. Tool output is capped by its raw size, so a runaway command cannot
 flood the context.
 
 ### Mistakes fail closed
 
-- A hook with a misspelt event name, or a `crashrc` option Crash does not
+- A hook with a misspelt event name, or a `klashrc` option Klash does not
   know, stops it at startup with the names it does know. Upstream ignored
   such a hook, so a misspelt guard simply never ran.
 - A hook whose answer is malformed cannot approve a tool call by accident, and
@@ -77,7 +77,7 @@ flood the context.
 ### What still leaves your machine
 
 - Your prompts, and the files the agent reads, go to the model provider you
-  choose. Point Crash at a [local model](#local-models) and nothing leaves.
+  choose. Point Klash at a [local model](#local-models) and nothing leaves.
 - `fetch`, `download`, `agentic_fetch` and `x402_fetch` reach the sites the
   agent asks for, after asking you. `x402_fetch` also reads the paying account
   from a node of the seller's chain.
@@ -88,7 +88,7 @@ flood the context.
 ## Built for gno.land
 
 [gno.land](https://gno.land) is a smart-contract platform whose contracts,
-called realms, are written in Gno, an interpreted and deterministic Go. Crash
+called realms, are written in Gno, an interpreted and deterministic Go. Klash
 knows it the way it knows Go.
 
 **The gno skill.** A built-in skill loads itself whenever a task touches
@@ -118,7 +118,7 @@ key, a session, within limits the chain itself enforces:
   sessions, and never add a package.
 
 Realms see the master as the caller, so nothing on the realm side changes.
-Crash's `gnokey` tool creates and revokes sessions (`gnokey maketx session
+Klash's `gnokey` tool creates and revokes sessions (`gnokey maketx session
 create`, `revoke`, `revokeall`) through the same masked prompt. You can give a
 browser wallet, a device or a script bounded authority instead of your master
 key. A leaked session key costs at most what is left of its limit before it
@@ -131,23 +131,23 @@ price on a gno.land chain. When you tell the agent to pay, its `x402_fetch`
 tool shows you the price, the payee, the chain and the network fee, and asks
 for the key's password in the masked prompt above. gnokey signs one bank send
 of exactly that price, the seller's facilitator settles it, and the agent gets
-the resource and the transaction hash. Crash checks the signature before the
+the resource and the transaction hash. Klash checks the signature before the
 payment leaves, pays only in ugnot, at most 1 GNOT at a time plus a network
 fee of at most 1 GNOT, and only on local and test chains: x402 on gno.land is
 unaudited, testnet-only work, so mainnet is refused. Pay from a session key and
 the chain caps what it can spend as well. Nothing is paid without you at the
-prompt: a run with nobody there to type has no paying tool. Crash signs these
+prompt: a run with nobody there to type has no paying tool. Klash signs these
 payments with the Go x402 client from
 [jaekwon/x402](https://github.com/jaekwon/x402).
 
 **gnopls.** Install the [Gno language server](https://github.com/gnoverse/gnopls)
-and Crash starts it for `.gno` files on its own, as it does gopls for Go.
+and Klash starts it for `.gno` files on its own, as it does gopls for Go.
 
 **gno-mcp.** The gno team's MCP server, [gno-mcp](https://mcp.gno.dev), runs in
-Crash like any other:
+Klash like any other:
 
 ```bash
-# crashrc
+# klashrc
 mcp add gnomcp --command gnomcp
 ```
 
@@ -160,21 +160,21 @@ that you sign with gnokey yourself.
 
 Claude Code's names work here too.
 
-| Claude Code                      | Crash                                              | What it does                                                |
+| Claude Code                      | Klash                                              | What it does                                                |
 | -------------------------------- | -------------------------------------------------- | ----------------------------------------------------------- |
-| `claude -p "…"`                  | `crash run "…"`, or `crash -p "…"`                 | Answer one prompt without the TUI                           |
-| `-p --output-format json`        | `crash run --output-format json`                   | Print one JSON result at the end                            |
-| `-p --output-format stream-json` | `crash run --output-format stream-json`            | A JSON line per message and tool result, then the result    |
-| `claude -r <id>`                 | `crash -s <id>`, or `crash -r <id>`                | Continue a session by ID                                    |
-| `claude -r`                      | `crash -r`                                         | Pick a session to continue from a list                      |
-| `claude -c`                      | `crash -C`                                         | Continue the last session; `-c` sets the working directory |
+| `claude -p "…"`                  | `klash run "…"`, or `klash -p "…"`                 | Answer one prompt without the TUI                           |
+| `-p --output-format json`        | `klash run --output-format json`                   | Print one JSON result at the end                            |
+| `-p --output-format stream-json` | `klash run --output-format stream-json`            | A JSON line per message and tool result, then the result    |
+| `claude -r <id>`                 | `klash -s <id>`, or `klash -r <id>`                | Continue a session by ID                                    |
+| `claude -r`                      | `klash -r`                                         | Pick a session to continue from a list                      |
+| `claude -c`                      | `klash -C`                                         | Continue the last session; `-c` sets the working directory |
 | `--dangerously-skip-permissions` | `--yolo`, or `--dangerously-skip-permissions`      | Skip every permission prompt                                |
 | `--allowedTools Read Grep`       | `--allowedTools "Read Grep"`, or `Read,Grep`       | Let these tools run without asking                          |
 | `--disallowedTools Bash Edit`    | `--disallowedTools "Bash Edit"`, or `Bash,Edit`    | Do not give the agent these tools                           |
 | `--tools "Read,Grep"`            | `--tools "Read,Grep"` (`""`: none)                 | Give the agent only these built-in tools                    |
-| `--system-prompt "…"`            | `--system-prompt "…"`, or `--system-prompt-file`   | Use these instructions in place of Crash's own              |
+| `--system-prompt "…"`            | `--system-prompt "…"`, or `--system-prompt-file`   | Use these instructions in place of Klash's own              |
 | `--append-system-prompt "…"`     | `--append-system-prompt "…"`, or its `-file` form  | Add this text at the end of the system prompt               |
-| `claude doctor`                  | `crash doctor`                                     | Check config, providers, models, hooks and tools            |
+| `claude doctor`                  | `klash doctor`                                     | Check config, providers, models, hooks and tools            |
 
 - **Hooks** take Claude Code's events and answers: `PreToolUse`,
   `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit` and `Stop`, with
@@ -182,10 +182,10 @@ Claude Code's names work here too.
   A UserPromptSubmit hook can add context to every prompt or block one, and a
   Stop hook can keep the agent working until your tests pass. See
   [docs/hooks](docs/hooks/README.md).
-- **Context and skills.** Crash reads `CLAUDE.md` and `CLAUDE.local.md`
-  alongside `CRASH.md` and `AGENTS.md`, and loads skills from `~/.claude/skills`
+- **Context and skills.** Klash reads `CLAUDE.md` and `CLAUDE.local.md`
+  alongside `KLASH.md` and `AGENTS.md`, and loads skills from `~/.claude/skills`
   and a project's `.claude/skills`. `--system-prompt` keeps them and the
-  environment, as Claude Code keeps `CLAUDE.md`: only Crash's own instructions
+  environment, as Claude Code keeps `CLAUDE.md`: only Klash's own instructions
   give way. Plan mode keeps its own, with `--append-system-prompt` added.
 - **`/loop`** keeps a session working on a task until it is done.
 
@@ -210,7 +210,7 @@ or failed without saying so. The ones you will notice:
 
 **It tells you what happened.**
 
-- `crash run --verbose` shows every tool call, a sub-agent's included, and
+- `klash run --verbose` shows every tool call, a sub-agent's included, and
   marks the ones that failed. Bash results carry their exit code.
 - When an edit is refused because the file changed, when a multi-edit fails,
   or when a grep for code with brackets finds nothing, the agent is told why
@@ -221,8 +221,8 @@ or failed without saying so. The ones you will notice:
 **It is yours to change.**
 
 - The system prompt and every tool description are files you can edit:
-  `crash prompt export`, `show`, `path` and `tools`.
-- `crash session web` serves a local page to read and edit a session's
+  `klash prompt export`, `show`, `path` and `tools`.
+- `klash session web` serves a local page to read and edit a session's
   messages.
 - `/think` and `/no_think` switch a model's thinking on or off, and it sticks.
 - Prompts typed while the agent works are queued, and <kbd>Up</kbd> edits
@@ -235,12 +235,12 @@ file work, since they keep track of what it has read.
 
 ## Installation
 
-Crash is built from source, with Go 1.27 or newer. From a checkout of this
+Klash is built from source, with Go 1.27 or newer. From a checkout of this
 repository:
 
 ```bash
-go build -o crash .
-install -m 755 crash ~/.local/bin/crash   # or anywhere on your PATH
+go build -o klash .
+install -m 755 klash ~/.local/bin/klash   # or anywhere on your PATH
 ```
 
 On Oracle Solaris, add `-tags sqlite3_dotlk` so the local database uses
@@ -248,13 +248,13 @@ dot-file locking.
 
 Everything named `crush` keeps working. An existing `~/.config/crush`, a
 project's `.crush/`, a `crushrc` or `crush.json`, `CRUSH.md` and `CRUSH_*`
-variables are all still read, and where a `crash` one exists it wins.
-`crash dirs` shows which directories are in use.
+variables are all still read, and where a `klash` one exists it wins.
+`klash dirs` shows which directories are in use.
 
 ## Getting started
 
-Run `crash` in a project directory and press <kbd>ctrl+l</kbd> to pick a
-model. Crash works with Anthropic, OpenAI, Google, OpenRouter, Groq and many
+Run `klash` in a project directory and press <kbd>ctrl+l</kbd> to pick a
+model. Klash works with Anthropic, OpenAI, Google, OpenRouter, Groq and many
 more hosted providers, with any OpenAI- or Anthropic-compatible endpoint, and
 with models on your own machine through llama.cpp, Ollama or LM Studio (see
 [Local Models](#local-models)). Charm's own provider, [Hyper][hyper], is there
@@ -262,7 +262,7 @@ too.
 
 ## API Keys
 
-You can also use Crash with many other providers such as Anthropic, OpenAI,
+You can also use Klash with many other providers such as Anthropic, OpenAI,
 Gemini, OpenRouter and so on. Press <kbd>ctrl+l</kbd> to open the model picker,
 choose the provider of your choice, and paste your API key.
 
@@ -301,21 +301,21 @@ That said, you can also set environment variables for preferred providers:
 
 [hyper]: https://hyper.charm.land
 
-Also note that Crash can support nearly any provider, including
+Also note that Klash can support nearly any provider, including
 [Local Models](#local-models). For more info see
 [Custom Providers](#custom-providers) below.
 
 ## Configuration
 
 > [!TIP]
-> Crash ships with a builtin skill for configuring itself. Most of the time
+> Klash ships with a builtin skill for configuring itself. Most of the time
 > you can just tell what you want it to configure and it will get the job done.
 
-Crash runs great with no configuration. That said, if you do need or want to
-customize Crash, you can, with a `crashrc`.
+Klash runs great with no configuration. That said, if you do need or want to
+customize Klash, you can, with a `klashrc`.
 
-A `crashrc` is just Bash with some Crash-specific builtins. It’s a lot like
-a `.bashrc`, just for your Crash. Because Crash has a native, built-in Bash
+A `klashrc` is just Bash with some Klash-specific builtins. It’s a lot like
+a `.bashrc`, just for your Klash. Because Klash has a native, built-in Bash
 interpreter, Bash-based config works identically across all platforms, including
 Windows.
 
@@ -348,24 +348,24 @@ with the following priority:
 
 | Priority | Unix-like                 | Windows                               |
 | -------- | ------------------------- | ------------------------------------- |
-| 1        | `./.crashrc`              | `.\.crashrc`                          |
-| 2        | `./crashrc`               | `.\crashrc`                           |
-| 3        | `~/.config/crash/crashrc` | `%USERPROFILE%\.config\crash\crashrc` |
+| 1        | `./.klashrc`              | `.\.klashrc`                          |
+| 2        | `./klashrc`               | `.\klashrc`                           |
+| 3        | `~/.config/klash/klashrc` | `%USERPROFILE%\.config\klash\klashrc` |
 
-(Crash respects the [XDG Base Directory Specification][xdg], so your paths
+(Klash respects the [XDG Base Directory Specification][xdg], so your paths
 may differ depending on your `XDG_CONFIG_HOME` value. Data directories such as
-`~/.local/share/crash` and `%LOCALAPPDATA%\crash` contain JSON state only; Crash
-does not execute a `crashrc` from them.)
+`~/.local/share/klash` and `%LOCALAPPDATA%\klash` contain JSON state only; Klash
+does not execute a `klashrc` from them.)
 
-Crash was called Crush, and every crush name still works: `~/.config/crush`,
+Klash was called Crush, and every crush name still works: `~/.config/crush`,
 `~/.local/share/crush`, `~/.cache/crush`, a project's `.crush/` data directory
 with its `crush.db`, and `crush.json`, `crushrc`, `.crushignore` and `CRUSH.md`.
 Wherever only the crush one exists, that one is used, so an existing setup and
-its sessions keep working without being moved; once the crash one exists, it
-wins. `~/.config/crash` and `~/.local/share/crash` count only once they hold a
-config file (`crash.json`, `crush.json`, `crashrc` or `crushrc`), so a `crash`
+its sessions keep working without being moved; once the klash one exists, it
+wins. `~/.config/klash` and `~/.local/share/klash` count only once they hold a
+config file (`klash.json`, `crush.json`, `klashrc` or `crushrc`), so a `klash`
 folder made for something else doesn't hide the `crush` one in use. A project
-uses the closest `.crash/` or `.crush/` on the way up to its root.
+uses the closest `.klash/` or `.crush/` on the way up to its root.
 
 [xdg]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 
@@ -375,28 +375,28 @@ considered deprecated. See: [the config docs](./docs/config/) for details.
 > [!TIP]
 > You can override the user and data config locations by setting:
 >
-> - `CRASH_GLOBAL_CONFIG`
-> - `CRASH_GLOBAL_DATA`
+> - `KLASH_GLOBAL_CONFIG`
+> - `KLASH_GLOBAL_DATA`
 >
-> Every `CRASH_` environment variable in this document also works under its
-> `CRUSH_` name, from before the rename; when both are set, `CRASH_` wins.
+> Every `KLASH_` environment variable in this document also works under its
+> `CRUSH_` name, from before the rename; when both are set, `KLASH_` wins.
 
-As an additional note, Crash also stores ephemeral data, such as application
+As an additional note, Klash also stores ephemeral data, such as application
 state, in one additional location. This is state and should not be edited by
 hand, nor should it be considered configuration.
 
 ```bash
 # Unix
-$HOME/.local/share/crash/crash.json
+$HOME/.local/share/klash/klash.json
 
 # Windows
-%LOCALAPPDATA%\crash\crash.json
+%LOCALAPPDATA%\klash\klash.json
 ```
 
 #### A note on security
 
-Both `crashrc` and `crash.json` are trusted code; `crashrc` runs in a full
-shell, and any `$(...)` in `crash.json` runs at load time. Don't launch Crash
+Both `klashrc` and `klash.json` are trusted code; `klashrc` runs in a full
+shell, and any `$(...)` in `klash.json` runs at load time. Don't launch Klash
 in a directory whose config you haven't reviewed, and don't randomly `source`
 files from the internet into your config.
 
@@ -405,7 +405,7 @@ files from the internet into your config.
 The top-level `env` field sets environment variables at startup, before
 providers are configured. This is useful for variables that affect provider
 authentication (e.g. the AWS SDK credential chain) without wrapping the
-`crash` command in a shell script or exporting them in your shell profile:
+`klash` command in a shell script or exporting them in your shell profile:
 
 ```json
 {
@@ -422,7 +422,7 @@ a value.
 
 ### Themes
 
-Crash ships with built-in color themes.
+Klash ships with built-in color themes.
 
 #### Switching Themes
 
@@ -434,7 +434,7 @@ confirms the selection. Press `esc` to cancel and revert.
 
 Open **Themes**, highlight the theme to customize, and press `ctrl+e`.
 Changes preview live as you type. Press `enter` or `ctrl+s` to save, or `esc`
-to cancel and revert. User themes are stored globally in the Crash config
+to cancel and revert. User themes are stored globally in the Klash config
 directory under `themes/`.
 
 You can also select a theme directly in your config with `active_theme`:
@@ -451,7 +451,7 @@ You can also select a theme directly in your config with `active_theme`:
 ```
 
 Custom theme palettes are stored as JSON files in the global theme directory.
-For example, `~/.config/crash/themes/my-theme.json`:
+For example, `~/.config/klash/themes/my-theme.json`:
 
 ```json
 {
@@ -473,11 +473,11 @@ dialog.
 
 ### LSPs
 
-Crash can use LSPs for additional context to help inform its decisions, just
+Klash can use LSPs for additional context to help inform its decisions, just
 like you would. LSPs can be added manually like so:
 
 ```bash
-# crashrc
+# klashrc
 
 lsp add go --command "gopls" --env "GOTOOLCHAIN go1.24.5"
 lsp add typescript --command "typescript-language-server" --args --stdio
@@ -486,12 +486,12 @@ lsp add nix --command "nil"
 
 ### MCPs
 
-Crash also supports Model Context Protocol (MCP) servers through three transport
+Klash also supports Model Context Protocol (MCP) servers through three transport
 types: `stdio` for command-line servers, `http` for HTTP endpoints, and `sse`
 for Server-Sent Events.
 
 ```bash
-# crashrc
+# klashrc
 
 # Add a local MCP server that runs a Node.js script.
 mcp add filesystem --command node --args /path/to/mcp-server.js \
@@ -509,7 +509,7 @@ mcp add streaming-service --type sse --url "https://example.com/mcp/sse" \
 
 #### MCP OAuth
 
-HTTP and SSE MCP servers that require OAuth can use Crash's built-in
+HTTP and SSE MCP servers that require OAuth can use Klash's built-in
 authorization-code flow instead of a static `Authorization` header. Set
 `"oauth": true` to enable it:
 
@@ -546,34 +546,34 @@ credentials directly. All values support shell expansion:
 }
 ```
 
-When `oauth_client_id` is set, Crash skips dynamic client registration
-and authenticates as the specified client. When omitted, Crash attempts
+When `oauth_client_id` is set, Klash skips dynamic client registration
+and authenticates as the specified client. When omitted, Klash attempts
 dynamic registration automatically (works with Linear, Notion, and other
 servers that support RFC 7591).
 
 #### Sessionless servers
 
 Some HTTP MCP servers are sessionless — they never issue a
-`Mcp-Session-Id` and reject the `subscriptions/listen` stream Crash opens
+`Mcp-Session-Id` and reject the `subscriptions/listen` stream Klash opens
 for list-changed notifications, which would otherwise break the
-connection. Crash auto-detects known sessionless servers (GitHub MCP,
+connection. Klash auto-detects known sessionless servers (GitHub MCP,
 `api.githubcopilot.com/mcp`), so those need no extra configuration.
 
 For other sessionless servers, mark them explicitly with
-`"sessionless": true` (or `--sessionless true` in `crashrc`); set it to
+`"sessionless": true` (or `--sessionless true` in `klashrc`); set it to
 `false` to force the default behavior for an auto-detected URL. The
 tradeoff is that a sessionless server won't push live
 tool/prompt/resource list-changed notifications.
 
 ### Hooks
 
-Crash has preliminary support for hooks. For details, see
+Klash has preliminary support for hooks. For details, see
 [the hook guide](./docs/hooks/).
 
 ### Sharing a workspace across clients
 
-When Crash is run against a shared backend (for example two TUIs talking to
-the same `crash serve`), clients are grouped into **workspaces** keyed by
+When Klash is run against a shared backend (for example two TUIs talking to
+the same `klash serve`), clients are grouped into **workspaces** keyed by
 their resolved `--cwd`. Two clients with the same `--cwd` join the same
 underlying workspace, so they share the session list, message history,
 permission queue, LSP, and MCP state.
@@ -606,14 +606,14 @@ does not get reaped before it can attach.
 
 ### Global context files
 
-Crash automatically includes two files for cross-project instructions. Think of
+Klash automatically includes two files for cross-project instructions. Think of
 these are personal additions to the system prompt.
 
-- `~/.config/crash/CRASH.md`: Crash-specific rules that would confuse other
-  agentic coding tools. If you only use Crash, this is the only one you need to
+- `~/.config/klash/KLASH.md`: Klash-specific rules that would confuse other
+  agentic coding tools. If you only use Klash, this is the only one you need to
   edit.
 - `~/.config/AGENTS.md`: generic instructions that other coding tools might
-  read. Avoid referring to Crash-specific features or workflows here. You
+  read. Avoid referring to Klash-specific features or workflows here. You
   probably only care about this if you use multiple agentic coding tools and
   want to share instructions between them.
 
@@ -630,17 +630,17 @@ option global-context-path "/full/path/to/folder/of/files/"
 
 ### Ignoring Files
 
-Crash respects `.gitignore` files by default, but you can also create a
-`.crashignore` file to specify additional files and directories that Crash
+Klash respects `.gitignore` files by default, but you can also create a
+`.klashignore` file to specify additional files and directories that Klash
 should ignore. This is useful for excluding files that you want in version
-control but don't want Crash to consider when providing context.
+control but don't want Klash to consider when providing context.
 
-The `.crashignore` file uses the same syntax as `.gitignore` and can be placed
+The `.klashignore` file uses the same syntax as `.gitignore` and can be placed
 in the root of your project or in subdirectories.
 
 ### Allowing Tools
 
-By default, Crash will ask you for permission before running tool calls. If
+By default, Klash will ask you for permission before running tool calls. If
 you'd like, you can allow tools to be executed without prompting you for
 permissions. Use this with care.
 
@@ -660,44 +660,44 @@ To disable tools from MCP servers, see the [MCP config section](#mcps).
 
 ### You only live once
 
-You can also skip all permission prompts completely by running Crash with the
+You can also skip all permission prompts completely by running Klash with the
 `--yolo` flag (or `--dangerously-skip-permissions`, as Claude Code calls it).
 Be very, very careful with this feature.
 
 ### Disabling Skills
 
-You can prevent Crash from using certain skills entirely. Disabled skills are
+You can prevent Klash from using certain skills entirely. Disabled skills are
 hidden from the agent, including builtin skills and skills discovered from
 disk.
 
 ```bash
-option disable-skill crash-config
+option disable-skill klash-config
 ```
 
 ### Agent Skills
 
-Crash supports the [Agent Skills](https://agentskills.io) open standard for
+Klash supports the [Agent Skills](https://agentskills.io) open standard for
 extending agent capabilities with reusable skill packages. Skills are folders
-containing a `SKILL.md` file with instructions that Crash can discover and
+containing a `SKILL.md` file with instructions that Klash can discover and
 activate on demand.
 
 The global paths we looks for skills are:
 
-- `$CRASH_SKILLS_DIR`
+- `$KLASH_SKILLS_DIR`
 - `$XDG_CONFIG_HOME/agents/skills` or `~/.config/agents/skills/`
-- `$XDG_CONFIG_HOME/crash/skills` or `~/.config/crash/skills/`
+- `$XDG_CONFIG_HOME/klash/skills` or `~/.config/klash/skills/`
 - `~/.agents/skills/`
 - `~/.claude/skills/`
 - On Windows, we _also_ look at
   - `%LOCALAPPDATA%\agents\skills\` or `%USERPROFILE%\AppData\Local\agents\skills\`
-  - `%LOCALAPPDATA%\crash\skills\` or `%USERPROFILE%\AppData\Local\crash\skills\`
+  - `%LOCALAPPDATA%\klash\skills\` or `%USERPROFILE%\AppData\Local\klash\skills\`
 - Additional paths configured via `options.skills_paths`
 
 On top of that, we _also_ load skills in your project from the following
 relative paths:
 
 - `.agents/skills`
-- `.crash/skills`
+- `.klash/skills`
 - `.claude/skills`
 - `.cursor/skills`
 
@@ -711,16 +711,16 @@ You can get started with example skills from [anthropics/skills](https://github.
 
 ```bash
 # Unix
-mkdir -p ~/.config/crash/skills
-cd ~/.config/crash/skills
+mkdir -p ~/.config/klash/skills
+cd ~/.config/klash/skills
 git clone https://github.com/anthropics/skills.git _temp
 mv _temp/skills/* . && rm -rf _temp
 ```
 
 ```powershell
 # Windows (PowerShell)
-mkdir -Force "$env:LOCALAPPDATA\crash\skills"
-cd "$env:LOCALAPPDATA\crash\skills"
+mkdir -Force "$env:LOCALAPPDATA\klash\skills"
+cd "$env:LOCALAPPDATA\klash\skills"
 git clone https://github.com/anthropics/skills.git _temp
 mv _temp/skills/* . ; rm -r -force _temp
 ```
@@ -761,7 +761,7 @@ Skills with `disable-model-invocation` won't appear in the model's available ski
 
 ### Desktop notifications
 
-Crash sends desktop notifications when a tool call requires permission and when
+Klash sends desktop notifications when a tool call requires permission and when
 the agent finishes its turn. They're only sent when the terminal window isn't
 focused _and_ your terminal supports reporting the focus state.
 
@@ -775,24 +775,24 @@ supported.
 
 ### Initialization
 
-When you initialize a project, Crash analyzes your codebase and creates
+When you initialize a project, Klash analyzes your codebase and creates
 a context file that helps it work more effectively in future sessions. By
 default, this file is named `AGENTS.md`, but you can customize the name and
 location with the `initialize-as` option:
 
 ```bash
-# crashrc
+# klashrc
 option initialize-as AGENTS.md
 ```
 
 This is useful if you prefer a different naming convention or want to place the
-file in a specific directory (e.g., `CRASH.md` or `docs/LLMs.md`). Crash will
+file in a specific directory (e.g., `KLASH.md` or `docs/LLMs.md`). Klash will
 fill the file with project-specific context like build commands, code patterns,
 and conventions it discovered during initialization.
 
 ### Attribution Settings
 
-By default, Crash adds attribution information to Git commits and pull requests
+By default, Klash adds attribution information to Git commits and pull requests
 it creates. You can customize this behavior with `option` commands:
 
 ```bash
@@ -802,15 +802,15 @@ option attribution-generated-with true
 
 - `trailer_style`: Controls the attribution trailer added to commit messages
   (default: `assisted-by`)
-  - `assisted-by`: Adds `Assisted-by: Crash:[ModelID]` as specified in [the convention](https://docs.kernel.org/process/coding-assistants.html#attribution)
-  - `co-authored-by`: Adds `Co-Authored-By: Crash <crash@charm.land>`
+  - `assisted-by`: Adds `Assisted-by: Klash:[ModelID]` as specified in [the convention](https://docs.kernel.org/process/coding-assistants.html#attribution)
+  - `co-authored-by`: Adds `Co-Authored-By: Klash <klash@charm.land>`
   - `none`: No attribution trailer
-- `generated_with`: When true (default), adds `💘 Generated with Crash` line to
+- `generated_with`: When true (default), adds `💘 Generated with Klash` line to
   commit messages and PR descriptions
 
 ### Custom Providers
 
-Crash supports custom provider configurations for both OpenAI-compatible and
+Klash supports custom provider configurations for both OpenAI-compatible and
 Anthropic-compatible APIs.
 
 > [!NOTE]
@@ -865,24 +865,24 @@ model add custom-anthropic/claude-sonnet-4-20250514 \
 
 ### Amazon Bedrock
 
-Crash currently supports running Anthropic models through Bedrock, with caching disabled.
+Klash currently supports running Anthropic models through Bedrock, with caching disabled.
 
-A Bedrock provider appears once Crash can find AWS credentials. You can
+A Bedrock provider appears once Klash can find AWS credentials. You can
 authenticate in one of two ways:
 
 **API key.** Set `AWS_BEARER_TOKEN_BEDROCK` to a Bedrock API key. This is the
 simplest option and never expires mid-session.
 
 **AWS credential chain (SSO, profiles, access keys).** Configure AWS the usual
-way with `aws configure` or `aws configure sso`. Crash picks up whatever the
+way with `aws configure` or `aws configure sso`. Klash picks up whatever the
 AWS SDK credential chain resolves, including `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`
 / `AWS_SECRET_ACCESS_KEY`, or an SSO session. To select a specific profile,
-set `AWS_PROFILE` in your shell (`AWS_PROFILE=myprofile crash`) or in the
+set `AWS_PROFILE` in your shell (`AWS_PROFILE=myprofile klash`) or in the
 top-level [`env`](#environment-variables) config.
 
 If you authenticate via AWS SSO, your session expires periodically. Set
 `aws_auth_refresh` to a command that refreshes it. When Bedrock returns a
-credential error, Crash runs the command, then retries the request in place
+credential error, Klash runs the command, then retries the request in place
 (no duplicate messages, no manual restart):
 
 ```json
@@ -915,7 +915,7 @@ $ gcloud auth application-default login
 To add specific models to the configuration, configure as such:
 
 ```bash
-# crashrc — authentication still comes from gcloud and the VERTEXAI_* env vars.
+# klashrc — authentication still comes from gcloud and the VERTEXAI_* env vars.
 provider add vertexai --type google-vertex
 
 model add vertexai/claude-sonnet-4@20250514 \
@@ -932,9 +932,9 @@ model add vertexai/claude-sonnet-4@20250514 \
 
 ### Local Models
 
-Crash can auto-discovers models from local providers. Add a custom provider
+Klash can auto-discovers models from local providers. Add a custom provider
 with `type` set to `llamacpp`, `omlx`, `lmstudio`, `litellm`, or `ollama`
-and leave out the models list. Crash will populate the model list
+and leave out the models list. Klash will populate the model list
 automatically.
 
 ```bash
@@ -963,7 +963,7 @@ by auto-discovery. Auto discovery will run if the model list is empty for any
 the found models with your hand configured ones.
 
 ```bash
-# crashrc
+# klashrc
 provider add ollama \
   --name Ollama \
   --type ollama \
@@ -981,80 +981,80 @@ your explicit model fields win on conflicts.
 
 ## Logging
 
-Sometimes you need to look at logs. Luckily, Crash logs all sorts of
-stuff. Logs are stored in `./.crash/logs/crash.log` relative to the project
+Sometimes you need to look at logs. Luckily, Klash logs all sorts of
+stuff. Logs are stored in `./.klash/logs/klash.log` relative to the project
 (or `./.crush/logs/crush.log` in a project from before the rename).
 
 The CLI also contains some helper commands to make perusing recent logs easier:
 
 ```bash
 # Print the last 1000 lines
-crash logs
+klash logs
 
 # Print the last 500 lines
-crash logs --tail 500
+klash logs --tail 500
 
 # Follow logs in real time
-crash logs --follow
+klash logs --follow
 ```
 
-Want more logging? Run `crash` with the `--debug` flag, or enable it in your
-`crashrc`:
+Want more logging? Run `klash` with the `--debug` flag, or enable it in your
+`klashrc`:
 
 ```bash
-# crashrc
+# klashrc
 option debug true
 option debug-lsp true
 ```
 
 ## The provider catalog
 
-Crash's list of providers and models comes from
+Klash's list of providers and models comes from
 [Catwalk](https://github.com/charmbracelet/catwalk), Charm's open source
 catalog, and a copy is built into the binary. Upstream Crush fetches a fresh
-one from Charm's servers on every start. Crash uses the built-in copy unless
+one from Charm's servers on every start. Klash uses the built-in copy unless
 you ask for the fetch:
 
 ```bash
-# crashrc
+# klashrc
 option provider-auto-update true
 ```
 
-Or set `CRASH_DISABLE_PROVIDER_AUTO_UPDATE=0`. To point the fetch at another
+Or set `KLASH_DISABLE_PROVIDER_AUTO_UPDATE=0`. To point the fetch at another
 catalog, for testing or a fork of Catwalk, set `CATWALK_URL`
 (`export CATWALK_URL=http://localhost:8000`).
 
-To refresh the catalog once, by hand, use `crash update-providers`:
+To refresh the catalog once, by hand, use `klash update-providers`:
 
 ```bash
 # Update providers remotely from Catwalk.
-crash update-providers
+klash update-providers
 
 # Update providers from a custom Catwalk base URL.
-crash update-providers https://example.com/
+klash update-providers https://example.com/
 
 # Update providers from a local file.
-crash update-providers /path/to/local-providers.json
+klash update-providers /path/to/local-providers.json
 
-# Reset providers to the copy built into crash.
-crash update-providers embedded
+# Reset providers to the copy built into klash.
+klash update-providers embedded
 
 # For more info:
-crash update-providers --help
+klash update-providers --help
 ```
 
 ## Metrics
 
-Crash sends no usage metrics unless you opt in, where upstream Crush sends
+Klash sends no usage metrics unless you opt in, where upstream Crush sends
 them to Charm's analytics service by default. Turned on with
-`option metrics true`, or `CRASH_DISABLE_METRICS=0`, Crash sends Charm
+`option metrics true`, or `KLASH_DISABLE_METRICS=0`, Klash sends Charm
 pseudonymous events keyed to a hash of your machine's ID:
 
 - when it starts and exits, and how long it ran;
 - sessions created, switched and deleted;
 - for each prompt and reply, the session ID, provider, model, reasoning effort,
   whether yolo mode is on, and the tokens used;
-- errors, your OS and CPU architecture, terminal, shell and Crash's version.
+- errors, your OS and CPU architecture, terminal, shell and Klash's version.
 
 Prompts, replies and code are never sent. `DO_NOT_TRACK=1` keeps metrics off
 whatever else is set. The events are defined in
@@ -1084,6 +1084,6 @@ Crush without coming back to you. You keep every right to your own work.
 [FSL-1.1-MIT](./LICENSE.md), the same licence as upstream Crush. Each version
 becomes MIT two years after Charm released it.
 
-Crash is a fork of [Crush](https://github.com/charmbracelet/crush) by
+Klash is a fork of [Crush](https://github.com/charmbracelet/crush) by
 [Charm](https://charm.land). Crush and Charm are Charmbracelet's names; this
 fork is not affiliated with or endorsed by them.

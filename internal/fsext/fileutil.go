@@ -30,7 +30,7 @@ func SkipHidden(path string) bool {
 	}
 
 	commonIgnoredDirs := map[string]bool{
-		".crash":           true,
+		".klash":           true,
 		".crush":           true,
 		"node_modules":     true,
 		"vendor":           true,

@@ -116,7 +116,7 @@ func TestPopQueuedPrompts_DoesNotRaceEnqueueCall(t *testing.T) {
 }
 
 // A prompt that carries a RunID belongs to a caller waiting on its
-// RunComplete (`crash run` against a shared server, say). Up must leave it
+// RunComplete (`klash run` against a shared server, say). Up must leave it
 // queued: popping it into an editor would drop it without that caller ever
 // hearing back, and the caller would hang.
 func TestPopQueuedPrompts_LeavesPromptsACallerIsWaitingOn(t *testing.T) {
@@ -127,7 +127,7 @@ func TestPopQueuedPrompts_LeavesPromptsACallerIsWaitingOn(t *testing.T) {
 
 	mu := a.sessionMu(sessionID)
 	mu.Lock()
-	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "from crash run", RunID: "run-1"})
+	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "from klash run", RunID: "run-1"})
 	a.enqueueCall(SessionAgentCall{SessionID: sessionID, Prompt: "typed in the TUI"})
 	mu.Unlock()
 

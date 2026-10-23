@@ -185,7 +185,7 @@ func TestAgentErrorToProto_PreservesRunID(t *testing.T) {
 }
 
 // A hook warning reaches a client as a hook_warning event, its text in
-// Error, so crash run can print it instead of taking it for a failed run.
+// Error, so klash run can print it instead of taking it for a failed run.
 func TestHookWarningToProto(t *testing.T) {
 	t.Parallel()
 

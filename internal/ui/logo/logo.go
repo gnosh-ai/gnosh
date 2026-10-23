@@ -19,7 +19,7 @@ type letterform func(bool) string
 
 const diag = `╱`
 
-// Opts are the options for rendering the Crash title art.
+// Opts are the options for rendering the Klash title art.
 type Opts struct {
 	FieldColor   color.Color // diagonal lines
 	TitleColorA  color.Color // left gradient ramp point
@@ -63,8 +63,8 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 		}
 	}
 	titleLetterforms := []letterform{
-		LetterC,
-		LetterR,
+		LetterK,
+		LetterL,
 		LetterA,
 		LetterSAlt,
 		LetterH,
