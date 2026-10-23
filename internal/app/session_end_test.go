@@ -25,7 +25,6 @@ func sessionEndApp(t *testing.T, hookCfgs ...config.HookConfig) (*App, string) {
 	require.NoError(t, cfg.ValidateHooks())
 	app := NewForTest(t.Context())
 	app.config = config.NewTestStoreIn(cfg, dir)
-	app.sessionEnded = map[string]chan struct{}{}
 	// The LSP manager is the one nil the full Shutdown touches; give it
 	// an empty one.
 	app.LSPManager = lsp.NewManager(app.config)
@@ -279,32 +278,12 @@ func TestShutdownDoesNotExceedBudget(t *testing.T) {
 		"Shutdown is bounded by its 5-second budget, not the hook's 60-second cap")
 }
 
-// The ended set does not grow with the number of sessions the process
-// has had: waitForSessionEndHooks drops an entry once its hook has
-// finished, so a long-lived TUI process does not accumulate a permanent
-// entry per ended session.
-func TestSessionEndedSetIsPruned(t *testing.T) {
-	t.Parallel()
-
-	app, _ := sessionEndApp(t, config.HookConfig{Command: `true`})
-	for _, id := range []string{"a", "b", "c"} {
-		app.ReportCurrentSession(id)
-		app.ReportCurrentSession("")
-	}
-	app.waitForSessionEndHooks(context.Background())
-	app.sessionEndMu.Lock()
-	n := len(app.sessionEnded)
-	app.sessionEndMu.Unlock()
-	require.Equal(t, 0, n, "the ended set is empty after the hooks have run")
-}
-
-// A session that ends while its hook is still running does not end
-// again: the ended set maps the id to the in-flight end's channel, so a
-// second end of the same id while the first is in flight is skipped,
-// and the first end's hook is what runs for it. Once the hook has
-// finished and the entry is pruned, a session reported open again after
-// it ended ends again.
-func TestSessionEndsOnceWhileInFlight(t *testing.T) {
+// A session the user leaves, reopens and leaves again ends twice, even
+// while its first end's hook is still running: each end is an event a
+// SessionEnd hook may count, and skipping the second, as an earlier
+// version did, dropped it. Leaving it once and exiting still ends it once
+// (TestSessionEndsOnce).
+func TestSessionEndsEachTimeItIsLeft(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -312,28 +291,15 @@ func TestSessionEndsOnceWhileInFlight(t *testing.T) {
 		Command: `echo "$KLASH_SESSION_ID" >> ` + filepath.Join(dir, "ended") + ` && sleep 0.3`,
 		Timeout: 60,
 	})
-	// Report s1, then s2: s1 ends, its hook is in flight.
 	app.ReportCurrentSession("s1")
-	app.ReportCurrentSession("s2")
-	// Re-open s1 while s1's hook is still running: s2 ends, s1 is open
-	// again, but s1's first end is still in flight, so s1 does not end
-	// again until the first hook has finished.
+	app.ReportCurrentSession("") // s1 ends; its hook runs for 0.3 s
 	app.ReportCurrentSession("s1")
-	// Wait for the in-flight hooks to finish, so the ended set is
-	// pruned.
+	app.ReportCurrentSession("") // s1 ends again while that hook runs
 	app.waitForSessionEndHooks(context.Background())
-	// Exit with s1 open: s1 ends again, now that its first end has
-	// finished.
-	app.Shutdown()
 
-	// s1 ended once (the in-flight end) and once after the reopen, s2
-	// once: three ends in total, two of them s1.
-	var data []byte
-	require.Eventually(t, func() bool {
-		var err error
-		data, err = os.ReadFile(filepath.Join(dir, "ended"))
-		return err == nil && strings.Count(string(data), "s1\n") == 2 && strings.Count(string(data), "s2\n") == 1
-	}, 2*time.Second, 10*time.Millisecond, "s1 ended twice, s2 once")
+	data, err := os.ReadFile(filepath.Join(dir, "ended"))
+	require.NoError(t, err)
+	require.Equal(t, 2, strings.Count(string(data), "s1\n"), "s1 was left twice: %q", data)
 }
 
 // A session that is reported open again after it ended ends again, and

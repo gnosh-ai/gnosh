@@ -97,12 +97,6 @@ type App struct {
 	// endSession). Guarded by sessionEndMu.
 	currentSessionID string
 	sessionEndMu     sync.Mutex
-	// sessionEnded names the sessions this process has ended, so a
-	// session ends once: endSession consults it before starting hooks,
-	// and waitForSessionEndHooks drops an entry once its hook has
-	// finished, so the set does not grow with the number of sessions the
-	// user has had in a long-lived TUI process.
-	sessionEnded map[string]chan struct{}
 	// sessionEndHooks is the set of in-flight SessionEnd hook goroutines;
 	// each entry is closed when its hook has finished, so
 	// waitForSessionEndHooks can wait on the channels rather than on a
@@ -151,8 +145,6 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 		tuiWG:              &sync.WaitGroup{},
 		agentNotifications: pubsub.NewBroker[notify.Notification](),
 		runCompletions:     pubsub.NewBroker[notify.RunComplete](),
-
-		sessionEnded: map[string]chan struct{}{},
 	}
 
 	app.setupEvents()
@@ -332,21 +324,14 @@ func (app *App) endSessionIfLeft(reason sessionEndReason, id string) {
 	app.endSession(prev, reason)
 }
 
-// endSession records that id ended, so it does not end again, and runs
-// its SessionEnd hooks with reason when it has one and hooks are
+// endSession runs id's SessionEnd hooks with reason, when hooks are
 // configured. The hooks run asynchronously so that a session switch or a
 // new session does not block on them; Shutdown waits for them to finish
-// before the process exits.
-//
-// The ended set maps a session id to the channel of the end that is in
-// flight for it, if any. A session ends once: a second end of the same
-// id while the first end's hook is still running is skipped, because the
-// session is still ended from the process's point of view, and the
-// first end's hook is what runs for it. Once the hook has finished, the
-// entry is pruned, so a session reported open again after it ended ends
-// again and its hooks run again. The check-and-set happens under
-// sessionEndMu, so two ends of the same id in a race end at most one
-// session, as two reports of the same session do.
+// before the process exits. Each end of a session runs them: one the user
+// left, reopened and left again ends twice, even while the first end's
+// hook is still running. That a session does not end twice for one
+// leaving is the callers' doing: each takes the current session out
+// under sessionEndMu before ending it.
 func (app *App) endSession(id string, reason sessionEndReason) {
 	// The hooks are read from the config and run in a goroutine that may
 	// outlive the caller; snapshot them here, in the caller, so a config
@@ -358,11 +343,6 @@ func (app *App) endSession(id string, reason sessionEndReason) {
 	}
 	done := make(chan struct{})
 	app.sessionEndMu.Lock()
-	if _, ended := app.sessionEnded[id]; ended {
-		app.sessionEndMu.Unlock()
-		return
-	}
-	app.sessionEnded[id] = done
 	app.sessionEndHooks = append(app.sessionEndHooks, done)
 	// The hook runs under the process's context, not a fresh
 	// Background: a cancelled run can stop it, instead of only its own
@@ -376,20 +356,8 @@ func (app *App) endSession(id string, reason sessionEndReason) {
 	go func() {
 		defer cancel()
 		app.runSessionEndHooks(ctx, cfgs, id, reason)
-		// Close the channel only after the hook has finished, then prune
-		// the id from sessionEnded: a session that is reported open again
-		// after it ended — the TUI's session list re-opens a session,
-		// say — ends again, and its hooks must run again. Pruning here,
-		// in the goroutine that owns the channel, closes the gap where a
-		// second end of the same id in the same process was skipped
-		// because the entry was only pruned by waitForSessionEndHooks,
-		// which a session switch does not call.
+		// Close the channel only after the hook has finished.
 		close(done)
-		app.sessionEndMu.Lock()
-		if app.sessionEnded[id] == done {
-			delete(app.sessionEnded, id)
-		}
-		app.sessionEndMu.Unlock()
 	}()
 }
 
@@ -415,11 +383,6 @@ func (app *App) endSession(id string, reason sessionEndReason) {
 // context, so the hook's own timeout is what bounds the hook itself),
 // so a hook at its cap may finish a little after the exit, but the exit
 // is not held up for it.
-//
-// The ended set is pruned by the hook goroutines themselves, once each
-// hook has finished, so a session reported open again after it ended
-// ends again and its hooks run again; the wait does not need to prune
-// it.
 func (app *App) waitForSessionEndHooks(bound context.Context) {
 	app.sessionEndMu.Lock()
 	hooks := app.sessionEndHooks
