@@ -92,9 +92,12 @@ func (r *Runner) Hooks() []config.HookConfig {
 // an aggregated result.
 func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolInputJSON string) (AggregateResult, error) {
 	id := toolUseID(ctx)
-	envVars := append(BuildEnv(eventName, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
-	p := toolPayload(eventName, sessionID, r.cwd, toolName, toolInputJSON)
+	session, agentID, agentType := toolCallSession(ctx, sessionID)
+	envVars := append(BuildEnv(eventName, toolName, session, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
+	envVars = append(envVars, agentVars(agentID, agentType)...)
+	p := toolPayload(eventName, session, r.cwd, toolName, toolInputJSON)
 	p.ToolUseID = id
+	p.AgentID, p.AgentType = agentID, agentType
 	return r.run(ctx, r.matchingHooks(toolName, tooldefs.LegacyName(toolName)), eventName, toolName, toolInputJSON, envVars, marshalPayload(p))
 }
 
@@ -109,9 +112,12 @@ func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolIn
 // is always cleared, on the aggregate and on each hook.
 func (r *Runner) RunPostToolUse(ctx context.Context, sessionID, toolName, toolInputJSON, output, metadata string, took time.Duration) (AggregateResult, error) {
 	id := toolUseID(ctx)
-	envVars := append(BuildEnv(EventPostToolUse, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
-	p := postPayload(sessionID, r.cwd, toolName, toolInputJSON, output, metadata)
+	session, agentID, agentType := toolCallSession(ctx, sessionID)
+	envVars := append(BuildEnv(EventPostToolUse, toolName, session, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
+	envVars = append(envVars, agentVars(agentID, agentType)...)
+	p := postPayload(session, r.cwd, toolName, toolInputJSON, output, metadata)
 	p.ToolUseID = id
+	p.AgentID, p.AgentType = agentID, agentType
 	p.DurationMS = took.Milliseconds()
 	agg, err := r.run(ctx, r.matchingHooks(toolName, tooldefs.LegacyName(toolName)), EventPostToolUse, toolName, toolInputJSON, envVars, marshalPayload(p))
 	return afterTheCall(agg), err
@@ -124,9 +130,12 @@ func (r *Runner) RunPostToolUse(ctx context.Context, sessionID, toolName, toolIn
 // left to approve or rewrite.
 func (r *Runner) RunPostToolUseFailure(ctx context.Context, sessionID, toolName, toolInputJSON, errText string, interrupted bool, took time.Duration) (AggregateResult, error) {
 	id := toolUseID(ctx)
-	envVars := append(BuildEnv(EventPostToolUseFailure, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
-	p := toolPayload(EventPostToolUseFailure, sessionID, r.cwd, toolName, toolInputJSON)
+	session, agentID, agentType := toolCallSession(ctx, sessionID)
+	envVars := append(BuildEnv(EventPostToolUseFailure, toolName, session, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
+	envVars = append(envVars, agentVars(agentID, agentType)...)
+	p := toolPayload(EventPostToolUseFailure, session, r.cwd, toolName, toolInputJSON)
 	p.ToolUseID = id
+	p.AgentID, p.AgentType = agentID, agentType
 	p.Error = errText
 	p.IsInterrupt = interrupted
 	p.DurationMS = took.Milliseconds()
@@ -166,6 +175,25 @@ func (r *Runner) RunStop(ctx context.Context, sessionID, lastAssistantMessage st
 	return agg, err
 }
 
+// RunSubagentStop executes every configured hook for the SubagentStop
+// event, which fires when a sub-agent is about to finish, and works
+// exactly as RunStop does for the main agent. Matchers do not apply, as
+// for Stop, so every hook the runner holds is executed. sessionID is
+// the session the sub-agent works for; agentID and agentType name the
+// sub-agent (see BuildSubagentStopPayload).
+//
+// A DecisionDeny result means a hook refused to let the sub-agent
+// finish; the caller should put it back to work with the aggregated
+// Reason. Halt ends it now, and UpdatedInput is always cleared, as for
+// RunStop.
+func (r *Runner) RunSubagentStop(ctx context.Context, sessionID, agentID, agentType, lastAssistantMessage string, stopHookActive bool) (AggregateResult, error) {
+	envVars := BuildSubagentStopEnv(sessionID, agentID, agentType, r.cwd, r.projectDir, stopHookActive)
+	payload := BuildSubagentStopPayload(sessionID, agentID, agentType, r.cwd, lastAssistantMessage, stopHookActive)
+	agg, err := r.run(ctx, r.Hooks(), EventSubagentStop, "", "", envVars, payload)
+	agg.UpdatedInput = ""
+	return agg, err
+}
+
 // RunUserPromptSubmit executes every configured hook for the
 // UserPromptSubmit event, which fires when the user sends a prompt and
 // before the agent sees it. Matchers do not apply, as for Stop.
@@ -179,6 +207,28 @@ func (r *Runner) RunUserPromptSubmit(ctx context.Context, sessionID, prompt stri
 	envVars := BuildEnv(EventUserPromptSubmit, "", sessionID, r.cwd, r.projectDir, "")
 	payload := BuildUserPromptSubmitPayload(sessionID, r.cwd, prompt, attachments)
 	agg, err := r.run(ctx, r.Hooks(), EventUserPromptSubmit, "", "", envVars, payload)
+	agg.UpdatedInput = ""
+	return agg, err
+}
+
+// RunSessionStart executes the SessionStart hooks whose matcher matches
+// source, before the first prompt the process sends to the session.
+// Source is the SessionStartSourceClear, SessionStartSourceResume,
+// SessionStartSourceStartup or SessionStartSourceCompact name of what
+// started the session; hooks with no matcher match every source, as in
+// Claude Code.
+//
+// A SessionStart hook cannot stop the prompt, as in Claude Code: the
+// caller sends the prompt whatever the aggregated result says, and
+// tells the user about any hook that objected or did not run to a
+// verdict. Context is what the hooks want the agent to read with the
+// prompt, as for UserPromptSubmit: a hook's plain-text stdout counts as
+// context too. UpdatedInput is meaningless without a tool call and is
+// always cleared.
+func (r *Runner) RunSessionStart(ctx context.Context, sessionID, model, source string) (AggregateResult, error) {
+	envVars := append(BuildEnv(EventSessionStart, "", sessionID, r.cwd, r.projectDir, ""), hookVar("SESSION_START_SOURCE", source)...)
+	payload := BuildSessionStartPayload(sessionID, r.cwd, model, source)
+	agg, err := r.run(ctx, r.matchingHooks(source, ""), EventSessionStart, "", "", envVars, payload)
 	agg.UpdatedInput = ""
 	return agg, err
 }
@@ -234,7 +284,7 @@ func (r *Runner) run(
 	for i, h := range deduped {
 		go func(idx int, hook config.HookConfig) {
 			defer wg.Done()
-			results[idx] = r.runOne(ctx, hook, envVars, payload, eventName == EventUserPromptSubmit)
+			results[idx] = r.runOne(ctx, hook, envVars, payload, eventName == EventUserPromptSubmit || eventName == EventSessionStart)
 		}(i, h)
 	}
 	wg.Wait()

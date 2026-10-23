@@ -265,6 +265,7 @@ type sessionAgent struct {
 	tools              *csync.Slice[fantasy.AgentTool]
 
 	isSubAgent bool
+	agentType  string // see SessionAgentOptions.AgentType
 	sessions   session.Service
 	messages   message.Service
 	// cfg backs channel reply routing (config lookup + MCP tool
@@ -323,6 +324,11 @@ type sessionAgent struct {
 	// across the agent. Cancel uses its current value as the per-session
 	// high-water mark.
 	acceptSeqGen uint64
+	// sessionStarted records, per session, that this process has sent a
+	// prompt to it, so its SessionStart hooks run once, for the first
+	// prompt, and not for later ones. sessionStartMu guards it.
+	sessionStarted *csync.Map[string, bool]
+	sessionStartMu sync.Mutex
 }
 
 type SessionAgentOptions struct {
@@ -339,6 +345,10 @@ type SessionAgentOptions struct {
 	Tools                []fantasy.AgentTool
 	Notify               pubsub.Publisher[notify.Notification]
 	RunComplete          pubsub.Publisher[notify.RunComplete]
+
+	// AgentType is the agent's name for hooks, the config ID of the agent
+	// it runs as (a sub-agent's is task): SubagentStop's agent_type.
+	AgentType string
 }
 
 func NewSessionAgent(
@@ -350,6 +360,7 @@ func NewSessionAgent(
 		systemPromptPrefix:   csync.NewValue(opts.SystemPromptPrefix),
 		systemPrompt:         csync.NewValue(opts.SystemPrompt),
 		isSubAgent:           opts.IsSubAgent,
+		agentType:            opts.AgentType,
 		sessions:             opts.Sessions,
 		messages:             opts.Messages,
 		cfg:                  opts.Cfg,
@@ -365,6 +376,7 @@ func NewSessionAgent(
 		submitting:           csync.NewMap[string, []*activeCancel](),
 		acceptedRuns:         csync.NewMap[string, int](),
 		cancelMark:           csync.NewMap[string, uint64](),
+		sessionStarted:       csync.NewMap[string, bool](),
 	}
 }
 
@@ -738,10 +750,29 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		submit   *activeCancel
 		hookCtx  context.Context
 	)
-	if a.wantsPromptHooks(call) {
+	// The first prompt this process sends to a session goes past its
+	// SessionStart hooks, then, as every prompt the user sends, past
+	// UserPromptSubmit's, in that order, as in Claude Code. Both run while
+	// the prompt is submitting: the session reads as busy, and a Cancel
+	// stops them and the prompt is not sent (cancel-on-entry below, which
+	// reports the cancelled turn). SessionStart ran after the dispatch
+	// before: an Esc in its hooks ended the turn without the RunComplete
+	// a waiting client blocks on, and what its hooks printed replaced what
+	// UserPromptSubmit's had.
+	sessionStart := a.wantsSessionStartHooks(call)
+	promptHooks := a.wantsPromptHooks(call)
+	if sessionStart || promptHooks {
 		submitMu = a.sessionSubmitMu(call.SessionID)
 		submitMu.Lock()
 		hookCtx, submit = a.beginSubmitting(ctx, call.SessionID)
+	}
+	if sessionStart {
+		a.runSessionStartHooks(hookCtx, &call)
+		if hookCtx.Err() == nil {
+			a.markSessionStarted(call.SessionID)
+		}
+	}
+	if promptHooks && hookCtx.Err() == nil {
 		if err := a.runPromptHooks(hookCtx, &call); err != nil {
 			a.endSubmitting(call.SessionID, submit, true)
 			submit.cancel()
@@ -1692,6 +1723,10 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	if err != nil {
 		return err
 	}
+
+	// The next prompt to this session runs its SessionStart hooks again,
+	// with source "compact", as in Claude Code.
+	a.markSessionSummarized(sessionID)
 
 	// Release the active request before processing queued messages so that
 	// Run() does not see the session as busy.

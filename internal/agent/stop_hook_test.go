@@ -240,19 +240,30 @@ func TestStopHookContinuation_PassesLastAssistantMessage(t *testing.T) {
 	require.Contains(t, string(raw), "I rewrote the parser.")
 }
 
-// Sub-agents never fire hooks, matching wrapToolsWithHooks: the
-// top-level turn is where the gate belongs.
+// Sub-agents never fire Stop hooks: the event that belongs to them is
+// SubagentStop. A Stop hook configured alongside it stays out, and the
+// SubagentStop hook is what runs instead.
 func TestStopHookContinuation_SubAgentSkips(t *testing.T) {
 	t.Parallel()
 
-	marker := filepath.Join(t.TempDir(), "ran")
-	a := stopHookAgentOpts(t, SessionAgentOptions{IsSubAgent: true},
-		"touch "+marker+"; exit 2")
+	stopMarker := filepath.Join(t.TempDir(), "stop-ran")
+	subMarker := filepath.Join(t.TempDir(), "subagent-ran")
+	cfg := &config.Config{
+		Hooks: map[string][]config.HookConfig{
+			hooks.EventStop:         {{Command: "touch " + stopMarker + "; exit 2"}},
+			hooks.EventSubagentStop: {{Command: "touch " + subMarker + "; exit 0"}},
+		},
+	}
+	require.NoError(t, cfg.ValidateHooks())
+	opts := SessionAgentOptions{IsSubAgent: true, Cfg: config.NewTestStore(cfg)}
+	a := NewSessionAgent(opts).(*sessionAgent)
 
 	_, blocked := a.stopHookContinuation(t.Context(), SessionAgentCall{SessionID: "s1"}, "done")
-	require.False(t, blocked)
-	_, err := os.Stat(marker)
+	require.False(t, blocked, "an allowing SubagentStop hook lets the sub-agent finish")
+	_, err := os.Stat(stopMarker)
 	require.ErrorIs(t, err, os.ErrNotExist, "a sub-agent must not run Stop hooks")
+	_, err = os.Stat(subMarker)
+	require.NoError(t, err, "a sub-agent's own hooks are the SubagentStop ones")
 }
 
 // A hook that blocks without explaining still has to produce a usable

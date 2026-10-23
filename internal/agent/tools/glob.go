@@ -3,7 +3,6 @@ package tools
 import (
 	"bufio"
 	"bytes"
-	"cmp"
 	"context"
 	_ "embed"
 	"fmt"
@@ -59,7 +58,8 @@ func NewGlobTool(workingDir string, cfg config.ToolGlob) fantasy.AgentTool {
 				return fantasy.NewTextErrorResponse("pattern is required"), nil
 			}
 
-			searchPath := cmp.Or(params.Path, workingDir)
+			// Relative to the tool's working directory, as for grep.
+			searchPath := filepathext.SmartJoin(workingDir, params.Path)
 
 			// Bound the search so a huge or symlink-heavy root (e.g. $HOME
 			// or a module cache) fails cleanly instead of pinning the CPU

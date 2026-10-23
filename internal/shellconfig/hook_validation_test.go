@@ -25,7 +25,7 @@ func loadScriptErr(t *testing.T, script string) error {
 func TestHookAddRejectsUnknownEvent(t *testing.T) {
 	t.Parallel()
 
-	for _, bad := range []string{"pre_tool_use", "pretooluse", "PRE_TOOL_USE", "stop", "SessionStart", "banana"} {
+	for _, bad := range []string{"pre_tool_use", "pretooluse", "PRE_TOOL_USE", "stop", "sessionstart", "banana"} {
 		t.Run(bad, func(t *testing.T) {
 			t.Parallel()
 			err := loadScriptErr(t, `hook add `+bad+` --command "echo hi"`)
@@ -42,13 +42,25 @@ func TestHookAddAcceptsKnownEvents(t *testing.T) {
 	result := loadScript(t, `hook add PreToolUse --command "echo pre"
 hook add PostToolUse --command "echo post" --matcher "^edit$"
 hook add PostToolUseFailure --command "echo failed" --matcher "^edit$"
+hook add SessionStart --command "echo start"
 hook add Stop --command "echo stop"`)
 
 	hooks := result["hooks"].(map[string]any)
 	require.Len(t, hooks["PreToolUse"].([]any), 1)
 	require.Len(t, hooks["PostToolUse"].([]any), 1)
 	require.Len(t, hooks["PostToolUseFailure"].([]any), 1)
+	require.Len(t, hooks["SessionStart"].([]any), 1)
 	require.Len(t, hooks["Stop"].([]any), 1)
+}
+
+// A matcher on a SessionStart hook is tested against its source, so the
+// builtin accepts one, as it does for PreCompact.
+func TestHookAddAllowsMatcherOnSessionStart(t *testing.T) {
+	t.Parallel()
+
+	result := loadScript(t, `hook add SessionStart --command "echo resume" --matcher "^resume$"`)
+	arr := result["hooks"].(map[string]any)["SessionStart"].([]any)
+	require.Equal(t, "^resume$", arr[0].(map[string]any)["matcher"])
 }
 
 // A matcher on a Stop hook matches nothing — there is no tool in play

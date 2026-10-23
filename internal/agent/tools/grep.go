@@ -3,7 +3,6 @@ package tools
 import (
 	"bufio"
 	"bytes"
-	"cmp"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -23,6 +22,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -159,7 +159,10 @@ func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 				searchPattern = "(?i)" + searchPattern
 			}
 
-			searchPath := cmp.Or(params.Path, workingDir)
+			// A relative path is the tool's, as view's is, not the
+			// process's: they differ for the fetch agent, whose tools work
+			// in a temporary directory.
+			searchPath := filepathext.SmartJoin(workingDir, params.Path)
 
 			searchCtx, cancel := context.WithTimeout(ctx, config.GetTimeout())
 			defer cancel()

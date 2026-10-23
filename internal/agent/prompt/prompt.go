@@ -43,6 +43,8 @@ type PromptDat struct {
 	ContextFiles       []ContextFile
 	GlobalContextFiles []ContextFile
 	AvailSkillXML      string
+	// AddedDirs are the directories added with --add-dir.
+	AddedDirs []string
 }
 
 type ContextFile struct {
@@ -271,6 +273,9 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 
 	data.ContextFiles = contextFiles
 	data.GlobalContextFiles = globalContextFiles
+	if o := store.Overrides(); o != nil {
+		data.AddedDirs = o.AddedDirs
+	}
 	return data, nil
 }
 

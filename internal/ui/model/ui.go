@@ -645,6 +645,12 @@ func (m *UI) Init() tea.Cmd {
 			cmds = append(cmds, util.ReportWarn("No configured provider can be used: "+why))
 		}
 	}
+	// Files and variables under the name from before the rename are not
+	// read; say so, as settings that quietly stop applying look like
+	// settings that still apply.
+	if names := config.RetiredNames(m.com.Workspace.WorkingDir()); len(names) > 0 {
+		cmds = append(cmds, util.ReportWarn("Not read since the rename to Klash: "+strings.Join(names, ", ")))
+	}
 	// load the user commands async
 	cmds = append(cmds, m.loadCustomCommands())
 	// Prime the memoized LSP state off-thread.
@@ -713,6 +719,14 @@ func startState(configured bool, needsInit func() bool, sessionAsked bool) uiSta
 	default:
 		return uiLanding
 	}
+}
+
+// StartInPlanMode shows the UI in plan mode from the start, for Claude
+// Code's --permission-mode plan; the coordinator already starts with the
+// plan agent (RuntimeOverrides.MainAgent).
+func (m *UI) StartInPlanMode() {
+	m.mode = uiInputModePlan
+	m.setEditorPrompt(m.yoloModeCached())
 }
 
 // PickSessionAtStart makes the UI open the list of sessions to pick from

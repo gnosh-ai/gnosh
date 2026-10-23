@@ -493,7 +493,7 @@ func TestValidateHooksRejectsUnknownEventNames(t *testing.T) {
 		{"kebab_case", "pre-tool-use"},
 		{"near_miss", "PreToolUsage"},
 		{"lowercase_stop", "stop"},
-		{"not_an_event", "SessionStart"},
+		{"lowercase_session_start", "sessionstart"},
 		{"nonsense", "banana"},
 		{"empty", ""},
 	}

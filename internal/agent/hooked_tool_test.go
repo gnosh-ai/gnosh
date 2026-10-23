@@ -119,9 +119,9 @@ func TestWrapToolsWithHooks(t *testing.T) {
 	runner := newRunner(t, `exit 0`)
 	inputs := []fantasy.AgentTool{&fakeTool{name: "a"}, &fakeTool{name: "b"}}
 
-	t.Run("top-level agent wraps every tool", func(t *testing.T) {
+	t.Run("every tool is wrapped", func(t *testing.T) {
 		t.Parallel()
-		out := wrapToolsWithHooks(inputs, toolHooks{pre: runner}, false)
+		out := wrapToolsWithHooks(inputs, toolHooks{pre: runner})
 		require.Len(t, out, len(inputs))
 		for i, tool := range out {
 			_, ok := tool.(*hookedTool)
@@ -129,19 +129,8 @@ func TestWrapToolsWithHooks(t *testing.T) {
 		}
 	})
 
-	t.Run("sub-agent skips the wrap", func(t *testing.T) {
+	t.Run("no runners skip the wrap", func(t *testing.T) {
 		t.Parallel()
-		out := wrapToolsWithHooks(inputs, toolHooks{pre: runner}, true)
-		require.Equal(t, inputs, out, "sub-agent tools should be returned unwrapped")
-		for _, tool := range out {
-			_, isHooked := tool.(*hookedTool)
-			require.False(t, isHooked, "sub-agent tool should not be wrapped")
-		}
-	})
-
-	t.Run("no runners skip the wrap for both agent kinds", func(t *testing.T) {
-		t.Parallel()
-		require.Equal(t, inputs, wrapToolsWithHooks(inputs, toolHooks{}, false))
-		require.Equal(t, inputs, wrapToolsWithHooks(inputs, toolHooks{}, true))
+		require.Equal(t, inputs, wrapToolsWithHooks(inputs, toolHooks{}))
 	})
 }

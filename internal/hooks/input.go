@@ -70,6 +70,22 @@ type Payload struct {
 	// It is a pointer so that it is left out of every other event's
 	// payload, while a PreCompact payload has it even when empty.
 	CustomInstructions *string `json:"custom_instructions,omitempty"`
+
+	// Model is set on an EventSessionStart payload: the ID of the model
+	// answering, as Claude Code's SessionStart input carries it.
+	Model string `json:"model,omitempty"`
+	// Source is set on an EventSessionStart payload: what started the
+	// session, as Claude Code's SessionStart input carries it. A matcher
+	// on a SessionStart hook is tested against it.
+	Source string `json:"source,omitempty"`
+
+	// AgentID and AgentType are set when a hook fires for a sub-agent (a
+	// SubagentStop hook, or one around a sub-agent's tool call), as
+	// Claude Code's agent_id and agent_type are: the sub-agent's own
+	// session, and its type (the agent tool's is "task"). SessionID is
+	// then the session the sub-agent works for, the user's.
+	AgentID   string `json:"agent_id,omitempty"`
+	AgentType string `json:"agent_type,omitempty"`
 }
 
 // ToolResponse is what a tool call returned, as a PostToolUse hook sees
@@ -117,6 +133,40 @@ func toolUseID(ctx context.Context) string {
 	return id
 }
 
+// subAgentKey is the context key WithSubAgent stores a sub-agent under.
+type subAgentKey struct{}
+
+type subAgent struct{ session, agentType string }
+
+// WithSubAgent returns a context saying the tool calls made under it are
+// a sub-agent's, working for session as agentType (the agent tool's is
+// "task"). Their PreToolUse, PostToolUse and PostToolUseFailure hooks
+// then see, as in Claude Code, that session as session_id, and the
+// sub-agent's own session and type as agent_id and agent_type.
+func WithSubAgent(ctx context.Context, session, agentType string) context.Context {
+	return context.WithValue(ctx, subAgentKey{}, subAgent{session: session, agentType: agentType})
+}
+
+// toolCallSession is the session_id a tool call's hooks see, and the
+// agent_id and agent_type they get when the call is a sub-agent's (see
+// WithSubAgent). sessionID is the session the call runs in.
+func toolCallSession(ctx context.Context, sessionID string) (session, agentID, agentType string) {
+	if sa, ok := ctx.Value(subAgentKey{}).(subAgent); ok && sa.session != "" && sa.session != sessionID {
+		return sa.session, sessionID, sa.agentType
+	}
+	return sessionID, "", ""
+}
+
+// agentVars are the AGENT_ID and AGENT_TYPE variables of a sub-agent's
+// hook, as its payload's agent_id and agent_type; none for the main
+// agent's.
+func agentVars(agentID, agentType string) []string {
+	if agentID == "" {
+		return nil
+	}
+	return append(hookVar("AGENT_ID", agentID), hookVar("AGENT_TYPE", agentType)...)
+}
+
 // toolPayload is the payload common to the events that fire around a
 // tool call.
 func toolPayload(eventName, sessionID, cwd, toolName, toolInputJSON string) Payload {
@@ -158,6 +208,29 @@ func BuildStopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActiv
 	return marshalPayload(p)
 }
 
+// BuildSubagentStopPayload constructs the JSON stdin payload for an
+// EventSubagentStop hook, which fires when a sub-agent is about to
+// finish. There is no tool in play, so tool_name is empty and
+// tool_input is an empty object. As in Claude Code's SubagentStop input,
+// sessionID is the session the sub-agent works for, and agentID and
+// agentType name the sub-agent: its own session and its type.
+// stopHookActive, as on a Stop payload, is set when the sub-agent's turn
+// is only still running because an earlier SubagentStop hook blocked it.
+func BuildSubagentStopPayload(sessionID, agentID, agentType, cwd, lastAssistantMessage string, stopHookActive bool) []byte {
+	p := Payload{
+		Event:                EventSubagentStop,
+		HookEventName:        EventSubagentStop,
+		SessionID:            sessionID,
+		CWD:                  cwd,
+		AgentID:              agentID,
+		AgentType:            agentType,
+		ToolInput:            json.RawMessage("{}"),
+		StopHookActive:       stopHookActive,
+		LastAssistantMessage: lastAssistantMessage,
+	}
+	return marshalPayload(p)
+}
+
 // BuildUserPromptSubmitPayload constructs the JSON stdin payload for an
 // EventUserPromptSubmit hook. There is no tool in play, so tool_name is
 // empty and tool_input is an empty object.
@@ -170,6 +243,35 @@ func BuildUserPromptSubmitPayload(sessionID, cwd, prompt string, attachments []s
 		ToolInput:     json.RawMessage("{}"),
 		Prompt:        prompt,
 		Attachments:   attachments,
+	})
+}
+
+// SessionStart sources, as in Claude Code: a new session in a running
+// process, resuming one that already has messages, or starting a
+// fresh one when the process starts.
+const (
+	SessionStartSourceClear   = "clear"
+	SessionStartSourceResume  = "resume"
+	SessionStartSourceStartup = "startup"
+	// SessionStartSourceCompact is the first prompt after a session's
+	// conversation was summarized, as Claude Code's "compact" follows a
+	// /compact or an automatic compaction.
+	SessionStartSourceCompact = "compact"
+)
+
+// BuildSessionStartPayload constructs the JSON stdin payload for an
+// EventSessionStart hook. There is no tool in play, so tool_name is empty
+// and tool_input is an empty object. Model is the ID of the model
+// answering; source names what started the session.
+func BuildSessionStartPayload(sessionID, cwd, model, source string) []byte {
+	return marshalPayload(Payload{
+		Event:         EventSessionStart,
+		HookEventName: EventSessionStart,
+		SessionID:     sessionID,
+		CWD:           cwd,
+		ToolInput:     json.RawMessage("{}"),
+		Model:         model,
+		Source:        source,
 	})
 }
 
@@ -206,6 +308,20 @@ func BuildStopEnv(sessionID, cwd, projectDir string, stopHookActive bool) []stri
 		active = "1"
 	}
 	return append(env, hookVar("STOP_HOOK_ACTIVE", active)...)
+}
+
+// BuildSubagentStopEnv constructs the environment variable slice for an
+// EventSubagentStop hook command: a Stop hook's, with AGENT_ID and
+// AGENT_TYPE as the payload's agent_id and agent_type.
+func BuildSubagentStopEnv(sessionID, agentID, agentType, cwd, projectDir string, stopHookActive bool) []string {
+	env := BuildEnv(EventSubagentStop, "", sessionID, cwd, projectDir, "")
+	active := "0"
+	if stopHookActive {
+		active = "1"
+	}
+	env = append(env, hookVar("STOP_HOOK_ACTIVE", active)...)
+	env = append(env, hookVar("AGENT_ID", agentID)...)
+	return append(env, hookVar("AGENT_TYPE", agentType)...)
 }
 
 // BuildEnv constructs the environment variable slice for a hook command.

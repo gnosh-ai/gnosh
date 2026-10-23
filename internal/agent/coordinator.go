@@ -277,6 +277,10 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 
 	c.mainAgent = agent
 	c.mainAgentName = config.AgentCoder
+	if overrides.MainAgent == config.AgentPlan {
+		c.mainAgent = planAgent
+		c.mainAgentName = config.AgentPlan
+	}
 	return c, nil
 }
 
@@ -826,6 +830,7 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		SystemPromptPrefix:   largeProviderCfg.SystemPromptPrefix,
 		SystemPrompt:         "",
 		IsSubAgent:           isSubAgent,
+		AgentType:            agent.ID,
 		DisableAutoSummarize: c.cfg.Config().Options.DisableAutoSummarize,
 		IsYolo:               c.permissions.SkipRequests(),
 		Sessions:             c.sessions,
@@ -913,18 +918,6 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	}
 
 	logFile := config.LogFile(filepath.Join(c.cfg.Config().Options.DataDirectory, "logs"))
-
-	// Build runners for the hooks configured around tool calls.
-	toolHooks := toolHooks{files: c.filetracker, workingDir: c.cfg.WorkingDir()}
-	if preToolHooks := c.cfg.Config().Hooks[hooks.EventPreToolUse]; len(preToolHooks) > 0 {
-		toolHooks.pre = hooks.NewRunner(preToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
-	}
-	if postToolHooks := c.cfg.Config().Hooks[hooks.EventPostToolUse]; len(postToolHooks) > 0 {
-		toolHooks.post = hooks.NewRunner(postToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
-	}
-	if failureHooks := c.cfg.Config().Hooks[hooks.EventPostToolUseFailure]; len(failureHooks) > 0 {
-		toolHooks.postFailure = hooks.NewRunner(failureHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
-	}
 
 	allTools = append(
 		allTools,
@@ -1014,14 +1007,30 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 		return strings.Compare(a.Info().Name, b.Info().Name)
 	})
 
-	// Wrap tools with hook interception for the top-level agent only.
-	// Sub-agents (the `agent` task tool, `agentic_fetch`, etc.) run
-	// without hook interception to avoid firing the user's hook N times
-	// per delegated turn. The top-level invocation of the sub-agent tool
-	// itself is still wrapped from the coder's side.
-	filteredTools = wrapToolsWithHooks(filteredTools, toolHooks, isSubAgent)
+	// A sub-agent's tool calls go past the hooks around tool calls too, as
+	// in Claude Code: a PreToolUse hook that keeps the agent from reading
+	// a file must keep a sub-agent it starts from reading it. Their hooks
+	// see whose calls they are from the context runSubAgent gives the
+	// sub-agent (hooks.WithSubAgent).
+	filteredTools = wrapToolsWithHooks(filteredTools, c.buildToolHooks())
 
 	return applyUserTools(filteredTools), nil
+}
+
+// buildToolHooks builds the runners for the hooks configured around tool
+// calls, for every agent's tools.
+func (c *coordinator) buildToolHooks() toolHooks {
+	th := toolHooks{files: c.filetracker, workingDir: c.cfg.WorkingDir()}
+	if preToolHooks := c.cfg.Config().Hooks[hooks.EventPreToolUse]; len(preToolHooks) > 0 {
+		th.pre = hooks.NewRunner(preToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
+	}
+	if postToolHooks := c.cfg.Config().Hooks[hooks.EventPostToolUse]; len(postToolHooks) > 0 {
+		th.post = hooks.NewRunner(postToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
+	}
+	if failureHooks := c.cfg.Config().Hooks[hooks.EventPostToolUseFailure]; len(failureHooks) > 0 {
+		th.postFailure = hooks.NewRunner(failureHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
+	}
+	return th
 }
 
 // TODO: when we support multiple agents we need to change this so that we pass in the agent specific model config
@@ -1705,6 +1714,9 @@ type subAgentParams struct {
 	ToolCallID     string
 	Prompt         string
 	SessionTitle   string
+	// AgentType is the sub-agent's type as its hooks see it, agent_type:
+	// task for the agent tool's, agentic_fetch for that tool's.
+	AgentType string
 	// SessionSetup is an optional callback invoked after session creation
 	// but before agent execution, for custom session configuration.
 	SessionSetup func(sessionID string)
@@ -1757,6 +1769,9 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 	if !ok {
 		return fantasy.ToolResponse{}, errModelProviderNotConfigured
 	}
+
+	// The sub-agent's tool calls are its own, and their hooks say so.
+	ctx = hooks.WithSubAgent(ctx, params.SessionID, params.AgentType)
 
 	// Run the agent
 	run := func() (*fantasy.AgentResult, error) {

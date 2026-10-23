@@ -17,14 +17,16 @@ forward.
 - Hooks are Claude Code-compatible
 - Klash ships with a builtin `klash-hook` skill write, edit, and configure
   hooks; just tell Klash how to configure Klash
-- Klash supports six hooks: `PreToolUse`, which fires before a tool call,
+- Klash supports eight hooks: `PreToolUse`, which fires before a tool call,
   `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
   fails, `UserPromptSubmit`, which fires when you send a prompt and can add
-  context to it or block it, `Stop`, which fires when the agent is about to
-  finish its turn and can refuse to let it end, and `PreCompact`, which fires
-  just before the session is summarized and can object to it; plans are to
-  support the full gamut, so please let us know which hooks you'd like to see
-  next
+  context to it or block it, `SessionStart`, which fires before the first
+  prompt to a session and can add context to it, `Stop`, which fires when
+  the agent is about to finish its turn and can refuse to let it end,
+  `SubagentStop`, which fires when a sub-agent is about to finish and can
+  refuse to let it end, and `PreCompact`, which fires just before the
+  session is summarized and can object to it; plans are to support the full
+  gamut, so please let us know which hooks you'd like to see next
 - Hooks run in parallel for speed, but their results compose in config order
   for determinism
 
@@ -199,11 +201,13 @@ stuff, and so on.
 > start on an event name it doesn't fire, rather than loading a hook that would
 > look configured and silently never run.
 
-**Scope**: `PreToolUse` only fires on the **top-level agent's** tool calls.
-Sub-agents (the `agent` task tool, `agentic_fetch`, etc.) run without hook
-interception so a single delegated turn doesn't trigger your hook N times. The
-outer sub-agent tool call itself _is_ hooked, so policy like "never let the
-agent spawn sub-agents" still works.
+**Scope**: `PreToolUse` fires on every tool call, a sub-agent's too (those of
+the `agent` tool's and `agentic_fetch`'s), as in Claude Code: a hook that keeps
+the agent from reading a file also keeps a sub-agent it starts from reading it.
+For a sub-agent's call, `session_id` is the session it works for (the one you
+are in), and `agent_id` and `agent_type` name the sub-agent (its own session,
+and `task` or `agentic_fetch`). The sub-agent tool call itself is hooked too,
+so policy like "never let the agent spawn sub-agents" works.
 
 ### PostToolUse
 
@@ -247,7 +251,7 @@ records a fresh read of the file instead, and tells the model the hook changed
 it, so it can view it again before editing near what changed. Claude Code does
 the same.
 
-**Scope**: like `PreToolUse`, only the **top-level agent's** tool calls.
+**Scope**: like `PreToolUse`, every tool call, a sub-agent's too.
 
 ### PostToolUseFailure
 
@@ -311,6 +315,70 @@ if jq -r .prompt | grep -qE 'sk-[A-Za-z0-9]{20,}'; then
 fi
 ```
 
+### SessionStart
+
+This hook fires before the first prompt a process sends to a session, so it
+can hand the agent context for the session up front: what the branch is, what
+the last failure was, what your notes say about the repo. Use it instead of
+typing the same preamble into every new session.
+
+**Matched against**: the source, `"startup"`, `"resume"`, `"clear"` or
+`"compact"`. A `matcher` on a `SessionStart` hook is tested against that
+source, so a hook matched on `^resume$` only fires when you go back to a
+session that already has messages, and a hook with no matcher fires for
+every source.
+
+- `"startup"` — the session is new and this process has started no session
+  of its own yet.
+- `"resume"` — the session already has messages: you went back to it, with
+  `--continue`, `--session`, or the session list.
+- `"clear"` — the session is new, but this process has already started
+  another session: the TUI's New Session command, say.
+- `"compact"` — the first prompt after the session's conversation was
+  summarized, as Claude Code fires it after a compaction.
+
+**Context**: whatever the hook prints on stdout, as plain text, is what the
+agent reads with the first prompt, inside a `<user-prompt-submit-hook>` tag,
+as for `UserPromptSubmit`; the prompt's `UserPromptSubmit` hooks run after
+`SessionStart`'s, as in Claude Code, and what they print comes after it. JSON output works too: Klash's `context`, or
+Claude Code's `hookSpecificOutput.additionalContext`. The context is kept
+with the prompt, so the agent reads it again when the conversation is
+rebuilt on later turns.
+
+**Blocking**: exit code `2` (or `"decision": "block"`) means the hook
+objects, but the prompt goes ahead anyway, as in Claude Code: you get the
+hook's reason as a warning. Exit `49` (or `"continue": false`) does the
+same. A hook that fails (any other exit code, or a timeout) is shown as a
+warning too, and the prompt goes ahead without it.
+
+**When it runs**: once, before the first prompt the process sends to the
+session. Later prompts to the same session do not run it, except the first
+one after a summary, which runs it again with source `"compact"`. While the
+hooks run the prompt counts as submitting, as for `UserPromptSubmit`: the
+session reads as busy, and Esc stops the hooks and the prompt is not sent.
+
+**Scope**: like `PreToolUse` and `Stop`, `SessionStart` fires only for the
+**top-level agent**, and not for sub-agents.
+
+```jsonc
+{
+  "hooks": {
+    "SessionStart": [
+      { "command": "./hooks/session-context.sh" },
+      { "matcher": "^resume$", "command": "./hooks/what-was-I-doing.sh" }
+    ]
+  }
+}
+```
+
+```bash
+#!/usr/bin/env bash
+# hooks/session-context.sh — tell the agent where it is, on every new
+# session.
+echo "Current branch: $(git branch --show-current)"
+echo "Last commit: $(git log -1 --format='%h %s')"
+```
+
 ### Stop
 
 This hook fires when the agent is about to finish its turn. Use it to refuse the
@@ -365,6 +433,72 @@ environment) is set when the turn is only still running because an earlier
 **Scope**: like `PreToolUse`, `Stop` fires only for the **top-level agent**, and
 not for sub-agents. It is also skipped when the turn is being continued for
 auto-summarization, since that turn isn't ending either.
+
+### SubagentStop
+
+This hook fires when a **sub-agent** — one started by the `agent` tool — is
+about to finish. It works exactly the way `Stop` does for the main agent:
+use it to refuse the stop, check the sub-agent's work, and send it back to
+work if the job isn't done. It fires only for sub-agents, and never for the
+main agent.
+
+**Matched against**: nothing, as for `Stop`. There is no tool in play when a
+sub-agent finishes, so a `matcher` on a `SubagentStop` hook is a config error
+rather than a setting that matches nothing. Every configured `SubagentStop`
+hook runs.
+
+**Blocking**: exit code `2` (or `"decision": "block"`) means "you are not
+finished" — the sub-agent stays alive and your stderr is handed to it as the
+reason to keep working. Exit code `49` means the opposite: end the sub-agent's
+work now, even if another `SubagentStop` hook blocked it. A hook that fails
+(any other exit code, or a timeout) lets the sub-agent finish, and the user is
+told the check never ran. When the hooks let the sub-agent finish, the `agent`
+tool hands the parent its last answer — the one after the hooks let it end.
+
+The same persistence rules as `Stop` apply: there is no cap on how many times
+a `SubagentStop` hook may object, and at every 10th consecutive block the
+sub-agent is asked to judge whether there is a genuine reason to stop (the
+task cannot be done as asked, it is blocked on something only the user can
+provide or decide, the check cannot pass in this environment, or it is
+repeating itself without progress). If it finds one, it explains why and
+finishes, and Klash shows a warning quoting its reason and the hook's last
+objection. Otherwise it keeps working. A hook that wants to object only once
+can stand down on its own: `stop_hook_active` in the payload (and
+`KLASH_STOP_HOOK_ACTIVE` in the environment) is set when the sub-agent is only
+still working because an earlier `SubagentStop` hook blocked it.
+
+**Payload**: as in Claude Code, the stdin JSON carries, beside the common
+fields, `"hook_event_name": "SubagentStop"`, the session the sub-agent works
+for (the one you are in) as `session_id`, the sub-agent's own session as
+`agent_id` and its type as `agent_type` (`task`, for the `agent` tool's
+sub-agents), `stop_hook_active` as in a `Stop` payload, and
+`last_assistant_message`, the text of the answer the sub-agent is about to
+finish on. A failed hook's warning shows in the session you are in.
+
+```jsonc
+{
+  "hooks": {
+    "SubagentStop": [
+      { "command": "./hooks/subagent-must-verify.sh" }
+    ]
+  }
+}
+```
+
+```bash
+#!/usr/bin/env bash
+# hooks/subagent-must-verify.sh — don't let a sub-agent finish without
+# having actually checked its work.
+read -r input
+msg=$(echo "$input" | jq -r '.last_assistant_message')
+if ! echo "$msg" | grep -qi 'verified'; then
+  echo "You have not verified your work yet; do that before finishing." >&2
+  exit 2
+fi
+```
+
+**Scope**: `SubagentStop` fires only for **sub-agents**, and never for the
+top-level agent — whose gate is `Stop`.
 
 ### PreCompact
 
@@ -457,8 +591,11 @@ The available environment variables are:
 | `KLASH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command being run. |
 | `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
 | `KLASH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
-| `KLASH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` when the turn is only still running because an earlier `Stop` hook blocked it, else `0`. |
+| `KLASH_STOP_HOOK_ACTIVE`     | `Stop` and `SubagentStop` only: `1` when the turn is only still running because an earlier hook for the event blocked it, else `0`. |
+| `KLASH_AGENT_ID`             | `SubagentStop`, and the tool hooks of a sub-agent's call: the sub-agent's own session ID, as `agent_id` in the payload. |
+| `KLASH_AGENT_TYPE`           | `SubagentStop`, and the tool hooks of a sub-agent's call: the sub-agent's type, as `agent_type` in the payload (`task`, or `agentic_fetch`). |
 | `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, the same as the `trigger` field in the payload. |
+| `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, the same as the `source` field in the payload. |
 
 Klash was called Crush, so every `KLASH_` variable above is also set under its
 `CRUSH_` name (`CRUSH_EVENT`, `CRUSH_TOOL_NAME`, and so on), and `CRUSH=1`
@@ -483,6 +620,9 @@ Standard input provides the full context as JSON:
   "tool_name": "bash", // The tool being called
   "tool_use_id": "call_8f2a", // The tool call's ID, the same in its PostToolUse hooks
   "tool_input": { "command": "rm -rf /" }, // The tool's input
+  // A sub-agent's call also has, as in Claude Code:
+  // "agent_id": "…",  // the sub-agent's own session
+  // "agent_type": "task", // or "agentic_fetch"
 }
 ```
 
@@ -853,7 +993,8 @@ Each entry under a `hooks.<EventName>` array:
   "name": "no-rm-rf",
 
   // string. Optional. Regex tested against the tool name, or against the
-  // PreCompact trigger. Omit to match all.
+  // PreCompact trigger, or against the SessionStart source. Omit to match
+  // all.
   // A matcher on a Stop or UserPromptSubmit hook is a config error,
   // because there is nothing to match when a turn ends or a prompt is
   // sent.
@@ -961,6 +1102,26 @@ Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
 
   // array of strings. The names of the files sent with it, if any.
   "attachments": ["screenshot.png"],
+}
+```
+
+### Stdin payload — SessionStart
+
+Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
+
+```jsonc
+{
+  // ...common fields...
+
+  // string. The ID of the model answering.
+  "model": "gpt-5",
+
+  // string. "startup" for a new session in a process that has started no
+  // session of its own, "resume" for a session that already has messages,
+  // "clear" for a fresh session in a running process, and "compact" for
+  // the first prompt after a summary. A matcher on a SessionStart hook is
+  // tested against this.
+  "source": "startup",
 }
 ```
 

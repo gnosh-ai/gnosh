@@ -370,6 +370,9 @@ Adapt verbosity to match the work completed:
 
 <env>
 Working directory: {{.WorkingDir}}
+{{- if .AddedDirs}}
+Additional working directories: {{range $i, $d := .AddedDirs}}{{if $i}}, {{end}}{{$d}}{{end}}
+{{- end}}
 Is directory a git repo: {{if .IsGitRepo}}yes{{else}}no{{end}}
 Platform: {{.Platform}}
 Today's date: {{.Date}}

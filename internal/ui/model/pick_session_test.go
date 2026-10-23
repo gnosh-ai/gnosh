@@ -104,3 +104,13 @@ func TestPickSessionMsgOpensTheSessionsList(t *testing.T) {
 	_, _ = u.Update(pickSessionMsg{})
 	require.True(t, u.dialog.ContainsDialog(dialog.SessionsID))
 }
+
+// --permission-mode plan shows the TUI in plan mode from the start.
+func TestStartInPlanMode(t *testing.T) {
+	t.Parallel()
+
+	u := newTestUI()
+	require.Equal(t, uiInputModeCode, u.mode)
+	u.StartInPlanMode()
+	require.Equal(t, uiInputModePlan, u.mode)
+}
