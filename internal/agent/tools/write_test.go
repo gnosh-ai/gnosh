@@ -47,3 +47,53 @@ func TestWriteToolWritesEmptyNewFile(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "", string(b))
 }
+
+// An existing file the agent never read is refused for that reason, not
+// as one "modified since it was last read" in year 1, and is left alone.
+func TestWriteToolRefusesAFileNeverRead(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	path := filepath.Join(workingDir, "probe_test.go")
+	require.NoError(t, os.WriteFile(path, []byte("package probe\n"), 0o644))
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+	tool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, &mockEditFileTracker{}, workingDir)
+
+	input, err := json.Marshal(WriteParams{FilePath: "probe_test.go", Content: "package other\n"})
+	require.NoError(t, err)
+	resp, err := tool.Run(ctx, fantasy.ToolCall{ID: "call", Name: WriteToolName, Input: string(input)})
+	require.NoError(t, err)
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "has not been read in this session")
+	require.NotContains(t, resp.Content, "modified since")
+	require.NotContains(t, resp.Content, "0001-01-01")
+
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "package probe\n", string(b))
+}
+
+// A file changed after the agent read it is refused with the time of each
+// and the likely cause, as the edit tool does, and is left alone.
+func TestWriteToolRefusesAFileChangedSinceItWasRead(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	path := filepath.Join(workingDir, "notes.md")
+	require.NoError(t, os.WriteFile(path, []byte("changed by a command\n"), 0o644))
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+	tracker := &mockEditFileTracker{lastRead: time.Now().Add(-time.Hour)}
+	tool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, tracker, workingDir)
+
+	input, err := json.Marshal(WriteParams{FilePath: "notes.md", Content: "new\n"})
+	require.NoError(t, err)
+	resp, err := tool.Run(ctx, fantasy.ToolCall{ID: "call", Name: WriteToolName, Input: string(input)})
+	require.NoError(t, err)
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "has been modified since it was last read")
+	require.Contains(t, resp.Content, "perhaps by a command you ran")
+
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "changed by a command\n", string(b))
+}

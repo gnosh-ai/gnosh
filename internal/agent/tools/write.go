@@ -71,11 +71,26 @@ func NewWriteTool(
 					return fantasy.NewTextErrorResponse(fmt.Sprintf("Path is a directory, not a file: %s", filePath)), nil
 				}
 
+				// A file never read in this session used to be refused as
+				// "modified since it was last read", last read in year 1:
+				// it had been made by a command the agent ran, and the
+				// message sent it looking for what else had changed it.
 				modTime := fileInfo.ModTime().Truncate(time.Second)
 				lastRead := filetracker.LastReadTime(ctx, sessionID, filePath)
+				if lastRead.IsZero() {
+					return fantasy.NewTextErrorResponse(fmt.Sprintf(
+						"file %s already exists and has not been read in this session. "+
+							"Read it with the view tool before writing over it, or use edit to change part of it.",
+						filePath,
+					)), nil
+				}
 				if modTime.After(lastRead) {
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("File %s has been modified since it was last read.\nLast modification: %s\nLast read: %s\n\nPlease read the file again before modifying it.",
-						filePath, modTime.Format(time.RFC3339), lastRead.Format(time.RFC3339))), nil
+					return fantasy.NewTextErrorResponse(fmt.Sprintf(
+						"file %s has been modified since it was last read (mod time: %s, last read: %s), "+
+							"perhaps by a command you ran. Read it again with the view tool before writing over it, "+
+							"so that what changed is not lost.",
+						filePath, modTime.Format(time.RFC3339), lastRead.Format(time.RFC3339),
+					)), nil
 				}
 
 				oldContent, readErr := os.ReadFile(filePath)
