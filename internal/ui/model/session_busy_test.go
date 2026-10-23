@@ -37,6 +37,7 @@ type countingWorkspace struct {
 	queued         []string
 	keepOnPop      bool     // the queue holds only what Up leaves in place
 	runs           []string // "session: prompt" per AgentRun
+	runErr         error    // what AgentRun returns
 	runAttachments [][]message.Attachment
 	popAttachments map[string][]message.Attachment // attachments per queued prompt, by prompt text
 	model          workspace.AgentModel
@@ -113,7 +114,7 @@ func (w *countingWorkspace) AgentCancel(string) { w.cancelCalls++ }
 func (w *countingWorkspace) AgentRun(_ context.Context, sessionID, prompt string, atts ...message.Attachment) error {
 	w.runs = append(w.runs, sessionID+": "+prompt)
 	w.runAttachments = append(w.runAttachments, atts)
-	return nil
+	return w.runErr
 }
 
 func (w *countingWorkspace) AgentModel() workspace.AgentModel {

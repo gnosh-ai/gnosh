@@ -919,6 +919,18 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case agentRunSubmittedMsg:
 		if msg.err != nil {
+			// A prompt that never reached the session (the agent was not
+			// ready, a UserPromptSubmit hook blocked it) goes back into the
+			// editor: Enter had already cleared it, so it was lost. One the
+			// session stored, which failed later in its turn, stays in the
+			// chat. The echo shows until the stored message replaces it.
+			notStored := msg.notSent || msg.queued ||
+				(m.pending.sessionID == msg.sessionID && m.pending.echo != nil)
+			if notStored && !msg.hidden && msg.sessionID == m.currentSessionID() {
+				if cmd := m.restoreRefusedPrompt(msg.prompt, msg.attachments); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+			}
 			cmds = append(cmds, util.ReportError(msg.err))
 			// A prompt sent behind a running turn and refused (a
 			// UserPromptSubmit hook blocked it) leaves that turn running:
@@ -5370,13 +5382,37 @@ func (m *UI) setThinking(enabled bool) tea.Cmd {
 	})
 }
 
+// restoreRefusedPrompt puts a prompt that was refused before it was sent
+// back into the editor, attachments included, when the editor is empty;
+// anything typed since is left alone.
+func (m *UI) restoreRefusedPrompt(prompt string, attachments []message.Attachment) tea.Cmd {
+	if prompt == "" && len(attachments) == 0 {
+		return nil
+	}
+	if m.textarea.Length() > 0 || (m.attachments != nil && len(m.attachments.List()) > 0) {
+		return nil
+	}
+	prevHeight := m.textarea.Height()
+	m.textarea.Reset()
+	m.textarea.InsertString(prompt)
+	m.textarea.MoveToEnd()
+	if m.attachments != nil {
+		for _, a := range attachments {
+			m.attachments.Update(a)
+		}
+	}
+	return m.handleTextareaHeightChange(prevHeight)
+}
+
 // sendMessageInternal can hide a generated continuation from the chat.
 func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...message.Attachment) tea.Cmd {
 	if err := m.com.Workspace.AgentReadyErr(); err != nil {
 		// Reported like a send that failed, so whatever waits on it (a
 		// running /loop) hears that nothing started.
 		sessionID := m.currentSessionID()
-		return func() tea.Msg { return agentRunSubmittedMsg{sessionID: sessionID, err: err} }
+		return func() tea.Msg {
+			return agentRunSubmittedMsg{sessionID: sessionID, err: err, notSent: true, prompt: content, attachments: attachments, hidden: hidden}
+		}
 	}
 
 	// Any new prompt supersedes a pending, unconfirmed plan.
@@ -5443,7 +5479,7 @@ func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...mes
 		if errors.Is(err, context.Canceled) {
 			err = nil
 		}
-		return agentRunSubmittedMsg{sessionID: sessionID, err: err, queued: queued}
+		return agentRunSubmittedMsg{sessionID: sessionID, err: err, queued: queued, prompt: content, attachments: attachments, hidden: hidden}
 	})
 	return tea.Batch(cmds...)
 }

@@ -112,6 +112,15 @@ type agentRunSubmittedMsg struct {
 	// queued is set when the prompt was sent while a turn was running,
 	// so it would have waited behind that turn rather than started one.
 	queued bool
+	// notSent is set when the prompt was refused before it was sent,
+	// the agent not being ready yet.
+	notSent bool
+	// prompt and attachments are what was sent, so a prompt refused
+	// before it reached the session can go back into the editor; hidden
+	// marks the agent's own continuations, which never do.
+	prompt      string
+	attachments []message.Attachment
+	hidden      bool
 }
 
 // agentModelChangedMsg reports that the coordinator's model was updated
