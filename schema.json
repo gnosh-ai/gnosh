@@ -119,7 +119,7 @@
         },
         "matcher": {
           "type": "string",
-          "description": "Regex pattern tested against the tool name. Empty means match all tools."
+          "description": "Which tools the hook runs for as in Claude Code: empty or * for all; exact names separated by | such as Bash|edit (klash's or Claude Code's names); anything else is an unanchored regular expression."
         },
         "command": {
           "type": "string",
@@ -127,8 +127,8 @@
         },
         "timeout": {
           "type": "integer",
-          "description": "Timeout in seconds for the hook command",
-          "default": 60
+          "description": "Timeout in seconds for the hook command. As in Claude Code it defaults to 600, or 30 for UserPromptSubmit.",
+          "default": 600
         }
       },
       "additionalProperties": false,
@@ -598,8 +598,20 @@
         },
         "disable_metrics": {
           "type": "boolean",
-          "description": "Disable sending usage metrics to Charm's analytics (data.charm.land). Unset none are sent; set false to send them",
+          "description": "Disable sending usage metrics. Unset none are sent; set false to send them to metrics_url (never to Charm)",
           "default": true
+        },
+        "metrics_url": {
+          "type": "string",
+          "description": "Where opted-in usage metrics go: a PostHog-compatible endpoint such as https://klash.gno.run. Empty sends nowhere; Charm is never a default."
+        },
+        "metrics_key": {
+          "type": "string",
+          "description": "Project key sent with metrics to metrics_url; a self-hosted collector may ignore it. Defaults to klash when metrics_url is set."
+        },
+        "update_repo": {
+          "type": "string",
+          "description": "GitHub owner/repo whose latest release the update check compares against (e.g. jaekwon/klash). Empty disables the check; Charm's repo is never a default."
         },
         "initialize_as": {
           "type": "string",

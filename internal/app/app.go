@@ -1114,7 +1114,7 @@ func (app *App) Shutdown() {
 }
 
 // updateCheckEnabled reports whether to ask GitHub for a newer release. The
-// check asks for upstream Crush's latest release, which says nothing about
+// check reads the configured update_repo's latest release, which says nothing about
 // this fork, and a source build's version reads as a prerelease, so it
 // would report an update on every start. It runs only when asked for with
 // KLASH_DISABLE_UPDATE_CHECK=0.
@@ -1128,10 +1128,16 @@ func (app *App) checkForUpdates(ctx context.Context) {
 	if !updateCheckEnabled() {
 		return
 	}
+	// The fork is not on GitHub and Charm's repo is never a default, so the
+	// check runs only against the repo the user configured (update_repo).
+	repo := app.config.Config().Options.UpdateCheckRepo()
+	if repo == "" {
+		return
+	}
 	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	info, err := update.Check(checkCtx, version.Version, update.Default)
+	info, err := update.Check(checkCtx, version.Version, update.NewGitHub(repo))
 	if err != nil || !info.Available() {
 		return
 	}

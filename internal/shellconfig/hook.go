@@ -49,7 +49,7 @@ func handleHook(ctx context.Context, args []string, stdin io.Reader, stdout, std
 // crushrc that Crush then refuses to start with — a startup failure
 // caused by a command Crush itself offers. Better to fail on the line
 // that is wrong.
-var knownHookEvents = []string{"PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "SessionStart", "Stop", "PreCompact"}
+var knownHookEvents = []string{"PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "SessionStart", "Stop", "SubagentStop", "PreCompact"}
 
 // eventsSupportingMatcher are the events whose hooks fire against a
 // named thing: a tool name, the PreCompact trigger, or the SessionStart
@@ -87,7 +87,9 @@ func hookAdd(b *ConfigBuilder, args []string, stderr io.Writer) error {
 		return usage(stderr, "hook add: --command is required")
 	}
 
-	if _, ok := h["matcher"]; ok && !slices.Contains(eventsSupportingMatcher, event) {
+	// "*" matches everything, as no matcher does, and config takes it on any
+	// event, as Claude Code does.
+	if m, ok := h["matcher"]; ok && m != "*" && !slices.Contains(eventsSupportingMatcher, event) {
 		return usage(stderr, fmt.Sprintf(
 			"hook add: --matcher is not supported for %s; there is nothing to match",
 			event,

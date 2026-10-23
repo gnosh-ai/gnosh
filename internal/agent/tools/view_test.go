@@ -272,6 +272,10 @@ func (m mockFileTracker) LastReadTime(ctx context.Context, sessionID, path strin
 	return time.Time{}
 }
 
+func (m mockFileTracker) UnchangedSinceRead(ctx context.Context, sessionID, path string) bool {
+	return false
+}
+
 func (m mockFileTracker) ListReadFiles(ctx context.Context, sessionID string) ([]string, error) {
 	return nil, nil
 }

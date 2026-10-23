@@ -42,6 +42,8 @@ func (t describedTool) Info() fantasy.ToolInfo {
 	return info
 }
 
+func (t describedTool) Unwrap() fantasy.AgentTool { return t.AgentTool }
+
 // applyUserTools drops the tools listed in disabled.txt and swaps in the
 // descriptions the user wrote. Everything else passes through untouched.
 func applyUserTools(tools []fantasy.AgentTool) []fantasy.AgentTool {

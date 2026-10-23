@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	_ "embed"
@@ -116,6 +117,10 @@ klash --session {session-id}
 klash --continue
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Ask once per machine, before anything sets up metrics or the TUI
+		// takes the terminal.
+		maybeAskMetricsConsent()
+
 		sessionID := sessionFlag(cmd)
 		continueLast, _ := cmd.Flags().GetBool("continue")
 		pick := sessionID == pickSession
@@ -144,7 +149,7 @@ klash --continue
 		if pick {
 			model.PickSessionAtStart()
 		}
-		if mode, _ := permissionModeFlag(cmd); mode == permissionModePlan {
+		if mode, _ := permissionModeFlag(cmd); mode == config.PermissionModePlan {
 			model.StartInPlanMode()
 		}
 
@@ -330,7 +335,7 @@ func addYoloFlags(cmd *cobra.Command) {
 func yoloFlag(cmd *cobra.Command) bool {
 	yolo, _ := cmd.Flags().GetBool("yolo")
 	skip, _ := cmd.Flags().GetBool("dangerously-skip-permissions")
-	return yolo || skip || flagValue(cmd, "permission-mode") == permissionModeBypass
+	return yolo || skip || flagValue(cmd, "permission-mode") == config.PermissionModeBypass
 }
 
 // workspaceYolo reports whether the workspace cmd sets up accepts every
@@ -413,7 +418,7 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	if err != nil {
 		return nil, nil, err
 	}
-	if permissionMode == permissionModeAcceptEdits {
+	if permissionMode == config.PermissionModeAcceptEdits {
 		allowedTools = append(allowedTools, acceptEditsTools...)
 	}
 	addedDirs, err := addDirFlag(cmd)
@@ -431,9 +436,7 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	store.Overrides().EnabledChannels = channels
 	store.Overrides().SystemPrompt = systemPrompt
 	store.Overrides().AppendSystemPrompt = appendSystemPrompt
-	if permissionMode == permissionModePlan {
-		store.Overrides().MainAgent = config.AgentPlan
-	}
+	applyPermissionMode(store.Overrides(), permissionMode)
 	store.Overrides().AddedDirs = addedDirs
 	if len(allowedTools) > 0 || len(disallowedTools) > 0 {
 		store.Overrides().AllowedTools = allowedTools
@@ -485,7 +488,7 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	}
 
 	if shouldEnableMetrics(cfg) {
-		event.Init()
+		event.Init(cfg.Options.MetricsSink())
 	}
 
 	ws := workspace.NewAppWorkspace(appInstance, store)
@@ -553,7 +556,7 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 	}
 	if mode, err := permissionModeFlag(cmd); err != nil {
 		return nil, nil, nil, err
-	} else if mode == permissionModeAcceptEdits || mode == permissionModePlan {
+	} else if mode == config.PermissionModeAcceptEdits || mode == config.PermissionModePlan {
 		return nil, nil, nil, fmt.Errorf("--permission-mode %s cannot reach the server's agent with %s=1 yet", mode, "KLASH_CLIENT_SERVER")
 	}
 	if replace, appended, err := systemPromptFlags(cmd); err != nil {
@@ -604,7 +607,7 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 	}
 
 	if shouldEnableMetrics(ws.Config) {
-		event.Init()
+		event.Init(ws.Config.Options.MetricsSink())
 	}
 
 	if ws.Config != nil {
@@ -1078,9 +1081,9 @@ func startDetachedServer(cmd *cobra.Command, hostURL *url.URL) error {
 	return nil
 }
 
-// shouldEnableMetrics reports whether to send usage metrics to Charm's
-// analytics. Upstream Crush sends them unless told not to; this fork sends
-// none unless asked. DO_NOT_TRACK=1 always wins, then
+// shouldEnableMetrics reports whether to send usage metrics at all. Upstream Crush sends them unless told not to; this fork sends
+// none unless asked, and only to the configured metrics_url, never to Charm.
+// DO_NOT_TRACK=1 always wins, then
 // KLASH_DISABLE_METRICS when it holds a value, then option metrics.
 func shouldEnableMetrics(cfg *config.Config) bool {
 	if v, _ := strconv.ParseBool(os.Getenv("DO_NOT_TRACK")); v {
@@ -1089,7 +1092,59 @@ func shouldEnableMetrics(cfg *config.Config) bool {
 	if disable, ok := env.LookupBool("KLASH_DISABLE_METRICS"); ok {
 		return !disable
 	}
-	return cfg.Options.MetricsOptedIn()
+	// An explicit option metrics in the config wins over the machine's
+	// first-run answer; with no option set, the stored consent decides, and
+	// it is off until the first-run question is answered.
+	if cfg != nil && cfg.Options != nil && cfg.Options.DisableMetrics != nil {
+		return !*cfg.Options.DisableMetrics
+	}
+	_, allow := config.MetricsConsent()
+	return allow
+}
+
+// metricsConsentPrompt is the first-run analytics question, shown once per
+// machine on an interactive run. It is cookie-style: off unless the person
+// turns it on, and pressing Enter declines.
+const metricsConsentPrompt = `
+Klash can send anonymous usage analytics to help improve it: which models and
+commands you use, token counts and timings, your OS and terminal, under a
+hashed machine id. Never your prompts, your code, or the model's replies. It
+is off unless you turn it on, goes only to klash's own collector, and you can
+change it any time with ` + "`option metrics true|false`" + `.
+
+Allow anonymous analytics? [y/N] (press Enter to decline) `
+
+// maybeAskMetricsConsent asks the first-run analytics question once per
+// machine, before the TUI starts, and records the answer so it is never asked
+// again. It does nothing when the machine has already answered, when metrics
+// are already settled by DO_NOT_TRACK/KLASH_DISABLE_METRICS/option, or when
+// input or output is not a terminal (a piped or non-interactive run never
+// prompts and sends nothing).
+func maybeAskMetricsConsent() {
+	if config.MetricsConsentDecided() {
+		return
+	}
+	if v, _ := strconv.ParseBool(os.Getenv("DO_NOT_TRACK")); v {
+		return
+	}
+	if _, ok := env.LookupBool("KLASH_DISABLE_METRICS"); ok {
+		return
+	}
+	if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
+		return
+	}
+	fmt.Fprint(os.Stdout, metricsConsentPrompt)
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	answer := strings.ToLower(strings.TrimSpace(line))
+	allow := answer == "y" || answer == "yes"
+	if err := config.RecordMetricsConsent(allow); err != nil {
+		slog.Warn("Could not save the analytics choice", "error", err)
+	}
+	if allow {
+		fmt.Fprintln(os.Stdout, "Analytics on. Thank you. Turn it off any time with `option metrics false`.")
+	} else {
+		fmt.Fprintln(os.Stdout, "No analytics will be sent. You can allow it later with `option metrics true`.")
+	}
 }
 
 // stdinWait is how long a piped stdin may stay silent before klash run

@@ -7,9 +7,9 @@ description: Use when the user wants to add, write, debug, or configure a Klash 
 
 Hooks are user-defined commands in `klash.json` that fire at specific points
 during execution, giving deterministic control over tool behavior. They run
-**before** permission checks and **only on the top-level agent's** tool calls —
-sub-agent calls (task tool, agentic_fetch, etc.) are not intercepted, though
-the sub-agent tool call itself is.
+**before** permission checks, on every tool call, a sub-agent's (task tool,
+agentic_fetch) too, as in Claude Code; a sub-agent's call carries `agent_id`
+and `agent_type`, and its `session_id` is the session it works for.
 
 For the full reference, see `docs/hooks/README.md`. This skill covers what you
 need to author correct hooks.
@@ -20,8 +20,10 @@ need to author correct hooks.
 call succeeds, and `PostToolUseFailure` after one fails. `UserPromptSubmit`
 fires when the user sends a prompt, before the agent sees it. `SessionStart`
 fires before the first prompt a process sends to a session. `Stop` fires when
-the agent is about to finish its turn. `PreCompact` fires just before a
-session's conversation is summarized, manual or automatic.
+the agent is about to finish its turn. `SubagentStop` fires when a sub-agent
+is about to finish, and works exactly like `Stop` but for sub-agents.
+`PreCompact` fires just before a session's conversation is summarized, manual
+or automatic.
 
 Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
 `PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Klash refuses
@@ -33,8 +35,8 @@ A `matcher` only makes sense for `PreToolUse`, `PostToolUse`,
 against the tool name; `PreCompact` matches against its trigger (`manual` or
 `auto`); `SessionStart` matches against its source (`startup`, `resume`,
 `clear` or `compact`). There is nothing to match when a prompt is sent or a
-turn ends, so a `matcher` on a `UserPromptSubmit` or `Stop` hook is a config
-error too, and every configured hook for those events runs.
+turn ends, so a `matcher` on a `UserPromptSubmit`, `Stop` or `SubagentStop`
+hook is a config error too, and every configured hook for those events runs.
 
 ## Configuration
 
@@ -43,9 +45,9 @@ error too, and every configured hook for those events runs.
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "^bash$",              // regex against tool name (optional; omit to match all)
+        "matcher": "bash",                // tool name, exact (optional; omit or "*" to match all)
         "command": "./hooks/my-hook.sh",   // required: shell command to run
-        "timeout": 10                     // optional: seconds, default 60
+        "timeout": 10                     // optional: seconds, default 600 (30 for UserPromptSubmit)
       }
     ]
   }
@@ -73,10 +75,13 @@ the input/output contract is identical regardless of language.
 | `KLASH_SESSION_ID`           | Current session ID                       |
 | `KLASH_CWD`                  | Working directory                        |
 | `KLASH_PROJECT_DIR`          | Project root directory                   |
+| `CLAUDE_PROJECT_DIR`         | The same, Claude Code's name for it      |
 | `KLASH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command      |
 | `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
 | `KLASH_TOOL_USE_ID`          | The tool call's ID, the same in its `PreToolUse` and `PostToolUse` hooks |
-| `KLASH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` if an earlier `Stop` hook is why the turn is still running |
+| `KLASH_STOP_HOOK_ACTIVE`     | `Stop` and `SubagentStop` only: `1` if an earlier hook for the event is why the turn is still running |
+| `KLASH_AGENT_ID`             | `SubagentStop`, and a sub-agent's tool calls: its own session ID (`agent_id`) |
+| `KLASH_AGENT_TYPE`           | `SubagentStop`, and a sub-agent's tool calls: its type (`agent_type`), `task` or `agentic_fetch` |
 | `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, as in the payload's `trigger` field |
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, as in the payload's `source` field |
 
@@ -93,9 +98,15 @@ the rename; either works.
   "cwd": "/home/user/project",
   "tool_name": "bash",
   "tool_use_id": "call_8f2a",
-  "tool_input": {"command": "rm -rf /"}
+  "tool_input": {"command": "rm -rf /"},
+  "permission_mode": "default"
 }
 ```
+
+`permission_mode` is on the tool events, `UserPromptSubmit`, `Stop` and
+`SubagentStop`, as in Claude Code: `plan` for the plan agent,
+`bypassPermissions` when every request is granted (yolo, or `klash run`),
+`acceptEdits` under `--permission-mode acceptEdits`, else `default`.
 
 A `PostToolUse` payload also carries what the tool returned, as in Claude
 Code: `"tool_response": {"output": "…", "metadata": {…}}` (for `bash`, the
@@ -186,6 +197,19 @@ added with the prompt for the agent to read, in a `<user-prompt-submit-hook>`
 tag, and is kept with the prompt, so it is read again when the conversation is
 rebuilt on later turns. Esc while it runs cancels the prompt. It fires only for
 the top-level agent, not sub-agents.
+
+**On `SubagentStop`** the input is the same as `Stop`, plus Claude Code's
+`"agent_id"` (the sub-agent's own session) and `"agent_type"` (`task`);
+`session_id` is the session the sub-agent works for. It works exactly like `Stop`, but
+for sub-agents started by the `agent` tool: exit `2` (or
+`"decision": "block"`) means "you are not finished" — the sub-agent keeps
+working, your stderr is its reason, and the `agent` tool eventually returns
+the sub-agent's last answer to the parent once its hooks let it finish. Exit
+`49` ends the sub-agent's work now. A failed hook lets the sub-agent finish,
+and the user is told the check never ran. There is no cap, and the
+sub-agent is asked to judge at every 10th consecutive block, exactly as the
+main agent is at `Stop` checkpoints. It fires only for sub-agents; the
+top-level agent's gate is `Stop`, which never fires for sub-agents.
 
 **On `PreCompact`** the input is `{"trigger": "manual"|"auto", "custom_instructions": ""}`
 beside the common fields. `trigger` names what set the summary going: the user
@@ -326,14 +350,16 @@ value is reported as a failed hook, not silently ignored.
 1. Add `#!/usr/bin/env bash` and `set -euo pipefail` (for shell scripts).
 2. `chmod +x` the script.
 3. Add the entry under `hooks.PreToolUse` or `hooks.PostToolUse` (with the
-   right matcher), `hooks.Stop` (no matcher), `hooks.PreCompact` (matcher
-   against `manual`/`auto`), or `hooks.SessionStart` (matcher against
+   right matcher), `hooks.Stop` (no matcher), `hooks.SubagentStop` (no
+   matcher; sub-agents only), `hooks.PreCompact` (matcher against
+   `manual`/`auto`), or `hooks.SessionStart` (matcher against
    `startup`/`resume`/`clear`/`compact`) in `klash.json`. Spell the event name
    exactly; anything else is a startup error.
 4. Decide intent: inject context (omit `decision`), auto-approve (`"allow"`),
-   block (`exit 2`), or halt (`exit 49`). On `Stop`, `exit 2` means "keep
-   working" and `exit 49` means "end now".
-5. On `Stop`, check `KLASH_STOP_HOOK_ACTIVE` so a hook that blocks can't loop.
+   block (`exit 2`), or halt (`exit 49`). On `Stop` and `SubagentStop`,
+   `exit 2` means "keep working" and `exit 49` means "end now".
+5. On `Stop` and `SubagentStop`, check `KLASH_STOP_HOOK_ACTIVE` so a hook
+   that blocks can't loop.
 6. If rewriting input, remember `updated_input` is a shallow merge — only
    include the keys you want to change (`PreToolUse` only).
 
@@ -342,12 +368,22 @@ value is reported as a failed hook, not silently ignored.
 - Timeouts kill the hook silently and the tool call proceeds. Bump `timeout` if needed.
 - Non-zero exit codes other than 2/49 are logged but don't block — check Klash logs.
 - Use `echo "debug info" >&2` for logging without corrupting stdout JSON.
-- `matcher` is a regex against the tool name. Use `^bash$` (not `bash`) if you
-  don't also want to match `mcp_something_bash`.
+- `matcher` follows Claude Code's rules: exact names separated by `|` or `,`
+  (`bash`, `Edit|Write`; Claude Code's names match Klash's tools), `*` or empty
+  for all, and anything else is an unanchored regex (`^mcp_github_`). A plain
+  name is exact: `edit` does not match `multiedit`.
 
 ## Claude Code Compatibility
 
-Klash also accepts Claude Code's `hookSpecificOutput` envelope. One intentional
-divergence: Klash treats `updated_input` as shallow-merge, Claude Code replaces.
-Existing Claude Code hooks work without modification for the matcher/decision
-parts; revisit any that relied on `updatedInput` fully replacing tool input.
+Klash also accepts Claude Code's `hookSpecificOutput` envelope, and reads
+matchers as Claude Code does, with Claude Code's tool names (`Bash`, `Read`,
+`Edit|Write`, `mcp__server__tool`) matching Klash's tools. It reads Claude
+Code's groups (`{"matcher": …, "hooks": [{"type": "command", …}]}`) as well as
+its own flat entries (`{"matcher": …, "command": …}`), so a Claude Code hooks
+block can be pasted in as it is; only `command` hooks run, and a hook asking for
+more (`if`, `args`, `async`, another `type`), one on an event Klash does not
+fire (`Notification`, `SessionEnd`), a matcher on an event that takes none, or a
+regex Go cannot read (lookahead) is a config error naming it.
+Divergences: Klash treats `updated_input` as shallow-merge, Claude Code
+replaces; and the payload's `tool_name` is Klash's name (`bash`), not Claude
+Code's (`Bash`).

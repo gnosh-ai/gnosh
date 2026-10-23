@@ -17,15 +17,16 @@ forward.
 - Hooks are Claude Code-compatible
 - Klash ships with a builtin `klash-hook` skill write, edit, and configure
   hooks; just tell Klash how to configure Klash
-- Klash supports seven hooks: `PreToolUse`, which fires before a tool call,
+- Klash supports eight hooks: `PreToolUse`, which fires before a tool call,
   `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
   fails, `UserPromptSubmit`, which fires when you send a prompt and can add
   context to it or block it, `SessionStart`, which fires before the first
   prompt to a session and can add context to it, `Stop`, which fires when
-  the agent is about to finish its turn and can refuse to let it end, and
-  `PreCompact`, which fires just before the session is summarized and can
-  object to it; plans are to support the full gamut, so please let us know
-  which hooks you'd like to see next
+  the agent is about to finish its turn and can refuse to let it end,
+  `SubagentStop`, which fires when a sub-agent is about to finish and can
+  refuse to let it end, and `PreCompact`, which fires just before the
+  session is summarized and can object to it; plans are to support the full
+  gamut, so please let us know which hooks you'd like to see next
 - Hooks run in parallel for speed, but their results compose in config order
   for determinism
 
@@ -147,14 +148,41 @@ and project-level, with project level hooks taking precedence.
     "PreToolUse": [
       {
         "name": "no-rm-rf", // friendly name shown in the TUI
-        "matcher": "bash", // regex tested against the tool name
+        "matcher": "bash", // the tool's name; see "Matchers" below
         "command": "./hooks/my-hot-hook.sh", // the path to the hook
-        "timeout": 10, // in seconds; default 60, as in Claude Code
+        "timeout": 10, // in seconds; default 600, or 30 for UserPromptSubmit
       },
     ],
   },
 }
 ```
+
+A Claude Code `settings.json` hooks block can also be pasted in as it is. Klash
+reads Claude Code's groups, a matcher and the hooks it runs, as one entry per
+command:
+
+```jsonc
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "./hooks/no-rm-rf.sh", "timeout": 10 }],
+      },
+    ],
+  },
+}
+```
+
+Klash runs `command` hooks only. `statusMessage` and `once` are accepted and
+change nothing, as are the default values of `shell` (`bash`), `async` and
+`asyncRewake` (`false`) and `onFailure` (`continue`). Anything else a Claude
+Code hook can ask for, another `type` (`http`, `mcp_tool`, `prompt`, `agent`),
+an `if` filter, `args`, a background hook, is a config error that names it,
+rather than a hook run some other way than written. So are a hook on an event
+Klash does not fire (`Notification`, `SessionEnd`, …), a matcher on an event
+that takes none (Claude Code ignores it), and a regular expression Go cannot
+read (lookahead such as `(?!…)`): take those entries out, or rewrite them.
 
 > [!IMPORTANT]
 > The `command` is resolved relative to your **current working directory** —
@@ -192,7 +220,23 @@ enforce policies, rewrite tool input, inject context the model should see, log
 stuff, and so on.
 
 **Matched against**: the tool name (e.g. `bash`, `edit`, `write`,
-`mcp_github_create_pull_request`).
+`mcp_github_create_pull_request`), and Claude Code's name for the same tool
+(`Bash`, `Edit`, `Write`, `mcp__github__create_pull_request`), so a matcher
+written for Claude Code matches here too.
+
+**Matchers** are read as Claude Code reads them:
+
+- empty, or `*`: every tool;
+- only letters, digits, `_`, `-`, spaces, `,` and `|`: exact names, separated
+  by `|` or `,` (`bash`, `Edit|Write`, `edit, write`). `Edit` does not match
+  `MultiEdit`, and `mcp_github` matches no tool (Klash logs a warning);
+- anything else: a regular expression, unanchored (`^mcp_github_`,
+  `mcp__github__.*`, `Notebook.*`).
+
+Claude Code's names Klash knows: `Agent` and `Task` (agent), `Bash`,
+`BashOutput` (job_output), `Edit`, `Glob`, `Grep`, `KillShell` (job_kill),
+`LS`, `MultiEdit`, `Read` (view), `TodoWrite` (todos), `WebFetch` (fetch) and
+`Write`. The payload's `tool_name` is Klash's name, `bash` not `Bash`.
 
 > [!IMPORTANT]
 > Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
@@ -200,11 +244,13 @@ stuff, and so on.
 > start on an event name it doesn't fire, rather than loading a hook that would
 > look configured and silently never run.
 
-**Scope**: `PreToolUse` only fires on the **top-level agent's** tool calls.
-Sub-agents (the `agent` task tool, `agentic_fetch`, etc.) run without hook
-interception so a single delegated turn doesn't trigger your hook N times. The
-outer sub-agent tool call itself _is_ hooked, so policy like "never let the
-agent spawn sub-agents" still works.
+**Scope**: `PreToolUse` fires on every tool call, a sub-agent's too (those of
+the `agent` tool's and `agentic_fetch`'s), as in Claude Code: a hook that keeps
+the agent from reading a file also keeps a sub-agent it starts from reading it.
+For a sub-agent's call, `session_id` is the session it works for (the one you
+are in), and `agent_id` and `agent_type` name the sub-agent (its own session,
+and `task` or `agentic_fetch`). The sub-agent tool call itself is hooked too,
+so policy like "never let the agent spawn sub-agents" works.
 
 ### PostToolUse
 
@@ -248,7 +294,7 @@ records a fresh read of the file instead, and tells the model the hook changed
 it, so it can view it again before editing near what changed. Claude Code does
 the same.
 
-**Scope**: like `PreToolUse`, only the **top-level agent's** tool calls.
+**Scope**: like `PreToolUse`, every tool call, a sub-agent's too.
 
 ### PostToolUseFailure
 
@@ -441,6 +487,72 @@ environment) is set when the turn is only still running because an earlier
 not for sub-agents. It is also skipped when the turn is being continued for
 auto-summarization, since that turn isn't ending either.
 
+### SubagentStop
+
+This hook fires when a **sub-agent** — one started by the `agent` tool — is
+about to finish. It works exactly the way `Stop` does for the main agent:
+use it to refuse the stop, check the sub-agent's work, and send it back to
+work if the job isn't done. It fires only for sub-agents, and never for the
+main agent.
+
+**Matched against**: nothing, as for `Stop`. There is no tool in play when a
+sub-agent finishes, so a `matcher` on a `SubagentStop` hook is a config error
+rather than a setting that matches nothing. Every configured `SubagentStop`
+hook runs.
+
+**Blocking**: exit code `2` (or `"decision": "block"`) means "you are not
+finished" — the sub-agent stays alive and your stderr is handed to it as the
+reason to keep working. Exit code `49` means the opposite: end the sub-agent's
+work now, even if another `SubagentStop` hook blocked it. A hook that fails
+(any other exit code, or a timeout) lets the sub-agent finish, and the user is
+told the check never ran. When the hooks let the sub-agent finish, the `agent`
+tool hands the parent its last answer — the one after the hooks let it end.
+
+The same persistence rules as `Stop` apply: there is no cap on how many times
+a `SubagentStop` hook may object, and at every 10th consecutive block the
+sub-agent is asked to judge whether there is a genuine reason to stop (the
+task cannot be done as asked, it is blocked on something only the user can
+provide or decide, the check cannot pass in this environment, or it is
+repeating itself without progress). If it finds one, it explains why and
+finishes, and Klash shows a warning quoting its reason and the hook's last
+objection. Otherwise it keeps working. A hook that wants to object only once
+can stand down on its own: `stop_hook_active` in the payload (and
+`KLASH_STOP_HOOK_ACTIVE` in the environment) is set when the sub-agent is only
+still working because an earlier `SubagentStop` hook blocked it.
+
+**Payload**: as in Claude Code, the stdin JSON carries, beside the common
+fields, `"hook_event_name": "SubagentStop"`, the session the sub-agent works
+for (the one you are in) as `session_id`, the sub-agent's own session as
+`agent_id` and its type as `agent_type` (`task`, for the `agent` tool's
+sub-agents), `stop_hook_active` as in a `Stop` payload, and
+`last_assistant_message`, the text of the answer the sub-agent is about to
+finish on. A failed hook's warning shows in the session you are in.
+
+```jsonc
+{
+  "hooks": {
+    "SubagentStop": [
+      { "command": "./hooks/subagent-must-verify.sh" }
+    ]
+  }
+}
+```
+
+```bash
+#!/usr/bin/env bash
+# hooks/subagent-must-verify.sh — don't let a sub-agent finish without
+# having actually checked its work.
+read -r input
+msg=$(echo "$input" | jq -r '.last_assistant_message')
+if ! echo "$msg" | grep -qi 'verified'; then
+  echo "You have not verified your work yet; do that before finishing." >&2
+  exit 2
+fi
+```
+
+**Scope**: `SubagentStop` fires only for **sub-agents**, and never for the
+top-level agent — whose gate is `Stop`.
+
 ### PreCompact
 
 This hook fires just before a session's conversation is summarized: when you
@@ -491,8 +603,8 @@ Hooks are keyed by event name. Only `command` is required, and you can omit
 
 When a hook fires, Klash:
 
-1. Filters hooks whose `matcher` regex matches the tool name (no matcher = match
-   all).
+1. Filters hooks whose `matcher` matches the tool's name, or Claude Code's name
+   for it (no matcher, or `*`, matches all; see [Matchers](#pretooluse)).
 2. Deduplicates by `command` (identical commands run once).
 3. Runs all matching hooks **in parallel** through Klash's embedded POSIX
    shell (see [Execution model](#execution-model)).
@@ -529,10 +641,13 @@ The available environment variables are:
 | `KLASH_SESSION_ID`           | Current session ID.                            |
 | `KLASH_CWD`                  | Working directory.                             |
 | `KLASH_PROJECT_DIR`          | Project root directory.                        |
+| `CLAUDE_PROJECT_DIR`         | The same, under Claude Code's name, so its hook commands (`"${CLAUDE_PROJECT_DIR}/.claude/hooks/check.sh"`) work unchanged. |
 | `KLASH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command being run. |
 | `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
 | `KLASH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
-| `KLASH_STOP_HOOK_ACTIVE`     | `Stop` only: `1` when the turn is only still running because an earlier `Stop` hook blocked it, else `0`. |
+| `KLASH_STOP_HOOK_ACTIVE`     | `Stop` and `SubagentStop` only: `1` when the turn is only still running because an earlier hook for the event blocked it, else `0`. |
+| `KLASH_AGENT_ID`             | `SubagentStop`, and the tool hooks of a sub-agent's call: the sub-agent's own session ID, as `agent_id` in the payload. |
+| `KLASH_AGENT_TYPE`           | `SubagentStop`, and the tool hooks of a sub-agent's call: the sub-agent's type, as `agent_type` in the payload (`task`, or `agentic_fetch`). |
 | `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, the same as the `trigger` field in the payload. |
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, the same as the `source` field in the payload. |
 
@@ -559,6 +674,10 @@ Standard input provides the full context as JSON:
   "tool_name": "bash", // The tool being called
   "tool_use_id": "call_8f2a", // The tool call's ID, the same in its PostToolUse hooks
   "tool_input": { "command": "rm -rf /" }, // The tool's input
+  "permission_mode": "default", // The session's permission mode, as in Claude Code
+  // A sub-agent's call also has, as in Claude Code:
+  // "agent_id": "…",  // the sub-agent's own session
+  // "agent_type": "task", // or "agentic_fetch"
 }
 ```
 
@@ -706,7 +825,8 @@ When multiple hooks match the same tool call:
 
 If a hook exceeds its timeout, Klash cancels its context and treats the
 result as a non-blocking error so the tool call proceeds. The default
-timeout is 60 seconds, as in Claude Code. Shebang-dispatched subprocesses are killed through
+timeout is Claude Code's for a command hook: 600 seconds, and 30 for
+`UserPromptSubmit`, which holds up the prompt just sent. Shebang-dispatched subprocesses are killed through
 `exec.CommandContext`; in-process hooks get a short grace period to yield
 and are then abandoned (the agent moves on regardless). Long-running work
 should honor context cancellation or run out-of-process via a shebang.
@@ -928,9 +1048,10 @@ Each entry under a `hooks.<EventName>` array:
   // command when omitted.
   "name": "no-rm-rf",
 
-  // string. Optional. Regex tested against the tool name, or against the
-  // PreCompact trigger, or against the SessionStart source. Omit to match
-  // all.
+  // string. Optional. Tested against the tool name (Klash's or Claude
+  // Code's), or against the PreCompact trigger, or against the SessionStart
+  // source, as in Claude Code: exact names separated by | or ,, or else a
+  // regular expression. Omit it, or use *, to match all.
   // A matcher on a Stop or UserPromptSubmit hook is a config error,
   // because there is nothing to match when a turn ends or a prompt is
   // sent.
@@ -961,6 +1082,20 @@ Present in every hook event:
 
   // string. Working directory when invoked.
   "cwd": "/home/user/project",
+}
+```
+
+On `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit`,
+`Stop` and `SubagentStop`, the events Claude Code gives it to, the payload also
+names the session's permission mode as the hook fires:
+
+```jsonc
+{
+  // string. "plan" for the plan agent; "bypassPermissions" when every
+  // permission request is granted (yolo, or a `klash run`); "acceptEdits"
+  // under --permission-mode acceptEdits; else "default". A sub-agent's
+  // hooks get the mode of the agent that started it.
+  "permission_mode": "default",
 }
 ```
 

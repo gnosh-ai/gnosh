@@ -168,7 +168,7 @@ func runStats(cmd *cobra.Command, _ []string) error {
 			dataDir = cfg.Config().Options.DataDirectory
 		}
 		if shouldEnableMetrics(cfg.Config()) {
-			event.Init()
+			event.Init(cfg.Config().Options.MetricsSink())
 		}
 
 		event.StatsViewed()

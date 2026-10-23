@@ -112,7 +112,7 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 
 			if params.URL != "" {
 				// URL mode: fetch the URL content first.
-				content, err := tools.FetchURLAndConvert(ctx, client, params.URL)
+				content, err := tools.FetchURLAndConvert(ctx, tools.ApprovedFetchClient(ctx, client, params.URL), params.URL)
 				if err != nil {
 					return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to fetch URL: %s", err)), nil
 				}
@@ -167,10 +167,8 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 
 			fetchTools := fetchAgentTools(tmpDir, client, c.lspManager, c.permissions, c.filetracker, c.cfg.Config().Tools)
 
-			// Sub-agent tools run without hook interception. The top-level
-			// `agentic_fetch` call itself is already wrapped from the coder's
-			// side; firing hooks again for every inner tool call would run
-			// the user's hooks N times per delegated turn.
+			// Its tool calls go past the hooks around tool calls, as every
+			// agent's do (see buildTools).
 
 			agent := NewSessionAgent(SessionAgentOptions{
 				LargeModel:           small, // Use small model for both (fetch doesn't need large)
@@ -181,7 +179,7 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 				IsYolo:               c.permissions.SkipRequests(),
 				Sessions:             c.sessions,
 				Messages:             c.messages,
-				Tools:                fetchTools,
+				Tools:                wrapToolsWithHooks(fetchTools, c.buildToolHooks()),
 			})
 
 			return c.runSubAgent(ctx, subAgentParams{
@@ -191,6 +189,7 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 				ToolCallID:     call.ID,
 				Prompt:         fullPrompt,
 				SessionTitle:   "Fetch Analysis",
+				AgentType:      tools.AgenticFetchToolName,
 				SessionSetup: func(sessionID string) {
 					c.permissions.AutoApproveSession(sessionID)
 				},
@@ -201,14 +200,17 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 
 // fetchAgentTools are the tools of agentic_fetch's sub-agent, which works
 // in dir, the temporary directory holding the pages it fetched. Its view,
-// grep and glob read only there (see confinedTool).
+// grep and glob read only there (see confinedTool), and its own fetches
+// reach public sites only (tools.PublicOnly): it goes where the pages it
+// read send it, without asking.
 func fetchAgentTools(dir string, client *http.Client, lspManager *lsp.Manager, permissions permission.Service, files filetracker.Service, cfg config.Tools) []fantasy.AgentTool {
+	public := tools.PublicOnly(client)
 	return []fantasy.AgentTool{
-		tools.NewWebFetchTool(dir, client),
-		tools.NewWebSearchTool(client),
+		tools.NewWebFetchTool(dir, public),
+		tools.NewWebSearchTool(public),
 		confine(dir, tools.NewGlobTool(dir, cfg.Glob)),
 		confine(dir, tools.NewGrepTool(dir, cfg.Grep)),
-		tools.NewSourcegraphTool(client),
+		tools.NewSourcegraphTool(public),
 		confine(dir, tools.NewViewTool(lspManager, permissions, files, nil, dir)),
 	}
 }

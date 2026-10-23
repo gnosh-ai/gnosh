@@ -16,9 +16,10 @@ import (
 )
 
 // standInModel is an OpenAI-compatible model server for a whole klash run
-// turn: it answers model discovery, gives a title request (one offering no
-// tools) a title, answers the first request that offers tools with text
-// and a call to ls, and the request carrying ls's result with an answer.
+// turn: it answers model discovery (two models, stand-in and stand-in-2),
+// gives a title request (one offering no tools) a title, answers the first
+// request that offers tools with text and a call to ls, and the request
+// carrying ls's result with an answer.
 func standInModel(t *testing.T) *httptest.Server {
 	t.Helper()
 	sse := func(w http.ResponseWriter, chunks ...string) {
@@ -31,7 +32,7 @@ func standInModel(t *testing.T) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, `{"data": [{"id": "stand-in", "object": "model"}]}`)
+			fmt.Fprint(w, `{"data": [{"id": "stand-in", "object": "model"}, {"id": "stand-in-2", "object": "model"}]}`)
 			return
 		}
 		type message struct {
@@ -63,6 +64,12 @@ func standInModel(t *testing.T) *httptest.Server {
 // model, in a project of its own, and returns what it wrote to stdout.
 func runForTest(t *testing.T, args ...string) (string, error) {
 	t.Helper()
+	return runForTestWith(t, append([]string{"--quiet", "-m", "standin/stand-in", "--small-model", "standin/stand-in"}, args...)...)
+}
+
+// runForTestWith is runForTest with no model flags but those in args.
+func runForTestWith(t *testing.T, args ...string) (string, error) {
+	t.Helper()
 	out, err := os.Create(filepath.Join(t.TempDir(), "stdout"))
 	require.NoError(t, err)
 	in, err := os.Create(filepath.Join(t.TempDir(), "stdin")) // empty: nothing to prepend
@@ -73,7 +80,7 @@ func runForTest(t *testing.T, args ...string) (string, error) {
 
 	cmd := &cobra.Command{Use: "run", RunE: runCmd.RunE}
 	addRunFlags(cmd)
-	cmd.SetArgs(append([]string{"--quiet", "-m", "standin/stand-in", "--small-model", "standin/stand-in"}, args...))
+	cmd.SetArgs(args)
 	cmd.SilenceUsage, cmd.SilenceErrors = true, true
 	runErr := cmd.Execute()
 	b, err := os.ReadFile(out.Name())
@@ -98,7 +105,8 @@ func TestRunEndToEnd(t *testing.T) {
 	}
 	srv := standInModel(t)
 	proj := t.TempDir()
-	cfg := `{"providers": {"standin": {"type": "llamacpp", "base_url": "` + srv.URL + `"}}}`
+	cfg := `{"providers": {"standin": {"type": "llamacpp", "base_url": "` + srv.URL + `"}},
+		"models": {"large": {"model": "stand-in", "provider": "standin"}, "small": {"model": "stand-in", "provider": "standin"}}}`
 	require.NoError(t, os.WriteFile(filepath.Join(proj, "klash.json"), []byte(cfg), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(proj, "a.txt"), []byte("alpha\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(proj, "b.txt"), []byte("beta\n"), 0o644))
@@ -114,6 +122,7 @@ func TestRunEndToEnd(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &res), out)
 	require.Equal(t, "There are two text files.", res["result"])
 	require.Equal(t, false, res["is_error"])
+	require.Equal(t, float64(2), res["num_turns"], "json counts the turns too, as Claude Code's does")
 
 	out, err = runForTest(t, "--output-format", "stream-json", "list the files here")
 	require.NoError(t, err)
@@ -126,6 +135,12 @@ func TestRunEndToEnd(t *testing.T) {
 		types = append(types, v["type"].(string))
 	}
 	require.Equal(t, []string{"system", "assistant", "user", "assistant", "result"}, types, out)
+	init := lines[0]
+	require.Equal(t, "stand-in", init["model"])
+	require.Equal(t, "bypassPermissions", init["permissionMode"])
+	require.Subset(t, init["tools"], []any{"bash", "edit", "ls", "view"}, "the tools the run offers, as Claude Code's init line lists them")
+	require.NotContains(t, init["tools"], "question", "a run offers no tool that needs someone to answer")
+	require.Equal(t, []any{}, init["mcp_servers"])
 	toolUse := lines[1]["message"].(map[string]any)["content"].([]any)[1].(map[string]any)
 	require.Equal(t, "ls", toolUse["name"])
 	result := lines[2]["message"].(map[string]any)["content"].([]any)[0].(map[string]any)
@@ -133,4 +148,22 @@ func TestRunEndToEnd(t *testing.T) {
 	require.Contains(t, result["content"], "a.txt")
 	require.Equal(t, "There are two text files.", lines[4]["result"])
 	require.Equal(t, float64(2), lines[4]["num_turns"])
+
+	// In plan mode the init line says so, and lists the plan agent's tools.
+	out, err = runForTest(t, "--permission-mode", "plan", "--output-format", "stream-json", "list the files here")
+	require.NoError(t, err)
+	init = streamLines(t, out)[0]
+	require.Equal(t, "plan", init["permissionMode"])
+	require.Contains(t, init["tools"], "view")
+	require.NotContains(t, init["tools"], "bash")
+	require.NotContains(t, init["tools"], "edit")
+
+	// Resumed with no model asked for, a run goes on with the session's
+	// model, and the init line names it, not the default.
+	out, err = runForTest(t, "-m", "standin/stand-in-2", "--output-format", "json", "list the files here")
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal([]byte(out), &res), out)
+	resumed, err := runForTestWith(t, "--quiet", "-r", res["session_id"].(string), "--output-format", "stream-json", "and again")
+	require.NoError(t, err)
+	require.Equal(t, "stand-in-2", streamLines(t, resumed)[0]["model"], resumed)
 }

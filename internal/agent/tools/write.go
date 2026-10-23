@@ -84,7 +84,9 @@ func NewWriteTool(
 						filePath,
 					)), nil
 				}
-				if modTime.After(lastRead) {
+				// Written back as it was since the read (git stash and pop),
+				// the file is not stale; see loadExistingFile.
+				if modTime.After(lastRead) && !filetracker.UnchangedSinceRead(ctx, sessionID, filePath) {
 					return fantasy.NewTextErrorResponse(fmt.Sprintf(
 						"file %s has been modified since it was last read (mod time: %s, last read: %s), "+
 							"perhaps by a command you ran. Read it again with the view tool before writing over it, "+

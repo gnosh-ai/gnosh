@@ -3,6 +3,7 @@ package cmd
 import (
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -53,5 +54,21 @@ func TestBypassPermissionsIsYolo(t *testing.T) {
 func TestRootAndRunTakePermissionMode(t *testing.T) {
 	for _, c := range []*cobra.Command{rootCmd, runCmd} {
 		require.NotNil(t, c.Flags().Lookup("permission-mode"), c.Name())
+	}
+}
+
+// A --permission-mode is kept in the runtime overrides: plan as the agent
+// the session starts in, acceptEdits for the hooks, which are told it.
+func TestApplyPermissionMode(t *testing.T) {
+	for mode, want := range map[string]config.RuntimeOverrides{
+		"":                               {},
+		config.PermissionModeDefault:     {},
+		config.PermissionModePlan:        {MainAgent: config.AgentPlan},
+		config.PermissionModeAcceptEdits: {AcceptEdits: true},
+		config.PermissionModeBypass:      {},
+	} {
+		var o config.RuntimeOverrides
+		applyPermissionMode(&o, mode)
+		require.Equal(t, want, o, mode)
 	}
 }

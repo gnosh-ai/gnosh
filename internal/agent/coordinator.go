@@ -150,6 +150,9 @@ type Coordinator interface {
 	// told about each one (name, description, parameters): the part of every
 	// request that is not the prompt template. Behind `crush prompt tools`.
 	ToolInfos(ctx context.Context) ([]fantasy.ToolInfo, error)
+	// ToolNames names the tools the main agent offers the model now:
+	// the coder's or, in plan mode, the plan agent's, MCP tools included.
+	ToolNames() []string
 	GenerateTitle(ctx context.Context, sessionID, prompt string)
 }
 
@@ -296,6 +299,22 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		c.mainAgentName = config.AgentPlan
 	}
 	return c, nil
+}
+
+// permissionMode is a session's permission mode as Claude Code names it
+// to hooks, for any agent but the plan agent: bypassPermissions when its
+// permission requests are all granted (yolo, or a klash run's session and
+// its sub-agents'), acceptEdits under --permission-mode acceptEdits, else
+// default.
+func (c *coordinator) permissionMode(sessionID string) string {
+	switch {
+	case c.permissions != nil && (c.permissions.SkipRequests() || c.permissions.IsSessionAutoApproved(sessionID)):
+		return config.PermissionModeBypass
+	case c.cfg != nil && c.cfg.Overrides().AcceptEdits:
+		return config.PermissionModeAcceptEdits
+	default:
+		return config.PermissionModeDefault
+	}
 }
 
 // activeAgent returns the coordinator's current main agent and its config
@@ -844,6 +863,8 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		SystemPromptPrefix:   largeProviderCfg.SystemPromptPrefix,
 		SystemPrompt:         "",
 		IsSubAgent:           isSubAgent,
+		AgentType:            agent.ID,
+		PermissionMode:       c.permissionMode,
 		DisableAutoSummarize: c.cfg.Config().Options.DisableAutoSummarize,
 		IsYolo:               c.permissions.SkipRequests(),
 		Sessions:             c.sessions,
@@ -931,18 +952,6 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	}
 
 	logFile := config.LogFile(filepath.Join(c.cfg.Config().Options.DataDirectory, "logs"))
-
-	// Build runners for the hooks configured around tool calls.
-	toolHooks := toolHooks{files: c.filetracker, workingDir: c.cfg.WorkingDir()}
-	if preToolHooks := c.cfg.Config().Hooks[hooks.EventPreToolUse]; len(preToolHooks) > 0 {
-		toolHooks.pre = hooks.NewRunner(preToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
-	}
-	if postToolHooks := c.cfg.Config().Hooks[hooks.EventPostToolUse]; len(postToolHooks) > 0 {
-		toolHooks.post = hooks.NewRunner(postToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
-	}
-	if failureHooks := c.cfg.Config().Hooks[hooks.EventPostToolUseFailure]; len(failureHooks) > 0 {
-		toolHooks.postFailure = hooks.NewRunner(failureHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
-	}
 
 	allTools = append(
 		allTools,
@@ -1032,14 +1041,30 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 		return strings.Compare(a.Info().Name, b.Info().Name)
 	})
 
-	// Wrap tools with hook interception for the top-level agent only.
-	// Sub-agents (the `agent` task tool, `agentic_fetch`, etc.) run
-	// without hook interception to avoid firing the user's hook N times
-	// per delegated turn. The top-level invocation of the sub-agent tool
-	// itself is still wrapped from the coder's side.
-	filteredTools = wrapToolsWithHooks(filteredTools, toolHooks, isSubAgent)
+	// A sub-agent's tool calls go past the hooks around tool calls too, as
+	// in Claude Code: a PreToolUse hook that keeps the agent from reading
+	// a file must keep a sub-agent it starts from reading it. Their hooks
+	// see whose calls they are from the context runSubAgent gives the
+	// sub-agent (hooks.WithSubAgent).
+	filteredTools = wrapToolsWithHooks(filteredTools, c.buildToolHooks())
 
 	return applyUserTools(filteredTools), nil
+}
+
+// buildToolHooks builds the runners for the hooks configured around tool
+// calls, for every agent's tools.
+func (c *coordinator) buildToolHooks() toolHooks {
+	th := toolHooks{files: c.filetracker, workingDir: c.cfg.WorkingDir()}
+	if preToolHooks := c.cfg.Config().Hooks[hooks.EventPreToolUse]; len(preToolHooks) > 0 {
+		th.pre = hooks.NewRunner(preToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
+	}
+	if postToolHooks := c.cfg.Config().Hooks[hooks.EventPostToolUse]; len(postToolHooks) > 0 {
+		th.post = hooks.NewRunner(postToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
+	}
+	if failureHooks := c.cfg.Config().Hooks[hooks.EventPostToolUseFailure]; len(failureHooks) > 0 {
+		th.postFailure = hooks.NewRunner(failureHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
+	}
+	return th
 }
 
 // TODO: when we support multiple agents we need to change this so that we pass in the agent specific model config
@@ -1512,6 +1537,10 @@ func (c *coordinator) ListSettledMessages(ctx context.Context, sessionID string)
 	return c.currentAgent().ListSettledMessages(ctx, sessionID)
 }
 
+func (c *coordinator) ToolNames() []string {
+	return c.currentAgent().ToolNames()
+}
+
 func (c *coordinator) Model() Model {
 	return c.currentAgent().Model()
 }
@@ -1723,6 +1752,9 @@ type subAgentParams struct {
 	ToolCallID     string
 	Prompt         string
 	SessionTitle   string
+	// AgentType is the sub-agent's type as its hooks see it, agent_type:
+	// task for the agent tool's, agentic_fetch for that tool's.
+	AgentType string
 	// SessionSetup is an optional callback invoked after session creation
 	// but before agent execution, for custom session configuration.
 	SessionSetup func(sessionID string)
@@ -1776,6 +1808,9 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 		return fantasy.ToolResponse{}, errModelProviderNotConfigured
 	}
 
+	// The sub-agent's tool calls are its own, and their hooks say so.
+	ctx = hooks.WithSubAgent(ctx, params.SessionID, params.AgentType)
+
 	// Run the agent
 	run := func() (*fantasy.AgentResult, error) {
 		return params.Agent.Run(ctx, SessionAgentCall{
@@ -1816,6 +1851,16 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 		)
 	}
 
+	// A tool result that ended the sub-agent's turn, a hook's halt or a
+	// permission the user denied, ends the parent's too. It is the user's
+	// word on the turn: the parent went on before, given only the
+	// sub-agent's last text, and could try by other means what was just
+	// refused.
+	if reason, halted := subAgentHalt(result); halted {
+		resp := fantasy.NewTextErrorResponse("The sub-agent was stopped: " + reason)
+		resp.StopTurn = true
+		return resp, nil
+	}
 	output := subAgentOutput(result)
 	if output == "" {
 		return fantasy.NewTextErrorResponse("Sub-agent completed but produced no text output."), nil
@@ -1823,11 +1868,36 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 	return fantasy.NewTextResponse(output), nil
 }
 
+// subAgentOutput is the sub-agent's answer as the parent reads it, without
+// the stop marker it ends on when it overrules its SubagentStop hooks.
 func subAgentOutput(result *fantasy.AgentResult) string {
 	if result == nil {
 		return ""
 	}
-	return result.Response.Content.Text()
+	return StripStopMarker(result.Response.Content.Text())
+}
+
+// subAgentHalt reports whether a tool result ended the sub-agent's turn,
+// and what it said.
+func subAgentHalt(result *fantasy.AgentResult) (string, bool) {
+	if result == nil || len(result.Steps) == 0 {
+		return "", false
+	}
+	for _, tr := range result.Steps[len(result.Steps)-1].Content.ToolResults() {
+		if !tr.StopTurn {
+			continue
+		}
+		switch out := tr.Result.(type) {
+		case fantasy.ToolResultOutputContentText:
+			return out.Text, true
+		case fantasy.ToolResultOutputContentError:
+			if out.Error != nil {
+				return out.Error.Error(), true
+			}
+		}
+		return "no reason given", true
+	}
+	return "", false
 }
 
 // updateParentSessionCost accumulates the cost from a child session to its parent session.

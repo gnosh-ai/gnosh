@@ -90,6 +90,15 @@ const (
 	AgentTask  string = "task"
 )
 
+// Permission modes, by Claude Code's names: the values of
+// --permission-mode, and the permission_mode hooks are told.
+const (
+	PermissionModeDefault     = "default"
+	PermissionModeAcceptEdits = "acceptEdits"
+	PermissionModeBypass      = "bypassPermissions"
+	PermissionModePlan        = "plan"
+)
+
 type SelectedModel struct {
 	// The model id as used by the provider API.
 	// Required.
@@ -514,7 +523,10 @@ type Options struct {
 	DisableProviderAutoUpdate *bool        `json:"disable_provider_auto_update,omitempty" jsonschema:"description=Disable fetching the provider catalog from Charm's servers (catwalk.charm.land and hyper.charm.land). Unset it is not fetched and the catalog built into Klash is used; set false to fetch it,default=true"`
 	DisableDefaultProviders   bool         `json:"disable_default_providers,omitempty" jsonschema:"description=Ignore all default/embedded providers. When enabled\\, providers must be fully specified in the config file with base_url\\, models\\, and api_key - no merging with defaults occurs,default=false"`
 	Attribution               *Attribution `json:"attribution,omitempty" jsonschema:"description=Attribution settings for generated content"`
-	DisableMetrics            *bool        `json:"disable_metrics,omitempty" jsonschema:"description=Disable sending usage metrics to Charm's analytics (data.charm.land). Unset none are sent; set false to send them,default=true"`
+	DisableMetrics            *bool        `json:"disable_metrics,omitempty" jsonschema:"description=Disable sending usage metrics. Unset none are sent; set false to send them to metrics_url (never to Charm),default=true"`
+	MetricsURL                string       `json:"metrics_url,omitempty" jsonschema:"description=Where opted-in usage metrics go: a PostHog-compatible endpoint such as https://klash.gno.run. Empty sends nowhere; Charm is never a default."`
+	MetricsKey                string       `json:"metrics_key,omitempty" jsonschema:"description=Project key sent with metrics to metrics_url; a self-hosted collector may ignore it. Defaults to klash when metrics_url is set."`
+	UpdateRepo                string       `json:"update_repo,omitempty" jsonschema:"description=GitHub owner/repo whose latest release the update check compares against (e.g. jaekwon/klash). Empty disables the check; Charm's repo is never a default."`
 	InitializeAs              string       `json:"initialize_as,omitempty" jsonschema:"description=Name of the context file to create/update during project initialization,default=AGENTS.md,example=AGENTS.md,example=CRUSH.md,example=CLAUDE.md,example=docs/LLMs.md"`
 	AutoLSP                   *bool        `json:"auto_lsp,omitempty" jsonschema:"description=Automatically setup LSPs based on root markers,default=true"`
 	Progress                  *bool        `json:"progress,omitempty" jsonschema:"description=Show indeterminate progress updates during long operations,default=true"`
@@ -554,6 +566,32 @@ func (o *Options) ProviderAutoUpdate() bool {
 // not to; this fork sends none unless asked.
 func (o *Options) MetricsOptedIn() bool {
 	return o != nil && o.DisableMetrics != nil && !*o.DisableMetrics
+}
+
+// MetricsSink is where opted-in metrics are sent. It is read only once the
+// metrics gate is on (DO_NOT_TRACK off, and either an explicit opt-in or this
+// machine's stored consent). The configured metrics_url wins; with none, the
+// default is klash's own analytics (DefaultMetricsURL), never Charm's.
+func (o *Options) MetricsSink() (url, key string) {
+	if o != nil {
+		url, key = o.MetricsURL, o.MetricsKey
+	}
+	if url == "" {
+		url = DefaultMetricsURL
+	}
+	if key == "" {
+		key = "klash"
+	}
+	return url, key
+}
+
+// UpdateCheckRepo is the GitHub owner/repo the update check compares against,
+// or "" when none is configured (no check). Charm's repo is never a default.
+func (o *Options) UpdateCheckRepo() string {
+	if o == nil {
+		return ""
+	}
+	return o.UpdateRepo
 }
 
 // GetMaxBackgroundJobs returns the running-job ceiling, always positive.
@@ -887,12 +925,15 @@ func (t ToolGlob) GetTimeout() time.Duration {
 type HookConfig struct {
 	// Friendly display name shown in the TUI. Falls back to Command when empty.
 	Name string `json:"name,omitempty" jsonschema:"description=Friendly display name shown in the TUI for this hook"`
-	// Regex pattern tested against the tool name. Empty means match all.
-	Matcher string `json:"matcher,omitempty" jsonschema:"description=Regex pattern tested against the tool name. Empty means match all tools."`
+	// Matcher picks the tools (or the SessionStart source, the PreCompact
+	// trigger) the hook runs for, as in Claude Code: empty or "*" for all,
+	// exact names separated by | or , ("Bash", "edit|write"), or else an
+	// unanchored regular expression ("^mcp_github_"). See HookMatcher.
+	Matcher string `json:"matcher,omitempty" jsonschema:"description=Which tools the hook runs for as in Claude Code: empty or * for all; exact names separated by | such as Bash|edit (klash's or Claude Code's names); anything else is an unanchored regular expression."`
 	// Shell command to execute.
 	Command string `json:"command" jsonschema:"required,description=Shell command to execute when the hook fires"`
 	// Timeout in seconds. Default 60, as in Claude Code.
-	Timeout int `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds for the hook command,default=60"`
+	Timeout int `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds for the hook command. As in Claude Code it defaults to 600\\, or 30 for UserPromptSubmit.,default=600"`
 }
 
 // DisplayName returns the hook name for display purposes. It returns Name
@@ -904,14 +945,20 @@ func (h *HookConfig) DisplayName() string {
 	return h.Command
 }
 
-// TimeoutDuration returns the hook timeout as a time.Duration, defaulting
-// to 60s, Claude Code's default: a Claude Code hook that takes 40 seconds
-// was killed here at 30, as a failed hook.
-func (h *HookConfig) TimeoutDuration() time.Duration {
-	if h.Timeout <= 0 {
-		return 60 * time.Second
+// TimeoutDuration returns the hook's timeout for event: the one it sets,
+// or else Claude Code's default for a command hook, 600 seconds, and 30
+// on UserPromptSubmit, which holds up the prompt the user just sent. The
+// default was 60 here, called Claude Code's, and a Claude Code Stop hook
+// that runs the tests for longer was killed as a failed hook, which lets
+// the turn end unchecked.
+func (h *HookConfig) TimeoutDuration(event string) time.Duration {
+	switch {
+	case h.Timeout > 0:
+		return time.Duration(h.Timeout) * time.Second
+	case event == EventUserPromptSubmit:
+		return 30 * time.Second
 	}
-	return time.Duration(h.Timeout) * time.Second
+	return 600 * time.Second
 }
 
 // Config holds the configuration for crush.

@@ -164,9 +164,6 @@ klash run --continue "Follow up on your last response"
 			return err
 		}
 		defer cleanup()
-		if names := config.RetiredNames(ws.WorkingDir()); len(names) > 0 {
-			fmt.Fprintln(os.Stderr, "klash: not read since the rename to Klash: "+strings.Join(names, ", "))
-		}
 
 		event.AppInitialized()
 
@@ -192,8 +189,24 @@ klash run --continue "Follow up on your last response"
 			return setThinking(ws, enabled, cmd.OutOrStdout())
 		}
 		hideSpinner, traceTools := runOutputFlags(quiet, verbose)
+		permissionMode := config.PermissionModeBypass // run accepts its session's permission requests
+		if mode, _ := permissionModeFlag(cmd); mode == config.PermissionModePlan {
+			permissionMode = config.PermissionModePlan
+		}
 		return output.finish(appWs.App().RunNonInteractive(ctx, output.w, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, func(id string) {
-			output.started(id, appWs.WorkingDir(), appWs.App().AgentCoordinator.Model().ModelCfg.Model)
+			output.started(id, func() streamInit {
+				// Asked for then, not now: the run replaces the coordinator
+				// with one without the interactive-only tools.
+				coordinator := appWs.App().AgentCoordinator
+				return streamInit{
+					SessionID:      id,
+					CWD:            appWs.WorkingDir(),
+					Model:          coordinator.Model().ModelCfg.Model,
+					PermissionMode: permissionMode,
+					Tools:          coordinator.ToolNames(),
+					MCPServers:     mcpServerStatuses(),
+				}
+			})
 		}, output.message))
 	},
 }
@@ -973,6 +986,9 @@ type runOutput struct {
 	final      string
 	finalID    string         // the message final came from
 	assistants map[string]int // each assistant message's place in the run
+	// init says what stream-json's init line says, asked for when the line
+	// is written; nil once it is, or before the session is known.
+	init func() streamInit
 }
 
 func newRunOutput(format string, stdout io.Writer) (*runOutput, error) {
@@ -990,21 +1006,32 @@ func newRunOutput(format string, stdout io.Writer) (*runOutput, error) {
 	}
 }
 
-// started records the run's session, once it is known, and for
-// stream-json writes the init line.
-func (o *runOutput) started(sessionID, cwd, model string) {
+// started records the run's session, once it is known. stream-json's
+// init line waits for the run's first message, or its end: a resumed
+// session's model is restored after its session is known, and the line
+// must name the model the run uses.
+func (o *runOutput) started(sessionID string, init func() streamInit) {
 	o.sessionID = sessionID
-	if o.stream != nil {
-		o.stream.start(sessionID, cwd, model)
+	o.init = init
+}
+
+// writeInit writes stream-json's init line, once the session is known.
+func (o *runOutput) writeInit() {
+	if o.stream == nil || o.init == nil {
+		return
 	}
+	o.stream.start(o.init())
+	o.init = nil
 }
 
 // message takes each update of the run's own messages.
 func (o *runOutput) message(msg message.Message) {
+	o.writeInit()
 	if o.stream != nil {
 		o.stream.message(msg)
 	}
-	if msg.Role != message.Assistant || msg.IsSummaryMessage {
+	// Only the run's own messages: not a sub-agent's, nor a summary.
+	if msg.Role != message.Assistant || msg.IsSummaryMessage || (o.sessionID != "" && msg.SessionID != o.sessionID) {
 		return
 	}
 	if o.assistants == nil {
@@ -1026,6 +1053,7 @@ func (o *runOutput) finish(runErr error) error {
 	if !o.json {
 		return runErr
 	}
+	o.writeInit()
 	if o.stream != nil {
 		o.stream.flush()
 	}
@@ -1036,13 +1064,16 @@ func (o *runOutput) finish(runErr error) error {
 		Result     string `json:"result"`
 		SessionID  string `json:"session_id,omitempty"`
 		DurationMS int64  `json:"duration_ms"`
-		NumTurns   int    `json:"num_turns,omitempty"`
+		NumTurns   int    `json:"num_turns"`
 	}{
 		Type:       "result",
 		Subtype:    "success",
 		Result:     cmp.Or(o.final, strings.TrimSpace(o.answer.String())),
 		SessionID:  o.sessionID,
 		DurationMS: time.Since(o.start).Milliseconds(),
+		// The run's own assistant messages, as Claude Code's json and
+		// stream-json results count them; json left it out.
+		NumTurns: len(o.assistants),
 	}
 	if runErr != nil {
 		res.Subtype = "error_during_execution"
@@ -1050,7 +1081,6 @@ func (o *runOutput) finish(runErr error) error {
 		res.Result = runErr.Error()
 	}
 	if o.stream != nil {
-		res.NumTurns = o.stream.turns
 		if o.stream.err != nil {
 			return errors.Join(runErr, o.stream.err)
 		}

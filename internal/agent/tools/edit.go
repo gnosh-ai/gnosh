@@ -292,8 +292,11 @@ func loadExistingFile(edit editContext, filePath, sessionError string) (sessionI
 		return "", "", false, fantasy.NewTextErrorResponse("you must read the file before editing it. Use the view tool first"), nil
 	}
 
+	// A file a command wrote back as it was, as git stash and pop do, is
+	// not stale: Claude Code compares the content too when the time says
+	// the file changed.
 	modTime := fileInfo.ModTime().Truncate(time.Second)
-	if modTime.After(lastRead) {
+	if modTime.After(lastRead) && !edit.filetracker.UnchangedSinceRead(edit.ctx, sessionID, filePath) {
 		return "", "", false, fantasy.NewTextErrorResponse(
 			fmt.Sprintf(
 				"file %s has been modified since it was last read (mod time: %s, last read: %s), "+

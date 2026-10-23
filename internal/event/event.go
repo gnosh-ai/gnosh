@@ -14,9 +14,6 @@ import (
 )
 
 const (
-	endpoint = "https://data.charm.land"
-	key      = "phc_4zt4VgDWLqbYnJYEwLRxFoaTL2noNrQij0C6E8k3I0V"
-
 	nonInteractiveAttrName       = "NonInteractive"
 	nonInteractiveNestedAttrName = "NonInteractiveNested"
 	continueSessionByIDAttrName  = "ContinueSessionByID"
@@ -51,17 +48,26 @@ func SetContinueLastSession(continueLastSession bool) {
 	baseProps = baseProps.Set(continueLastSessionAttrName, continueLastSession)
 }
 
-func Init() {
+// Init starts the metrics client that send() enqueues to. endpoint is a
+// PostHog-compatible collector (the fork's own, e.g. https://klash.gno.run);
+// an empty endpoint leaves the client nil, so metrics go nowhere and, in
+// particular, never to Charm. Only shouldEnableMetrics decides whether this
+// is called at all.
+func Init(endpoint, key string) {
+	distinctId = getDistinctId()
+	if endpoint == "" {
+		return
+	}
 	c, err := posthog.NewWithConfig(key, posthog.Config{
 		Endpoint:        endpoint,
 		Logger:          logger{},
 		ShutdownTimeout: 500 * time.Millisecond,
 	})
 	if err != nil {
-		slog.Error("Failed to initialize PostHog client", "error", err)
+		slog.Error("Failed to initialize the metrics client", "error", err)
+		return
 	}
 	client = c
-	distinctId = getDistinctId()
 }
 
 func GetID() string { return distinctId }

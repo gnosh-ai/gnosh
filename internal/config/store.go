@@ -86,6 +86,9 @@ type RuntimeOverrides struct {
 	// MainAgent is the agent the session starts with: AgentPlan for
 	// Claude Code's --permission-mode plan, "" for the coder.
 	MainAgent string
+	// AcceptEdits is set by Claude Code's --permission-mode acceptEdits,
+	// which puts the edit tools in AllowedTools; hooks are told the mode.
+	AcceptEdits bool
 	// AddedDirs are the directories added with --add-dir, as absolute
 	// paths: read without asking, as the working directory, and named in
 	// the system prompt's environment.
@@ -1244,7 +1247,11 @@ func nextRecentModels(cfg *Config, modelType SelectedModelType, model SelectedMo
 	return updated, true
 }
 
-// NewTestStore creates a ConfigStore for testing purposes.
+// NewTestStore creates a ConfigStore for testing purposes. loadedPaths
+// are the config files it reports as loaded, not a directory: the store
+// has no working directory, so code that runs commands in it (hooks)
+// runs them in the process's. For a test's own directory, use
+// NewTestStoreIn.
 func NewTestStore(cfg *Config, loadedPaths ...string) *ConfigStore {
 	store := &ConfigStore{
 		config:      cfg,
@@ -1255,6 +1262,16 @@ func NewTestStore(cfg *Config, loadedPaths ...string) *ConfigStore {
 		store.workingDir = wd
 	}
 	return store
+}
+
+// NewTestStoreIn is NewTestStore for a project in workingDir, for a test
+// whose hooks or tools must run there. Two self-improvement runs took
+// NewTestStore's second argument for one, and then changed NewTestStore
+// for every test.
+func NewTestStoreIn(cfg *Config, workingDir string) *ConfigStore {
+	s := NewTestStore(cfg)
+	s.workingDir = workingDir
+	return s
 }
 
 // ImportCopilot attempts to import a GitHub Copilot token from disk.

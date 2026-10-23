@@ -20,6 +20,10 @@ func (m mockFileTrackerService) LastReadTime(ctx context.Context, sessionID, pat
 	return time.Now()
 }
 
+func (m mockFileTrackerService) UnchangedSinceRead(ctx context.Context, sessionID, path string) bool {
+	return false
+}
+
 func (m mockFileTrackerService) ListReadFiles(ctx context.Context, sessionID string) ([]string, error) {
 	return nil, nil
 }
@@ -96,4 +100,35 @@ func TestWriteToolRefusesAFileChangedSinceItWasRead(t *testing.T) {
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, "changed by a command\n", string(b))
+}
+
+// The write tool, too, writes over a file a command wrote back as it was
+// since the agent read it, and refuses one whose content changed.
+func TestWriteAfterAFileIsWrittenBackAsItWas(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.go")
+	require.NoError(t, os.WriteFile(path, []byte("package a\n"), 0o644))
+	tracker := realTracker(t, "session")
+	tracker.RecordRead(t.Context(), "session", path)
+	ctx := context.WithValue(t.Context(), SessionIDContextKey, "session")
+	tool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, tracker, dir)
+	write := func(content string) fantasy.ToolResponse {
+		t.Helper()
+		input, err := json.Marshal(WriteParams{FilePath: "a.go", Content: content})
+		require.NoError(t, err)
+		resp, err := tool.Run(ctx, fantasy.ToolCall{ID: "call", Name: WriteToolName, Input: string(input)})
+		require.NoError(t, err)
+		return resp
+	}
+
+	writeBack(t, path, "package a\n", time.Now().Add(time.Minute))
+	resp := write("package b\n")
+	require.False(t, resp.IsError, resp.Content)
+
+	writeBack(t, path, "package c\n", time.Now().Add(2*time.Minute))
+	resp = write("package d\n")
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "modified since it was last read")
 }

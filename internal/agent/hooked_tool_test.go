@@ -46,6 +46,42 @@ func newRunner(t *testing.T, cmd string) *hooks.Runner {
 	return hooks.NewRunner(cfg.Hooks[hooks.EventPreToolUse], t.TempDir(), t.TempDir())
 }
 
+// fakeMCPTool is a fakeTool that says it is an MCP server's tool.
+type fakeMCPTool struct {
+	*fakeTool
+	server, tool string
+}
+
+func (f fakeMCPTool) MCP() string         { return f.server }
+func (f fakeMCPTool) MCPToolName() string { return f.tool }
+
+// An MCP tool's hooks see its Claude Code name, mcp__<server>__<tool>,
+// so a matcher written for Claude Code blocks it here too.
+func TestHookedTool_MatchesAnMCPToolByItsClaudeCodeName(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{Hooks: map[string][]config.HookConfig{
+		hooks.EventPreToolUse: {{Matcher: "mcp__github__.*", Command: `echo "no github" >&2; exit 2`}},
+	}}
+	require.NoError(t, cfg.ValidateHooks())
+	runner := hooks.NewRunner(cfg.Hooks[hooks.EventPreToolUse], t.TempDir(), t.TempDir())
+	inner := fakeMCPTool{fakeTool: &fakeTool{name: "mcp_github_create_issue"}, server: "github", tool: "create_issue"}
+	tool := newHookedTool(inner, toolHooks{pre: runner})
+
+	resp, err := tool.Run(t.Context(), fantasy.ToolCall{ID: "call-1", Name: "mcp_github_create_issue", Input: "{}"})
+	require.NoError(t, err)
+	require.False(t, inner.called, "the hook blocked the call")
+	require.Contains(t, resp.Content, "no github")
+
+	// Under another of Klash's wrappers too.
+	inner = fakeMCPTool{fakeTool: &fakeTool{name: "mcp_github_create_issue"}, server: "github", tool: "create_issue"}
+	tool = newHookedTool(describedTool{AgentTool: inner, description: "the user's"}, toolHooks{pre: runner})
+	resp, err = tool.Run(t.Context(), fantasy.ToolCall{ID: "call-2", Name: "mcp_github_create_issue", Input: "{}"})
+	require.NoError(t, err)
+	require.False(t, inner.called)
+	require.Contains(t, resp.Content, "no github")
+}
+
 func TestHookedTool_AllowStampsHookApproval(t *testing.T) {
 	t.Parallel()
 
@@ -119,9 +155,9 @@ func TestWrapToolsWithHooks(t *testing.T) {
 	runner := newRunner(t, `exit 0`)
 	inputs := []fantasy.AgentTool{&fakeTool{name: "a"}, &fakeTool{name: "b"}}
 
-	t.Run("top-level agent wraps every tool", func(t *testing.T) {
+	t.Run("every tool is wrapped", func(t *testing.T) {
 		t.Parallel()
-		out := wrapToolsWithHooks(inputs, toolHooks{pre: runner}, false)
+		out := wrapToolsWithHooks(inputs, toolHooks{pre: runner})
 		require.Len(t, out, len(inputs))
 		for i, tool := range out {
 			_, ok := tool.(*hookedTool)
@@ -129,19 +165,8 @@ func TestWrapToolsWithHooks(t *testing.T) {
 		}
 	})
 
-	t.Run("sub-agent skips the wrap", func(t *testing.T) {
+	t.Run("no runners skip the wrap", func(t *testing.T) {
 		t.Parallel()
-		out := wrapToolsWithHooks(inputs, toolHooks{pre: runner}, true)
-		require.Equal(t, inputs, out, "sub-agent tools should be returned unwrapped")
-		for _, tool := range out {
-			_, isHooked := tool.(*hookedTool)
-			require.False(t, isHooked, "sub-agent tool should not be wrapped")
-		}
-	})
-
-	t.Run("no runners skip the wrap for both agent kinds", func(t *testing.T) {
-		t.Parallel()
-		require.Equal(t, inputs, wrapToolsWithHooks(inputs, toolHooks{}, false))
-		require.Equal(t, inputs, wrapToolsWithHooks(inputs, toolHooks{}, true))
+		require.Equal(t, inputs, wrapToolsWithHooks(inputs, toolHooks{}))
 	})
 }

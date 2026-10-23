@@ -11,13 +11,7 @@ import (
 	"time"
 )
 
-const (
-	githubApiUrl = "https://api.github.com/repos/charmbracelet/crush/releases/latest"
-	userAgent    = "crush/1.0"
-)
-
-// Default is the default [Client].
-var Default Client = &github{}
+const userAgent = "klash/1.0"
 
 // Info contains information about an available update.
 type Info struct {
@@ -83,7 +77,13 @@ type Client interface {
 	Latest(ctx context.Context) (*Release, error)
 }
 
-type github struct{}
+// github reads the latest release of one GitHub repo (owner/repo). The fork
+// is not on GitHub, and Charm's repo is never a default, so repo is whatever
+// the user configures (update_repo); with none, no check runs.
+type github struct{ repo string }
+
+// NewGitHub returns a [Client] reading owner/repo's latest release.
+func NewGitHub(repo string) Client { return &github{repo: repo} }
 
 // Latest implements [Client].
 func (c *github) Latest(ctx context.Context) (*Release, error) {
@@ -91,7 +91,8 @@ func (c *github) Latest(ctx context.Context) (*Release, error) {
 		Timeout: 30 * time.Second,
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", githubApiUrl, nil)
+	url := "https://api.github.com/repos/" + c.repo + "/releases/latest"
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/stretchr/testify/require"
 )
@@ -20,6 +21,13 @@ func streamLines(t *testing.T, out string) []map[string]any {
 		lines = append(lines, v)
 	}
 	return lines
+}
+
+// fixedInit is an init line's content that does not change.
+func fixedInit(session, cwd, model string) func() streamInit {
+	return func() streamInit {
+		return streamInit{SessionID: session, CWD: cwd, Model: model, PermissionMode: config.PermissionModeBypass}
+	}
 }
 
 func assistantMsg(id, session string, parts ...message.ContentPart) message.Message {
@@ -36,7 +44,7 @@ func TestStreamJSONWritesATurnInOrder(t *testing.T) {
 	var out bytes.Buffer
 	o, err := newRunOutput("stream-json", &out)
 	require.NoError(t, err)
-	o.started("s1", "/work", "qwen3.8-27b")
+	o.started("s1", fixedInit("s1", "/work", "qwen3.8-27b"))
 
 	call := message.ToolCall{ID: "c1", Name: "bash", Input: `{"command":"ls"}`, Finished: true}
 	o.message(message.Message{ID: "u1", Role: message.User, SessionID: "s1", Parts: []message.ContentPart{message.TextContent{Text: "list files"}}})
@@ -94,7 +102,7 @@ func TestStreamJSONWritesAnUnfinishedMessageAtTheEnd(t *testing.T) {
 	var out bytes.Buffer
 	o, err := newRunOutput("stream-json", &out)
 	require.NoError(t, err)
-	o.started("s1", "/work", "m")
+	o.started("s1", fixedInit("s1", "/work", "m"))
 	o.message(assistantMsg("a1", "s1", message.TextContent{Text: "half an ans"}))
 	require.Error(t, o.finish(errors.New("model server went away")))
 
@@ -106,6 +114,49 @@ func TestStreamJSONWritesAnUnfinishedMessageAtTheEnd(t *testing.T) {
 	require.Equal(t, []any{map[string]any{"type": "text", "text": "half an ans"}}, msg["content"])
 	require.Equal(t, "error_during_execution", lines[2]["subtype"])
 	require.Equal(t, true, lines[2]["is_error"])
+}
+
+// The init line names the model the run uses. It is written at the run's
+// first message, after a resumed session's model was restored; written
+// when the session became known, it named the default model instead.
+// Its lists are lists even when empty, as Claude Code's are.
+func TestStreamJSONInitNamesTheModelInUse(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	o, err := newRunOutput("stream-json", &out)
+	require.NoError(t, err)
+	model := "default-model"
+	o.started("s1", func() streamInit {
+		return streamInit{SessionID: "s1", Model: model, PermissionMode: config.PermissionModePlan, Tools: []string{"glob", "view"}}
+	})
+	model = "session-model" // restored from the session
+	o.message(assistantMsg("a1", "s1", message.TextContent{Text: "done"}, message.Finish{Reason: message.FinishReasonEndTurn}))
+	require.NoError(t, o.finish(nil))
+
+	lines := streamLines(t, out.String())
+	require.Equal(t, "session-model", lines[0]["model"])
+	require.Equal(t, "plan", lines[0]["permissionMode"])
+	require.Equal(t, []any{"glob", "view"}, lines[0]["tools"])
+	require.Equal(t, []any{}, lines[0]["mcp_servers"])
+}
+
+// A run that fails after its session is known but before any message
+// still begins with the init line, then the result.
+func TestStreamJSONInitBeforeAnEarlyFailure(t *testing.T) {
+	t.Parallel()
+
+	var out bytes.Buffer
+	o, err := newRunOutput("stream-json", &out)
+	require.NoError(t, err)
+	o.started("s1", fixedInit("s1", "/work", "m"))
+	require.Error(t, o.finish(errors.New("reasoning effort not supported")))
+
+	lines := streamLines(t, out.String())
+	require.Len(t, lines, 2)
+	require.Equal(t, "system", lines[0]["type"])
+	require.Equal(t, "result", lines[1]["type"])
+	require.Equal(t, "s1", lines[1]["session_id"])
 }
 
 func TestToolInput(t *testing.T) {
@@ -125,7 +176,7 @@ func TestJSONResultIsTheFinalAnswer(t *testing.T) {
 	var out bytes.Buffer
 	o, err := newRunOutput("json", &out)
 	require.NoError(t, err)
-	o.started("s1", "/work", "m")
+	o.started("s1", fixedInit("s1", "/work", "m"))
 	o.message(assistantMsg("a1", "s1", message.TextContent{Text: "Let me look."}))
 	o.message(assistantMsg("a2", "s1", message.TextContent{Text: "Two files."}))
 	o.message(assistantMsg("a1", "s1", message.TextContent{Text: "Let me look."}, message.Finish{Reason: message.FinishReasonToolUse}))

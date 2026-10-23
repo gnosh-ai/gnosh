@@ -78,6 +78,20 @@ type Payload struct {
 	// session, as Claude Code's SessionStart input carries it. A matcher
 	// on a SessionStart hook is tested against it.
 	Source string `json:"source,omitempty"`
+
+	// AgentID and AgentType are set when a hook fires for a sub-agent (a
+	// SubagentStop hook, or one around a sub-agent's tool call), as
+	// Claude Code's agent_id and agent_type are: the sub-agent's own
+	// session, and its type (the agent tool's is "task"). SessionID is
+	// then the session the sub-agent works for, the user's.
+	AgentID   string `json:"agent_id,omitempty"`
+	AgentType string `json:"agent_type,omitempty"`
+
+	// PermissionMode is the session's permission mode when the hook
+	// fires, as Claude Code's permission_mode (see WithPermissionMode).
+	// It is on the events Claude Code puts it on: the tool events,
+	// UserPromptSubmit, Stop and SubagentStop.
+	PermissionMode string `json:"permission_mode,omitempty"`
 }
 
 // ToolResponse is what a tool call returned, as a PostToolUse hook sees
@@ -125,6 +139,79 @@ func toolUseID(ctx context.Context) string {
 	return id
 }
 
+// toolAliasesKey is the context key WithToolAliases stores names under.
+type toolAliasesKey struct{}
+
+// WithToolAliases returns a context giving the tool call that hooks run
+// for more names to match against, such as an MCP tool's Claude Code
+// name, mcp__<server>__<tool>, which its own name, mcp_<server>_<tool>,
+// cannot be turned back into: server names have underscores too.
+func WithToolAliases(ctx context.Context, names ...string) context.Context {
+	return context.WithValue(ctx, toolAliasesKey{}, names)
+}
+
+func toolAliases(ctx context.Context) []string {
+	names, _ := ctx.Value(toolAliasesKey{}).([]string)
+	return names
+}
+
+// subAgentKey is the context key WithSubAgent stores a sub-agent under.
+type subAgentKey struct{}
+
+type subAgent struct{ session, agentType string }
+
+// WithSubAgent returns a context saying the tool calls made under it are
+// a sub-agent's, working for session as agentType (the agent tool's is
+// "task"). Their PreToolUse, PostToolUse and PostToolUseFailure hooks
+// then see, as in Claude Code, that session as session_id, and the
+// sub-agent's own session and type as agent_id and agent_type.
+func WithSubAgent(ctx context.Context, session, agentType string) context.Context {
+	return context.WithValue(ctx, subAgentKey{}, subAgent{session: session, agentType: agentType})
+}
+
+// permissionModeKey is the context key WithPermissionMode stores under.
+type permissionModeKey struct{}
+
+// WithPermissionMode returns a context whose hooks are told the session's
+// permission mode (config.PermissionModeDefault and the rest), asked of
+// mode as each hook fires, so a mode switched mid-turn shows. A context
+// that has one keeps it: a sub-agent works in the mode of the agent
+// whose call started it.
+func WithPermissionMode(ctx context.Context, mode func() string) context.Context {
+	if _, ok := ctx.Value(permissionModeKey{}).(func() string); ok {
+		return ctx
+	}
+	return context.WithValue(ctx, permissionModeKey{}, mode)
+}
+
+func permissionMode(ctx context.Context) string {
+	mode, _ := ctx.Value(permissionModeKey{}).(func() string)
+	if mode == nil {
+		return ""
+	}
+	return mode()
+}
+
+// toolCallSession is the session_id a tool call's hooks see, and the
+// agent_id and agent_type they get when the call is a sub-agent's (see
+// WithSubAgent). sessionID is the session the call runs in.
+func toolCallSession(ctx context.Context, sessionID string) (session, agentID, agentType string) {
+	if sa, ok := ctx.Value(subAgentKey{}).(subAgent); ok && sa.session != "" && sa.session != sessionID {
+		return sa.session, sessionID, sa.agentType
+	}
+	return sessionID, "", ""
+}
+
+// agentVars are the AGENT_ID and AGENT_TYPE variables of a sub-agent's
+// hook, as its payload's agent_id and agent_type; none for the main
+// agent's.
+func agentVars(agentID, agentType string) []string {
+	if agentID == "" {
+		return nil
+	}
+	return append(hookVar("AGENT_ID", agentID), hookVar("AGENT_TYPE", agentType)...)
+}
+
 // toolPayload is the payload common to the events that fire around a
 // tool call.
 func toolPayload(eventName, sessionID, cwd, toolName, toolInputJSON string) Payload {
@@ -154,7 +241,11 @@ func marshalPayload(p Payload) []byte {
 // hook. There is no tool in play, so tool_name is empty and tool_input
 // is an empty object.
 func BuildStopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActive bool) []byte {
-	p := Payload{
+	return marshalPayload(stopPayload(sessionID, cwd, lastAssistantMessage, stopHookActive))
+}
+
+func stopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActive bool) Payload {
+	return Payload{
 		Event:                EventStop,
 		HookEventName:        EventStop,
 		SessionID:            sessionID,
@@ -163,14 +254,43 @@ func BuildStopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActiv
 		StopHookActive:       stopHookActive,
 		LastAssistantMessage: lastAssistantMessage,
 	}
-	return marshalPayload(p)
+}
+
+// BuildSubagentStopPayload constructs the JSON stdin payload for an
+// EventSubagentStop hook, which fires when a sub-agent is about to
+// finish. There is no tool in play, so tool_name is empty and
+// tool_input is an empty object. As in Claude Code's SubagentStop input,
+// sessionID is the session the sub-agent works for, and agentID and
+// agentType name the sub-agent: its own session and its type.
+// stopHookActive, as on a Stop payload, is set when the sub-agent's turn
+// is only still running because an earlier SubagentStop hook blocked it.
+func BuildSubagentStopPayload(sessionID, agentID, agentType, cwd, lastAssistantMessage string, stopHookActive bool) []byte {
+	return marshalPayload(subagentStopPayload(sessionID, agentID, agentType, cwd, lastAssistantMessage, stopHookActive))
+}
+
+func subagentStopPayload(sessionID, agentID, agentType, cwd, lastAssistantMessage string, stopHookActive bool) Payload {
+	return Payload{
+		Event:                EventSubagentStop,
+		HookEventName:        EventSubagentStop,
+		SessionID:            sessionID,
+		CWD:                  cwd,
+		AgentID:              agentID,
+		AgentType:            agentType,
+		ToolInput:            json.RawMessage("{}"),
+		StopHookActive:       stopHookActive,
+		LastAssistantMessage: lastAssistantMessage,
+	}
 }
 
 // BuildUserPromptSubmitPayload constructs the JSON stdin payload for an
 // EventUserPromptSubmit hook. There is no tool in play, so tool_name is
 // empty and tool_input is an empty object.
 func BuildUserPromptSubmitPayload(sessionID, cwd, prompt string, attachments []string) []byte {
-	return marshalPayload(Payload{
+	return marshalPayload(userPromptSubmitPayload(sessionID, cwd, prompt, attachments))
+}
+
+func userPromptSubmitPayload(sessionID, cwd, prompt string, attachments []string) Payload {
+	return Payload{
 		Event:         EventUserPromptSubmit,
 		HookEventName: EventUserPromptSubmit,
 		SessionID:     sessionID,
@@ -178,7 +298,7 @@ func BuildUserPromptSubmitPayload(sessionID, cwd, prompt string, attachments []s
 		ToolInput:     json.RawMessage("{}"),
 		Prompt:        prompt,
 		Attachments:   attachments,
-	})
+	}
 }
 
 // SessionStart sources, as in Claude Code: a new session in a running
@@ -245,6 +365,20 @@ func BuildStopEnv(sessionID, cwd, projectDir string, stopHookActive bool) []stri
 	return append(env, hookVar("STOP_HOOK_ACTIVE", active)...)
 }
 
+// BuildSubagentStopEnv constructs the environment variable slice for an
+// EventSubagentStop hook command: a Stop hook's, with AGENT_ID and
+// AGENT_TYPE as the payload's agent_id and agent_type.
+func BuildSubagentStopEnv(sessionID, agentID, agentType, cwd, projectDir string, stopHookActive bool) []string {
+	env := BuildEnv(EventSubagentStop, "", sessionID, cwd, projectDir, "")
+	active := "0"
+	if stopHookActive {
+		active = "1"
+	}
+	env = append(env, hookVar("STOP_HOOK_ACTIVE", active)...)
+	env = append(env, hookVar("AGENT_ID", agentID)...)
+	return append(env, hookVar("AGENT_TYPE", agentType)...)
+}
+
 // BuildEnv constructs the environment variable slice for a hook command.
 // It includes all current process env vars plus hook-specific ones.
 func BuildEnv(eventName, toolName, sessionID, cwd, projectDir, toolInputJSON string) []string {
@@ -255,6 +389,11 @@ func BuildEnv(eventName, toolName, sessionID, cwd, projectDir, toolInputJSON str
 	env = append(env, hookVar("SESSION_ID", sessionID)...)
 	env = append(env, hookVar("CWD", cwd)...)
 	env = append(env, hookVar("PROJECT_DIR", projectDir)...)
+	// Claude Code's name for it, which its hook commands are written
+	// with: "${CLAUDE_PROJECT_DIR}/.claude/hooks/check.sh". Without it
+	// such a command ran /.claude/hooks/check.sh, failed to start, and a
+	// hook that fails lets the call go ahead.
+	env = append(env, "CLAUDE_PROJECT_DIR="+projectDir)
 
 	// Extract tool-specific env vars from the JSON input.
 	if toolInputJSON != "" {

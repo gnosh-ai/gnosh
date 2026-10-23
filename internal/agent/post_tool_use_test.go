@@ -38,6 +38,8 @@ func (r *readRecorder) LastReadTime(context.Context, string, string) time.Time {
 	return time.Time{}
 }
 
+func (r *readRecorder) UnchangedSinceRead(context.Context, string, string) bool { return false }
+
 func (r *readRecorder) ListReadFiles(context.Context, string) ([]string, error) {
 	return r.reads, nil
 }

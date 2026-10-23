@@ -1,4 +1,4 @@
-You are summarizing a conversation to preserve context for continuing work later.
+Stop work on the task here and summarize our conversation above, to preserve its context for continuing the work later. Do not call any tools: reply with the summary alone.
 
 **Critical**: This summary will be the ONLY context available when the conversation resumes. Assume all previous messages will be lost. Be thorough.
 

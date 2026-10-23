@@ -3,12 +3,14 @@ package filetracker
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/db"
 )
 
@@ -21,27 +23,72 @@ type Service interface {
 	// Returns zero time if never read.
 	LastReadTime(ctx context.Context, sessionID, path string) time.Time
 
+	// UnchangedSinceRead reports whether a file holds what it held when
+	// it was last read in the session, whatever its modification time
+	// says. False when that is not known: the read was before this
+	// process started, or the file is too large to compare.
+	UnchangedSinceRead(ctx context.Context, sessionID, path string) bool
+
 	// ListReadFiles returns the paths of all files read in a session.
 	ListReadFiles(ctx context.Context, sessionID string) ([]string, error)
 }
 
 type service struct {
 	q *db.Queries
+	// sums holds each file's content hash at its last read in a session.
+	sums *csync.Map[readKey, [sha256.Size]byte]
 }
+
+type readKey struct{ sessionID, path string }
+
+// maxComparedSize bounds the files whose content is hashed at each read
+// to compare later; a larger one is judged by its modification time.
+const maxComparedSize = 16 << 20
 
 // NewService creates a new file tracker service.
 func NewService(q *db.Queries) Service {
-	return &service{q: q}
+	return &service{q: q, sums: csync.NewMap[readKey, [sha256.Size]byte]()}
 }
 
 // RecordRead records when a file was read.
 func (s *service) RecordRead(ctx context.Context, sessionID, path string) {
+	key := readKey{sessionID, relpath(path)}
 	if err := s.q.RecordFileRead(ctx, db.RecordFileReadParams{
 		SessionID: sessionID,
-		Path:      relpath(path),
+		Path:      key.path,
 	}); err != nil {
 		slog.Error("Error recording file read", "error", err, "file", path)
 	}
+	if sum, ok := contentSum(path); ok {
+		s.sums.Set(key, sum)
+	} else {
+		s.sums.Del(key)
+	}
+}
+
+// UnchangedSinceRead reports whether a file holds what it held when it
+// was last read in the session.
+func (s *service) UnchangedSinceRead(_ context.Context, sessionID, path string) bool {
+	then, ok := s.sums.Get(readKey{sessionID, relpath(path)})
+	if !ok {
+		return false
+	}
+	now, ok := contentSum(path)
+	return ok && now == then
+}
+
+// contentSum hashes a file's content, unless it is not a regular file
+// that can be read or is larger than maxComparedSize.
+func contentSum(path string) ([sha256.Size]byte, bool) {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxComparedSize {
+		return [sha256.Size]byte{}, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return [sha256.Size]byte{}, false
+	}
+	return sha256.Sum256(data), true
 }
 
 // LastReadTime returns when a file was last read.

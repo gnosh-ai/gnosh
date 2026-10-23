@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -58,9 +57,6 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 	}
 
 	cfg.setDefaults(workingDir, dataDir)
-	for _, name := range RetiredNames(workingDir) {
-		slog.Warn("Not read since the rename to Klash", "name", name)
-	}
 
 	store := &ConfigStore{
 		config:         cfg,
@@ -655,6 +651,19 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 		c.Options.DisableDefaultProviders, _ = strconv.ParseBool(str)
 	}
 
+	// The fork's own endpoints, replacing Charm's: where metrics go, and
+	// whose releases the update check reads. Each is empty by default, so
+	// nothing is sent or checked until it is set.
+	if v, ok := env.LookupEnv("KLASH_METRICS_URL"); ok {
+		c.Options.MetricsURL = v
+	}
+	if v, ok := env.LookupEnv("KLASH_METRICS_KEY"); ok {
+		c.Options.MetricsKey = v
+	}
+	if v, ok := env.LookupEnv("KLASH_UPDATE_REPO"); ok {
+		c.Options.UpdateRepo = v
+	}
+
 	if c.Options.Attribution == nil {
 		c.Options.Attribution = &Attribution{
 			TrailerStyle:  TrailerStyleAssistedBy,
@@ -1066,6 +1075,9 @@ func loadFromConfigPaths(ctx context.Context, configPaths []string) (*Config, []
 				if !json.Valid(jsonBytes) {
 					return nil, nil, fmt.Errorf("shell config %s produced invalid JSON", path)
 				}
+				if jsonBytes, err = flattenHookGroups(jsonBytes); err != nil {
+					return nil, nil, fmt.Errorf("shell config %s: %w", path, err)
+				}
 				addTopLevelKeys(shDirKeys, dir, jsonBytes)
 				configs = append(configs, jsonBytes)
 				loaded = append(loaded, path)
@@ -1073,6 +1085,9 @@ func loadFromConfigPaths(ctx context.Context, configPaths []string) (*Config, []
 		} else {
 			if !json.Valid(data) {
 				return nil, nil, fmt.Errorf("invalid JSON in config file %s", path)
+			}
+			if data, err = flattenHookGroups(data); err != nil {
+				return nil, nil, fmt.Errorf("config file %s: %w", path, err)
 			}
 			addTopLevelKeys(jsonDirKeys, dir, data)
 			configs = append(configs, data)
@@ -1578,6 +1593,9 @@ func mergeWorkspaceConfig(cfg *Config, path, workingDir string) (bool, error) {
 	if !json.Valid(wsData) {
 		return false, fmt.Errorf("invalid JSON in config file %s", path)
 	}
+	if wsData, err = flattenHookGroups(wsData); err != nil {
+		return false, fmt.Errorf("config file %s: %w", path, err)
+	}
 	merged, err := loadFromBytes(append([][]byte{mustMarshalConfig(cfg)}, wsData))
 	if err != nil {
 		return false, fmt.Errorf("failed to merge config file %s: %w", path, err)
@@ -1734,8 +1752,9 @@ func (c *Config) ValidateModels() error {
 }
 
 // ValidateHooks checks that every configured hook is filed under an
-// event Crush actually fires and has a command, and that any matcher is
-// a syntactically valid regex. Event names are matched exactly: an
+// event Crush actually fires and has a command, and that any matcher
+// compiles (see HookMatcher); it logs a warning for a tool event's
+// matcher that names no tool there can be. Event names are matched exactly: an
 // unrecognised name is an error rather than a key nothing ever reads,
 // so a typo surfaces at load time instead of leaving a hook that looks
 // configured and silently never runs. Matcher compilation used for
@@ -1754,7 +1773,8 @@ func (c *Config) ValidateHooks() error {
 			if h.Command == "" {
 				return fmt.Errorf("hook %s[%d]: command is required", event, i)
 			}
-			if h.Matcher == "" {
+			// "*" matches everything, as no matcher does, as in Claude Code.
+			if m := strings.TrimSpace(h.Matcher); m == "" || m == "*" {
 				continue
 			}
 			if !HookEventSupportsMatcher(event) {
@@ -1763,10 +1783,36 @@ func (c *Config) ValidateHooks() error {
 					event, i, event,
 				)
 			}
-			if _, err := regexp.Compile(h.Matcher); err != nil {
+			m, err := CompileHookMatcher(h.Matcher)
+			if err != nil {
 				return fmt.Errorf("hook %s[%d]: invalid matcher regex %q: %w", event, i, h.Matcher, err)
+			}
+			if event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure {
+				for _, name := range m.Names() {
+					if !namesSomeTool(name) {
+						slog.Warn("A hook's matcher names no tool, so it matches nothing; a name is matched exactly, and a regular expression such as mcp_github_.* matches a server's tools",
+							"event", event, "matcher", h.Matcher, "name", name)
+					}
+				}
 			}
 		}
 	}
 	return nil
+}
+
+// namesSomeTool reports whether an exact matcher name can be a tool's: a
+// built-in tool's own name, its name before the rename or Claude Code's
+// name for it; or an MCP tool's whole name, mcp_<server>_<tool> or Claude
+// Code's mcp__<server>__<tool>, which is not checked further, since MCP
+// servers' tools come and go.
+func namesSomeTool(name string) bool {
+	if tooldefs.NamesATool(name) {
+		return true
+	}
+	rest, ok := strings.CutPrefix(name, tooldefs.MCPPrefix)
+	if !ok {
+		return false
+	}
+	server, tool, ok := strings.Cut(strings.TrimPrefix(rest, "_"), "_")
+	return ok && server != "" && strings.TrimPrefix(tool, "_") != ""
 }

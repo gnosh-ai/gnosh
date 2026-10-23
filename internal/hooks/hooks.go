@@ -28,6 +28,9 @@ const (
 	EventSessionStart = config.EventSessionStart
 	// EventStop fires when the agent is about to finish its turn.
 	EventStop = config.EventStop
+	// EventSubagentStop fires when a sub-agent is about to finish, and
+	// works as EventStop does for the main agent.
+	EventSubagentStop = config.EventSubagentStop
 	// EventPreCompact fires just before a session's conversation is
 	// summarized, manual or automatic.
 	EventPreCompact = config.EventPreCompact
