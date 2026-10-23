@@ -7,8 +7,9 @@ the same terminal UI, sessions, LSP and MCP support, and any model you like,
 from a hosted API to one running on your own machine. On top of that it closes
 doors a coding agent usually leaves open: nothing phones home, text from a tool
 cannot pose as the conversation, the sub-agent that reads web pages for it
-cannot read your files, and a misspelt guard stops it instead of being
-ignored. It also speaks Claude Code's flags and hooks, fixes a long list of
+cannot read your files, a misspelt guard stops it instead of being ignored,
+and a check that cannot run holds the work up instead of waving it through.
+It also speaks Claude Code's flags and hooks, fixes a long list of
 things that broke, hung or failed without saying so, and knows Gno and
 gno.land. There every signature waits for you to type the key's password,
 which the model never sees, and a session key caps what even a transaction
@@ -52,15 +53,31 @@ flood the context.
 
 `agentic_fetch` hands web pages to a sub-agent that fetches without asking, so
 that sub-agent's file tools read only the pages it fetched. A page cannot talk
-it into reading your keys or a `.env` and sending them off in a URL.
+it into reading your keys or a `.env` and sending them off in a URL. Its own
+fetches go to public sites only, so a page cannot send it to your model
+server, your router or a machine on your Tailscale network either, and a page
+you let it open cannot redirect it there.
 
 ### Mistakes fail closed
 
 - A hook with a misspelt event name, or a `klashrc` option Klash does not
   know, stops it at startup with the names it does know. Upstream ignored
   such a hook, so a misspelt guard simply never ran.
-- A hook whose answer is malformed cannot approve a tool call by accident, and
-  a deny it gave still holds.
+- A check that cannot run holds the work up instead of passing it. A hook
+  whose script is missing, whose command is not installed, that times out, or
+  that says so itself (exit `3`, "could not evaluate") blocks as a failed
+  check does, and says why. Upstream, and Claude Code, let such a hook pass,
+  so a check that never ran read as one that passed. See
+  [Could not evaluate](docs/hooks/README.md#could-not-evaluate-klash-fails-closed).
+- A hook whose answer Klash cannot read, a misspelt `"Deny"` say, blocks too,
+  and a deny it gave still holds.
+- Your hooks see a helper agent's tool calls too. Upstream did not run them on
+  those calls, so a hook that refused to read a key file could be walked
+  around by handing the read to a helper (the `agent` tool, or
+  `agentic_fetch`).
+- A project's `klash.json` written by another user, with sudo say, stops
+  Klash and says whose it is and what to do, instead of being skipped without
+  a word along with any tools it turned off.
 
 ### What still leaves your machine
 
@@ -96,14 +113,22 @@ Claude Code's names work here too.
 | `claude doctor`                  | `klash doctor`                                     | Check config, providers, models, hooks and tools            |
 
 - **Hooks** take Claude Code's events and answers: `PreToolUse`,
-  `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit` and `Stop`, with
-  `tool_use_id`, `hook_event_name`, `continue: false` and `hookSpecificOutput`.
-  A UserPromptSubmit hook can add context to every prompt or block one, and a
-  Stop hook can keep the agent working until your tests pass. See
+  `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit`, `SessionStart`,
+  `Stop`, `SubagentStop` and `PreCompact`, with `tool_use_id`,
+  `hook_event_name`, `permission_mode`, `continue: false` and
+  `hookSpecificOutput`. Matchers know Claude Code's tool names (`Bash`,
+  `Edit|Write`, `mcp__github__.*`), so the `hooks` block of your
+  `~/.claude/settings.json` can be pasted into `klash.json`; an entry Klash
+  cannot run the same way stops it with an error that says so. A
+  UserPromptSubmit hook can add context to every prompt or block one, a
+  SessionStart hook can add context when a session starts, and a Stop hook can
+  keep the agent working until your tests pass. One difference: a hook that
+  could not check blocks here, where Claude Code lets it pass. See
   [docs/hooks](docs/hooks/README.md).
 - **Context and skills.** Klash reads `CLAUDE.md` and `CLAUDE.local.md`
   alongside `KLASH.md` and `AGENTS.md`, from the working directory and the
-  directories above it, and follows their `@path` imports, as Claude Code does.
+  directories above it (and a subdirectory's own, the first time the agent
+  reads a file there), and follows their `@path` imports, as Claude Code does.
   A project's files import only the project's own, and a directory above gives
   only files you or root own, so a repository or a shared directory cannot put
   your keys or its instructions in the prompt. Skills load from
@@ -111,6 +136,12 @@ Claude Code's names work here too.
   them and the environment, as Claude Code keeps `CLAUDE.md`: only Klash's own
   instructions give way. Plan mode keeps its own, with `--append-system-prompt`
   added.
+- **Tools take Claude Code's parameters.** `grep` takes `-A`, `-B` and `-C`
+  context lines, `glob`, `-i`, `output_mode` and `head_limit`; `bash` takes
+  `timeout` in milliseconds; and `view`'s `offset` is the line number to start
+  at. Klash used to drop these without a word, so a model asking for context
+  lines, a list of files or a ten-minute test run got none of them, and one
+  viewing from line 120 started at line 121.
 - **`/loop`** keeps a session working on a task until it is done.
 
 ## What else changed from Crush
@@ -129,6 +160,16 @@ or failed without saying so. The ones you will notice:
   unknown.
 - `/loop` and Stop hooks keep work going until it is done. An agent caught
   repeating itself is told so, instead of having its turn silently ended.
+- Compacting a long conversation no longer makes a local model read it all
+  again: the summary request starts as the conversation's own, so the model
+  server reuses its cache. With a full context on a local model, that read
+  took twenty minutes.
+- A helper agent no longer pushes the main conversation out of a local model
+  server's cache, which cost minutes each time one finished. One started by
+  `klash run` gets the run's permission to act, where it used to wait forever
+  for an answer nobody could give.
+- A request to Anthropic is never refused for carrying one cache marker more
+  than Anthropic accepts.
 - Waiting on a background job, and a grep, are both bounded, so neither can
   hang a turn.
 
@@ -139,6 +180,15 @@ or failed without saying so. The ones you will notice:
 - When an edit is refused because the file changed, when a multi-edit fails,
   or when a grep for code with brackets finds nothing, the agent is told why
   and what to do.
+- When a command changes a file the agent has read, its result says so, so
+  the next edit is not refused as stale. An edit is refused only when the
+  file's content really changed: `git stash` and `pop`, which put the same
+  content back, no longer count.
+- A Klash tool typed as a shell command, `job_kill 077` say, is answered with
+  the tool to call.
+- With your model server out of reach, Klash still starts and says which
+  provider it could not use and why, instead of claiming that none is
+  configured.
 - A language server that is not installed is reported once, and one that
   fails to start is retried with a back-off.
 
@@ -150,7 +200,8 @@ or failed without saying so. The ones you will notice:
   messages.
 - `/think` and `/no_think` switch a model's thinking on or off, and it sticks.
 - Prompts typed while the agent works are queued, and <kbd>Up</kbd> edits
-  them in place.
+  them in place. A prompt a hook refused, or one typed while Klash was
+  starting, comes back into the editor, attachments and all.
 
 **Better tools.** `view` reads 2,000 lines by default and cuts an oversized
 section instead of failing. `grep` can ignore case, and can search for a
