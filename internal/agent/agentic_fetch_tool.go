@@ -200,14 +200,17 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 
 // fetchAgentTools are the tools of agentic_fetch's sub-agent, which works
 // in dir, the temporary directory holding the pages it fetched. Its view,
-// grep and glob read only there (see confinedTool).
+// grep and glob read only there (see confinedTool), and its own fetches
+// reach public sites only (tools.PublicOnly): it goes where the pages it
+// read send it, without asking.
 func fetchAgentTools(dir string, client *http.Client, lspManager *lsp.Manager, permissions permission.Service, files filetracker.Service, cfg config.Tools) []fantasy.AgentTool {
+	public := tools.PublicOnly(client)
 	return []fantasy.AgentTool{
-		tools.NewWebFetchTool(dir, client),
-		tools.NewWebSearchTool(client),
+		tools.NewWebFetchTool(dir, public),
+		tools.NewWebSearchTool(public),
 		confine(dir, tools.NewGlobTool(dir, cfg.Glob)),
 		confine(dir, tools.NewGrepTool(dir, cfg.Grep)),
-		tools.NewSourcegraphTool(client),
+		tools.NewSourcegraphTool(public),
 		confine(dir, tools.NewViewTool(lspManager, permissions, files, nil, dir)),
 	}
 }

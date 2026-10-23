@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -77,4 +79,28 @@ func TestFetchAgentReadsOnlyItsPages(t *testing.T) {
 		require.Contains(t, run(t, tools.GrepToolName, tools.GrepParams{Pattern: "fetched"}).Content, "page-1.md")
 		require.Contains(t, run(t, tools.GlobToolName, tools.GlobParams{Pattern: "*.md"}).Content, "page-1.md")
 	})
+}
+
+// The fetch agent's own fetches reach public sites only: its web_fetch
+// refuses a local service, as a page could otherwise send it to one.
+func TestFetchAgentFetchesPublicSitesOnly(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("TOPSECRET local service"))
+	}))
+	t.Cleanup(srv.Close)
+	var webFetch fantasy.AgentTool
+	for _, tool := range fetchAgentTools(t.TempDir(), srv.Client(), nil, nil, &readRecorder{}, config.Tools{}) {
+		if tool.Info().Name == tools.WebFetchToolName {
+			webFetch = tool
+		}
+	}
+	require.NotNil(t, webFetch)
+	input, err := json.Marshal(tools.WebFetchParams{URL: srv.URL})
+	require.NoError(t, err)
+	resp, err := webFetch.Run(t.Context(), fantasy.ToolCall{ID: "c1", Name: tools.WebFetchToolName, Input: string(input)})
+	require.NoError(t, err)
+	require.True(t, resp.IsError)
+	require.NotContains(t, resp.Content, "TOPSECRET")
 }
