@@ -92,9 +92,12 @@ func (r *Runner) Hooks() []config.HookConfig {
 // an aggregated result.
 func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolInputJSON string) (AggregateResult, error) {
 	id := toolUseID(ctx)
-	envVars := append(BuildEnv(eventName, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
-	p := toolPayload(eventName, sessionID, r.cwd, toolName, toolInputJSON)
+	session, agentID, agentType := toolCallSession(ctx, sessionID)
+	envVars := append(BuildEnv(eventName, toolName, session, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
+	envVars = append(envVars, agentVars(agentID, agentType)...)
+	p := toolPayload(eventName, session, r.cwd, toolName, toolInputJSON)
 	p.ToolUseID = id
+	p.AgentID, p.AgentType = agentID, agentType
 	return r.run(ctx, r.matchingHooks(toolName, tooldefs.LegacyName(toolName)), eventName, toolName, toolInputJSON, envVars, marshalPayload(p))
 }
 
@@ -109,9 +112,12 @@ func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolIn
 // is always cleared, on the aggregate and on each hook.
 func (r *Runner) RunPostToolUse(ctx context.Context, sessionID, toolName, toolInputJSON, output, metadata string, took time.Duration) (AggregateResult, error) {
 	id := toolUseID(ctx)
-	envVars := append(BuildEnv(EventPostToolUse, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
-	p := postPayload(sessionID, r.cwd, toolName, toolInputJSON, output, metadata)
+	session, agentID, agentType := toolCallSession(ctx, sessionID)
+	envVars := append(BuildEnv(EventPostToolUse, toolName, session, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
+	envVars = append(envVars, agentVars(agentID, agentType)...)
+	p := postPayload(session, r.cwd, toolName, toolInputJSON, output, metadata)
 	p.ToolUseID = id
+	p.AgentID, p.AgentType = agentID, agentType
 	p.DurationMS = took.Milliseconds()
 	agg, err := r.run(ctx, r.matchingHooks(toolName, tooldefs.LegacyName(toolName)), EventPostToolUse, toolName, toolInputJSON, envVars, marshalPayload(p))
 	return afterTheCall(agg), err
@@ -124,9 +130,12 @@ func (r *Runner) RunPostToolUse(ctx context.Context, sessionID, toolName, toolIn
 // left to approve or rewrite.
 func (r *Runner) RunPostToolUseFailure(ctx context.Context, sessionID, toolName, toolInputJSON, errText string, interrupted bool, took time.Duration) (AggregateResult, error) {
 	id := toolUseID(ctx)
-	envVars := append(BuildEnv(EventPostToolUseFailure, toolName, sessionID, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
-	p := toolPayload(EventPostToolUseFailure, sessionID, r.cwd, toolName, toolInputJSON)
+	session, agentID, agentType := toolCallSession(ctx, sessionID)
+	envVars := append(BuildEnv(EventPostToolUseFailure, toolName, session, r.cwd, r.projectDir, toolInputJSON), hookVar("TOOL_USE_ID", id)...)
+	envVars = append(envVars, agentVars(agentID, agentType)...)
+	p := toolPayload(EventPostToolUseFailure, session, r.cwd, toolName, toolInputJSON)
 	p.ToolUseID = id
+	p.AgentID, p.AgentType = agentID, agentType
 	p.Error = errText
 	p.IsInterrupt = interrupted
 	p.DurationMS = took.Milliseconds()

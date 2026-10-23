@@ -201,11 +201,13 @@ stuff, and so on.
 > start on an event name it doesn't fire, rather than loading a hook that would
 > look configured and silently never run.
 
-**Scope**: `PreToolUse` only fires on the **top-level agent's** tool calls.
-Sub-agents (the `agent` task tool, `agentic_fetch`, etc.) run without hook
-interception so a single delegated turn doesn't trigger your hook N times. The
-outer sub-agent tool call itself _is_ hooked, so policy like "never let the
-agent spawn sub-agents" still works.
+**Scope**: `PreToolUse` fires on every tool call, a sub-agent's too (those of
+the `agent` tool's and `agentic_fetch`'s), as in Claude Code: a hook that keeps
+the agent from reading a file also keeps a sub-agent it starts from reading it.
+For a sub-agent's call, `session_id` is the session it works for (the one you
+are in), and `agent_id` and `agent_type` name the sub-agent (its own session,
+and `task` or `agentic_fetch`). The sub-agent tool call itself is hooked too,
+so policy like "never let the agent spawn sub-agents" works.
 
 ### PostToolUse
 
@@ -249,7 +251,7 @@ records a fresh read of the file instead, and tells the model the hook changed
 it, so it can view it again before editing near what changed. Claude Code does
 the same.
 
-**Scope**: like `PreToolUse`, only the **top-level agent's** tool calls.
+**Scope**: like `PreToolUse`, every tool call, a sub-agent's too.
 
 ### PostToolUseFailure
 
@@ -590,8 +592,8 @@ The available environment variables are:
 | `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
 | `KLASH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
 | `KLASH_STOP_HOOK_ACTIVE`     | `Stop` and `SubagentStop` only: `1` when the turn is only still running because an earlier hook for the event blocked it, else `0`. |
-| `KLASH_AGENT_ID`             | `SubagentStop` only: the sub-agent's own session ID, as `agent_id` in the payload. |
-| `KLASH_AGENT_TYPE`           | `SubagentStop` only: the sub-agent's type, as `agent_type` in the payload (`task`). |
+| `KLASH_AGENT_ID`             | `SubagentStop`, and the tool hooks of a sub-agent's call: the sub-agent's own session ID, as `agent_id` in the payload. |
+| `KLASH_AGENT_TYPE`           | `SubagentStop`, and the tool hooks of a sub-agent's call: the sub-agent's type, as `agent_type` in the payload (`task`, or `agentic_fetch`). |
 | `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, the same as the `trigger` field in the payload. |
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, the same as the `source` field in the payload. |
 
@@ -618,6 +620,9 @@ Standard input provides the full context as JSON:
   "tool_name": "bash", // The tool being called
   "tool_use_id": "call_8f2a", // The tool call's ID, the same in its PostToolUse hooks
   "tool_input": { "command": "rm -rf /" }, // The tool's input
+  // A sub-agent's call also has, as in Claude Code:
+  // "agent_id": "…",  // the sub-agent's own session
+  // "agent_type": "task", // or "agentic_fetch"
 }
 ```
 

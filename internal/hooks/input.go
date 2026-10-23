@@ -79,7 +79,8 @@ type Payload struct {
 	// on a SessionStart hook is tested against it.
 	Source string `json:"source,omitempty"`
 
-	// AgentID and AgentType are set when a hook fires for a sub-agent, as
+	// AgentID and AgentType are set when a hook fires for a sub-agent (a
+	// SubagentStop hook, or one around a sub-agent's tool call), as
 	// Claude Code's agent_id and agent_type are: the sub-agent's own
 	// session, and its type (the agent tool's is "task"). SessionID is
 	// then the session the sub-agent works for, the user's.
@@ -130,6 +131,40 @@ func WithToolUseID(ctx context.Context, id string) context.Context {
 func toolUseID(ctx context.Context) string {
 	id, _ := ctx.Value(toolUseIDKey{}).(string)
 	return id
+}
+
+// subAgentKey is the context key WithSubAgent stores a sub-agent under.
+type subAgentKey struct{}
+
+type subAgent struct{ session, agentType string }
+
+// WithSubAgent returns a context saying the tool calls made under it are
+// a sub-agent's, working for session as agentType (the agent tool's is
+// "task"). Their PreToolUse, PostToolUse and PostToolUseFailure hooks
+// then see, as in Claude Code, that session as session_id, and the
+// sub-agent's own session and type as agent_id and agent_type.
+func WithSubAgent(ctx context.Context, session, agentType string) context.Context {
+	return context.WithValue(ctx, subAgentKey{}, subAgent{session: session, agentType: agentType})
+}
+
+// toolCallSession is the session_id a tool call's hooks see, and the
+// agent_id and agent_type they get when the call is a sub-agent's (see
+// WithSubAgent). sessionID is the session the call runs in.
+func toolCallSession(ctx context.Context, sessionID string) (session, agentID, agentType string) {
+	if sa, ok := ctx.Value(subAgentKey{}).(subAgent); ok && sa.session != "" && sa.session != sessionID {
+		return sa.session, sessionID, sa.agentType
+	}
+	return sessionID, "", ""
+}
+
+// agentVars are the AGENT_ID and AGENT_TYPE variables of a sub-agent's
+// hook, as its payload's agent_id and agent_type; none for the main
+// agent's.
+func agentVars(agentID, agentType string) []string {
+	if agentID == "" {
+		return nil
+	}
+	return append(hookVar("AGENT_ID", agentID), hookVar("AGENT_TYPE", agentType)...)
 }
 
 // toolPayload is the payload common to the events that fire around a

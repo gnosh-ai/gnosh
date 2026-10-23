@@ -7,9 +7,9 @@ description: Use when the user wants to add, write, debug, or configure a Klash 
 
 Hooks are user-defined commands in `klash.json` that fire at specific points
 during execution, giving deterministic control over tool behavior. They run
-**before** permission checks and **only on the top-level agent's** tool calls —
-sub-agent calls (task tool, agentic_fetch, etc.) are not intercepted, though
-the sub-agent tool call itself is.
+**before** permission checks, on every tool call, a sub-agent's (task tool,
+agentic_fetch) too, as in Claude Code; a sub-agent's call carries `agent_id`
+and `agent_type`, and its `session_id` is the session it works for.
 
 For the full reference, see `docs/hooks/README.md`. This skill covers what you
 need to author correct hooks.
@@ -79,8 +79,8 @@ the input/output contract is identical regardless of language.
 | `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
 | `KLASH_TOOL_USE_ID`          | The tool call's ID, the same in its `PreToolUse` and `PostToolUse` hooks |
 | `KLASH_STOP_HOOK_ACTIVE`     | `Stop` and `SubagentStop` only: `1` if an earlier hook for the event is why the turn is still running |
-| `KLASH_AGENT_ID`             | `SubagentStop` only: the sub-agent's own session ID (`agent_id`) |
-| `KLASH_AGENT_TYPE`           | `SubagentStop` only: the sub-agent's type (`agent_type`), `task` |
+| `KLASH_AGENT_ID`             | `SubagentStop`, and a sub-agent's tool calls: its own session ID (`agent_id`) |
+| `KLASH_AGENT_TYPE`           | `SubagentStop`, and a sub-agent's tool calls: its type (`agent_type`), `task` or `agentic_fetch` |
 | `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, as in the payload's `trigger` field |
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, as in the payload's `source` field |
 
