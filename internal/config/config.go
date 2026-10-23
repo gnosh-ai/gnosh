@@ -921,7 +921,7 @@ type HookConfig struct {
 	// Shell command to execute.
 	Command string `json:"command" jsonschema:"required,description=Shell command to execute when the hook fires"`
 	// Timeout in seconds. Default 60, as in Claude Code.
-	Timeout int `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds for the hook command,default=60"`
+	Timeout int `json:"timeout,omitempty" jsonschema:"description=Timeout in seconds for the hook command. As in Claude Code it defaults to 600\\, or 30 for UserPromptSubmit.,default=600"`
 }
 
 // DisplayName returns the hook name for display purposes. It returns Name
@@ -933,14 +933,20 @@ func (h *HookConfig) DisplayName() string {
 	return h.Command
 }
 
-// TimeoutDuration returns the hook timeout as a time.Duration, defaulting
-// to 60s, Claude Code's default: a Claude Code hook that takes 40 seconds
-// was killed here at 30, as a failed hook.
-func (h *HookConfig) TimeoutDuration() time.Duration {
-	if h.Timeout <= 0 {
-		return 60 * time.Second
+// TimeoutDuration returns the hook's timeout for event: the one it sets,
+// or else Claude Code's default for a command hook, 600 seconds, and 30
+// on UserPromptSubmit, which holds up the prompt the user just sent. The
+// default was 60 here, called Claude Code's, and a Claude Code Stop hook
+// that runs the tests for longer was killed as a failed hook, which lets
+// the turn end unchecked.
+func (h *HookConfig) TimeoutDuration(event string) time.Duration {
+	switch {
+	case h.Timeout > 0:
+		return time.Duration(h.Timeout) * time.Second
+	case event == EventUserPromptSubmit:
+		return 30 * time.Second
 	}
-	return time.Duration(h.Timeout) * time.Second
+	return 600 * time.Second
 }
 
 // Config holds the configuration for crush.

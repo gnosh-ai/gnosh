@@ -279,7 +279,7 @@ func (r *Runner) run(
 	for i, h := range deduped {
 		go func(idx int, hook config.HookConfig) {
 			defer wg.Done()
-			results[idx] = r.runOne(ctx, hook, envVars, payload, eventName == EventUserPromptSubmit || eventName == EventSessionStart)
+			results[idx] = r.runOne(ctx, hook, eventName, envVars, payload)
 		}(i, h)
 	}
 	wg.Wait()
@@ -348,10 +348,11 @@ func toolNames(ctx context.Context, toolName string) []string {
 //   - on the abandon path, the goroutine may still be writing and the
 //     outer frame must not touch them again.
 //
-// plainStdoutIsContext makes stdout that is not a JSON object the hook's
-// context, as Claude Code reads a UserPromptSubmit hook's output.
-func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, envVars []string, payload []byte, plainStdoutIsContext bool) HookResult {
-	timeout := hook.TimeoutDuration()
+// On UserPromptSubmit and SessionStart, stdout that is not a JSON object
+// is the hook's context, as Claude Code reads those hooks' output.
+func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, eventName string, envVars []string, payload []byte) HookResult {
+	plainStdoutIsContext := eventName == EventUserPromptSubmit || eventName == EventSessionStart
+	timeout := hook.TimeoutDuration(eventName)
 	ctx, cancel := context.WithTimeout(parentCtx, timeout)
 	defer cancel()
 

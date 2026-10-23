@@ -47,7 +47,7 @@ hook is a config error too, and every configured hook for those events runs.
       {
         "matcher": "bash",                // tool name, exact (optional; omit or "*" to match all)
         "command": "./hooks/my-hook.sh",   // required: shell command to run
-        "timeout": 10                     // optional: seconds, default 60
+        "timeout": 10                     // optional: seconds, default 600 (30 for UserPromptSubmit)
       }
     ]
   }

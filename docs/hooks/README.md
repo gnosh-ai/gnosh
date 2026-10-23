@@ -150,7 +150,7 @@ and project-level, with project level hooks taking precedence.
         "name": "no-rm-rf", // friendly name shown in the TUI
         "matcher": "bash", // the tool's name; see "Matchers" below
         "command": "./hooks/my-hot-hook.sh", // the path to the hook
-        "timeout": 10, // in seconds; default 60
+        "timeout": 10, // in seconds; default 600, or 30 for UserPromptSubmit
       },
     ],
   },
@@ -811,7 +811,8 @@ When multiple hooks match the same tool call:
 
 If a hook exceeds its timeout, Klash cancels its context and treats the
 result as a non-blocking error so the tool call proceeds. The default
-timeout is 60 seconds, as in Claude Code. Shebang-dispatched subprocesses are killed through
+timeout is Claude Code's for a command hook: 600 seconds, and 30 for
+`UserPromptSubmit`, which holds up the prompt just sent. Shebang-dispatched subprocesses are killed through
 `exec.CommandContext`; in-process hooks get a short grace period to yield
 and are then abandoned (the agent moves on regardless). Long-running work
 should honor context cancellation or run out-of-process via a shebang.
