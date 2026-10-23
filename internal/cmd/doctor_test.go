@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -65,4 +67,38 @@ func TestDoctorReportSaysWhatIsWrong(t *testing.T) {
 	lines, ok = doctorReport(config.NewTestStore(empty), found)
 	require.False(t, ok)
 	require.Contains(t, strings.Join(lines, "\n"), "✗ providers: none configured")
+}
+
+// A hook that runs a script by path is checked: one that is missing, is a
+// directory or cannot be run fails every time it fires. Bare names may be
+// the hook shell's own builtins and are left alone.
+func TestHookScriptProblem(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plain.sh"), []byte("#!/bin/sh\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ok.sh"), []byte("#!/bin/sh\n"), 0o755))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "hooks"), 0o755))
+
+	require.Equal(t, "./missing.sh does not exist", hookScriptProblem("./missing.sh --flag", dir))
+	require.Equal(t, "./plain.sh is not executable", hookScriptProblem("./plain.sh", dir))
+	require.Equal(t, "./hooks is a directory", hookScriptProblem("./hooks", dir))
+	require.Empty(t, hookScriptProblem("./ok.sh arg", dir))
+	require.Empty(t, hookScriptProblem(filepath.Join(dir, "ok.sh"), "/elsewhere"))
+	require.Empty(t, hookScriptProblem("bash ./missing.sh", dir), "the shell runs it; bash is a bare name")
+	require.Empty(t, hookScriptProblem(`echo '{"decision":"allow"}'`, dir))
+	require.Empty(t, hookScriptProblem("$HOME/bin/x", dir), "a variable is the shell's to expand")
+}
+
+// The report names the hook whose script is missing.
+func TestDoctorReportNamesABrokenHook(t *testing.T) {
+	t.Parallel()
+
+	cfg := doctorConfig()
+	missing := filepath.Join(t.TempDir(), "gate.sh")
+	cfg.Hooks = map[string][]config.HookConfig{config.EventStop: {{Name: "gate", Command: missing}}}
+
+	lines, ok := doctorReport(config.NewTestStore(cfg), found)
+	require.True(t, ok, "a broken hook is worth knowing, but a turn can still run")
+	require.Contains(t, strings.Join(lines, "\n"), `! hook Stop "gate": `+missing+" does not exist, so it fails each time it fires")
 }

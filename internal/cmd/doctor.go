@@ -4,11 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/home"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -104,6 +107,13 @@ func doctorReport(store *config.ConfigStore, lookPath func(string) (string, erro
 	} else {
 		add("✓", "hooks: none")
 	}
+	for _, event := range config.KnownHookEvents() {
+		for _, h := range cfg.Hooks[event] {
+			if problem := hookScriptProblem(h.Command, store.WorkingDir()); problem != "" {
+				add("!", "hook %s %q: %s, so it fails each time it fires", event, h.DisplayName(), problem)
+			}
+		}
+	}
 
 	if path, err := lookPath("rg"); err == nil {
 		add("✓", "ripgrep: %s", path)
@@ -126,4 +136,34 @@ func doctorReport(store *config.ConfigStore, lookPath func(string) (string, erro
 		add("✓", "data: %s", cfg.Options.DataDirectory)
 	}
 	return lines, ok
+}
+
+// hookScriptProblem says what is wrong with the script a hook command
+// runs, when the command starts with a path to one (./hooks/check.sh,
+// ~/bin/gate): it does not exist, is a directory, or is not executable.
+// Hooks run in dir. A command that starts with a bare name is left alone,
+// since the hook shell has builtins of its own.
+func hookScriptProblem(command, dir string) string {
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return ""
+	}
+	script := fields[0]
+	if !strings.Contains(script, "/") || strings.ContainsAny(script, "$`\"'") {
+		return ""
+	}
+	path := home.Long(script)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(dir, path)
+	}
+	info, err := os.Stat(path)
+	switch {
+	case err != nil:
+		return script + " does not exist"
+	case info.IsDir():
+		return script + " is a directory"
+	case info.Mode()&0o111 == 0:
+		return script + " is not executable"
+	}
+	return ""
 }
