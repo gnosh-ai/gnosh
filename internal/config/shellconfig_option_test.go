@@ -53,7 +53,7 @@ func TestShellConfigOptionsReachingCharmAreOffUnlessAsked(t *testing.T) {
 func TestShellConfigOptionProviderAutoUpdate(t *testing.T) {
 	// TestMain forces the fetch off through the environment, which outranks
 	// the config; an empty value leaves the decision to the config again.
-	t.Setenv("CRASH_DISABLE_PROVIDER_AUTO_UPDATE", "")
+	t.Setenv("KLASH_DISABLE_PROVIDER_AUTO_UPDATE", "")
 
 	on := loadCrushSh(t, `option provider-auto-update true`).Config().Options
 	require.True(t, on.ProviderAutoUpdate(), "provider-auto-update true asks for the fetch")
@@ -125,10 +125,10 @@ func TestShellConfigOptionAttributionRejectsInvalidStyle(t *testing.T) {
 }
 
 func TestShellConfigOptionListAppends(t *testing.T) {
-	store := loadCrushSh(t, `option disable-skill crash-config
+	store := loadCrushSh(t, `option disable-skill klash-config
 option disable-skill jq`)
 
-	require.Subset(t, store.Config().Options.DisabledSkills, []string{"crash-config", "jq"})
+	require.Subset(t, store.Config().Options.DisabledSkills, []string{"klash-config", "jq"})
 }
 
 // reset wipes values added earlier (or via source) while keeping anything

@@ -10,18 +10,18 @@ import (
 
 // BuiltinPrefix is the path prefix for builtin skill files. It is used by
 // the View tool to distinguish embedded files from disk files.
-const BuiltinPrefix = "crash://skills/"
+const BuiltinPrefix = "klash://skills/"
 
 // LegacyBuiltinPrefix is the prefix builtin skill files had before Crush
-// was renamed Crash. Old sessions and prompt templates still name files
+// was renamed Klash. Old sessions and prompt templates still name files
 // under it, so it still resolves (see CanonicalBuiltinPath).
 const LegacyBuiltinPrefix = "crush://skills/"
 
 // legacySkillNames maps builtin skills' names from before the rename to
 // their names now.
 var legacySkillNames = map[string]string{
-	"crush-config": "crash-config",
-	"crush-hooks":  "crash-hooks",
+	"crush-config": "klash-config",
+	"crush-hooks":  "klash-hooks",
 }
 
 // CanonicalSkillName returns a builtin skill's current name given the name
@@ -41,7 +41,7 @@ func IsBuiltinPath(path string) bool {
 
 // CanonicalBuiltinPath returns a builtin skill file's path under the
 // current prefix and skill name: crush://skills/crush-config/SKILL.md is
-// crash://skills/crash-config/SKILL.md. Other paths are returned as they
+// klash://skills/klash-config/SKILL.md. Other paths are returned as they
 // are.
 func CanonicalBuiltinPath(path string) string {
 	rest, ok := strings.CutPrefix(path, LegacyBuiltinPrefix)
@@ -101,9 +101,9 @@ func DiscoverBuiltinWithStates() ([]*Skill, []*SkillState) {
 			return nil
 		}
 
-		// Set paths using the crash prefix. Strip the leading "builtin/"
+		// Set paths using the klash prefix. Strip the leading "builtin/"
 		// so the path is relative to the embedded root
-		// (e.g., "crash://skills/crash-config/SKILL.md").
+		// (e.g., "klash://skills/klash-config/SKILL.md").
 		relPath, _ := filepath.Rel("builtin", path)
 		relPath = filepath.ToSlash(relPath)
 		skill.SkillFilePath = BuiltinPrefix + relPath

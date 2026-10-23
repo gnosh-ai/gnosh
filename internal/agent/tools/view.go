@@ -107,7 +107,7 @@ func NewViewTool(
 				return fantasy.NewTextErrorResponse("file_path is required"), nil
 			}
 
-			// Handle builtin skill files (crash:// prefix, or crush://
+			// Handle builtin skill files (klash:// prefix, or crush://
 			// from before the rename).
 			if skills.IsBuiltinPath(params.FilePath) {
 				params.FilePath = skills.CanonicalBuiltinPath(params.FilePath)

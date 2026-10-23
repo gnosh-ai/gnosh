@@ -174,9 +174,9 @@ func expandPath(path string, store *config.ConfigStore) string {
 
 // loadContextFiles loads the context files at paths, in the order the
 // paths are given, each file once. A path listed again in another case
-// (CRASH.md, crash.md) is skipped, and so is a file already loaded under
+// (KLASH.md, klash.md) is skipped, and so is a file already loaded under
 // another name: a symlink such as CLAUDE.md -> AGENTS.md, or CRUSH.md ->
-// CRASH.md after the rename, would otherwise put the same text in the
+// KLASH.md after the rename, would otherwise put the same text in the
 // prompt twice. The order is fixed because the system prompt is rebuilt
 // (on a model switch, a config reload), and a model server's prompt
 // cache reuses only the part of a conversation before the first change:

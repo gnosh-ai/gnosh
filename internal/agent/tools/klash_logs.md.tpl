@@ -1,8 +1,8 @@
-Read Crash's internal application logs (default {{ .DefaultLines }} entries, max {{ .MaxLines }}); useful for diagnosing provider errors, tool failures, LSP/MCP issues.
+Read Klash's internal application logs (default {{ .DefaultLines }} entries, max {{ .MaxLines }}); useful for diagnosing provider errors, tool failures, LSP/MCP issues.
 
 <usage>
-- Returns recent log entries from Crash's internal log file
-- Use to diagnose issues with Crash itself (provider errors, tool failures,
+- Returns recent log entries from Klash's internal log file
+- Use to diagnose issues with Klash itself (provider errors, tool failures,
   LSP problems, MCP connection issues)
 - Entries shown in compact format: TIME LEVEL SOURCE MESSAGE key=value...
 </usage>

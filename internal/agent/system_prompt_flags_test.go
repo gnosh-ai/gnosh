@@ -13,7 +13,7 @@ import (
 // The coordinator applies --system-prompt and --append-system-prompt (in
 // RuntimeOverrides) when it builds its top-level agents: the coder's own
 // instructions give way to the user's, its environment and the project's
-// CRASH.md stay, and the appended text ends the coder's and the plan
+// KLASH.md stay, and the appended text ends the coder's and the plan
 // agent's prompts.
 func TestNewCoordinatorUsesTheSystemPromptFlags(t *testing.T) {
 	env := testEnv(t)
@@ -27,7 +27,7 @@ func TestNewCoordinatorUsesTheSystemPromptFlags(t *testing.T) {
              "small": {"provider": "mock", "model": "mock-model"}}
 }`
 	require.NoError(t, os.WriteFile(filepath.Join(env.workingDir, "crush.json"), []byte(crushJSON), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(env.workingDir, "CRASH.md"), []byte("Run the linter before every commit."), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(env.workingDir, "KLASH.md"), []byte("Run the linter before every commit."), 0o644))
 
 	prompts := func(replace, appended string) (coder, plan string) {
 		cfg, err := config.Init(env.workingDir, "", false)
@@ -51,14 +51,14 @@ func TestNewCoordinatorUsesTheSystemPromptFlags(t *testing.T) {
 	}
 
 	coder, plan := prompts("", "")
-	require.True(t, strings.HasPrefix(coder, "You are Crash, a powerful AI Assistant"), "without the flags the built-in instructions are used")
+	require.True(t, strings.HasPrefix(coder, "You are Klash, a powerful AI Assistant"), "without the flags the built-in instructions are used")
 	require.Contains(t, coder, "Run the linter before every commit.")
 	plainPlan := plan
 
 	coder, plan = prompts("You answer only in haiku.", "End every answer with DONE.")
 	require.True(t, strings.HasPrefix(coder, "You answer only in haiku.\n\n<env>\nWorking directory: "+env.workingDir), "the user's instructions come first, then the environment: %.120q", coder)
-	require.NotContains(t, coder, "You are Crash, a powerful AI Assistant", "--system-prompt replaces the built-in instructions")
-	require.Contains(t, coder, "Run the linter before every commit.", "the project's CRASH.md is kept, as Claude Code keeps CLAUDE.md")
+	require.NotContains(t, coder, "You are Klash, a powerful AI Assistant", "--system-prompt replaces the built-in instructions")
+	require.Contains(t, coder, "Run the linter before every commit.", "the project's KLASH.md is kept, as Claude Code keeps CLAUDE.md")
 	require.True(t, strings.HasSuffix(coder, "\n\nEnd every answer with DONE."), "--append-system-prompt ends the coder's prompt")
 	require.Equal(t, plainPlan+"\n\nEnd every answer with DONE.", plan, "the plan agent keeps its own instructions and gets the appended text")
 }

@@ -84,7 +84,7 @@ func TestRun_SessionStartFirstPromptStartup(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "source")
 	r := sessionStartAgent(t, false, "",
-		sessionStartHooks("", `echo "$CRASH_SESSION_START_SOURCE" > `+out)...)
+		sessionStartHooks("", `echo "$KLASH_SESSION_START_SOURCE" > `+out)...)
 	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "first"})
 	require.NoError(t, err)
 	data, err := os.ReadFile(out)
@@ -106,7 +106,7 @@ func TestRun_SessionStartResume(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "source")
 	r := sessionStartAgent(t, false, "earlier prompt",
-		sessionStartHooks("", `echo "$CRASH_SESSION_START_SOURCE" > `+out)...)
+		sessionStartHooks("", `echo "$KLASH_SESSION_START_SOURCE" > `+out)...)
 	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "next"})
 	require.NoError(t, err)
 	data, err := os.ReadFile(out)
@@ -123,7 +123,7 @@ func TestRun_SessionStartSecondSessionClear(t *testing.T) {
 	out1 := filepath.Join(dir, "source1")
 	out2 := filepath.Join(dir, "source2")
 	r := sessionStartAgent(t, false, "",
-		sessionStartHooks("", `echo "$CRASH_SESSION_START_SOURCE" > `+out1)...)
+		sessionStartHooks("", `echo "$KLASH_SESSION_START_SOURCE" > `+out1)...)
 	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "first"})
 	require.NoError(t, err)
 	data, err := os.ReadFile(out1)
@@ -132,7 +132,7 @@ func TestRun_SessionStartSecondSessionClear(t *testing.T) {
 
 	sess2, err := r.env.sessions.Create(t.Context(), "second session")
 	require.NoError(t, err)
-	r.cfg.Hooks[hooks.EventSessionStart] = sessionStartHooks("", `echo "$CRASH_SESSION_START_SOURCE" > `+out2)
+	r.cfg.Hooks[hooks.EventSessionStart] = sessionStartHooks("", `echo "$KLASH_SESSION_START_SOURCE" > `+out2)
 	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: sess2.ID, Prompt: "hello"})
 	require.NoError(t, err)
 	data, err = os.ReadFile(out2)
@@ -181,7 +181,7 @@ func TestRun_SessionStartAfterSummaryCompact(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "source")
 	r := sessionStartAgent(t, false, "",
-		sessionStartHooks("", `echo "$CRASH_SESSION_START_SOURCE" > `+out)...)
+		sessionStartHooks("", `echo "$KLASH_SESSION_START_SOURCE" > `+out)...)
 	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "first"})
 	require.NoError(t, err)
 	data, err := os.ReadFile(out)

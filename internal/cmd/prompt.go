@@ -19,8 +19,8 @@ import (
 var promptCmd = &cobra.Command{
 	Use:   "prompt",
 	Short: "The system prompt templates, as files you can edit",
-	Long: `Crash builds its system prompt from a template. Export the built-in one to
-the templates directory (crash prompt path prints it), edit it, and Crash uses
+	Long: `Klash builds its system prompt from a template. Export the built-in one to
+the templates directory (klash prompt path prints it), edit it, and Klash uses
 your file from then on.
 Names: coder.md.tpl (the default agent), plan.md.tpl, task.md.tpl, initialize.md.tpl.`,
 }
@@ -147,7 +147,7 @@ exact objects.`,
 			fmt.Fprintln(out)
 		}
 		fmt.Fprintf(out, "%d tools, %d bytes of JSON (roughly %d tokens)\n", len(infos), total, total/4)
-		fmt.Fprintf(out, "Descriptions can be edited as %s/<name>.md and tools left out via %s (crash prompt tools --export writes them).\n", agent.UserToolsDir(), agent.DisabledToolsFile())
+		fmt.Fprintf(out, "Descriptions can be edited as %s/<name>.md and tools left out via %s (klash prompt tools --export writes them).\n", agent.UserToolsDir(), agent.DisabledToolsFile())
 		return nil
 	},
 }
@@ -172,7 +172,7 @@ func exportToolDescriptions(cmd *cobra.Command, infos []fantasy.ToolInfo) error 
 	}
 	disabled := agent.DisabledToolsFile()
 	if _, err := os.Stat(disabled); err != nil {
-		header := "# One tool name per line; these are not offered to the model. Names: crash prompt tools\n"
+		header := "# One tool name per line; these are not offered to the model. Names: klash prompt tools\n"
 		if err := os.WriteFile(disabled, []byte(header), 0o644); err != nil {
 			return err
 		}

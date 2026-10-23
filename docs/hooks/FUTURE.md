@@ -24,7 +24,7 @@ puts there is concatenated into what the model sees. That's fine for short notes
 - Large files can push the turn past the context window.
 
 `context_files` is the lazy alternative: the hook returns **paths**, not
-contents. Crash tells the agent the files exist and are relevant, and the agent
+contents. Klash tells the agent the files exist and are relevant, and the agent
 decides whether to open them with its existing `view` tool.
 
 ### Proposed shape
@@ -39,12 +39,12 @@ Additive envelope field. Accepts a list of strings:
 }
 ```
 
-Paths are resolved relative to `CRASH_CWD`. Non-existent paths are dropped with
+Paths are resolved relative to `KLASH_CWD`. Non-existent paths are dropped with
 a debug log (don't fail the hook over a missing file).
 
 ### How the agent sees it
 
-Crash appends a short note to the turn's context along the lines of:
+Klash appends a short note to the turn's context along the lines of:
 
 ```
 ## Referenced files
@@ -70,7 +70,7 @@ envelopes keep working unchanged. No version bump required.
 
 ### Open questions
 
-- Should `context_files` paths be constrained to `CRASH_PROJECT_DIR`? Probably
+- Should `context_files` paths be constrained to `KLASH_PROJECT_DIR`? Probably
   yes, to avoid hooks smuggling in arbitrary filesystem reads.
 - Do we want a per-file line range (`"README.md:1-40"`) or keep it dead simple
   (whole-file references only)? Start simple; add ranges only if asked for.
@@ -161,7 +161,7 @@ then; a blocked prompt is not stored. The design notes below are kept for
 
 ### Motivation
 
-Today Crash supports three hook events: `PreToolUse`, which gates and rewrites
+Today Klash supports three hook events: `PreToolUse`, which gates and rewrites
 tool calls, `PostToolUse`, which reacts to a call that ran, and `Stop`, which
 can refuse to let a turn end. None of them can touch
 the prompt on its way in. The next-most-useful event is

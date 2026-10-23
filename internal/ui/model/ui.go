@@ -225,6 +225,9 @@ type UI struct {
 	initialSessionID string
 	// continueLastSession is set to continue the most recent session on startup.
 	continueLastSession bool
+	// pickSessionAtStart opens the sessions list on startup, for a bare
+	// `klash -r` (see PickSessionAtStart).
+	pickSessionAtStart bool
 
 	lastUserMessageTime int64
 
@@ -607,13 +610,11 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	// set onboarding state defaults
 	ui.onboarding.yesInitializeSelected = true
 
-	desiredState := uiLanding
+	desiredState := startState(com.Config().IsConfigured(), func() bool {
+		n, _ := com.Workspace.ProjectNeedsInitialization()
+		return n
+	}, initialSessionID != "" || continueLast)
 	desiredFocus := uiFocusEditor
-	if !com.Config().IsConfigured() {
-		desiredState = uiOnboarding
-	} else if n, _ := com.Workspace.ProjectNeedsInitialization(); n {
-		desiredState = uiInitialize
-	}
 
 	// set initial state
 	ui.setState(desiredState, desiredFocus)
@@ -655,6 +656,9 @@ func (m *UI) Init() tea.Cmd {
 	if initialSession != nil {
 		cmds = append(cmds, initialSession)
 	}
+	if cmd := m.startupSessionPicker(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	// loadSessionMsg reloads history for whichever session arrives, so
 	// doing it here too would be discarded — and with no session set yet
 	// it reads every user message in the database, which the pending
@@ -693,6 +697,58 @@ func (m *UI) Init() tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 	return tea.Batch(cmds...)
+}
+
+// startState is the screen the UI starts on: onboarding until a provider
+// can be used; then, in a project never initialized, the question whether
+// to initialize it, unless the command line asked for a session to
+// continue, which either answer to the question used to drop (it is asked
+// on the next start instead); else the landing page.
+func startState(configured bool, needsInit func() bool, sessionAsked bool) uiState {
+	switch {
+	case !configured:
+		return uiOnboarding
+	case !sessionAsked && needsInit():
+		return uiInitialize
+	default:
+		return uiLanding
+	}
+}
+
+// PickSessionAtStart makes the UI open the list of sessions to pick from
+// as it starts, for a bare `klash -r`, as Claude Code's `claude -r` opens
+// its picker. Like a session named on the command line, it goes before
+// the question whether to initialize the project (see startState).
+func (m *UI) PickSessionAtStart() {
+	m.pickSessionAtStart = true
+	if m.state == uiInitialize {
+		m.setState(uiLanding, uiFocusEditor)
+	}
+}
+
+// pickSessionMsg opens the sessions list. It is its own message because
+// dialog.ActionOpenDialog is acted on only when an open dialog returns it,
+// so sent at startup, with no dialog open, it did nothing.
+type pickSessionMsg struct{}
+
+// startupSessionPicker opens the sessions list at startup when
+// PickSessionAtStart asked for it, or says there is no session to pick
+// rather than open an empty list. Like loadInitialSession, it waits out
+// onboarding.
+func (m *UI) startupSessionPicker() tea.Cmd {
+	if !m.pickSessionAtStart || m.state != uiLanding {
+		return nil
+	}
+	return func() tea.Msg {
+		sessions, err := m.com.Workspace.ListSessions(context.Background())
+		if err != nil {
+			return util.NewErrorMsg(err)
+		}
+		if len(sessions) == 0 {
+			return util.NewInfoMsg("No sessions to resume here yet")
+		}
+		return pickSessionMsg{}
+	}
 }
 
 // loadInitialSession loads the initial session if one was specified on startup.
@@ -957,6 +1013,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 		if cmd := m.dispatchPromptQueueRefresh(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case pickSessionMsg:
+		if cmd := m.openSessionsDialog(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case loadSessionMsg:
@@ -3811,7 +3871,7 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}
 
 	// Debugging rendering (visually see when the tui rerenders)
-	if env.Getenv("CRASH_UI_DEBUG") == "true" {
+	if env.Getenv("KLASH_UI_DEBUG") == "true" {
 		debugView := lipgloss.NewStyle().Background(lipgloss.ANSIColor(rand.Intn(256))).Width(4).Height(2)
 		debug := uv.NewStyledString(debugView.String())
 		debug.Draw(scr, image.Rectangle{

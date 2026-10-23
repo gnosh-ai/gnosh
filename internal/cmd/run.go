@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -41,33 +42,33 @@ var runCmd = &cobra.Command{
 The prompt can be provided as arguments or piped from stdin.`,
 	Example: `
 # Run a simple prompt
-crash run "Guess my 5 favorite Pokémon"
+klash run "Guess my 5 favorite Pokémon"
 
 # Pipe input from stdin
-curl https://charm.land | crash run "Summarize this website"
+curl https://charm.land | klash run "Summarize this website"
 
 # Read from a file
-crash run "What is this code doing?" <<< prrr.go
+klash run "What is this code doing?" <<< prrr.go
 
 # Redirect output to a file
-crash run "Generate a hot README for this project" > MY_HOT_README.md
+klash run "Generate a hot README for this project" > MY_HOT_README.md
 
 # Run in quiet mode (hide the spinner)
-crash run --quiet "Generate a README for this project"
+klash run --quiet "Generate a README for this project"
 
 # Run in verbose mode (show logs)
-crash run --verbose "Generate a README for this project"
+klash run --verbose "Generate a README for this project"
 
 # Use a specific reasoning effort
 # Levels depend on the model, unsupported values are rejected
 # with the accepted values listed
-crash run --reasoning-effort high "What is the meaning of life?"
+klash run --reasoning-effort high "What is the meaning of life?"
 
 # Continue a previous session
-crash run --session {session-id} "Follow up on your last response"
+klash run --session {session-id} "Follow up on your last response"
 
 # Continue the most recent session
-crash run --continue "Follow up on your last response"
+klash run --continue "Follow up on your last response"
 
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -82,6 +83,9 @@ crash run --continue "Follow up on your last response"
 
 		// sessionID is read from --session or --resume.
 		sessionID := sessionFlag(cmd)
+		if sessionID == pickSession {
+			return errors.New("a session ID must follow -r in klash run; `klash -r` on its own lists the sessions to pick from")
+		}
 
 		// Cancel on SIGINT or SIGTERM.
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
@@ -103,6 +107,10 @@ crash run --continue "Follow up on your last response"
 		output, err := newRunOutput(outputFormat, os.Stdout)
 		if err != nil {
 			return err
+		}
+
+		if output.stream != nil && useClientServer() {
+			return fmt.Errorf("--output-format stream-json is not supported with %s=1 yet; use text or json", "KLASH_CLIENT_SERVER")
 		}
 
 		event.SetNonInteractive(true)
@@ -182,8 +190,8 @@ crash run --continue "Follow up on your last response"
 		}
 		hideSpinner, traceTools := runOutputFlags(quiet, verbose)
 		return output.finish(appWs.App().RunNonInteractive(ctx, output.w, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, func(id string) {
-			output.sessionID = id
-		}))
+			output.started(id, appWs.WorkingDir(), appWs.App().AgentCoordinator.Model().ModelCfg.Model)
+		}, output.message))
 	},
 }
 
@@ -198,7 +206,7 @@ func init() {
 	addRunFlags(runCmd)
 }
 
-// addRunFlags adds crash run's flags to cmd.
+// addRunFlags adds klash run's flags to cmd.
 func addRunFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolP("quiet", "q", false, "Hide spinner")
 	cmd.Flags().BoolP("verbose", "v", false, "Show logs and a line per tool call on stderr")
@@ -209,7 +217,7 @@ func addRunFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it")
 	cmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	cmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
-	cmd.Flags().String("output-format", "text", "How the answer is printed: text, as it streams, or json, one result object at the end (as Claude Code's -p --output-format json)")
+	cmd.Flags().String("output-format", "text", "How the answer is printed: text, as it streams; json, one result object at the end; or stream-json, a JSON line per message and the result at the end (as Claude Code's -p --output-format)")
 	// The yolo flags are accepted so that Claude Code's
 	// `-p --dangerously-skip-permissions` works, and change nothing: run
 	// already accepts its own session's permission requests, and keeps
@@ -217,7 +225,7 @@ func addRunFlags(cmd *cobra.Command) {
 	addYoloFlags(cmd)
 	addToolFlags(cmd)
 	addSystemPromptFlags(cmd)
-	cmd.Flags().Lookup("yolo").Usage = "Accepted for Claude Code's sake; changes nothing, as crash run already accepts its session's permission requests"
+	cmd.Flags().Lookup("yolo").Usage = "Accepted for Claude Code's sake; changes nothing, as klash run already accepts its session's permission requests"
 	cmd.Flags().Lookup("dangerously-skip-permissions").Usage = "Same as --yolo"
 }
 
@@ -941,17 +949,25 @@ func setThinking(ws workspace.Workspace, enabled bool, out io.Writer) error {
 	return err
 }
 
-// runOutput is where crash run writes its answer, by --output-format:
+// runOutput is where klash run writes its answer, by --output-format:
 // streamed as it comes for text, or collected and printed as one result
 // object at the end for json, as Claude Code's -p --output-format json
-// does, for scripts that read the answer and the session to resume.
+// does, for scripts that read the answer and the session to resume;
+// stream-json adds a line per message before it (see streamJSON).
 type runOutput struct {
-	json      bool
+	json      bool          // json or stream-json: a result object at the end
+	stream    *streamJSON   // stream-json: a line per message as it comes
 	w         io.Writer     // what the run writes the answer to
 	answer    *bytes.Buffer // json: the answer, collected
 	stdout    io.Writer     // json: where the result object goes
 	start     time.Time
 	sessionID string // set once the run knows its session
+	// final is the text of the run's last assistant message with any, the
+	// json result as Claude Code gives it: the answer, not the narration
+	// of each step before it ("Let me look.").
+	final      string
+	finalID    string         // the message final came from
+	assistants map[string]int // each assistant message's place in the run
 }
 
 func newRunOutput(format string, stdout io.Writer) (*runOutput, error) {
@@ -962,9 +978,40 @@ func newRunOutput(format string, stdout io.Writer) (*runOutput, error) {
 		answer := &bytes.Buffer{}
 		return &runOutput{json: true, w: answer, answer: answer, stdout: stdout, start: time.Now()}, nil
 	case "stream-json":
-		return nil, fmt.Errorf("--output-format stream-json is not supported yet; use text or json")
+		answer := &bytes.Buffer{}
+		return &runOutput{json: true, stream: newStreamJSON(stdout), w: answer, answer: answer, stdout: stdout, start: time.Now()}, nil
 	default:
-		return nil, fmt.Errorf("--output-format %q: expected text or json", format)
+		return nil, fmt.Errorf("--output-format %q: expected text, json or stream-json", format)
+	}
+}
+
+// started records the run's session, once it is known, and for
+// stream-json writes the init line.
+func (o *runOutput) started(sessionID, cwd, model string) {
+	o.sessionID = sessionID
+	if o.stream != nil {
+		o.stream.start(sessionID, cwd, model)
+	}
+}
+
+// message takes each update of the run's own messages.
+func (o *runOutput) message(msg message.Message) {
+	if o.stream != nil {
+		o.stream.message(msg)
+	}
+	if msg.Role != message.Assistant || msg.IsSummaryMessage {
+		return
+	}
+	if o.assistants == nil {
+		o.assistants = map[string]int{}
+	}
+	if _, ok := o.assistants[msg.ID]; !ok {
+		o.assistants[msg.ID] = len(o.assistants)
+	}
+	// A late update of an earlier message does not take the answer back.
+	text := strings.TrimSpace(msg.Content().Text)
+	if text != "" && (o.finalID == "" || o.assistants[msg.ID] >= o.assistants[o.finalID]) {
+		o.final, o.finalID = text, msg.ID
 	}
 }
 
@@ -974,6 +1021,9 @@ func (o *runOutput) finish(runErr error) error {
 	if !o.json {
 		return runErr
 	}
+	if o.stream != nil {
+		o.stream.flush()
+	}
 	res := struct {
 		Type       string `json:"type"`
 		Subtype    string `json:"subtype"`
@@ -981,10 +1031,11 @@ func (o *runOutput) finish(runErr error) error {
 		Result     string `json:"result"`
 		SessionID  string `json:"session_id,omitempty"`
 		DurationMS int64  `json:"duration_ms"`
+		NumTurns   int    `json:"num_turns,omitempty"`
 	}{
 		Type:       "result",
 		Subtype:    "success",
-		Result:     strings.TrimSpace(o.answer.String()),
+		Result:     cmp.Or(o.final, strings.TrimSpace(o.answer.String())),
 		SessionID:  o.sessionID,
 		DurationMS: time.Since(o.start).Milliseconds(),
 	}
@@ -993,13 +1044,19 @@ func (o *runOutput) finish(runErr error) error {
 		res.IsError = true
 		res.Result = runErr.Error()
 	}
+	if o.stream != nil {
+		res.NumTurns = o.stream.turns
+		if o.stream.err != nil {
+			return errors.Join(runErr, o.stream.err)
+		}
+	}
 	if err := json.NewEncoder(o.stdout).Encode(res); err != nil {
 		return errors.Join(runErr, err)
 	}
 	return runErr
 }
 
-// noProviderError says why crash run has no provider to use. When the
+// noProviderError says why klash run has no provider to use. When the
 // config names providers that loading had to leave out, such as one whose
 // model server did not answer, it says which and why; "no providers
 // configured" sent a user whose server was down to set one up again.

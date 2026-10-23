@@ -128,7 +128,7 @@ func TestSummarize_PreCompactFiresWithTheTrigger(t *testing.T) {
 			dir := t.TempDir()
 			out := filepath.Join(dir, "trigger")
 			r := preCompactAgent(t, false,
-				preCompactHooks("", `echo "$CRASH_PRE_COMPACT_TRIGGER" > `+out)...)
+				preCompactHooks("", `echo "$KLASH_PRE_COMPACT_TRIGGER" > `+out)...)
 			err, summarized, _ := r.summarize(t, tc.trigger)
 			require.NoError(t, err)
 			require.Equal(t, 1, summarized, "the summary goes ahead")
@@ -140,7 +140,7 @@ func TestSummarize_PreCompactFiresWithTheTrigger(t *testing.T) {
 }
 
 // The payload carries hook_event_name "PreCompact", the session ID, the
-// working directory, the trigger, and custom_instructions, which Crash
+// working directory, the trigger, and custom_instructions, which Klash
 // has none of, so it is the empty string.
 func TestSummarize_PreCompactPayload(t *testing.T) {
 	t.Parallel()

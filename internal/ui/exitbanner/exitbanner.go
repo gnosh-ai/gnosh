@@ -68,7 +68,7 @@ func logoSection(contentWidth int) string {
 		lipgloss.NewStyle().Width(contentWidth).Render("Thanks for using "+version.Name+"! "+randomExitMessage())
 }
 
-// sessionResumeLines returns the "Session  <title>\nContinue crash -s <hash>"
+// sessionResumeLines returns the "Session  <title>\nContinue klash -s <hash>"
 // pair used by the exit banner.
 func sessionResumeLines(sess *session.Session, contentWidth int) string {
 	title := strings.ReplaceAll(sess.Title, "\n", " ")

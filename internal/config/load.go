@@ -201,14 +201,14 @@ func mustMarshalConfig(cfg *Config) []byte {
 	return data
 }
 
-// PushPopCrushEnv lets a CRASH_ or CRUSH_ prefixed variable stand in for
+// PushPopCrushEnv lets a KLASH_ or CRUSH_ prefixed variable stand in for
 // the unprefixed one while providers are configured, so that, e.g.,
-// CRASH_OPENAI_API_KEY overrides OPENAI_API_KEY for this program alone.
-// CRASH_, the name after the rename, wins over CRUSH_. The returned func
+// KLASH_OPENAI_API_KEY overrides OPENAI_API_KEY for this program alone.
+// KLASH_, the name after the rename, wins over CRUSH_. The returned func
 // restores the previous values.
 func PushPopCrushEnv() func() {
 	overrides := make(map[string]string)
-	for _, prefix := range []string{"CRUSH_", "CRASH_"} { // the later prefix wins
+	for _, prefix := range []string{"CRUSH_", "KLASH_"} { // the later prefix wins
 		for _, ev := range os.Environ() {
 			name, value, ok := strings.Cut(ev, "=")
 			if !ok {
@@ -581,7 +581,7 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	if len(c.Options.GlobalContextPaths) == 0 {
 		configDir := filepath.Dir(GlobalConfig())
 		c.Options.GlobalContextPaths = []string{
-			filepath.Join(configDir, "CRASH.md"),
+			filepath.Join(configDir, "KLASH.md"),
 			filepath.Join(configDir, "CRUSH.md"),
 			filepath.Join(filepath.Dir(configDir), "AGENTS.md"),
 		}
@@ -639,11 +639,11 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 
 	// Only an explicit value counts: unset or empty leaves the catalog fetch
 	// as the config has it, which is off unless asked for.
-	if disable, ok := env.LookupBool("CRASH_DISABLE_PROVIDER_AUTO_UPDATE"); ok {
+	if disable, ok := env.LookupBool("KLASH_DISABLE_PROVIDER_AUTO_UPDATE"); ok {
 		c.Options.DisableProviderAutoUpdate = new(disable)
 	}
 
-	if str, ok := env.LookupEnv("CRASH_DISABLE_DEFAULT_PROVIDERS"); ok {
+	if str, ok := env.LookupEnv("KLASH_DISABLE_DEFAULT_PROVIDERS"); ok {
 		c.Options.DisableDefaultProviders, _ = strconv.ParseBool(str)
 	}
 
@@ -976,8 +976,8 @@ func lookupConfigs(cwd string) []string {
 // projectConfigNames are the names a project config file can have, in
 // priority order within a directory. LookupBounded returns matches in
 // this order, and the later reverse + merge make the earliest listed
-// name win on conflict. So: .crashrc beats crashrc, both beat the JSON
-// configs, and .crash.json beats crash.json; each beats its name from
+// name win on conflict. So: .klashrc beats klashrc, both beat the JSON
+// configs, and .klash.json beats klash.json; each beats its name from
 // before the rename.
 func projectConfigNames() []string {
 	var names []string
@@ -991,7 +991,7 @@ func projectConfigNames() []string {
 // passes over because someone other than the owner of the project
 // directory owns it. The lookup skips such a file so that another user
 // cannot plant settings in a directory they can write to, but it skipped
-// it without a word: a crash.json written with sudo into your own
+// it without a word: a klash.json written with sudo into your own
 // project, say, was ignored, and the settings in it, a disabled tool
 // among them, silently did not apply.
 func checkProjectConfigOwners(cwd string) error {
@@ -1010,7 +1010,7 @@ func checkProjectConfigOwners(cwd string) error {
 		return nil
 	}
 	return fmt.Errorf(
-		"project config %s belongs to %s, but %s belongs to %s. Crash reads a project config only from the owner of the project directory, so its settings would not apply. If it is meant for this project, give it to %s (chown %s %s); otherwise remove it",
+		"project config %s belongs to %s, but %s belongs to %s. Klash reads a project config only from the owner of the project directory, so its settings would not apply. If it is meant for this project, give it to %s (chown %s %s); otherwise remove it",
 		path, userName(fileOwner), cwd, userName(dirOwner), userName(dirOwner), userName(dirOwner), path,
 	)
 }
@@ -1254,9 +1254,9 @@ func migrateDisableNotifications() {
 }
 
 // projectDataDir is the data directory for a project in workingDir: the
-// closest .crash or .crush within the project, so that a .crash made
+// closest .klash or .crush within the project, so that a .klash made
 // farther up (by a run at the repository root) cannot hide the sessions
-// in a closer .crush. Where there is neither, it is a new .crash in
+// in a closer .crush. Where there is neither, it is a new .klash in
 // workingDir, or the .crush already there: the lookup passes over the
 // home directory, where both would otherwise be missed.
 func projectDataDir(workingDir string) string {
@@ -1270,21 +1270,21 @@ func projectDataDir(workingDir string) string {
 }
 
 // LogFile returns the log file for logDir, a data directory's logs or a
-// server's cache directory: crash.log, or the crush.log from before the
-// rename to Crash where only that one exists.
+// server's cache directory: klash.log, or the crush.log from before the
+// rename to Klash where only that one exists.
 func LogFile(logDir string) string {
 	return fsext.FirstExisting(filepath.Join(logDir, appName+".log"), filepath.Join(logDir, legacyAppName+".log"))
 }
 
 // GlobalConfig returns the global configuration file path for the application.
 func GlobalConfig() string {
-	if dir := env.Getenv("CRASH_GLOBAL_CONFIG"); dir != "" {
+	if dir := env.Getenv("KLASH_GLOBAL_CONFIG"); dir != "" {
 		return configFileIn(dir)
 	}
 	return configFileIn(appConfigDir(home.Config()))
 }
 
-// appDir is the program's directory under base: crash, or crush where only
+// appDir is the program's directory under base: klash, or crush where only
 // that one exists.
 func appDir(base string) string {
 	return fsext.FirstExisting(filepath.Join(base, appName), filepath.Join(base, legacyAppName))
@@ -1292,9 +1292,9 @@ func appDir(base string) string {
 
 // appConfigDir is appDir for a directory that holds a config file, the
 // global config and global data directories: the one holding a config
-// file wins, crash before crush, and only where neither does is it
-// appDir's choice. A crash directory made for anything else (mkdir -p
-// ~/.config/crash/commands) must not take over from a crush one in use:
+// file wins, klash before crush, and only where neither does is it
+// appDir's choice. A klash directory made for anything else (mkdir -p
+// ~/.config/klash/commands) must not take over from a crush one in use:
 // it would hide its config, and with it the hooks, MCP servers and
 // permissions, its shell config, templates, tools and skills, and in the
 // data directory the OAuth tokens.
@@ -1322,14 +1322,14 @@ func hasConfigFile(dir string) bool {
 	return false
 }
 
-// configFileIn is the JSON config file in dir: crash.json, or crush.json
+// configFileIn is the JSON config file in dir: klash.json, or crush.json
 // where only that one exists.
 func configFileIn(dir string) string {
 	return fsext.FirstExisting(filepath.Join(dir, appName+".json"), filepath.Join(dir, legacyAppName+".json"))
 }
 
 // shellConfigSiblings returns the shell config paths that sit alongside a
-// given JSON config path (same directory): crushrc, then crashrc, so that
+// given JSON config path (same directory): crushrc, then klashrc, so that
 // the new name wins where both exist. Both are listed even when missing, so
 // that creating either one is noticed. Used so global config locations pick
 // up a shell config, not just JSON.
@@ -1338,8 +1338,8 @@ func shellConfigSiblings(jsonPath string) []string {
 	return []string{filepath.Join(dir, legacyAppName+"rc"), filepath.Join(dir, appName+"rc")}
 }
 
-// isShellConfig reports whether a config path is a shell config (crashrc,
-// crushrc, or a hidden .crashrc or .crushrc), as opposed to a JSON config.
+// isShellConfig reports whether a config path is a shell config (klashrc,
+// crushrc, or a hidden .klashrc or .crushrc), as opposed to a JSON config.
 func isShellConfig(path string) bool {
 	switch filepath.Base(path) {
 	case appName + "rc", "." + appName + "rc", legacyAppName + "rc", "." + legacyAppName + "rc":
@@ -1351,7 +1351,7 @@ func isShellConfig(path string) bool {
 // GlobalCacheDir returns the path to the global cache directory for the
 // application.
 func GlobalCacheDir() string {
-	if crushCache := env.Getenv("CRASH_CACHE_DIR"); crushCache != "" {
+	if crushCache := env.Getenv("KLASH_CACHE_DIR"); crushCache != "" {
 		return crushCache
 	}
 	if xdgCacheHome := os.Getenv("XDG_CACHE_HOME"); xdgCacheHome != "" {
@@ -1375,7 +1375,7 @@ func ProjectConfigs(cwd string) []string {
 // GlobalConfigData returns the path to the main data directory for the application.
 // this config is used when the app overrides configurations instead of updating the global config.
 func GlobalConfigData() string {
-	if dir := env.Getenv("CRASH_GLOBAL_DATA"); dir != "" {
+	if dir := env.Getenv("KLASH_GLOBAL_DATA"); dir != "" {
 		return configFileIn(dir)
 	}
 	if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
@@ -1383,8 +1383,8 @@ func GlobalConfigData() string {
 	}
 
 	// return the path to the main data directory
-	// for windows, it should be in `%LOCALAPPDATA%/crash/`
-	// for linux and macOS, it should be in `$HOME/.local/share/crash/`
+	// for windows, it should be in `%LOCALAPPDATA%/klash/`
+	// for linux and macOS, it should be in `$HOME/.local/share/klash/`
 	// (or crush, where only that one exists)
 	if runtime.GOOS == "windows" {
 		localAppData := cmp.Or(
@@ -1482,7 +1482,7 @@ func projectBoundary(dir string) string {
 // Skills in these directories are auto-discovered and their files can be read
 // without permission prompts.
 func GlobalSkillsDirs() []string {
-	if crushSkills := env.Getenv("CRASH_SKILLS_DIR"); crushSkills != "" {
+	if crushSkills := env.Getenv("KLASH_SKILLS_DIR"); crushSkills != "" {
 		return []string{crushSkills}
 	}
 
@@ -1641,7 +1641,7 @@ func (c *Config) ValidateMCPs() error {
 // time only the shape can be checked.
 func (c *Config) ValidateTools() error {
 	// A tool or skill named as it was before the rename (crush_logs,
-	// crush-config) means the one it is now (crash_logs, crash-config).
+	// crush-config) means the one it is now (klash_logs, klash-config).
 	// Both the load and the reload come through here, so the lists are put
 	// in current names first.
 	if c.Options != nil {

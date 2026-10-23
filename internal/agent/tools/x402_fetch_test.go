@@ -609,7 +609,7 @@ func TestGnotAmount(t *testing.T) {
 	require.Equal(t, "5uother", gnotAmount(std.Coin{Denom: "uother", Amount: 5}))
 }
 
-// TestX402ChainAllowed pins which chains crash pays on: local and test
+// TestX402ChainAllowed pins which chains klash pays on: local and test
 // chains, and nothing else.
 func TestX402ChainAllowed(t *testing.T) {
 	for _, chain := range []string{"dev", "staging", "onyx-1", "onyx-2", "test12"} {

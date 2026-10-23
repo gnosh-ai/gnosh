@@ -69,7 +69,7 @@ type connectOptions struct {
 // WithDataDirLock toggles acquisition of the per-data-directory lock
 // for this Connect call. The lock is off by default so local-mode
 // invocations do not regress today's behavior; the server's
-// workspace-bootstrap path opts in. CRASH_SKIP_DATADIR_LOCK still
+// workspace-bootstrap path opts in. KLASH_SKIP_DATADIR_LOCK still
 // bypasses acquisition even when this option is set.
 func WithDataDirLock(enable bool) ConnectOption {
 	return func(o *connectOptions) { o.lockDataDir = enable }
@@ -247,11 +247,11 @@ func initGoose() error {
 	return gooseInitErr
 }
 
-// FileName returns the database file in dataDir: crash.db, or the crush.db
-// from before the rename to Crash where only that one exists, so that an
+// FileName returns the database file in dataDir: klash.db, or the crush.db
+// from before the rename to Klash where only that one exists, so that an
 // existing data directory keeps its sessions.
 func FileName(dataDir string) string {
-	db := filepath.Join(dataDir, "crash.db")
+	db := filepath.Join(dataDir, "klash.db")
 	if _, err := os.Stat(db); err == nil {
 		return db
 	}

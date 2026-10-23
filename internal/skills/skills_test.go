@@ -364,7 +364,7 @@ func TestToPromptXMLBuiltinType(t *testing.T) {
 	t.Parallel()
 
 	skills := []*Skill{
-		{Name: "builtin-skill", Description: "A builtin.", SkillFilePath: "crash://skills/builtin-skill/SKILL.md", Builtin: true},
+		{Name: "builtin-skill", Description: "A builtin.", SkillFilePath: "klash://skills/builtin-skill/SKILL.md", Builtin: true},
 		{Name: "user-skill", Description: "A user skill.", SkillFilePath: "/home/user/.config/crush/skills/user-skill/SKILL.md"},
 	}
 	xml := ToPromptXML(skills)
@@ -408,25 +408,25 @@ func TestDiscoverBuiltin(t *testing.T) {
 
 	var found bool
 	for _, s := range discovered {
-		if s.Name == "crash-config" {
+		if s.Name == "klash-config" {
 			found = true
 			require.True(t, strings.HasPrefix(s.SkillFilePath, BuiltinPrefix))
 			require.True(t, strings.HasPrefix(s.Path, BuiltinPrefix))
-			require.Equal(t, "crash://skills/crash-config/SKILL.md", s.SkillFilePath)
-			require.Equal(t, "crash://skills/crash-config", s.Path)
+			require.Equal(t, "klash://skills/klash-config/SKILL.md", s.SkillFilePath)
+			require.Equal(t, "klash://skills/klash-config", s.Path)
 			require.NotEmpty(t, s.Description)
 			require.NotEmpty(t, s.Instructions)
 			require.True(t, s.Builtin)
 		}
 	}
-	require.True(t, found, "crash-config builtin skill not found")
+	require.True(t, found, "klash-config builtin skill not found")
 
 	var foundJQ bool
 	for _, s := range discovered {
 		if s.Name == "jq" {
 			foundJQ = true
-			require.Equal(t, "crash://skills/jq/SKILL.md", s.SkillFilePath)
-			require.Equal(t, "crash://skills/jq", s.Path)
+			require.Equal(t, "klash://skills/jq/SKILL.md", s.SkillFilePath)
+			require.Equal(t, "klash://skills/jq", s.Path)
 			require.NotEmpty(t, s.Description)
 			require.NotEmpty(t, s.Instructions)
 			require.True(t, s.Builtin)
@@ -436,16 +436,16 @@ func TestDiscoverBuiltin(t *testing.T) {
 
 	var foundHooks bool
 	for _, s := range discovered {
-		if s.Name == "crash-hooks" {
+		if s.Name == "klash-hooks" {
 			foundHooks = true
-			require.Equal(t, "crash://skills/crash-hooks/SKILL.md", s.SkillFilePath)
-			require.Equal(t, "crash://skills/crash-hooks", s.Path)
+			require.Equal(t, "klash://skills/klash-hooks/SKILL.md", s.SkillFilePath)
+			require.Equal(t, "klash://skills/klash-hooks", s.Path)
 			require.NotEmpty(t, s.Description)
 			require.NotEmpty(t, s.Instructions)
 			require.True(t, s.Builtin)
 		}
 	}
-	require.True(t, foundHooks, "crash-hooks builtin skill not found")
+	require.True(t, foundHooks, "klash-hooks builtin skill not found")
 }
 
 func TestDeduplicate(t *testing.T) {
@@ -465,10 +465,10 @@ func TestDeduplicate(t *testing.T) {
 		},
 		{
 			name:     "user overrides builtin",
-			input:    []*Skill{{Name: "crash-config", Path: "crash://skills/crash-config"}, {Name: "crash-config", Path: "/user/crash-config"}},
+			input:    []*Skill{{Name: "klash-config", Path: "klash://skills/klash-config"}, {Name: "klash-config", Path: "/user/klash-config"}},
 			wantLen:  1,
-			wantName: "crash-config",
-			wantPath: "/user/crash-config",
+			wantName: "klash-config",
+			wantPath: "/user/klash-config",
 		},
 		{
 			name:    "empty",
@@ -519,24 +519,24 @@ func TestFilter(t *testing.T) {
 	}
 }
 
-// Builtin skills were renamed with Crush to Crash; their old paths and
+// Builtin skills were renamed with Crush to Klash; their old paths and
 // names, which old sessions and prompt templates hold, still resolve.
 func TestCanonicalBuiltinPath(t *testing.T) {
 	t.Parallel()
 
 	for in, want := range map[string]string{
-		"crush://skills/crush-config/SKILL.md": "crash://skills/crash-config/SKILL.md",
-		"crush://skills/crush-hooks":           "crash://skills/crash-hooks",
-		"crush://skills/jq/SKILL.md":           "crash://skills/jq/SKILL.md",
-		"crash://skills/crash-config/SKILL.md": "crash://skills/crash-config/SKILL.md",
-		"crash://skills/crush-config/SKILL.md": "crash://skills/crash-config/SKILL.md",
+		"crush://skills/crush-config/SKILL.md": "klash://skills/klash-config/SKILL.md",
+		"crush://skills/crush-hooks":           "klash://skills/klash-hooks",
+		"crush://skills/jq/SKILL.md":           "klash://skills/jq/SKILL.md",
+		"klash://skills/klash-config/SKILL.md": "klash://skills/klash-config/SKILL.md",
+		"klash://skills/crush-config/SKILL.md": "klash://skills/klash-config/SKILL.md",
 		"/home/me/skills/x/SKILL.md":           "/home/me/skills/x/SKILL.md",
 	} {
 		require.Equal(t, want, CanonicalBuiltinPath(in), in)
 	}
 	require.True(t, IsBuiltinPath("crush://skills/jq/SKILL.md"))
-	require.True(t, IsBuiltinPath("crash://skills/jq/SKILL.md"))
+	require.True(t, IsBuiltinPath("klash://skills/jq/SKILL.md"))
 	require.False(t, IsBuiltinPath("/skills/jq/SKILL.md"))
-	require.Equal(t, "crash-config", CanonicalSkillName("crush-config"))
+	require.Equal(t, "klash-config", CanonicalSkillName("crush-config"))
 	require.Equal(t, "jq", CanonicalSkillName("jq"))
 }

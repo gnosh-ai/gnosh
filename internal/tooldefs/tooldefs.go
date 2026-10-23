@@ -23,8 +23,8 @@ var names = []string{
 	"agent",
 	"bash",
 	"gnokey",
-	"crash_info",
-	"crash_logs",
+	"klash_info",
+	"klash_logs",
 	"job_output",
 	"job_kill",
 	"download",
@@ -58,12 +58,12 @@ func Names() []string {
 	return slices.Clone(names)
 }
 
-// legacyNames maps the names tools had before Crush was renamed Crash
+// legacyNames maps the names tools had before Crush was renamed Klash
 // to their names now, so that a config or hook naming the old one keeps
 // working.
 var legacyNames = map[string]string{
-	"crush_info": "crash_info",
-	"crush_logs": "crash_logs",
+	"crush_info": "klash_info",
+	"crush_logs": "klash_logs",
 }
 
 // Canonical returns the current name of a built-in tool given by any of
@@ -113,7 +113,7 @@ var claudeCodeNames = map[string]string{
 }
 
 // FromClaudeCode returns the built-in tool Claude Code calls name, or ""
-// if Claude Code has no tool by that name or Crash none like it.
+// if Claude Code has no tool by that name or Klash none like it.
 func FromClaudeCode(name string) string {
 	return claudeCodeNames[name]
 }

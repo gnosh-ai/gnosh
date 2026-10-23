@@ -28,9 +28,9 @@ const stopHookReflectEvery = 10
 // though the Stop hook still objects. The rest of its reply is its
 // reason, written for the user. Like the plan markers it is an HTML
 // comment, and the UI strips it before rendering (see StripStopMarker).
-const StopMarker = "<!-- CRASH_STOP -->"
+const StopMarker = "<!-- KLASH_STOP -->"
 
-// legacyStopMarker is the marker from before Crush was renamed Crash. An
+// legacyStopMarker is the marker from before Crush was renamed Klash. An
 // agent may still write it, from a session or a prompt that predates the
 // rename, and it counts the same.
 const legacyStopMarker = "<!-- CRUSH_STOP -->"

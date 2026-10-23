@@ -29,7 +29,7 @@ const (
 	// Session, say.
 	sessionStartSourceClear sessionStartSource = hooks.SessionStartSourceClear
 	// sessionStartSourceCompact is the first prompt after a session's
-	// conversation was summarized, Crash's own source with no Claude
+	// conversation was summarized, Klash's own source with no Claude
 	// Code counterpart.
 	sessionStartSourceCompact sessionStartSource = hooks.SessionStartSourceCompact
 )

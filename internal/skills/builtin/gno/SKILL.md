@@ -91,7 +91,7 @@ reference. The docs are also at https://docs.gno.land.
 
 Before writing or reviewing a realm that holds assets, has an admin, or
 takes callbacks or interfaces, view
-`crash://skills/gno/references/security-review.md`.
+`klash://skills/gno/references/security-review.md`.
 
 ## Test, lint, run
 
@@ -227,9 +227,9 @@ one payment.
 
 ## More
 
-- `crash://skills/gno/references/security-review.md`: the review checklist
+- `klash://skills/gno/references/security-review.md`: the review checklist
   and the cases behind it.
-- `crash://skills/gno/references/toolchain.md`: gno, gnokey and gnodev
+- `klash://skills/gno/references/toolchain.md`: gno, gnokey and gnodev
   flags, query paths, the airgapped signing flow.
 - `$GNOROOT/docs/resources/`: `effective-gno.md`, `gno-interrealm-v2.md`,
   `gno-security-guide.md`, `gno-testing.md`, `gnodev.md`,

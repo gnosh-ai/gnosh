@@ -155,14 +155,14 @@ func TestRunStopEnvMarksActive(t *testing.T) {
 
 	dir := t.TempDir()
 	envOut := filepath.Join(dir, "env.txt")
-	r := stopRunner(t, `printf '%s|%s' "$CRASH_STOP_HOOK_ACTIVE" "$CRUSH_STOP_HOOK_ACTIVE" > `+envOut)
+	r := stopRunner(t, `printf '%s|%s' "$KLASH_STOP_HOOK_ACTIVE" "$CRUSH_STOP_HOOK_ACTIVE" > `+envOut)
 
 	_, err := r.RunStop(context.Background(), "sess", "", true)
 	require.NoError(t, err)
 
 	envLine, err := os.ReadFile(envOut)
 	require.NoError(t, err)
-	require.Equal(t, "1|1", string(envLine), "under the CRASH_ name and the CRUSH_ name before it")
+	require.Equal(t, "1|1", string(envLine), "under the KLASH_ name and the CRUSH_ name before it")
 }
 
 // updated_input patches a tool's arguments; with no tool call in flight

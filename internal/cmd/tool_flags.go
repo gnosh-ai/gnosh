@@ -21,7 +21,7 @@ func addToolFlags(cmd *cobra.Command) {
 	cmd.Flags().StringSlice("disallowedTools", nil, "Same as --disallowed-tools, by Claude Code's name for it")
 }
 
-// toolFlags returns the tools cmd's tool flags name, in Crash's names. A
+// toolFlags returns the tools cmd's tool flags name, in Klash's names. A
 // name that is not a tool is an error, so a typo cannot leave a tool on
 // that was meant to be off. A command without the flags names none.
 func toolFlags(cmd *cobra.Command) (allowed, disallowed []string, err error) {
@@ -94,11 +94,11 @@ func toolFlagNames(cmd *cobra.Command, flag, claudeFlag string, mcpOK bool) ([]s
 	return tools, nil
 }
 
-// toolFlagName is the built-in tool word names: Crash's name for it in
+// toolFlagName is the built-in tool word names: Klash's name for it in
 // any case, or Claude Code's, or, where mcpOK, an MCP tool's name.
 func toolFlagName(word string, mcpOK bool) (string, error) {
 	if strings.ContainsAny(word, "()") {
-		return "", fmt.Errorf("crash takes whole tools only, not a command pattern like %q", word)
+		return "", fmt.Errorf("klash takes whole tools only, not a command pattern like %q", word)
 	}
 	if tool := tooldefs.FromClaudeCode(word); tool != "" {
 		return tool, nil

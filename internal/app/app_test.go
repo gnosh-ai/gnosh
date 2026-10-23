@@ -185,7 +185,7 @@ func testNConsumers(t *testing.T, n int) {
 	wg.Wait()
 }
 
-// crash run prints a hook warning for its own session as a stderr line,
+// klash run prints a hook warning for its own session as a stderr line,
 // and nothing for any other notification.
 func TestHookWarningLine(t *testing.T) {
 	t.Parallel()

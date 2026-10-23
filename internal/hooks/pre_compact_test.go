@@ -26,7 +26,7 @@ func preCompactRunner(t *testing.T, matcher string, commands ...string) *Runner 
 }
 
 // As in Claude Code, a PreCompact hook's payload carries who asked for
-// the summary and the instructions to fold into it. Crash has no
+// the summary and the instructions to fold into it. Klash has no
 // instructions, so custom_instructions is always the empty string.
 func TestRunPreCompactPayload(t *testing.T) {
 	t.Parallel()
@@ -111,7 +111,7 @@ func TestRunPreCompactEnvCarriesTheTrigger(t *testing.T) {
 
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out")
-	r := preCompactRunner(t, "", `echo "$CRASH_PRE_COMPACT_TRIGGER" > `+out)
+	r := preCompactRunner(t, "", `echo "$KLASH_PRE_COMPACT_TRIGGER" > `+out)
 	_, err := r.RunPreCompact(context.Background(), "sess", PreCompactTriggerManual)
 	require.NoError(t, err)
 	data, err := os.ReadFile(out)

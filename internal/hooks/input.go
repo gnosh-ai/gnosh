@@ -65,7 +65,7 @@ type Payload struct {
 	// Trigger and CustomInstructions are set on an EventPreCompact
 	// payload, as Claude Code's PreCompact input carries them: whether
 	// the user asked for the summary or the context filled up, and the
-	// instructions to fold into it, which Crash has none of.
+	// instructions to fold into it, which Klash has none of.
 	Trigger string `json:"trigger,omitempty"`
 	// It is a pointer so that it is left out of every other event's
 	// payload, while a PreCompact payload has it even when empty.
@@ -114,7 +114,7 @@ func postPayload(sessionID, cwd, toolName, toolInputJSON, output, metadata strin
 type toolUseIDKey struct{}
 
 // WithToolUseID returns a context naming the tool call that hooks run
-// for. They get it as tool_use_id, and in CRASH_TOOL_USE_ID, so that a
+// for. They get it as tool_use_id, and in KLASH_TOOL_USE_ID, so that a
 // PreToolUse and a PostToolUse hook can tell they saw the same call.
 func WithToolUseID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, toolUseIDKey{}, id)
@@ -188,7 +188,7 @@ const (
 	SessionStartSourceClear   = "clear"
 	SessionStartSourceResume  = "resume"
 	SessionStartSourceStartup = "startup"
-	// SessionStartSourceCompact is Crash's own: the first prompt after a
+	// SessionStartSourceCompact is Klash's own: the first prompt after a
 	// session's conversation was summarized. Claude Code's SessionStart
 	// has no compact source; it has no summarization at all.
 	SessionStartSourceCompact = "compact"
@@ -220,8 +220,8 @@ const (
 // BuildPreCompactPayload constructs the JSON stdin payload for an
 // EventPreCompact hook. There is no tool in play, so tool_name is empty
 // and tool_input is an empty object. Trigger names who asked for the
-// summary; CustomInstructions is Crash's counterpart to Claude Code's,
-// which Crash has none of, so it is always the empty string.
+// summary; CustomInstructions is Klash's counterpart to Claude Code's,
+// which Klash has none of, so it is always the empty string.
 func BuildPreCompactPayload(sessionID, cwd, trigger string) []byte {
 	return marshalPayload(Payload{
 		Event:              EventPreCompact,
@@ -269,10 +269,10 @@ func BuildEnv(eventName, toolName, sessionID, cwd, projectDir, toolInputJSON str
 	return env
 }
 
-// hookVar sets a hook's environment variable under its CRASH_ name and
+// hookVar sets a hook's environment variable under its KLASH_ name and
 // under the CRUSH_ name that hooks written before the rename read.
 func hookVar(name, value string) []string {
-	return []string{"CRASH_" + name + "=" + value, "CRUSH_" + name + "=" + value}
+	return []string{"KLASH_" + name + "=" + value, "CRUSH_" + name + "=" + value}
 }
 
 // parseStdout parses the JSON output from a hook command's stdout.

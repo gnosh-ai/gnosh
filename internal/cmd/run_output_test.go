@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// crash run --output-format json prints one result object at the end, as
+// klash run --output-format json prints one result object at the end, as
 // Claude Code's -p --output-format json does, so a script gets the answer
 // and the session to resume without parsing streamed text.
 func TestRunOutputJSON(t *testing.T) {
@@ -55,10 +55,8 @@ func TestRunOutputText(t *testing.T) {
 	require.NoError(t, out.finish(nil))
 	require.Equal(t, "streamed", stdout.String(), "text streams the answer and adds nothing")
 
-	_, err = newRunOutput("stream-json", &stdout)
-	require.ErrorContains(t, err, "not supported yet")
 	_, err = newRunOutput("yaml", &stdout)
-	require.ErrorContains(t, err, "expected text or json")
+	require.ErrorContains(t, err, "expected text, json or stream-json")
 }
 
 func TestRunTakesOutputFormat(t *testing.T) {
