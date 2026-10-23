@@ -39,7 +39,7 @@ klash doctor
 			fmt.Fprintf(cmd.OutOrStdout(), "✗ config: %v\n", err)
 			return errors.New("the config does not load; see above")
 		}
-		lines, ok := doctorReport(store, exec.LookPath, config.RetiredNames(store.WorkingDir()))
+		lines, ok := doctorReport(store, exec.LookPath)
 		fmt.Fprintln(cmd.OutOrStdout(), strings.Join(lines, "\n"))
 		if !ok {
 			return errors.New("klash could not run a turn here; see above")
@@ -51,7 +51,7 @@ klash doctor
 // doctorReport checks the setup store holds and returns a line per check
 // ("✓" fine, "!" works but worth knowing, "✗" a turn could not run), and
 // whether a turn could run. lookPath finds a program, as exec.LookPath.
-func doctorReport(store *config.ConfigStore, lookPath func(string) (string, error), retired []string) (lines []string, ok bool) {
+func doctorReport(store *config.ConfigStore, lookPath func(string) (string, error)) (lines []string, ok bool) {
 	ok = true
 	add := func(mark, format string, args ...any) {
 		lines = append(lines, mark+" "+fmt.Sprintf(format, args...))
@@ -64,9 +64,6 @@ func doctorReport(store *config.ConfigStore, lookPath func(string) (string, erro
 		add("✓", "config: %s", strings.Join(paths, ", "))
 	} else {
 		add("!", "config: no config files, defaults only")
-	}
-	for _, name := range retired {
-		add("!", "not read since the rename to Klash: %s", name)
 	}
 
 	enabled := cfg.EnabledProviders()

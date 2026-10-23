@@ -57,9 +57,6 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 	}
 
 	cfg.setDefaults(workingDir, dataDir)
-	for _, name := range RetiredNames(workingDir) {
-		slog.Warn("Not read since the rename to Klash", "name", name)
-	}
 
 	store := &ConfigStore{
 		config:         cfg,
