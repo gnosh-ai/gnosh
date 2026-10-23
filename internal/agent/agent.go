@@ -226,6 +226,8 @@ type SessionAgent interface {
 	BeginAccepted(sessionID string) *AcceptedRun
 	SetModels(large Model, small Model)
 	SetTools(tools []fantasy.AgentTool)
+	// ToolNames names the tools the agent offers the model.
+	ToolNames() []string
 	SetSystemPrompt(systemPrompt string)
 	Cancel(sessionID string)
 	CancelAll()
@@ -2487,6 +2489,15 @@ func (a *sessionAgent) SetModels(large Model, small Model) {
 
 func (a *sessionAgent) SetTools(tools []fantasy.AgentTool) {
 	a.tools.SetSlice(tools)
+}
+
+func (a *sessionAgent) ToolNames() []string {
+	tools := a.tools.Copy()
+	names := make([]string, len(tools))
+	for i, tool := range tools {
+		names[i] = tool.Info().Name
+	}
+	return names
 }
 
 func (a *sessionAgent) SetSystemPrompt(systemPrompt string) {

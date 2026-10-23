@@ -192,8 +192,24 @@ klash run --continue "Follow up on your last response"
 			return setThinking(ws, enabled, cmd.OutOrStdout())
 		}
 		hideSpinner, traceTools := runOutputFlags(quiet, verbose)
+		permissionMode := permissionModeBypass // run accepts its session's permission requests
+		if mode, _ := permissionModeFlag(cmd); mode == permissionModePlan {
+			permissionMode = permissionModePlan
+		}
 		return output.finish(appWs.App().RunNonInteractive(ctx, output.w, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, func(id string) {
-			output.started(id, appWs.WorkingDir(), appWs.App().AgentCoordinator.Model().ModelCfg.Model)
+			output.started(id, func() streamInit {
+				// Asked for then, not now: the run replaces the coordinator
+				// with one without the interactive-only tools.
+				coordinator := appWs.App().AgentCoordinator
+				return streamInit{
+					SessionID:      id,
+					CWD:            appWs.WorkingDir(),
+					Model:          coordinator.Model().ModelCfg.Model,
+					PermissionMode: permissionMode,
+					Tools:          coordinator.ToolNames(),
+					MCPServers:     mcpServerStatuses(),
+				}
+			})
 		}, output.message))
 	},
 }
@@ -973,6 +989,9 @@ type runOutput struct {
 	final      string
 	finalID    string         // the message final came from
 	assistants map[string]int // each assistant message's place in the run
+	// init says what stream-json's init line says, asked for when the line
+	// is written; nil once it is, or before the session is known.
+	init func() streamInit
 }
 
 func newRunOutput(format string, stdout io.Writer) (*runOutput, error) {
@@ -990,17 +1009,27 @@ func newRunOutput(format string, stdout io.Writer) (*runOutput, error) {
 	}
 }
 
-// started records the run's session, once it is known, and for
-// stream-json writes the init line.
-func (o *runOutput) started(sessionID, cwd, model string) {
+// started records the run's session, once it is known. stream-json's
+// init line waits for the run's first message, or its end: a resumed
+// session's model is restored after its session is known, and the line
+// must name the model the run uses.
+func (o *runOutput) started(sessionID string, init func() streamInit) {
 	o.sessionID = sessionID
-	if o.stream != nil {
-		o.stream.start(sessionID, cwd, model)
+	o.init = init
+}
+
+// writeInit writes stream-json's init line, once the session is known.
+func (o *runOutput) writeInit() {
+	if o.stream == nil || o.init == nil {
+		return
 	}
+	o.stream.start(o.init())
+	o.init = nil
 }
 
 // message takes each update of the run's own messages.
 func (o *runOutput) message(msg message.Message) {
+	o.writeInit()
 	if o.stream != nil {
 		o.stream.message(msg)
 	}
@@ -1026,6 +1055,7 @@ func (o *runOutput) finish(runErr error) error {
 	if !o.json {
 		return runErr
 	}
+	o.writeInit()
 	if o.stream != nil {
 		o.stream.flush()
 	}

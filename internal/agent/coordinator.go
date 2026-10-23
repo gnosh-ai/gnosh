@@ -150,6 +150,9 @@ type Coordinator interface {
 	// told about each one (name, description, parameters): the part of every
 	// request that is not the prompt template. Behind `crush prompt tools`.
 	ToolInfos(ctx context.Context) ([]fantasy.ToolInfo, error)
+	// ToolNames names the tools the main agent offers the model now:
+	// the coder's or, in plan mode, the plan agent's, MCP tools included.
+	ToolNames() []string
 	GenerateTitle(ctx context.Context, sessionID, prompt string)
 }
 
@@ -1501,6 +1504,10 @@ func (c *coordinator) IsSessionBusy(sessionID string) bool {
 
 func (c *coordinator) ListSettledMessages(ctx context.Context, sessionID string) ([]message.Message, error) {
 	return c.currentAgent().ListSettledMessages(ctx, sessionID)
+}
+
+func (c *coordinator) ToolNames() []string {
+	return c.currentAgent().ToolNames()
 }
 
 func (c *coordinator) Model() Model {

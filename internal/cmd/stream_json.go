@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"cmp"
 	"encoding/json"
 	"io"
+	"slices"
 
+	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/message"
 )
 
@@ -40,17 +43,65 @@ func newStreamJSON(w io.Writer) *streamJSON {
 	}
 }
 
+// streamInit is what the init line says about the run, as Claude Code's
+// does: the tools the model is offered and the MCP servers by name and
+// status, beside the session, directory, model and permission mode.
+type streamInit struct {
+	SessionID      string
+	CWD            string
+	Model          string
+	PermissionMode string
+	Tools          []string
+	MCPServers     []mcpServerStatus
+}
+
+type mcpServerStatus struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+// mcpServerStatuses are the MCP servers as the init line lists them, by
+// name, each with Claude Code's word for its state.
+func mcpServerStatuses() []mcpServerStatus {
+	var servers []mcpServerStatus
+	for name, info := range mcp.GetStates() {
+		status := info.State.String()
+		switch info.State {
+		case mcp.StateStarting:
+			status = "pending"
+		case mcp.StateError:
+			status = "failed"
+		case mcp.StateNeedsAuth:
+			status = "needs-auth"
+		}
+		servers = append(servers, mcpServerStatus{Name: name, Status: status})
+	}
+	slices.SortFunc(servers, func(a, b mcpServerStatus) int { return cmp.Compare(a.Name, b.Name) })
+	return servers
+}
+
 // start writes the init line for the run's session.
-func (s *streamJSON) start(sessionID, cwd, model string) {
-	s.sessionID = sessionID
+func (s *streamJSON) start(init streamInit) {
+	s.sessionID = init.SessionID
 	s.write(map[string]any{
 		"type":           "system",
 		"subtype":        "init",
-		"session_id":     sessionID,
-		"cwd":            cwd,
-		"model":          model,
-		"permissionMode": "bypassPermissions",
+		"session_id":     init.SessionID,
+		"cwd":            init.CWD,
+		"model":          init.Model,
+		"permissionMode": init.PermissionMode,
+		"tools":          nonNil(init.Tools),
+		"mcp_servers":    nonNil(init.MCPServers),
 	})
+}
+
+// nonNil is list, or an empty one for nil: the init line's lists are
+// never null.
+func nonNil[T any](list []T) []T {
+	if list == nil {
+		return []T{}
+	}
+	return list
 }
 
 // message takes one update of a message of the run.
