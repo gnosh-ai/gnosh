@@ -32,7 +32,7 @@ func TestRunSubagentStopNoHooks(t *testing.T) {
 	t.Parallel()
 
 	r := NewRunner(nil, t.TempDir(), t.TempDir())
-	result, err := r.RunSubagentStop(context.Background(), "sub", "main", "all done", false)
+	result, err := r.RunSubagentStop(context.Background(), "main", "sub", "task", "all done", false)
 	require.NoError(t, err)
 	require.Equal(t, DecisionNone, result.Decision)
 	require.False(t, result.Halt)
@@ -45,7 +45,7 @@ func TestRunSubagentStopExitTwoBlocksTheStop(t *testing.T) {
 	t.Parallel()
 
 	r := subagentStopRunner(t, `echo "tests are still failing" >&2; exit 2`)
-	result, err := r.RunSubagentStop(context.Background(), "sub", "main", "I'm done!", false)
+	result, err := r.RunSubagentStop(context.Background(), "main", "sub", "task", "I'm done!", false)
 	require.NoError(t, err)
 	require.Equal(t, DecisionDeny, result.Decision)
 	require.False(t, result.Halt, "a plain block is not a halt")
@@ -58,7 +58,7 @@ func TestRunSubagentStopHaltEndsTheTurn(t *testing.T) {
 	t.Parallel()
 
 	r := subagentStopRunner(t, `echo "giving up" >&2; exit 49`)
-	result, err := r.RunSubagentStop(context.Background(), "sub", "main", "", false)
+	result, err := r.RunSubagentStop(context.Background(), "main", "sub", "task", "", false)
 	require.NoError(t, err)
 	require.True(t, result.Halt)
 	require.Equal(t, "giving up", result.Reason)
@@ -68,7 +68,7 @@ func TestRunSubagentStopAllowLetsTheSubAgentFinish(t *testing.T) {
 	t.Parallel()
 
 	r := subagentStopRunner(t, `exit 0`)
-	result, err := r.RunSubagentStop(context.Background(), "sub", "main", "", false)
+	result, err := r.RunSubagentStop(context.Background(), "main", "sub", "task", "", false)
 	require.NoError(t, err)
 	require.NotEqual(t, DecisionDeny, result.Decision)
 	require.False(t, result.Halt)
@@ -76,8 +76,8 @@ func TestRunSubagentStopAllowLetsTheSubAgentFinish(t *testing.T) {
 
 // The payload is the hook's whole view of the sub-agent, so assert its
 // shape rather than just the decision it produced: the event name, the
-// sub-agent's own session, the parent that started it, the active flag
-// and the answer it is judging.
+// session the sub-agent works for, the sub-agent's own ID and type as
+// Claude Code names them, the active flag and the answer it is judging.
 func TestRunSubagentStopPayload(t *testing.T) {
 	t.Parallel()
 
@@ -85,7 +85,7 @@ func TestRunSubagentStopPayload(t *testing.T) {
 	out := filepath.Join(dir, "payload.json")
 	r := subagentStopRunner(t, "cat > "+out)
 
-	_, err := r.RunSubagentStop(context.Background(), "sub-42", "main-7", "here is my answer", true)
+	_, err := r.RunSubagentStop(context.Background(), "main-7", "sub-42", "task", "here is my answer", true)
 	require.NoError(t, err)
 
 	raw, err := os.ReadFile(out)
@@ -96,8 +96,9 @@ func TestRunSubagentStopPayload(t *testing.T) {
 	require.Equal(t, EventSubagentStop, got.Event)
 	require.Equal(t, EventSubagentStop, got.HookEventName,
 		"Claude Code hooks read hook_event_name to tell events apart")
-	require.Equal(t, "sub-42", got.SessionID, "the sub-agent's own session")
-	require.Equal(t, "main-7", got.ParentSessionID, "the session that started it")
+	require.Equal(t, "main-7", got.SessionID, "the session the sub-agent works for, as in Claude Code")
+	require.Equal(t, "sub-42", got.AgentID, "the sub-agent's own session")
+	require.Equal(t, "task", got.AgentType)
 	require.Empty(t, got.ToolName, "a SubagentStop hook fires with no tool in play")
 	require.JSONEq(t, "{}", string(got.ToolInput))
 	require.True(t, got.StopHookActive,
@@ -107,7 +108,7 @@ func TestRunSubagentStopPayload(t *testing.T) {
 
 // stop_hook_active is omitted rather than false-y on a first pass, and
 // the environment carries the same signal for hooks that read env vars,
-// beside the parent session's ID.
+// beside the sub-agent's ID and type.
 func TestRunSubagentStopPayloadFirstPass(t *testing.T) {
 	t.Parallel()
 
@@ -116,9 +117,9 @@ func TestRunSubagentStopPayloadFirstPass(t *testing.T) {
 	envOut := filepath.Join(dir, "env.txt")
 	r := subagentStopRunner(t,
 		"cat > "+out+
-			"; printf '%s|%s|%s' \"$CRUSH_EVENT\" \"$CRUSH_STOP_HOOK_ACTIVE\" \"$CRUSH_PARENT_SESSION_ID\" > "+envOut)
+			"; printf '%s|%s|%s|%s|%s' \"$CRUSH_EVENT\" \"$CRUSH_STOP_HOOK_ACTIVE\" \"$KLASH_SESSION_ID\" \"$KLASH_AGENT_ID\" \"$KLASH_AGENT_TYPE\" > "+envOut)
 
-	_, err := r.RunSubagentStop(context.Background(), "sub-1", "main-1", "", false)
+	_, err := r.RunSubagentStop(context.Background(), "main-1", "sub-1", "task", "", false)
 	require.NoError(t, err)
 
 	raw, err := os.ReadFile(out)
@@ -129,7 +130,7 @@ func TestRunSubagentStopPayloadFirstPass(t *testing.T) {
 
 	envLine, err := os.ReadFile(envOut)
 	require.NoError(t, err)
-	require.Equal(t, "SubagentStop|0|main-1", string(envLine))
+	require.Equal(t, "SubagentStop|0|main-1|sub-1|task", string(envLine))
 }
 
 func TestRunSubagentStopEnvMarksActive(t *testing.T) {
@@ -139,7 +140,7 @@ func TestRunSubagentStopEnvMarksActive(t *testing.T) {
 	envOut := filepath.Join(dir, "env.txt")
 	r := subagentStopRunner(t, `printf '%s|%s' "$KLASH_STOP_HOOK_ACTIVE" "$CRUSH_STOP_HOOK_ACTIVE" > `+envOut)
 
-	_, err := r.RunSubagentStop(context.Background(), "sub", "main", "", true)
+	_, err := r.RunSubagentStop(context.Background(), "main", "sub", "task", "", true)
 	require.NoError(t, err)
 
 	envLine, err := os.ReadFile(envOut)
@@ -153,7 +154,7 @@ func TestRunSubagentStopClearsUpdatedInput(t *testing.T) {
 	t.Parallel()
 
 	r := subagentStopRunner(t, `echo '{"decision":"deny","reason":"no","updated_input":{"command":"rm -rf /"}}'`)
-	result, err := r.RunSubagentStop(context.Background(), "sub", "main", "", false)
+	result, err := r.RunSubagentStop(context.Background(), "main", "sub", "task", "", false)
 	require.NoError(t, err)
 	require.Equal(t, DecisionDeny, result.Decision)
 	require.Empty(t, result.UpdatedInput)

@@ -33,6 +33,7 @@ func subagentStopAgent(t *testing.T, env fakeEnv, commands ...string) *sessionAg
 	require.NoError(t, cfg.ValidateHooks())
 	return NewSessionAgent(SessionAgentOptions{
 		IsSubAgent: true,
+		AgentType:  "task",
 		Sessions:   env.sessions,
 		Messages:   env.messages,
 		Cfg:        config.NewTestStore(cfg),
@@ -139,10 +140,10 @@ func TestSubagentStopContinuation_PayloadFields(t *testing.T) {
 	require.Contains(t, string(raw), `"hook_event_name":"SubagentStop"`,
 		"the hook must be able to tell the event it is")
 	require.Contains(t, string(raw), `"event":"SubagentStop"`)
-	require.Contains(t, string(raw), `"session_id":"`+sub.ID+`"`,
-		"the session the hook is judging is the sub-agent's own")
-	require.Contains(t, string(raw), `"parent_session_id":"`+parent.ID+`"`,
-		"and the one that started it")
+	require.Contains(t, string(raw), `"session_id":"`+parent.ID+`"`,
+		"session_id is the session the sub-agent works for, as in Claude Code")
+	require.Contains(t, string(raw), `"agent_id":"`+sub.ID+`"`, "and agent_id the sub-agent's own")
+	require.Contains(t, string(raw), `"agent_type":"task"`)
 	require.Contains(t, string(raw), "I rewrote the parser.")
 	require.NotContains(t, string(raw), `"stop_hook_active"`,
 		"the first pass is not a re-entry, so the flag is omitted")
@@ -241,6 +242,9 @@ type subagentStopRun struct {
 	// for the original prompt, plus one per continuation a
 	// SubagentStop hook forced.
 	turns *atomic.Int64
+	// result is what Run returned, from which the agent tool takes the
+	// answer it hands the parent (subAgentOutput).
+	result *fantasy.AgentResult
 }
 
 func runSubagentTurn(t *testing.T, commands ...string) subagentStopRun {
@@ -273,6 +277,7 @@ func runSubagentTurnModel(t *testing.T, llm fantasy.LanguageModel, turns *atomic
 		SmallModel:           model,
 		SystemPrompt:         "test",
 		IsSubAgent:           true,
+		AgentType:            "task",
 		IsYolo:               true,
 		DisableAutoSummarize: true,
 		Sessions:             env.sessions,
@@ -294,13 +299,13 @@ func runSubagentTurnModel(t *testing.T, llm fantasy.LanguageModel, turns *atomic
 	})
 	require.NoError(t, err)
 
-	_, err = a.Run(t.Context(), SessionAgentCall{
+	result, err := a.Run(t.Context(), SessionAgentCall{
 		SessionID: sub.ID,
 		RunID:     "run-1",
 		Prompt:    "do the thing",
 	})
 	require.NoError(t, err)
-	return subagentStopRun{agent: a, sessionID: sub.ID, parentID: parent.ID, notifier: notifier, turns: turns}
+	return subagentStopRun{agent: a, sessionID: sub.ID, parentID: parent.ID, notifier: notifier, turns: turns, result: result}
 }
 
 func requireSubagentQueueEmpty(t *testing.T, r subagentStopRun) {
@@ -346,10 +351,31 @@ func TestSubagentStopHookBlockOnceCostsOneMoreTurn(t *testing.T) {
 	require.True(t, found, "the hook's reason must reach the model as the continuation prompt")
 }
 
+// What the agent tool hands the parent is the sub-agent's answer after
+// its SubagentStop hooks let it finish, not the one a hook turned back.
+func TestSubagentStopParentGetsTheAnswerAfterTheBlock(t *testing.T) {
+	var turns atomic.Int64
+	llm := &promptAwareModel{
+		turns: &turns,
+		answer: func(lastUser string) string {
+			if strings.Contains(lastUser, "you forgot the tests") {
+				return "Tests added; all done."
+			}
+			return "All done."
+		},
+	}
+	r := runSubagentTurnModel(t, llm, &turns,
+		`[ "$KLASH_STOP_HOOK_ACTIVE" = "1" ] && exit 0; echo "you forgot the tests" >&2; exit 2`)
+
+	require.Equal(t, int64(2), turns.Load())
+	require.Equal(t, "Tests added; all done.", subAgentOutput(r.result))
+}
+
 // The hook's whole view of the sub-agent, as the real flow builds it:
-// hook_event_name SubagentStop, the sub-agent's session_id, the
-// parent_session_id that started it, stop_hook_active (false on the
-// first pass) and the last_assistant_message it is judging.
+// hook_event_name SubagentStop, session_id the session it works for,
+// agent_id its own session and agent_type its type (as Claude Code names
+// them), stop_hook_active (false on the first pass) and the
+// last_assistant_message it is judging.
 func TestSubagentStopRunPayloadFields(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "payload.json")
 	r := runSubagentTurn(t, "cat > "+out+"; exit 0")
@@ -358,8 +384,9 @@ func TestSubagentStopRunPayloadFields(t *testing.T) {
 	raw := readFileForTest(t, out)
 	require.Contains(t, raw, `"hook_event_name":"SubagentStop"`)
 	require.Contains(t, raw, `"event":"SubagentStop"`)
-	require.Contains(t, raw, `"session_id":"`+r.sessionID+`"`)
-	require.Contains(t, raw, `"parent_session_id":"`+r.parentID+`"`)
+	require.Contains(t, raw, `"session_id":"`+r.parentID+`"`)
+	require.Contains(t, raw, `"agent_id":"`+r.sessionID+`"`)
+	require.Contains(t, raw, `"agent_type":"task"`)
 	require.Contains(t, raw, "I'm all done.")
 	require.NotContains(t, raw, `"stop_hook_active"`)
 }
@@ -404,6 +431,8 @@ func TestSubagentStopHookFailureLetsTheSubAgentFinishWithAWarning(t *testing.T) 
 	require.Len(t, warnings, 1, "the user must be told the check never ran")
 	require.Contains(t, warnings[0].Message, "SubagentStop")
 	require.Contains(t, warnings[0].Message, "the script broke")
+	require.Equal(t, r.parentID, warnings[0].SessionID,
+		"in the session the user is in: klash run prints only that session's warnings")
 }
 
 // A SubagentStop hook that halts (exit 49) ends the sub-agent's turn
@@ -453,6 +482,7 @@ func TestSubagentStopAgentJudgesItShouldStopAtACheckpoint(t *testing.T) {
 	require.Contains(t, warnings[0].Message, "SubagentStop")
 	require.Contains(t, warnings[0].Message, "staging database")
 	require.Contains(t, warnings[0].Message, "never done")
+	require.Equal(t, r.parentID, warnings[0].SessionID)
 }
 
 // A Claude Code SubagentStop hook blocks with JSON, not an exit code:
@@ -482,6 +512,7 @@ func TestSubagentStopPromptsNameTheEvent(t *testing.T) {
 	require.True(t, blocked)
 	require.True(t, next.stopHookReflecting)
 	require.Contains(t, next.Prompt, "step back", "the reflection prompt asks the agent to judge")
+	require.Contains(t, next.Prompt, "A SubagentStop hook has now refused")
 	require.Contains(t, next.Prompt, StopMarker, "and tells it how to say it should stop")
 
 	next, blocked = a.stopHookContinuation(t.Context(), SessionAgentCall{SessionID: "s1"}, "done")
@@ -489,15 +520,16 @@ func TestSubagentStopPromptsNameTheEvent(t *testing.T) {
 	require.Contains(t, next.Prompt, "A SubagentStop hook blocked the end of this turn")
 }
 
-// The env vars a SubagentStop hook reads: the event name, both session
-// IDs, and the active flag under its KLASH_ and CRUSH_ names.
+// The env vars a SubagentStop hook reads: the event name, the session the
+// sub-agent works for, its own ID and type, and the active flag under
+// its KLASH_ and CRUSH_ names.
 func TestSubagentStopHookEnvVars(t *testing.T) {
 	t.Parallel()
 
 	envDir := t.TempDir()
 	envLine := filepath.Join(envDir, "env.txt")
 	env := testEnv(t)
-	a := subagentStopAgent(t, env, `printf '%s|%s|%s|%s|%s' "$KLASH_EVENT" "$KLASH_SESSION_ID" "$KLASH_PARENT_SESSION_ID" "$KLASH_STOP_HOOK_ACTIVE" "$CRUSH_STOP_HOOK_ACTIVE" > `+envLine+`; exit 0`)
+	a := subagentStopAgent(t, env, `printf '%s|%s|%s|%s|%s|%s' "$KLASH_EVENT" "$KLASH_SESSION_ID" "$KLASH_AGENT_ID" "$KLASH_AGENT_TYPE" "$KLASH_STOP_HOOK_ACTIVE" "$CRUSH_STOP_HOOK_ACTIVE" > `+envLine+`; exit 0`)
 
 	parent, err := env.sessions.Create(t.Context(), "parent")
 	require.NoError(t, err)
@@ -509,5 +541,5 @@ func TestSubagentStopHookEnvVars(t *testing.T) {
 
 	got, err := os.ReadFile(envLine)
 	require.NoError(t, err)
-	require.Equal(t, "SubagentStop|"+sub.ID+"|"+parent.ID+"|1|1", string(got))
+	require.Equal(t, "SubagentStop|"+parent.ID+"|"+sub.ID+"|task|1|1", string(got))
 }

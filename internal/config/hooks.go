@@ -40,10 +40,10 @@ const (
 	// EventSubagentStop fires when a sub-agent is about to finish, and
 	// works exactly as EventStop does for the main agent: a hook that
 	// blocks it sends the sub-agent back to work. It fires only for
-	// sub-agents, never for the main agent, and its payload carries
-	// the sub-agent's session_id and the parent_session_id that
-	// started it. There is no tool in play, so hooks for it may not
-	// carry a Matcher.
+	// sub-agents, never for the main agent. As in Claude Code, its
+	// payload's session_id is the session the sub-agent works for, and
+	// agent_id and agent_type name the sub-agent. There is no tool in
+	// play, so hooks for it may not carry a Matcher.
 	EventSubagentStop = "SubagentStop"
 	// EventPreCompact fires just before a session's conversation is
 	// summarized: when the user asks for the summary, or automatically

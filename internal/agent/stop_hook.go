@@ -62,14 +62,30 @@ func (a *sessionAgent) stopHookContinuation(
 	}
 	// Main-agent turns are gated by Stop; a sub-agent's are gated by
 	// SubagentStop, which works the same way.
-	eventName, hooksForEvent, isSub := hooks.EventStop, a.cfg.Config().Hooks[hooks.EventStop], false
+	eventName := hooks.EventStop
 	if a.isSubAgent {
-		// Sub-agents never fire Stop hooks, mirroring wrapToolsWithHooks;
-		// the SubagentStop event is the one that belongs to them.
-		eventName, hooksForEvent, isSub = hooks.EventSubagentStop, a.cfg.Config().Hooks[hooks.EventSubagentStop], true
+		eventName = hooks.EventSubagentStop
 	}
+	hooksForEvent := a.cfg.Config().Hooks[eventName]
 	if len(hooksForEvent) == 0 {
 		return SessionAgentCall{}, false
+	}
+	// A sub-agent's hooks, as in Claude Code, see the session it works
+	// for as session_id, and its own as agent_id; their warnings go to
+	// that session too, the one the user is in, which is all `klash run`
+	// prints warnings for.
+	userSession := call.SessionID
+	if a.isSubAgent && a.sessions != nil {
+		sess, err := a.sessions.Get(ctx, call.SessionID)
+		switch {
+		case err != nil:
+			slog.Warn("A sub-agent's session could not be read; its SubagentStop hooks see it as the session",
+				"session_id", call.SessionID,
+				"error", err,
+			)
+		case sess.ParentSessionID != "":
+			userSession = sess.ParentSessionID
+		}
 	}
 
 	// At a reflection checkpoint the agent was asked whether there is a
@@ -82,7 +98,7 @@ func (a *sessionAgent) stopHookContinuation(
 			"session_id", call.SessionID,
 			"attempts", call.stopHookDepth,
 		)
-		a.warnAgentChoseToStop(call, StripStopMarker(lastAssistantMessage), isSub)
+		a.warnAgentChoseToStop(call, userSession, eventName, StripStopMarker(lastAssistantMessage))
 		return SessionAgentCall{}, false
 	}
 
@@ -103,35 +119,17 @@ func (a *sessionAgent) stopHookContinuation(
 		workingDir = wd
 	}
 
-	// SubagentStop hooks judge the sub-agent's own session, and tell
-	// their owner which one started it. The main agent's session has no
-	// parent, so the lookup is skipped there. In the real flow the
-	// sub-agent's session always exists — it is created before its
-	// first Run — so a miss here means the hooks simply have no parent
-	// to name; the turn still ends on their verdict.
-	parentSessionID := ""
-	if isSub && a.sessions != nil {
-		if parent, err := a.sessions.Get(ctx, call.SessionID); err == nil {
-			parentSessionID = parent.ParentSessionID
-		} else {
-			slog.Warn("SubagentStop hooks are configured but the sub-agent's session could not be read; the parent session is unknown",
-				"session_id", call.SessionID,
-				"error", err,
-			)
-		}
-	}
-
 	runner := hooks.NewRunner(hooksForEvent, workingDir, workingDir)
 	var (
 		result hooks.AggregateResult
 		err    error
 	)
-	if isSub {
-		result, err = runner.RunSubagentStop(ctx, call.SessionID, parentSessionID, lastAssistantMessage, call.stopHookDepth > 0)
+	if a.isSubAgent {
+		result, err = runner.RunSubagentStop(ctx, userSession, call.SessionID, a.agentType, lastAssistantMessage, call.stopHookDepth > 0)
 	} else {
 		result, err = runner.RunStop(ctx, call.SessionID, lastAssistantMessage, call.stopHookDepth > 0)
 	}
-	a.warnFailedStopHooks(call.SessionID, result.Hooks, isSub)
+	a.warnFailedStopHooks(userSession, eventName, result.Hooks)
 	if err != nil {
 		slog.Warn("Stop hook execution error; letting the turn end",
 			"session_id", call.SessionID,
@@ -147,16 +145,16 @@ func (a *sessionAgent) stopHookContinuation(
 
 	reason := result.Reason
 	if reason == "" {
-		reason = stopReasonDefault(isSub)
+		reason = fmt.Sprintf("A %s hook blocked the end of this turn.", eventName)
 	}
 	next := call
 	next.stopHookDepth = call.stopHookDepth + 1
 	next.stopHookReason = reason
 	next.stopHookReflecting = next.stopHookDepth%stopHookReflectEvery == 0
 	if next.stopHookReflecting {
-		next.Prompt = stopHookReflectionPrompt(next.stopHookDepth, reason)
+		next.Prompt = stopHookReflectionPrompt(eventName, next.stopHookDepth, reason)
 	} else {
-		next.Prompt = stopHookContinuationPrompt(reason, isSub)
+		next.Prompt = stopHookContinuationPrompt(eventName, reason)
 	}
 	// The continuation is generated, not typed: keep it out of the
 	// transcript the user reads.
@@ -170,18 +168,14 @@ func (a *sessionAgent) stopHookContinuation(
 		"session_id", call.SessionID,
 		"attempt", next.stopHookDepth,
 		"reflecting", next.stopHookReflecting,
-		"sub_agent", isSub,
 		"reason", reason,
 	)
 	return next, true
 }
 
-// stopHookContinuationPrompt is the ordinary "not done yet" prompt.
-func stopHookContinuationPrompt(reason string, isSub bool) string {
-	event := "Stop"
-	if isSub {
-		event = "SubagentStop"
-	}
+// stopHookContinuationPrompt is the ordinary "not done yet" prompt, for
+// event's hooks (Stop or SubagentStop).
+func stopHookContinuationPrompt(event, reason string) string {
 	return fmt.Sprintf(
 		"A %s hook blocked the end of this turn:\n\n%s\n\n"+
 			"Keep working on the original request until this is resolved.",
@@ -189,21 +183,13 @@ func stopHookContinuationPrompt(reason string, isSub bool) string {
 	)
 }
 
-// stopReasonDefault is the reason a block without one is reported under.
-func stopReasonDefault(isSub bool) string {
-	if isSub {
-		return "A SubagentStop hook blocked the end of this turn."
-	}
-	return "A Stop hook blocked the end of this turn."
-}
-
 // stopHookReflectionPrompt is sent every stopHookReflectEvery
 // consecutive blocks. It asks the agent to judge whether there is a
 // genuine reason to stop, and tells it how to say so; absent such a
 // reason it is told plainly to keep going.
-func stopHookReflectionPrompt(attempts int, reason string) string {
+func stopHookReflectionPrompt(event string, attempts int, reason string) string {
 	return fmt.Sprintf(
-		"A Stop hook has now refused to let this turn end %d times in a row. "+
+		"A %s hook has now refused to let this turn end %d times in a row. "+
 			"Its latest objection:\n\n%s\n\n"+
 			"Before continuing, step back and judge honestly whether there is a "+
 			"genuine reason to stop — for example: the task cannot be done as "+
@@ -215,7 +201,7 @@ func stopHookReflectionPrompt(attempts int, reason string) string {
 			"your reply with this line on its own:\n%s\n\n"+
 			"Otherwise, do not stop: keep working on the original request. Taking "+
 			"many attempts is fine.",
-		attempts, reason, StopMarker,
+		event, attempts, reason, StopMarker,
 	)
 }
 
@@ -263,13 +249,9 @@ func StripStopMarker(text string) string {
 // must pass" gate pointed at the wrong script would let every turn
 // finish, unchecked, with nothing on screen to say the check never ran.
 // This is the only place that can say so.
-func (a *sessionAgent) warnFailedStopHooks(sessionID string, ran []hooks.HookInfo, isSub bool) {
+func (a *sessionAgent) warnFailedStopHooks(sessionID, event string, ran []hooks.HookInfo) {
 	if a.notify == nil {
 		return
-	}
-	event := "Stop"
-	if isSub {
-		event = "SubagentStop"
 	}
 	for _, h := range ran {
 		if h.Error == "" {
@@ -286,17 +268,14 @@ func (a *sessionAgent) warnFailedStopHooks(sessionID string, ran []hooks.HookInf
 	}
 }
 
-// warnAgentChoseToStop tells the user the agent ended the turn over the
-// Stop hook's objection, having been asked to judge whether it should.
-// The hook's objections reached the model as hidden prompts, so this is
-// the only place the user learns their gate was overruled, and why.
-func (a *sessionAgent) warnAgentChoseToStop(call SessionAgentCall, agentReason string, isSub bool) {
+// warnAgentChoseToStop tells the user, in sessionID, the agent ended the
+// turn over event's hook's objection, having been asked to judge whether
+// it should. The hook's objections reached the model as hidden prompts,
+// so this is the only place the user learns their gate was overruled,
+// and why.
+func (a *sessionAgent) warnAgentChoseToStop(call SessionAgentCall, sessionID, event, agentReason string) {
 	if a.notify == nil {
 		return
-	}
-	event := "Stop"
-	if isSub {
-		event = "SubagentStop"
 	}
 	msg := fmt.Sprintf(
 		"The %s hook said \"not done\" %d times; the agent judged it should stop",
@@ -311,7 +290,7 @@ func (a *sessionAgent) warnAgentChoseToStop(call SessionAgentCall, agentReason s
 		msg += ". Hook's last objection: " + call.stopHookReason
 	}
 	a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
-		SessionID: call.SessionID,
+		SessionID: sessionID,
 		Type:      notify.TypeHookWarning,
 		Message:   msg,
 	})

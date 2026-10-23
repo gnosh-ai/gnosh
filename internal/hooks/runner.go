@@ -170,16 +170,16 @@ func (r *Runner) RunStop(ctx context.Context, sessionID, lastAssistantMessage st
 // event, which fires when a sub-agent is about to finish, and works
 // exactly as RunStop does for the main agent. Matchers do not apply, as
 // for Stop, so every hook the runner holds is executed. sessionID is
-// the sub-agent's own session; parentSessionID is the session that
-// started it.
+// the session the sub-agent works for; agentID and agentType name the
+// sub-agent (see BuildSubagentStopPayload).
 //
 // A DecisionDeny result means a hook refused to let the sub-agent
 // finish; the caller should put it back to work with the aggregated
 // Reason. Halt ends it now, and UpdatedInput is always cleared, as for
 // RunStop.
-func (r *Runner) RunSubagentStop(ctx context.Context, sessionID, parentSessionID, lastAssistantMessage string, stopHookActive bool) (AggregateResult, error) {
-	envVars := BuildSubagentStopEnv(sessionID, parentSessionID, r.cwd, r.projectDir, stopHookActive)
-	payload := BuildSubagentStopPayload(sessionID, parentSessionID, r.cwd, lastAssistantMessage, stopHookActive)
+func (r *Runner) RunSubagentStop(ctx context.Context, sessionID, agentID, agentType, lastAssistantMessage string, stopHookActive bool) (AggregateResult, error) {
+	envVars := BuildSubagentStopEnv(sessionID, agentID, agentType, r.cwd, r.projectDir, stopHookActive)
+	payload := BuildSubagentStopPayload(sessionID, agentID, agentType, r.cwd, lastAssistantMessage, stopHookActive)
 	agg, err := r.run(ctx, r.Hooks(), EventSubagentStop, "", "", envVars, payload)
 	agg.UpdatedInput = ""
 	return agg, err

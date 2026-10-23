@@ -79,7 +79,8 @@ the input/output contract is identical regardless of language.
 | `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path     |
 | `KLASH_TOOL_USE_ID`          | The tool call's ID, the same in its `PreToolUse` and `PostToolUse` hooks |
 | `KLASH_STOP_HOOK_ACTIVE`     | `Stop` and `SubagentStop` only: `1` if an earlier hook for the event is why the turn is still running |
-| `KLASH_PARENT_SESSION_ID`    | `SubagentStop` only: the ID of the session that started the sub-agent |
+| `KLASH_AGENT_ID`             | `SubagentStop` only: the sub-agent's own session ID (`agent_id`) |
+| `KLASH_AGENT_TYPE`           | `SubagentStop` only: the sub-agent's type (`agent_type`), `task` |
 | `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, as in the payload's `trigger` field |
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, as in the payload's `source` field |
 
@@ -182,9 +183,9 @@ tag, and is kept with the prompt, so it is read again when the conversation is
 rebuilt on later turns. Esc while it runs cancels the prompt. It fires only for
 the top-level agent, not sub-agents.
 
-**On `SubagentStop`** the input is the same as `Stop`, plus
-`"parent_session_id"` (the session that started the sub-agent; the
-`session_id` field is the sub-agent's own). It works exactly like `Stop`, but
+**On `SubagentStop`** the input is the same as `Stop`, plus Claude Code's
+`"agent_id"` (the sub-agent's own session) and `"agent_type"` (`task`);
+`session_id` is the session the sub-agent works for. It works exactly like `Stop`, but
 for sub-agents started by the `agent` tool: exit `2` (or
 `"decision": "block"`) means "you are not finished" — the sub-agent keeps
 working, your stderr is its reason, and the `agent` tool eventually returns

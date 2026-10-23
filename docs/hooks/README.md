@@ -465,11 +465,13 @@ can stand down on its own: `stop_hook_active` in the payload (and
 `KLASH_STOP_HOOK_ACTIVE` in the environment) is set when the sub-agent is only
 still working because an earlier `SubagentStop` hook blocked it.
 
-**Payload**: the stdin JSON carries, beside the common fields,
-`"hook_event_name": "SubagentStop"`, the sub-agent's own session as
-`session_id`, the session that started it as `parent_session_id`,
-`stop_hook_active` as in a `Stop` payload, and `last_assistant_message`, the
-text of the answer the sub-agent is about to finish on.
+**Payload**: as in Claude Code, the stdin JSON carries, beside the common
+fields, `"hook_event_name": "SubagentStop"`, the session the sub-agent works
+for (the one you are in) as `session_id`, the sub-agent's own session as
+`agent_id` and its type as `agent_type` (`task`, for the `agent` tool's
+sub-agents), `stop_hook_active` as in a `Stop` payload, and
+`last_assistant_message`, the text of the answer the sub-agent is about to
+finish on. A failed hook's warning shows in the session you are in.
 
 ```jsonc
 {
@@ -588,7 +590,8 @@ The available environment variables are:
 | `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
 | `KLASH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
 | `KLASH_STOP_HOOK_ACTIVE`     | `Stop` and `SubagentStop` only: `1` when the turn is only still running because an earlier hook for the event blocked it, else `0`. |
-| `KLASH_PARENT_SESSION_ID`    | `SubagentStop` only: the ID of the session that started the sub-agent, the same as the `parent_session_id` field in the payload. |
+| `KLASH_AGENT_ID`             | `SubagentStop` only: the sub-agent's own session ID, as `agent_id` in the payload. |
+| `KLASH_AGENT_TYPE`           | `SubagentStop` only: the sub-agent's type, as `agent_type` in the payload (`task`). |
 | `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, the same as the `trigger` field in the payload. |
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, the same as the `source` field in the payload. |
 

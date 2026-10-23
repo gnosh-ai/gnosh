@@ -265,6 +265,7 @@ type sessionAgent struct {
 	tools              *csync.Slice[fantasy.AgentTool]
 
 	isSubAgent bool
+	agentType  string // see SessionAgentOptions.AgentType
 	sessions   session.Service
 	messages   message.Service
 	// cfg backs channel reply routing (config lookup + MCP tool
@@ -344,6 +345,10 @@ type SessionAgentOptions struct {
 	Tools                []fantasy.AgentTool
 	Notify               pubsub.Publisher[notify.Notification]
 	RunComplete          pubsub.Publisher[notify.RunComplete]
+
+	// AgentType is the agent's name for hooks, the config ID of the agent
+	// it runs as (a sub-agent's is task): SubagentStop's agent_type.
+	AgentType string
 }
 
 func NewSessionAgent(
@@ -355,6 +360,7 @@ func NewSessionAgent(
 		systemPromptPrefix:   csync.NewValue(opts.SystemPromptPrefix),
 		systemPrompt:         csync.NewValue(opts.SystemPrompt),
 		isSubAgent:           opts.IsSubAgent,
+		agentType:            opts.AgentType,
 		sessions:             opts.Sessions,
 		messages:             opts.Messages,
 		cfg:                  opts.Cfg,
