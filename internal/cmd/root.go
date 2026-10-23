@@ -62,6 +62,7 @@ func init() {
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
 	addYoloFlags(rootCmd)
 	addToolFlags(rootCmd)
+	addSystemPromptFlags(rootCmd)
 	rootCmd.PersistentFlags().StringSlice("channels", nil, "MCP servers to enable as channels (repeatable), e.g. --channels server:webhook")
 	_ = rootCmd.PersistentFlags().MarkHidden("channels")
 	addSessionFlags(rootCmd)
@@ -363,6 +364,10 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	if err != nil {
 		return nil, nil, err
 	}
+	systemPrompt, appendSystemPrompt, err := systemPromptFlags(cmd)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	store, err := config.Init(cwd, dataDir, debug)
 	if err != nil {
@@ -372,6 +377,8 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	cfg := store.Config()
 	store.Overrides().SkipPermissionRequests = yolo
 	store.Overrides().EnabledChannels = channels
+	store.Overrides().SystemPrompt = systemPrompt
+	store.Overrides().AppendSystemPrompt = appendSystemPrompt
 	if len(allowedTools) > 0 || len(disallowedTools) > 0 {
 		store.Overrides().AllowedTools = allowedTools
 		store.Overrides().DisabledTools = disallowedTools
@@ -482,6 +489,11 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 		return nil, nil, nil, err
 	} else if len(allowed) > 0 || len(disallowed) > 0 {
 		return nil, nil, nil, fmt.Errorf("tools named with --allowed-tools or --disallowed-tools cannot reach the server's config with %s=1 yet; set options.disabled_tools or permissions.allowed_tools in the project's crash.json instead", "CRASH_CLIENT_SERVER")
+	}
+	if replace, appended, err := systemPromptFlags(cmd); err != nil {
+		return nil, nil, nil, err
+	} else if replace != "" || appended != "" {
+		return nil, nil, nil, fmt.Errorf("--system-prompt and --append-system-prompt cannot reach the server's agent with %s=1 yet", "CRASH_CLIENT_SERVER")
 	}
 
 	hostURL, err := server.ParseHostURL(clientHost)

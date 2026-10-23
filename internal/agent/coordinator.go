@@ -237,12 +237,23 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		return nil, errCoderAgentNotConfigured
 	}
 
-	coderPrompt, err := coderPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()))
+	// --system-prompt replaces the coder's instructions, and
+	// --append-system-prompt goes at the end of both top-level agents'
+	// prompts; sub-agents keep their own.
+	overrides := c.cfg.Overrides()
+	appended := prompt.WithTextAfter(overrides.AppendSystemPrompt)
+	var coderSystemPrompt *prompt.Prompt
+	var err error
+	if overrides.SystemPrompt != "" {
+		coderSystemPrompt, err = coderPromptReplacing(overrides.SystemPrompt, prompt.WithWorkingDir(c.cfg.WorkingDir()), appended)
+	} else {
+		coderSystemPrompt, err = coderPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()), appended)
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	agent, err := c.buildAgent(ctx, coderPrompt, agentCfg, false)
+	agent, err := c.buildAgent(ctx, coderSystemPrompt, agentCfg, false)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +264,7 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		return nil, errPlanAgentNotConfigured
 	}
 
-	planSystemPrompt, err := planPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()))
+	planSystemPrompt, err := planPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()), appended)
 	if err != nil {
 		return nil, err
 	}

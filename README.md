@@ -170,6 +170,8 @@ Claude Code's names work here too.
 | `--allowedTools Read Grep`       | `--allowedTools "Read Grep"`, or `Read,Grep`       | Let these tools run without asking                          |
 | `--disallowedTools Bash Edit`    | `--disallowedTools "Bash Edit"`, or `Bash,Edit`    | Do not give the agent these tools                           |
 | `--tools "Read,Grep"`            | `--tools "Read,Grep"` (`""`: none)                 | Give the agent only these built-in tools                    |
+| `--system-prompt "…"`            | `--system-prompt "…"`, or `--system-prompt-file`   | Use these instructions in place of Crash's own              |
+| `--append-system-prompt "…"`     | `--append-system-prompt "…"`, or its `-file` form  | Add this text at the end of the system prompt               |
 | `claude doctor`                  | `crash doctor`                                     | Check config, providers, models, hooks and tools            |
 
 - **Hooks** take Claude Code's events and answers: `PreToolUse`,
@@ -180,7 +182,9 @@ Claude Code's names work here too.
   [docs/hooks](docs/hooks/README.md).
 - **Context and skills.** Crash reads `CLAUDE.md` and `CLAUDE.local.md`
   alongside `CRASH.md` and `AGENTS.md`, and loads skills from `~/.claude/skills`
-  and a project's `.claude/skills`.
+  and a project's `.claude/skills`. `--system-prompt` keeps them and the
+  environment, as Claude Code keeps `CLAUDE.md`: only Crash's own instructions
+  give way. Plan mode keeps its own, with `--append-system-prompt` added.
 - **`/loop`** keeps a session working on a task until it is done.
 
 ## What else changed from Crush

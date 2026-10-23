@@ -216,6 +216,7 @@ func addRunFlags(cmd *cobra.Command) {
 	// the flags from the workspace (see workspaceYolo).
 	addYoloFlags(cmd)
 	addToolFlags(cmd)
+	addSystemPromptFlags(cmd)
 	cmd.Flags().Lookup("yolo").Usage = "Accepted for Claude Code's sake; changes nothing, as crash run already accepts its session's permission requests"
 	cmd.Flags().Lookup("dangerously-skip-permissions").Usage = "Same as --yolo"
 }

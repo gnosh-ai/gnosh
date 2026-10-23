@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/config"
@@ -30,6 +31,26 @@ func coderPrompt(opts ...prompt.Option) (*prompt.Prompt, error) {
 		return nil, err
 	}
 	return systemPrompt, nil
+}
+
+// coderPromptReplacing builds the coder agent's system prompt with
+// instructions, the text of --system-prompt, in place of the template's
+// own: the part before its <env> line. The environment, skills and
+// context files from that line on are kept, as Claude Code keeps
+// CLAUDE.md under its --system-prompt. They come from the built-in
+// template, since a user's template need not have an <env> line.
+func coderPromptReplacing(instructions string, opts ...prompt.Option) (*prompt.Prompt, error) {
+	return prompt.NewPrompt("coder", builtinCoderContext(), append(opts, prompt.WithTextBefore(instructions+"\n\n"))...)
+}
+
+// builtinCoderContext is the built-in coder template from its <env> line
+// to the end.
+func builtinCoderContext() string {
+	t := string(coderPromptTmpl)
+	if i := strings.Index(t, "\n<env>\n"); i >= 0 {
+		return t[i+1:]
+	}
+	return ""
 }
 
 func taskPrompt(opts ...prompt.Option) (*prompt.Prompt, error) {

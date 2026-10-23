@@ -77,6 +77,12 @@ type RuntimeOverrides struct {
 	// reload from disk keeps them.
 	DisabledTools []string
 	AllowedTools  []string
+	// SystemPrompt and AppendSystemPrompt are the text of Claude Code's
+	// --system-prompt and --append-system-prompt (or their -file forms).
+	// The first takes the place of the coder agent's instructions; the
+	// second goes at the end of the coder and plan agents' system prompts.
+	SystemPrompt       string
+	AppendSystemPrompt string
 }
 
 // ConfigStore is the single entry point for all config access. It owns the

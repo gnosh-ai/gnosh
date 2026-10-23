@@ -27,6 +27,8 @@ type Prompt struct {
 	now        func() time.Time
 	platform   string
 	workingDir string
+	before     string
+	after      string
 }
 
 type PromptDat struct {
@@ -68,6 +70,22 @@ func WithWorkingDir(workingDir string) Option {
 	}
 }
 
+// WithTextBefore puts text, as written, before what the template builds;
+// it is not read as a template.
+func WithTextBefore(text string) Option {
+	return func(p *Prompt) {
+		p.before = text
+	}
+}
+
+// WithTextAfter puts text, as written, after what the template builds,
+// separated by a blank line; it is not read as a template.
+func WithTextAfter(text string) Option {
+	return func(p *Prompt) {
+		p.after = text
+	}
+}
+
 func NewPrompt(name, promptTemplate string, opts ...Option) (*Prompt, error) {
 	p := &Prompt{
 		name:     name,
@@ -90,8 +108,13 @@ func (p *Prompt) Build(ctx context.Context, provider, model string, store *confi
 	if err != nil {
 		return "", err
 	}
+	sb.WriteString(p.before)
 	if err := t.Execute(&sb, d); err != nil {
 		return "", fmt.Errorf("executing template: %w", err)
+	}
+	if p.after != "" {
+		sb.WriteString("\n\n")
+		sb.WriteString(p.after)
 	}
 
 	return sb.String(), nil
