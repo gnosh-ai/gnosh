@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"text/template"
@@ -184,10 +185,52 @@ func expandPath(path string, store *config.ConfigStore) string {
 // cache reuses only the part of a conversation before the first change:
 // files reshuffled by map order made the whole conversation be read
 // again.
-func loadContextFiles(paths []string, store *config.ConfigStore) []ContextFile {
+//
+// The files a context file imports, with Claude Code's @path, come just
+// before it, as Claude Code reads them first (see contextImports). They
+// must stay inside importRoot, unless it is "": a project's own context
+// files may import only the project's files, or a repository could have
+// its AGENTS.md put ~/.ssh/id_ed25519 in the prompt, and so in front of
+// the model's provider. The user's global context files import anything.
+func loadContextFiles(paths []string, store *config.ConfigStore, importRoot string) []ContextFile {
 	var files []ContextFile
 	seenPaths := map[string]bool{}
 	seenFiles := map[string]bool{}
+	// add loads the files file imports, then file, each once, depth hops
+	// from a configured path.
+	var add func(file ContextFile, depth int)
+	add = func(file ContextFile, depth int) {
+		real, err := filepath.EvalSymlinks(file.Path)
+		if err != nil {
+			real = file.Path
+		}
+		if seenFiles[real] {
+			return
+		}
+		seenFiles[real] = true
+		defer func() { files = append(files, file) }()
+		if depth == maxImportDepth {
+			return
+		}
+		for _, ref := range contextImports(file.Content) {
+			target := home.Long(ref)
+			if !filepath.IsAbs(target) {
+				target = filepath.Join(filepath.Dir(file.Path), target)
+			}
+			if info, err := os.Stat(target); err != nil || !info.Mode().IsRegular() {
+				// Not a file: an @mention, a handle, a missing file.
+				continue
+			}
+			if importRoot != "" && !within(target, importRoot) {
+				slog.Warn("A context file imports a file outside the project; it is not read",
+					"file", file.Path, "import", ref)
+				continue
+			}
+			if imported := processFile(target); imported != nil {
+				add(*imported, depth+1)
+			}
+		}
+	}
 	for _, pth := range paths {
 		expanded := expandPath(pth, store)
 		pathKey := strings.ToLower(expanded)
@@ -196,18 +239,60 @@ func loadContextFiles(paths []string, store *config.ConfigStore) []ContextFile {
 		}
 		seenPaths[pathKey] = true
 		for _, file := range processContextPath(expanded, store) {
-			real, err := filepath.EvalSymlinks(file.Path)
-			if err != nil {
-				real = file.Path
-			}
-			if seenFiles[real] {
-				continue
-			}
-			seenFiles[real] = true
-			files = append(files, file)
+			add(file, 0)
 		}
 	}
 	return files
+}
+
+// maxImportDepth is how many hops of imports are followed from a
+// configured context file, as in Claude Code.
+const maxImportDepth = 4
+
+// importRef is an @path import: an @ at the start of a line or after a
+// space, then the path, which ends at the first space not escaped with
+// a backslash.
+var importRef = regexp.MustCompile(`(?:^|\s)@((?:\\ |\S)+)`)
+
+// contextImports returns the paths a context file imports with Claude
+// Code's @path syntax, in order: "@AGENTS.md", "see @docs/style.md", a
+// space in a path escaped with a backslash. As in Claude Code, nothing in
+// a code span or a fenced code block imports.
+func contextImports(content string) []string {
+	var refs []string
+	fenced := false
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			fenced = !fenced
+			continue
+		}
+		if fenced {
+			continue
+		}
+		// Every other piece between backticks is a code span.
+		pieces := strings.Split(line, "`")
+		for i := 0; i < len(pieces); i += 2 {
+			for _, m := range importRef.FindAllStringSubmatch(pieces[i], -1) {
+				refs = append(refs, strings.ReplaceAll(m[1], `\ `, " "))
+			}
+		}
+	}
+	return refs
+}
+
+// within reports whether path, its symlinks resolved, is inside dir.
+func within(path, dir string) bool {
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+	root, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(root, real)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func (p *Prompt) promptData(ctx context.Context, provider, model string, store *config.ConfigStore) (PromptDat, error) {
@@ -215,8 +300,8 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 	platform := cmp.Or(p.platform, runtime.GOOS)
 
 	cfg := store.Config()
-	contextFiles := loadContextFiles(cfg.Options.ContextPaths, store)
-	globalContextFiles := loadContextFiles(cfg.Options.GlobalContextPaths, store)
+	contextFiles := loadContextFiles(cfg.Options.ContextPaths, store, cmp.Or(store.WorkingDir(), "."))
+	globalContextFiles := loadContextFiles(cfg.Options.GlobalContextPaths, store, "")
 
 	// Discover and load skills metadata.
 	var availSkillXML string
