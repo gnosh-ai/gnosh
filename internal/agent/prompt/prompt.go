@@ -15,6 +15,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/filepathext"
+	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/gitutil"
 	"github.com/charmbracelet/crush/internal/home"
 	"github.com/charmbracelet/crush/internal/shell"
@@ -193,9 +194,72 @@ func expandPath(path string, store *config.ConfigStore) string {
 // its AGENTS.md put ~/.ssh/id_ed25519 in the prompt, and so in front of
 // the model's provider. The user's global context files import anything.
 func loadContextFiles(paths []string, store *config.ConfigStore, importRoot string) []ContextFile {
-	var files []ContextFile
-	seenPaths := map[string]bool{}
-	seenFiles := map[string]bool{}
+	l := newContextLoader(store)
+	l.load(paths, importRoot, nil)
+	return l.files
+}
+
+// projectContextFiles loads the project's context files at paths: those
+// in each directory above the working directory, the outermost first,
+// then the working directory's own, as Claude Code reads CLAUDE.md files,
+// so the instructions closest to where klash started come last. Started
+// in a subdirectory of a repository, klash read none of the
+// repository's. A directory above gives only files the user or root
+// owns, so a shared one such as /tmp cannot slip instructions into a
+// session, and their imports stay inside that directory.
+func projectContextFiles(paths []string, store *config.ConfigStore) []ContextFile {
+	l := newContextLoader(store)
+	workingDir := store.WorkingDir()
+	if workingDir != "" {
+		var relative []string
+		for _, p := range paths {
+			if expanded := expandPath(p, store); !filepathext.SmartIsAbs(expanded) {
+				relative = append(relative, expanded)
+			}
+		}
+		var above []string
+		for dir := filepath.Dir(workingDir); ; dir = filepath.Dir(dir) {
+			above = append(above, dir)
+			if dir == filepath.Dir(dir) {
+				break
+			}
+		}
+		for i := len(above) - 1; i >= 0; i-- {
+			inDir := make([]string, len(relative))
+			for j, p := range relative {
+				inDir[j] = filepath.Join(above[i], p)
+			}
+			l.load(inDir, above[i], ownedByUserOrRoot)
+		}
+	}
+	l.load(paths, cmp.Or(workingDir, "."), nil)
+	return l.files
+}
+
+// ownedByUserOrRoot reports whether the file at path belongs to the user
+// klash runs as, or to root.
+func ownedByUserOrRoot(path string) bool {
+	uid, err := fsext.Owner(path)
+	return err == nil && (uid == os.Getuid() || uid == 0)
+}
+
+// contextLoader loads context files for the prompt, each once however
+// it is reached (see loadContextFiles).
+type contextLoader struct {
+	store     *config.ConfigStore
+	files     []ContextFile
+	seenPaths map[string]bool
+	seenFiles map[string]bool
+}
+
+func newContextLoader(store *config.ConfigStore) *contextLoader {
+	return &contextLoader{store: store, seenPaths: map[string]bool{}, seenFiles: map[string]bool{}}
+}
+
+// load adds the context files at paths and the files they import, which
+// must stay inside importRoot unless it is "". When trusted is not nil,
+// a file it refuses is not read.
+func (l *contextLoader) load(paths []string, importRoot string, trusted func(path string) bool) {
 	// add loads the files file imports, then file, each once, depth hops
 	// from a configured path.
 	var add func(file ContextFile, depth int)
@@ -204,11 +268,11 @@ func loadContextFiles(paths []string, store *config.ConfigStore, importRoot stri
 		if err != nil {
 			real = file.Path
 		}
-		if seenFiles[real] {
+		if l.seenFiles[real] || (trusted != nil && !trusted(file.Path)) {
 			return
 		}
-		seenFiles[real] = true
-		defer func() { files = append(files, file) }()
+		l.seenFiles[real] = true
+		defer func() { l.files = append(l.files, file) }()
 		if depth == maxImportDepth {
 			return
 		}
@@ -232,17 +296,16 @@ func loadContextFiles(paths []string, store *config.ConfigStore, importRoot stri
 		}
 	}
 	for _, pth := range paths {
-		expanded := expandPath(pth, store)
+		expanded := expandPath(pth, l.store)
 		pathKey := strings.ToLower(expanded)
-		if seenPaths[pathKey] {
+		if l.seenPaths[pathKey] {
 			continue
 		}
-		seenPaths[pathKey] = true
-		for _, file := range processContextPath(expanded, store) {
+		l.seenPaths[pathKey] = true
+		for _, file := range processContextPath(expanded, l.store) {
 			add(file, 0)
 		}
 	}
-	return files
 }
 
 // maxImportDepth is how many hops of imports are followed from a
@@ -300,7 +363,7 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 	platform := cmp.Or(p.platform, runtime.GOOS)
 
 	cfg := store.Config()
-	contextFiles := loadContextFiles(cfg.Options.ContextPaths, store, cmp.Or(store.WorkingDir(), "."))
+	contextFiles := projectContextFiles(cfg.Options.ContextPaths, store)
 	globalContextFiles := loadContextFiles(cfg.Options.GlobalContextPaths, store, "")
 
 	// Discover and load skills metadata.

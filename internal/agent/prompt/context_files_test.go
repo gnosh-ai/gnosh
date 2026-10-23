@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/config"
@@ -147,4 +148,61 @@ func TestLoadContextFilesImportsStayInTheProject(t *testing.T) {
 	files := loadContextFiles([]string{global}, store, "")
 	require.Equal(t, []string{"secret.md", "AGENTS.md"}, contextPaths(files))
 	require.Equal(t, "the key", files[0].Content)
+}
+
+// filesUnder returns the paths, relative to dir, of the files that are in
+// dir: the directories above a test's own are the machine's, and may hold
+// context files of their own.
+func filesUnder(files []ContextFile, dir string) []string {
+	var out []string
+	for _, f := range files {
+		if rel, err := filepath.Rel(dir, f.Path); err == nil && !strings.HasPrefix(rel, "..") {
+			out = append(out, filepath.ToSlash(rel))
+		}
+	}
+	return out
+}
+
+// Started in a subdirectory, klash reads the context files of the
+// directories above it too, the outermost first and the working
+// directory's last, as Claude Code reads CLAUDE.md files. An import in a
+// directory above stays inside that directory.
+func TestProjectContextFilesReadTheDirectoriesAbove(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	repo := filepath.Join(base, "repo")
+	work := filepath.Join(repo, "sub")
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "docs"), 0o755))
+	require.NoError(t, os.MkdirAll(work, 0o755))
+	writeContextFile(t, base, "outside.md", "outside")
+	writeContextFile(t, base, "CLAUDE.md", "the outer rules")
+	writeContextFile(t, repo, "AGENTS.md", "@docs/style.md @../outside.md")
+	writeContextFile(t, filepath.Join(repo, "docs"), "style.md", "the style")
+	writeContextFile(t, work, "CLAUDE.md", "the sub rules")
+	store := config.NewTestStoreIn(&config.Config{Options: &config.Options{}}, work)
+
+	files := projectContextFiles([]string{"CLAUDE.md", "AGENTS.md"}, store)
+	require.Equal(t, []string{"CLAUDE.md", "repo/docs/style.md", "repo/AGENTS.md", "repo/sub/CLAUDE.md"}, filesUnder(files, base))
+}
+
+// A directory above gives only files the user or root owns, so a shared
+// one such as /tmp cannot slip instructions into a session. The working
+// directory's own files are read whoever owns them, as before.
+func TestProjectContextFilesTrustOnlyTheUserOrRootAbove(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("giving a file to another user takes root")
+	}
+	t.Parallel()
+
+	base := t.TempDir()
+	work := filepath.Join(base, "work")
+	require.NoError(t, os.Mkdir(work, 0o755))
+	planted := writeContextFile(t, base, "AGENTS.md", "planted")
+	own := writeContextFile(t, work, "AGENTS.md", "the rules")
+	require.NoError(t, os.Chown(planted, 4242, 4242))
+	require.NoError(t, os.Chown(own, 4242, 4242))
+	store := config.NewTestStoreIn(&config.Config{Options: &config.Options{}}, work)
+
+	require.Equal(t, []string{"work/AGENTS.md"}, filesUnder(projectContextFiles([]string{"AGENTS.md"}, store), base))
 }

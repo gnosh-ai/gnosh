@@ -102,10 +102,15 @@ Claude Code's names work here too.
   Stop hook can keep the agent working until your tests pass. See
   [docs/hooks](docs/hooks/README.md).
 - **Context and skills.** Klash reads `CLAUDE.md` and `CLAUDE.local.md`
-  alongside `KLASH.md` and `AGENTS.md`, and loads skills from `~/.claude/skills`
-  and a project's `.claude/skills`. `--system-prompt` keeps them and the
-  environment, as Claude Code keeps `CLAUDE.md`: only Klash's own instructions
-  give way. Plan mode keeps its own, with `--append-system-prompt` added.
+  alongside `KLASH.md` and `AGENTS.md`, from the working directory and the
+  directories above it, and follows their `@path` imports, as Claude Code does.
+  A project's files import only the project's own, and a directory above gives
+  only files you or root own, so a repository or a shared directory cannot put
+  your keys or its instructions in the prompt. Skills load from
+  `~/.claude/skills` and a project's `.claude/skills`. `--system-prompt` keeps
+  them and the environment, as Claude Code keeps `CLAUDE.md`: only Klash's own
+  instructions give way. Plan mode keeps its own, with `--append-system-prompt`
+  added.
 - **`/loop`** keeps a session working on a task until it is done.
 
 ## What else changed from Crush
