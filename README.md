@@ -169,6 +169,7 @@ Claude Code's names work here too.
 | `--allowedTools Read Grep`       | `--allowedTools "Read Grep"`, or `Read,Grep`       | Let these tools run without asking                          |
 | `--disallowedTools Bash Edit`    | `--disallowedTools "Bash Edit"`, or `Bash,Edit`    | Do not give the agent these tools                           |
 | `--tools "Read,Grep"`            | `--tools "Read,Grep"` (`""`: none)                 | Give the agent only these built-in tools                    |
+| `claude doctor`                  | `crash doctor`                                     | Check config, providers, models, hooks and tools            |
 
 - **Hooks** take Claude Code's events and answers: `PreToolUse`,
   `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit` and `Stop`, with
