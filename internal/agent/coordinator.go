@@ -995,7 +995,11 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 
 	allTools = append(
 		allTools,
-		tools.NewBashTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.cfg.Config().Options.Attribution, modelID, c.cfg.Config().Options.GetMaxBackgroundJobs()),
+		&changedReadFiles{
+			AgentTool:  tools.NewBashTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.cfg.Config().Options.Attribution, modelID, c.cfg.Config().Options.GetMaxBackgroundJobs()),
+			files:      c.filetracker,
+			workingDir: c.cfg.WorkingDir(),
+		},
 		tools.NewKlashInfoTool(c.cfg, c.lspManager, c.allSkills, c.activeSkills, c.skillTracker),
 		tools.NewKlashLogsTool(logFile),
 		tools.NewJobOutputTool(c.cfg.Config().Options.DataDirectory),
