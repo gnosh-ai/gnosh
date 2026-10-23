@@ -189,9 +189,9 @@ klash run --continue "Follow up on your last response"
 			return setThinking(ws, enabled, cmd.OutOrStdout())
 		}
 		hideSpinner, traceTools := runOutputFlags(quiet, verbose)
-		permissionMode := permissionModeBypass // run accepts its session's permission requests
-		if mode, _ := permissionModeFlag(cmd); mode == permissionModePlan {
-			permissionMode = permissionModePlan
+		permissionMode := config.PermissionModeBypass // run accepts its session's permission requests
+		if mode, _ := permissionModeFlag(cmd); mode == config.PermissionModePlan {
+			permissionMode = config.PermissionModePlan
 		}
 		return output.finish(appWs.App().RunNonInteractive(ctx, output.w, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, func(id string) {
 			output.started(id, func() streamInit {

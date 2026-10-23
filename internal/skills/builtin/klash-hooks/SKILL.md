@@ -98,9 +98,15 @@ the rename; either works.
   "cwd": "/home/user/project",
   "tool_name": "bash",
   "tool_use_id": "call_8f2a",
-  "tool_input": {"command": "rm -rf /"}
+  "tool_input": {"command": "rm -rf /"},
+  "permission_mode": "default"
 }
 ```
+
+`permission_mode` is on the tool events, `UserPromptSubmit`, `Stop` and
+`SubagentStop`, as in Claude Code: `plan` for the plan agent,
+`bypassPermissions` when every request is granted (yolo, or `klash run`),
+`acceptEdits` under `--permission-mode acceptEdits`, else `default`.
 
 A `PostToolUse` payload also carries what the tool returned, as in Claude
 Code: `"tool_response": {"output": "…", "metadata": {…}}` (for `bash`, the

@@ -90,6 +90,15 @@ const (
 	AgentTask  string = "task"
 )
 
+// Permission modes, by Claude Code's names: the values of
+// --permission-mode, and the permission_mode hooks are told.
+const (
+	PermissionModeDefault     = "default"
+	PermissionModeAcceptEdits = "acceptEdits"
+	PermissionModeBypass      = "bypassPermissions"
+	PermissionModePlan        = "plan"
+)
+
 type SelectedModel struct {
 	// The model id as used by the provider API.
 	// Required.

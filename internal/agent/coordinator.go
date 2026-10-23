@@ -287,6 +287,22 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 	return c, nil
 }
 
+// permissionMode is a session's permission mode as Claude Code names it
+// to hooks, for any agent but the plan agent: bypassPermissions when its
+// permission requests are all granted (yolo, or a klash run's session and
+// its sub-agents'), acceptEdits under --permission-mode acceptEdits, else
+// default.
+func (c *coordinator) permissionMode(sessionID string) string {
+	switch {
+	case c.permissions != nil && (c.permissions.SkipRequests() || c.permissions.IsSessionAutoApproved(sessionID)):
+		return config.PermissionModeBypass
+	case c.cfg != nil && c.cfg.Overrides().AcceptEdits:
+		return config.PermissionModeAcceptEdits
+	default:
+		return config.PermissionModeDefault
+	}
+}
+
 // activeAgent returns the coordinator's current main agent and its config
 // name as one snapshot. Callers use the snapshot for the whole operation,
 // so a SetMainAgent racing mid-flight never splits a run, model refresh, or
@@ -834,6 +850,7 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		SystemPrompt:         "",
 		IsSubAgent:           isSubAgent,
 		AgentType:            agent.ID,
+		PermissionMode:       c.permissionMode,
 		DisableAutoSummarize: c.cfg.Config().Options.DisableAutoSummarize,
 		IsYolo:               c.permissions.SkipRequests(),
 		Sessions:             c.sessions,

@@ -93,6 +93,7 @@ func (r *Runner) Run(ctx context.Context, eventName, sessionID, toolName, toolIn
 	p := toolPayload(eventName, session, r.cwd, toolName, toolInputJSON)
 	p.ToolUseID = id
 	p.AgentID, p.AgentType = agentID, agentType
+	p.PermissionMode = permissionMode(ctx)
 	return r.run(ctx, r.matchingHooks(toolNames(ctx, toolName)...), eventName, toolName, toolInputJSON, envVars, marshalPayload(p))
 }
 
@@ -113,6 +114,7 @@ func (r *Runner) RunPostToolUse(ctx context.Context, sessionID, toolName, toolIn
 	p := postPayload(session, r.cwd, toolName, toolInputJSON, output, metadata)
 	p.ToolUseID = id
 	p.AgentID, p.AgentType = agentID, agentType
+	p.PermissionMode = permissionMode(ctx)
 	p.DurationMS = took.Milliseconds()
 	agg, err := r.run(ctx, r.matchingHooks(toolNames(ctx, toolName)...), EventPostToolUse, toolName, toolInputJSON, envVars, marshalPayload(p))
 	return afterTheCall(agg), err
@@ -131,6 +133,7 @@ func (r *Runner) RunPostToolUseFailure(ctx context.Context, sessionID, toolName,
 	p := toolPayload(EventPostToolUseFailure, session, r.cwd, toolName, toolInputJSON)
 	p.ToolUseID = id
 	p.AgentID, p.AgentType = agentID, agentType
+	p.PermissionMode = permissionMode(ctx)
 	p.Error = errText
 	p.IsInterrupt = interrupted
 	p.DurationMS = took.Milliseconds()
@@ -164,8 +167,9 @@ func afterTheCall(agg AggregateResult) AggregateResult {
 // is always cleared.
 func (r *Runner) RunStop(ctx context.Context, sessionID, lastAssistantMessage string, stopHookActive bool) (AggregateResult, error) {
 	envVars := BuildStopEnv(sessionID, r.cwd, r.projectDir, stopHookActive)
-	payload := BuildStopPayload(sessionID, r.cwd, lastAssistantMessage, stopHookActive)
-	agg, err := r.run(ctx, r.Hooks(), EventStop, "", "", envVars, payload)
+	p := stopPayload(sessionID, r.cwd, lastAssistantMessage, stopHookActive)
+	p.PermissionMode = permissionMode(ctx)
+	agg, err := r.run(ctx, r.Hooks(), EventStop, "", "", envVars, marshalPayload(p))
 	agg.UpdatedInput = ""
 	return agg, err
 }
@@ -183,8 +187,9 @@ func (r *Runner) RunStop(ctx context.Context, sessionID, lastAssistantMessage st
 // RunStop.
 func (r *Runner) RunSubagentStop(ctx context.Context, sessionID, agentID, agentType, lastAssistantMessage string, stopHookActive bool) (AggregateResult, error) {
 	envVars := BuildSubagentStopEnv(sessionID, agentID, agentType, r.cwd, r.projectDir, stopHookActive)
-	payload := BuildSubagentStopPayload(sessionID, agentID, agentType, r.cwd, lastAssistantMessage, stopHookActive)
-	agg, err := r.run(ctx, r.Hooks(), EventSubagentStop, "", "", envVars, payload)
+	p := subagentStopPayload(sessionID, agentID, agentType, r.cwd, lastAssistantMessage, stopHookActive)
+	p.PermissionMode = permissionMode(ctx)
+	agg, err := r.run(ctx, r.Hooks(), EventSubagentStop, "", "", envVars, marshalPayload(p))
 	agg.UpdatedInput = ""
 	return agg, err
 }
@@ -200,8 +205,9 @@ func (r *Runner) RunSubagentStop(ctx context.Context, sessionID, agentID, agentT
 // as context for this event; JSON output is read as for any other.
 func (r *Runner) RunUserPromptSubmit(ctx context.Context, sessionID, prompt string, attachments []string) (AggregateResult, error) {
 	envVars := BuildEnv(EventUserPromptSubmit, "", sessionID, r.cwd, r.projectDir, "")
-	payload := BuildUserPromptSubmitPayload(sessionID, r.cwd, prompt, attachments)
-	agg, err := r.run(ctx, r.Hooks(), EventUserPromptSubmit, "", "", envVars, payload)
+	p := userPromptSubmitPayload(sessionID, r.cwd, prompt, attachments)
+	p.PermissionMode = permissionMode(ctx)
+	agg, err := r.run(ctx, r.Hooks(), EventUserPromptSubmit, "", "", envVars, marshalPayload(p))
 	agg.UpdatedInput = ""
 	return agg, err
 }

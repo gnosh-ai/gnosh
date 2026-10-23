@@ -86,6 +86,9 @@ type RuntimeOverrides struct {
 	// MainAgent is the agent the session starts with: AgentPlan for
 	// Claude Code's --permission-mode plan, "" for the coder.
 	MainAgent string
+	// AcceptEdits is set by Claude Code's --permission-mode acceptEdits,
+	// which puts the edit tools in AllowedTools; hooks are told the mode.
+	AcceptEdits bool
 	// AddedDirs are the directories added with --add-dir, as absolute
 	// paths: read without asking, as the working directory, and named in
 	// the system prompt's environment.

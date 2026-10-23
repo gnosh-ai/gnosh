@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +26,7 @@ func streamLines(t *testing.T, out string) []map[string]any {
 // fixedInit is an init line's content that does not change.
 func fixedInit(session, cwd, model string) func() streamInit {
 	return func() streamInit {
-		return streamInit{SessionID: session, CWD: cwd, Model: model, PermissionMode: permissionModeBypass}
+		return streamInit{SessionID: session, CWD: cwd, Model: model, PermissionMode: config.PermissionModeBypass}
 	}
 }
 
@@ -127,7 +128,7 @@ func TestStreamJSONInitNamesTheModelInUse(t *testing.T) {
 	require.NoError(t, err)
 	model := "default-model"
 	o.started("s1", func() streamInit {
-		return streamInit{SessionID: "s1", Model: model, PermissionMode: permissionModePlan, Tools: []string{"glob", "view"}}
+		return streamInit{SessionID: "s1", Model: model, PermissionMode: config.PermissionModePlan, Tools: []string{"glob", "view"}}
 	})
 	model = "session-model" // restored from the session
 	o.message(assistantMsg("a1", "s1", message.TextContent{Text: "done"}, message.Finish{Reason: message.FinishReasonEndTurn}))

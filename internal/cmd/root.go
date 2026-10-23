@@ -149,7 +149,7 @@ klash --continue
 		if pick {
 			model.PickSessionAtStart()
 		}
-		if mode, _ := permissionModeFlag(cmd); mode == permissionModePlan {
+		if mode, _ := permissionModeFlag(cmd); mode == config.PermissionModePlan {
 			model.StartInPlanMode()
 		}
 
@@ -335,7 +335,7 @@ func addYoloFlags(cmd *cobra.Command) {
 func yoloFlag(cmd *cobra.Command) bool {
 	yolo, _ := cmd.Flags().GetBool("yolo")
 	skip, _ := cmd.Flags().GetBool("dangerously-skip-permissions")
-	return yolo || skip || flagValue(cmd, "permission-mode") == permissionModeBypass
+	return yolo || skip || flagValue(cmd, "permission-mode") == config.PermissionModeBypass
 }
 
 // workspaceYolo reports whether the workspace cmd sets up accepts every
@@ -418,7 +418,7 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	if err != nil {
 		return nil, nil, err
 	}
-	if permissionMode == permissionModeAcceptEdits {
+	if permissionMode == config.PermissionModeAcceptEdits {
 		allowedTools = append(allowedTools, acceptEditsTools...)
 	}
 	addedDirs, err := addDirFlag(cmd)
@@ -436,9 +436,7 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	store.Overrides().EnabledChannels = channels
 	store.Overrides().SystemPrompt = systemPrompt
 	store.Overrides().AppendSystemPrompt = appendSystemPrompt
-	if permissionMode == permissionModePlan {
-		store.Overrides().MainAgent = config.AgentPlan
-	}
+	applyPermissionMode(store.Overrides(), permissionMode)
 	store.Overrides().AddedDirs = addedDirs
 	if len(allowedTools) > 0 || len(disallowedTools) > 0 {
 		store.Overrides().AllowedTools = allowedTools
@@ -558,7 +556,7 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 	}
 	if mode, err := permissionModeFlag(cmd); err != nil {
 		return nil, nil, nil, err
-	} else if mode == permissionModeAcceptEdits || mode == permissionModePlan {
+	} else if mode == config.PermissionModeAcceptEdits || mode == config.PermissionModePlan {
 		return nil, nil, nil, fmt.Errorf("--permission-mode %s cannot reach the server's agent with %s=1 yet", mode, "KLASH_CLIENT_SERVER")
 	}
 	if replace, appended, err := systemPromptFlags(cmd); err != nil {

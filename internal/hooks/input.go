@@ -86,6 +86,12 @@ type Payload struct {
 	// then the session the sub-agent works for, the user's.
 	AgentID   string `json:"agent_id,omitempty"`
 	AgentType string `json:"agent_type,omitempty"`
+
+	// PermissionMode is the session's permission mode when the hook
+	// fires, as Claude Code's permission_mode (see WithPermissionMode).
+	// It is on the events Claude Code puts it on: the tool events,
+	// UserPromptSubmit, Stop and SubagentStop.
+	PermissionMode string `json:"permission_mode,omitempty"`
 }
 
 // ToolResponse is what a tool call returned, as a PostToolUse hook sees
@@ -163,6 +169,29 @@ func WithSubAgent(ctx context.Context, session, agentType string) context.Contex
 	return context.WithValue(ctx, subAgentKey{}, subAgent{session: session, agentType: agentType})
 }
 
+// permissionModeKey is the context key WithPermissionMode stores under.
+type permissionModeKey struct{}
+
+// WithPermissionMode returns a context whose hooks are told the session's
+// permission mode (config.PermissionModeDefault and the rest), asked of
+// mode as each hook fires, so a mode switched mid-turn shows. A context
+// that has one keeps it: a sub-agent works in the mode of the agent
+// whose call started it.
+func WithPermissionMode(ctx context.Context, mode func() string) context.Context {
+	if _, ok := ctx.Value(permissionModeKey{}).(func() string); ok {
+		return ctx
+	}
+	return context.WithValue(ctx, permissionModeKey{}, mode)
+}
+
+func permissionMode(ctx context.Context) string {
+	mode, _ := ctx.Value(permissionModeKey{}).(func() string)
+	if mode == nil {
+		return ""
+	}
+	return mode()
+}
+
 // toolCallSession is the session_id a tool call's hooks see, and the
 // agent_id and agent_type they get when the call is a sub-agent's (see
 // WithSubAgent). sessionID is the session the call runs in.
@@ -212,7 +241,11 @@ func marshalPayload(p Payload) []byte {
 // hook. There is no tool in play, so tool_name is empty and tool_input
 // is an empty object.
 func BuildStopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActive bool) []byte {
-	p := Payload{
+	return marshalPayload(stopPayload(sessionID, cwd, lastAssistantMessage, stopHookActive))
+}
+
+func stopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActive bool) Payload {
+	return Payload{
 		Event:                EventStop,
 		HookEventName:        EventStop,
 		SessionID:            sessionID,
@@ -221,7 +254,6 @@ func BuildStopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActiv
 		StopHookActive:       stopHookActive,
 		LastAssistantMessage: lastAssistantMessage,
 	}
-	return marshalPayload(p)
 }
 
 // BuildSubagentStopPayload constructs the JSON stdin payload for an
@@ -233,7 +265,11 @@ func BuildStopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActiv
 // stopHookActive, as on a Stop payload, is set when the sub-agent's turn
 // is only still running because an earlier SubagentStop hook blocked it.
 func BuildSubagentStopPayload(sessionID, agentID, agentType, cwd, lastAssistantMessage string, stopHookActive bool) []byte {
-	p := Payload{
+	return marshalPayload(subagentStopPayload(sessionID, agentID, agentType, cwd, lastAssistantMessage, stopHookActive))
+}
+
+func subagentStopPayload(sessionID, agentID, agentType, cwd, lastAssistantMessage string, stopHookActive bool) Payload {
+	return Payload{
 		Event:                EventSubagentStop,
 		HookEventName:        EventSubagentStop,
 		SessionID:            sessionID,
@@ -244,14 +280,17 @@ func BuildSubagentStopPayload(sessionID, agentID, agentType, cwd, lastAssistantM
 		StopHookActive:       stopHookActive,
 		LastAssistantMessage: lastAssistantMessage,
 	}
-	return marshalPayload(p)
 }
 
 // BuildUserPromptSubmitPayload constructs the JSON stdin payload for an
 // EventUserPromptSubmit hook. There is no tool in play, so tool_name is
 // empty and tool_input is an empty object.
 func BuildUserPromptSubmitPayload(sessionID, cwd, prompt string, attachments []string) []byte {
-	return marshalPayload(Payload{
+	return marshalPayload(userPromptSubmitPayload(sessionID, cwd, prompt, attachments))
+}
+
+func userPromptSubmitPayload(sessionID, cwd, prompt string, attachments []string) Payload {
+	return Payload{
 		Event:         EventUserPromptSubmit,
 		HookEventName: EventUserPromptSubmit,
 		SessionID:     sessionID,
@@ -259,7 +298,7 @@ func BuildUserPromptSubmitPayload(sessionID, cwd, prompt string, attachments []s
 		ToolInput:     json.RawMessage("{}"),
 		Prompt:        prompt,
 		Attachments:   attachments,
-	})
+	}
 }
 
 // SessionStart sources, as in Claude Code: a new session in a running

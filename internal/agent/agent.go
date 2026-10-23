@@ -40,6 +40,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/env"
+	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/session"
@@ -276,6 +277,7 @@ type sessionAgent struct {
 	cfg                  *config.ConfigStore
 	disableAutoSummarize bool
 	isYolo               bool
+	permissionModeOf     func(sessionID string) string // see SessionAgentOptions.PermissionMode
 	notify               pubsub.Publisher[notify.Notification]
 	runComplete          pubsub.Publisher[notify.RunComplete]
 
@@ -351,6 +353,10 @@ type SessionAgentOptions struct {
 	// AgentType is the agent's name for hooks, the config ID of the agent
 	// it runs as (a sub-agent's is task): SubagentStop's agent_type.
 	AgentType string
+	// PermissionMode names a session's permission mode for its hooks,
+	// unless the agent is the plan agent (see coordinator.permissionMode).
+	// Nil reads as default.
+	PermissionMode func(sessionID string) string
 }
 
 func NewSessionAgent(
@@ -363,6 +369,7 @@ func NewSessionAgent(
 		systemPrompt:         csync.NewValue(opts.SystemPrompt),
 		isSubAgent:           opts.IsSubAgent,
 		agentType:            opts.AgentType,
+		permissionModeOf:     opts.PermissionMode,
 		sessions:             opts.Sessions,
 		messages:             opts.Messages,
 		cfg:                  opts.Cfg,
@@ -726,6 +733,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	if err := ValidateCall(call); err != nil {
 		return nil, err
 	}
+	// The turn's hooks are told the session's permission mode, as Claude
+	// Code tells them; a sub-agent's turn keeps its parent's.
+	ctx = hooks.WithPermissionMode(ctx, func() string { return a.permissionMode(call.SessionID) })
 
 	if call.Channel != "" && call.channelMeta == nil {
 		call.channelMeta, _ = parseChannelMeta(call.Prompt)
@@ -1753,6 +1763,19 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel string,
 	mu.Unlock()
 	_, qErr := a.Run(ctx, firstQueuedMessage)
 	return qErr
+}
+
+// permissionMode is a session's permission mode as its hooks are told
+// it. The plan agent's turns are plan, whatever else is set, as the TUI
+// shows them.
+func (a *sessionAgent) permissionMode(sessionID string) string {
+	if a.agentType == config.AgentPlan {
+		return config.PermissionModePlan
+	}
+	if a.permissionModeOf == nil {
+		return config.PermissionModeDefault
+	}
+	return a.permissionModeOf(sessionID)
 }
 
 // requestSystemPrompt is the system prompt a session's requests send:

@@ -664,6 +664,7 @@ Standard input provides the full context as JSON:
   "tool_name": "bash", // The tool being called
   "tool_use_id": "call_8f2a", // The tool call's ID, the same in its PostToolUse hooks
   "tool_input": { "command": "rm -rf /" }, // The tool's input
+  "permission_mode": "default", // The session's permission mode, as in Claude Code
   // A sub-agent's call also has, as in Claude Code:
   // "agent_id": "…",  // the sub-agent's own session
   // "agent_type": "task", // or "agentic_fetch"
@@ -1071,6 +1072,20 @@ Present in every hook event:
 
   // string. Working directory when invoked.
   "cwd": "/home/user/project",
+}
+```
+
+On `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit`,
+`Stop` and `SubagentStop`, the events Claude Code gives it to, the payload also
+names the session's permission mode as the hook fires:
+
+```jsonc
+{
+  // string. "plan" for the plan agent; "bypassPermissions" when every
+  // permission request is granted (yolo, or a `klash run`); "acceptEdits"
+  // under --permission-mode acceptEdits; else "default". A sub-agent's
+  // hooks get the mode of the agent that started it.
+  "permission_mode": "default",
 }
 ```
 
