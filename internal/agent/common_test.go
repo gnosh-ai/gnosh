@@ -109,11 +109,20 @@ func testEnv(t *testing.T) fakeEnv {
 
 // cassetteEnv is testEnv in the fixed directory the recorded cassettes
 // were made in: the working directory is part of every recorded request,
-// so it must be the same when the cassettes are replayed.
+// so it must be the same when the cassettes are replayed. Another user's
+// run of the suite can own that directory (on the AI box the suite is
+// verified as root, and the self-improvement agent runs it as crush). The
+// test is then skipped with the reason, as for stale cassettes, since
+// they can be replayed nowhere else; it failed, and each run spent calls
+// finding out why.
 func cassetteEnv(t *testing.T) fakeEnv {
 	workingDir := filepath.Join("/tmp/crush-test/", t.Name())
-	os.RemoveAll(workingDir)
-	require.NoError(t, os.MkdirAll(workingDir, 0o755))
+	if err := os.RemoveAll(workingDir); err != nil {
+		t.Skipf("cannot use the directory the cassettes were recorded in: %v", err)
+	}
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		t.Skipf("cannot use the directory the cassettes were recorded in: %v", err)
+	}
 	t.Cleanup(func() { os.RemoveAll(workingDir) })
 	return newTestEnv(t, workingDir)
 }
