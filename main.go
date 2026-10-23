@@ -40,7 +40,7 @@ func servePprof(setting string) {
 
 // pprofListen opens the listener pprof is served on: the host:port that
 // setting names, or else defaultAddr, or, when another process already
-// holds defaultAddr, a free port on localhost. Every crash on a machine
+// holds defaultAddr, a free port on localhost. Every klash on a machine
 // asked for the same port, so only the first could be profiled; a klash
 // that hung later could not be. Its port is in its log, or in
 // `ss -ltnp | grep pid=<pid>`.

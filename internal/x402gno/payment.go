@@ -4,11 +4,13 @@
 // elsewhere. Klash has gnokey make that signature, so a key's password goes to
 // gnokey and nowhere else.
 //
-// It is gnoverse/x402's client/exact, trimmed to what klash uses: Prepare and
-// Payment, without the x402.SchemeNetworkClient that signs in process, and
-// with the facilitator's three protocol constants written out here so klash
-// does not link the facilitator. Keep the two in step until the Go client is
-// published as a module, then import it instead.
+// It is client/exact from github.com/jaekwon/x402, trimmed to what klash
+// uses: Prepare and Payment, without the x402.SchemeNetworkClient that signs
+// in process, and with the facilitator's three protocol constants written out
+// here. Importing the package itself would link gnoclient, and with it the
+// Gno VM, and the facilitator; this copy links gno's amino, std, crypto and
+// bank packages only. scripts/sync-x402gno.py regenerates it from a checkout
+// of the library.
 //
 // A payment is one bank send of exactly the price to the seller, signed and
 // not broadcast; the seller's facilitator broadcasts it. The chain id it is
@@ -42,8 +44,8 @@ const schemeExact = "exact"
 // "gno:<chain-id>".
 const namespace = "gno"
 
-// The facilitator's protocol constants (gnoverse/x402 facilitator/exact), which
-// a payment has to satisfy.
+// The facilitator's protocol constants (github.com/jaekwon/x402,
+// facilitator/exact), which a payment has to satisfy.
 const (
 	// assetTransferMethod is how a gno payment moves value: the payer signs a
 	// bank send the facilitator broadcasts. An offer that omits

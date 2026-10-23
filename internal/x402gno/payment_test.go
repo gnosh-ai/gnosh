@@ -133,8 +133,9 @@ func pay(t *testing.T, k key, master crypto.Address, requirements types.PaymentR
 	return raw
 }
 
-// fixture is a payment the TypeScript mechanism in gnoverse/x402 signed for
-// offer against the fake node's account state, as its base64 decodes.
+// fixture is a payment the TypeScript mechanism in github.com/jaekwon/x402
+// (client/src) signed for offer against the fake node's account state, as its
+// base64 decodes.
 func fixture(t *testing.T, name string) []byte {
 	t.Helper()
 	encoded, err := os.ReadFile(filepath.Join("testdata", name))
