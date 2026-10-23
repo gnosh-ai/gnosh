@@ -3,16 +3,18 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/tooldefs"
 	"github.com/spf13/cobra"
 )
 
-// addToolFlags adds --allowed-tools and --disallowed-tools, with Claude
-// Code's spellings of them, --allowedTools and --disallowedTools; read
-// them with toolFlags.
+// addToolFlags adds --tools, --allowed-tools and --disallowed-tools, with
+// Claude Code's spellings of the last two, --allowedTools and
+// --disallowedTools; read them with toolFlags.
 func addToolFlags(cmd *cobra.Command) {
+	cmd.Flags().String("tools", "", `The only built-in tools the agent is given, comma- or space-separated; "" for none, "default" for all; Claude Code's names (Read, Bash) work too`)
 	cmd.Flags().StringSlice("allowed-tools", nil, "Tools that run without asking permission, comma- or space-separated; Claude Code's names (Read, Bash) work too")
 	cmd.Flags().StringSlice("allowedTools", nil, "Same as --allowed-tools, by Claude Code's name for it")
 	cmd.Flags().StringSlice("disallowed-tools", nil, "Tools the agent is not given, comma- or space-separated; Claude Code's names (Edit, Bash) work too")
@@ -29,7 +31,42 @@ func toolFlags(cmd *cobra.Command) (allowed, disallowed []string, err error) {
 	if disallowed, err = toolFlagNames(cmd, "disallowed-tools", "disallowedTools", false); err != nil {
 		return nil, nil, err
 	}
-	return allowed, disallowed, nil
+	others, err := toolsFlagOthers(cmd)
+	if err != nil {
+		return nil, nil, err
+	}
+	return allowed, append(disallowed, others...), nil
+}
+
+// toolsFlagOthers returns the built-in tools that --tools leaves out, as
+// Claude Code's --tools does: every tool but the ones it names, all of
+// them for "", none for "default" or when the flag is not given. Naming
+// what to keep, rather than everything to turn off, means a tool added
+// later stays off too.
+func toolsFlagOthers(cmd *cobra.Command) ([]string, error) {
+	flag := cmd.Flags().Lookup("tools")
+	if flag == nil || !flag.Changed {
+		return nil, nil
+	}
+	value := strings.TrimSpace(flag.Value.String())
+	if value == "default" {
+		return nil, nil
+	}
+	keep := map[string]bool{}
+	for _, word := range strings.FieldsFunc(value, func(r rune) bool { return r == ',' || unicode.IsSpace(r) }) {
+		tool, err := toolFlagName(word, false)
+		if err != nil {
+			return nil, fmt.Errorf("%w (in --tools)", err)
+		}
+		keep[tool] = true
+	}
+	var others []string
+	for _, tool := range config.KnownToolNames() {
+		if !keep[tool] {
+			others = append(others, tool)
+		}
+	}
+	return others, nil
 }
 
 func toolFlagNames(cmd *cobra.Command, flag, claudeFlag string, mcpOK bool) ([]string, error) {

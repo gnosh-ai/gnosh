@@ -3,6 +3,7 @@ package cmd
 import (
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -54,4 +55,55 @@ func TestToolFlagsWithoutTheFlags(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, allowed)
 	require.Empty(t, disallowed)
+}
+
+// --tools names the only built-in tools the agent gets, as Claude Code's
+// does: every other one is left out, "" leaves out all of them, and
+// "default" (or no flag) leaves the set as it is.
+func TestToolsFlag(t *testing.T) {
+	t.Parallel()
+
+	parse := func(args ...string) ([]string, error) {
+		cmd := &cobra.Command{Use: "crash", RunE: func(*cobra.Command, []string) error { return nil }}
+		cmd.SilenceErrors, cmd.SilenceUsage = true, true
+		addToolFlags(cmd)
+		cmd.SetArgs(args)
+		if err := cmd.Execute(); err != nil {
+			return nil, err
+		}
+		_, disallowed, err := toolFlags(cmd)
+		return disallowed, err
+	}
+
+	all := config.KnownToolNames()
+
+	off, err := parse("--tools", "Read Grep,glob ls")
+	require.NoError(t, err)
+	require.Len(t, off, len(all)-4)
+	for _, kept := range []string{"view", "grep", "glob", "ls"} {
+		require.NotContains(t, off, kept)
+	}
+	require.Contains(t, off, "bash")
+	require.Contains(t, off, "edit")
+
+	off, err = parse("--tools", "")
+	require.NoError(t, err)
+	require.ElementsMatch(t, all, off, `"" leaves out every built-in tool`)
+
+	off, err = parse("--tools", "default")
+	require.NoError(t, err)
+	require.Empty(t, off)
+
+	off, err = parse()
+	require.NoError(t, err)
+	require.Empty(t, off)
+
+	off, err = parse("--tools", "view,bash", "--disallowedTools", "bash")
+	require.NoError(t, err)
+	require.Contains(t, off, "bash", "--disallowed-tools still takes away a tool --tools keeps")
+	require.NotContains(t, off, "view")
+
+	_, err = parse("--tools", "Bsh")
+	require.ErrorContains(t, err, `unknown tool "Bsh"`)
+	require.ErrorContains(t, err, "(in --tools)")
 }
