@@ -164,6 +164,9 @@ klash run --continue "Follow up on your last response"
 			return err
 		}
 		defer cleanup()
+		if names := config.RetiredNames(ws.WorkingDir()); len(names) > 0 {
+			fmt.Fprintln(os.Stderr, "klash: not read since the rename to Klash: "+strings.Join(names, ", "))
+		}
 
 		event.AppInitialized()
 

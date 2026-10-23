@@ -34,7 +34,7 @@ func found(name string) (string, error) { return "/usr/bin/" + name, nil }
 func TestDoctorReportOnAWorkingSetup(t *testing.T) {
 	t.Parallel()
 
-	lines, ok := doctorReport(config.NewTestStore(doctorConfig()), found)
+	lines, ok := doctorReport(config.NewTestStore(doctorConfig()), found, nil)
 	report := strings.Join(lines, "\n")
 	require.True(t, ok, report)
 	require.Contains(t, report, "✓ provider qwen: 1 models (http://127.0.0.1:8080/v1)")
@@ -55,7 +55,7 @@ func TestDoctorReportSaysWhatIsWrong(t *testing.T) {
 	cfg.Models[config.SelectedModelTypeLarge] = config.SelectedModel{Provider: "qwen", Model: "gone"}
 	missing := func(name string) (string, error) { return "", errors.New("not found") }
 
-	lines, ok := doctorReport(config.NewTestStore(cfg), missing)
+	lines, ok := doctorReport(config.NewTestStore(cfg), missing, nil)
 	report := strings.Join(lines, "\n")
 	require.False(t, ok)
 	require.Contains(t, report, "✗ large model: qwen/gone is not offered by an available provider")
@@ -64,7 +64,7 @@ func TestDoctorReportSaysWhatIsWrong(t *testing.T) {
 
 	empty := doctorConfig()
 	empty.Providers = csync.NewMap[string, config.ProviderConfig]()
-	lines, ok = doctorReport(config.NewTestStore(empty), found)
+	lines, ok = doctorReport(config.NewTestStore(empty), found, nil)
 	require.False(t, ok)
 	require.Contains(t, strings.Join(lines, "\n"), "✗ providers: none configured")
 }
@@ -98,7 +98,19 @@ func TestDoctorReportNamesABrokenHook(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "gate.sh")
 	cfg.Hooks = map[string][]config.HookConfig{config.EventStop: {{Name: "gate", Command: missing}}}
 
-	lines, ok := doctorReport(config.NewTestStore(cfg), found)
+	lines, ok := doctorReport(config.NewTestStore(cfg), found, nil)
 	require.True(t, ok, "a broken hook is worth knowing, but a turn can still run")
 	require.Contains(t, strings.Join(lines, "\n"), `! hook Stop "gate": `+missing+" does not exist, so it fails each time it fires")
+}
+
+// Names from before the rename to Klash are listed as not read, a warning
+// rather than a failure.
+func TestDoctorReportNamesRetiredNames(t *testing.T) {
+	t.Parallel()
+
+	lines, ok := doctorReport(config.NewTestStore(doctorConfig()), found, []string{"~/proj/crash.json (now klash.json)", "CRASH_DISABLE_METRICS (now KLASH_DISABLE_METRICS)"})
+	report := strings.Join(lines, "\n")
+	require.True(t, ok, report)
+	require.Contains(t, report, "! not read since the rename to Klash: ~/proj/crash.json (now klash.json)")
+	require.Contains(t, report, "! not read since the rename to Klash: CRASH_DISABLE_METRICS (now KLASH_DISABLE_METRICS)")
 }
