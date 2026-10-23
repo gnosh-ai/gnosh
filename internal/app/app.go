@@ -419,9 +419,9 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	go func(ctx context.Context, sessionID, prompt string) {
 		result, err := app.AgentCoordinator.Run(ctx, sess.ID, prompt)
 		if err != nil {
-			done <- response{
-				err: fmt.Errorf("failed to start agent processing stream: %w", err),
-			}
+			// Run returns the turn's error, whenever in the turn it came;
+			// it is reported in runError.
+			done <- response{err: err}
 			return
 		}
 		done <- response{
@@ -481,7 +481,7 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 					slog.Debug("Non-interactive: agent processing cancelled", "session_id", sess.ID)
 					return nil
 				}
-				return fmt.Errorf("agent processing failed: %w", result.err)
+				return runError(result.err)
 			}
 			return nil
 
@@ -1087,4 +1087,17 @@ func (app *App) checkForUpdates(ctx context.Context) {
 		LatestVersion:  info.Latest,
 		IsDevelopment:  info.IsDevelopment(),
 	})
+}
+
+// runError is what a non-interactive run reports for the error its turn
+// ended with. A prompt a UserPromptSubmit hook blocked is reported with
+// the hook's reason as it stands: the user's own hook refused it, nothing
+// failed. Anything else failed somewhere in the turn, which is all the
+// error can say: it used to read "failed to start agent processing
+// stream" also for a model error halfway through.
+func runError(err error) error {
+	if errors.Is(err, agent.ErrPromptBlocked) {
+		return err
+	}
+	return fmt.Errorf("agent processing failed: %w", err)
 }
