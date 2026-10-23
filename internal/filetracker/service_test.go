@@ -2,6 +2,8 @@ package filetracker
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -113,4 +115,50 @@ func TestService_RecordRead_DifferentPaths(t *testing.T) {
 
 	lastRead2 := env.svc.LastReadTime(env.ctx, sessionID, path2)
 	require.True(t, lastRead2.IsZero(), "path2 should not be recorded")
+}
+
+// A file written back as it was since its read, as git stash and pop
+// do, counts as unchanged whatever its modification time says; a change
+// to its content, its removal, or a read in another session does not.
+func TestService_UnchangedSinceRead(t *testing.T) {
+	env := setupTest(t)
+	env.createSession(t, "s")
+	path := filepath.Join(t.TempDir(), "a.go")
+	require.NoError(t, os.WriteFile(path, []byte("package a\n"), 0o644))
+
+	require.False(t, env.svc.UnchangedSinceRead(env.ctx, "s", path), "never read")
+	env.svc.RecordRead(env.ctx, "s", path)
+	require.True(t, env.svc.UnchangedSinceRead(env.ctx, "s", path))
+	require.False(t, env.svc.UnchangedSinceRead(env.ctx, "other", path), "read in another session")
+
+	later := time.Now().Add(time.Minute)
+	require.NoError(t, os.WriteFile(path, []byte("package a\n"), 0o644))
+	require.NoError(t, os.Chtimes(path, later, later))
+	require.True(t, env.svc.UnchangedSinceRead(env.ctx, "s", path), "written back as it was")
+
+	require.NoError(t, os.WriteFile(path, []byte("package b\n"), 0o644))
+	require.False(t, env.svc.UnchangedSinceRead(env.ctx, "s", path), "changed")
+
+	require.NoError(t, os.Remove(path))
+	require.False(t, env.svc.UnchangedSinceRead(env.ctx, "s", path), "removed")
+}
+
+// A file larger than maxComparedSize is not hashed at its reads, so it
+// is never taken as unchanged, not even when it is written back as it
+// was at an earlier read: what the agent read last was the large file.
+func TestService_UnchangedSinceReadSkipsLargeFiles(t *testing.T) {
+	env := setupTest(t)
+	env.createSession(t, "s")
+	path := filepath.Join(t.TempDir(), "big.log")
+	require.NoError(t, os.WriteFile(path, []byte("small\n"), 0o644))
+	env.svc.RecordRead(env.ctx, "s", path)
+	require.True(t, env.svc.UnchangedSinceRead(env.ctx, "s", path))
+
+	require.NoError(t, os.Truncate(path, maxComparedSize+1))
+	env.svc.RecordRead(env.ctx, "s", path)
+	require.False(t, env.svc.LastReadTime(env.ctx, "s", path).IsZero(), "the read is still recorded")
+	require.False(t, env.svc.UnchangedSinceRead(env.ctx, "s", path))
+
+	require.NoError(t, os.WriteFile(path, []byte("small\n"), 0o644))
+	require.False(t, env.svc.UnchangedSinceRead(env.ctx, "s", path), "compared with the read before the last")
 }

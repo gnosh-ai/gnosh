@@ -9,12 +9,15 @@ import (
 	"time"
 
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/db"
+	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/stretchr/testify/require"
 )
 
 type mockEditFileTracker struct {
-	lastRead time.Time
-	reads    []string
+	lastRead  time.Time
+	reads     []string
+	unchanged bool
 }
 
 func (m *mockEditFileTracker) RecordRead(ctx context.Context, sessionID, path string) {
@@ -23,6 +26,10 @@ func (m *mockEditFileTracker) RecordRead(ctx context.Context, sessionID, path st
 
 func (m *mockEditFileTracker) LastReadTime(ctx context.Context, sessionID, path string) time.Time {
 	return m.lastRead
+}
+
+func (m *mockEditFileTracker) UnchangedSinceRead(ctx context.Context, sessionID, path string) bool {
+	return m.unchanged
 }
 
 func (m *mockEditFileTracker) ListReadFiles(ctx context.Context, sessionID string) ([]string, error) {
@@ -112,4 +119,57 @@ func TestReplaceContentRefusesAFileChangedSinceItWasRead(t *testing.T) {
 	content, err := os.ReadFile(filePath)
 	require.NoError(t, err)
 	require.Equal(t, "alpha\n", string(content), "the file is left as it is")
+}
+
+// realTracker is the file tracker the app uses, over a fresh database
+// holding the session to record reads in.
+func realTracker(t *testing.T, sessionID string) filetracker.Service {
+	t.Helper()
+	conn, err := db.Connect(t.Context(), t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+	q := db.New(conn)
+	_, err = q.CreateSession(t.Context(), db.CreateSessionParams{ID: sessionID, Title: "test"})
+	require.NoError(t, err)
+	return filetracker.NewService(q)
+}
+
+// writeBack writes content to path with a modification time after every
+// read so far, as a command does that rewrites the file.
+func writeBack(t *testing.T, path, content string, at time.Time) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	require.NoError(t, os.Chtimes(path, at, at))
+}
+
+// A file a command wrote back as it was since the agent read it, as git
+// stash and pop do, can be edited; one whose content changed is still
+// refused as stale. Run 13 had three edits refused, and read the files
+// again, after a git stash and pop of its own.
+func TestEditAfterAFileIsWrittenBackAsItWas(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.go")
+	require.NoError(t, os.WriteFile(path, []byte("package a\n\nvar x = 1\n"), 0o644))
+	tracker := realTracker(t, "session")
+	tracker.RecordRead(t.Context(), "session", path)
+	edit := editContext{
+		ctx:         context.WithValue(t.Context(), SessionIDContextKey, "session"),
+		permissions: &mockPermissionService{},
+		files:       &mockHistoryService{},
+		filetracker: tracker,
+		workingDir:  dir,
+	}
+
+	writeBack(t, path, "package a\n\nvar x = 1\n", time.Now().Add(time.Minute))
+	resp, err := replaceContent(edit, path, "x = 1", "x = 2", false, fantasy.ToolCall{ID: "c1"})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+
+	writeBack(t, path, "package a\n\nvar x = 3\n", time.Now().Add(2*time.Minute))
+	resp, err = replaceContent(edit, path, "x = 3", "x = 4", false, fantasy.ToolCall{ID: "c2"})
+	require.NoError(t, err)
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "modified since it was last read")
 }
