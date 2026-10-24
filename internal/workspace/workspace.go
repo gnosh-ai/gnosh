@@ -126,6 +126,9 @@ type Workspace interface {
 	// PermissionsReport is what the agent may do without asking, the
 	// Markdown Claude Code's /permissions shows.
 	PermissionsReport(ctx context.Context) (string, error)
+	// DoctorReport is the check of the setup that klash doctor prints,
+	// the Markdown /doctor shows, as Claude Code's /doctor checks it.
+	DoctorReport(ctx context.Context) (string, error)
 	// ContextReport is what fills the session's context window ("" for a
 	// new session), the Markdown Claude Code's /context prints.
 	ContextReport(ctx context.Context, sessionID string) (string, error)

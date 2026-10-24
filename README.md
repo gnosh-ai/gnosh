@@ -147,7 +147,7 @@ Claude Code's names work here too.
 | `--tools "Read,Grep"`            | `--tools "Read,Grep"` (`""`: none)                 | Give the agent only these built-in tools                    |
 | `--system-prompt "…"`            | `--system-prompt "…"`, or `--system-prompt-file`   | Use these instructions in place of Klash's own              |
 | `--append-system-prompt "…"`     | `--append-system-prompt "…"`, or its `-file` form  | Add this text at the end of the system prompt               |
-| `claude doctor`                  | `klash doctor`                                     | Check config, providers, models, hooks and tools            |
+| `claude doctor`                  | `klash doctor`, or `/doctor` in a session          | Check config, providers, models, hooks and tools            |
 
 - **Hooks** take Claude Code's events and answers: `PreToolUse`,
   `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit`, `SessionStart`,

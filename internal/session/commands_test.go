@@ -137,3 +137,16 @@ func TestParseExportCommand(t *testing.T) {
 		require.False(t, ok, line)
 	}
 }
+
+// /doctor, or its alias /checkup, is read as the other commands are;
+// what follows it is not used.
+func TestParseDoctorCommand(t *testing.T) {
+	t.Parallel()
+
+	for _, line := range []string{"/doctor", "doctor", " /Doctor now ", "/checkup"} {
+		require.True(t, ParseDoctorCommand(line), line)
+	}
+	for _, line := range []string{"/doc", "/doctors", "/check", "ask the doctor", ""} {
+		require.False(t, ParseDoctorCommand(line), line)
+	}
+}

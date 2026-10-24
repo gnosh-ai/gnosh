@@ -658,6 +658,17 @@ func (c *controllerV1) handleGetWorkspacePermissionsReport(w http.ResponseWriter
 	jsonEncode(w, proto.PermissionsReport{Markdown: report})
 }
 
+// handleGetWorkspaceDoctorReport reports the check of the workspace's
+// setup that klash doctor prints.
+func (c *controllerV1) handleGetWorkspaceDoctorReport(w http.ResponseWriter, r *http.Request) {
+	report, err := c.backend.DoctorReport(r.PathValue("id"))
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	jsonEncode(w, proto.DoctorReport{Markdown: report})
+}
+
 // handleGetWorkspaceAgentContext reports what fills a session's context
 // window.
 func (c *controllerV1) handleGetWorkspaceAgentContext(w http.ResponseWriter, r *http.Request) {

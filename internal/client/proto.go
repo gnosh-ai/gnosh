@@ -635,6 +635,27 @@ func (c *Client) PermissionsReport(ctx context.Context, id string) (string, erro
 	return report.Markdown, nil
 }
 
+// DoctorReport is the check of the workspace's setup that klash doctor
+// prints, as the Markdown /doctor shows.
+func (c *Client) DoctorReport(ctx context.Context, id string) (string, error) {
+	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/doctor", id), nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get the doctor report: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		if msg := decodeErrorMessage(rsp.Body); msg != "" {
+			return "", errors.New(msg)
+		}
+		return "", fmt.Errorf("failed to get the doctor report: status code %d", rsp.StatusCode)
+	}
+	var report proto.DoctorReport
+	if err := json.NewDecoder(rsp.Body).Decode(&report); err != nil {
+		return "", fmt.Errorf("failed to decode the doctor report: %w", err)
+	}
+	return report.Markdown, nil
+}
+
 // AgentContextReport is what fills a session's context window ("" for a
 // new session), the Markdown Claude Code's /context prints.
 func (c *Client) AgentContextReport(ctx context.Context, id, sessionID string) (string, error) {

@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/doctor"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
@@ -231,6 +233,19 @@ func (b *Backend) PermissionsReport(workspaceID string) (string, error) {
 		return "", ErrAgentNotInitialized
 	}
 	return config.PermissionsReport(ws.Cfg.Config(), ws.Cfg.Overrides(), ws.Cfg.WorkingDir(), ws.Permissions.SkipRequests()), nil
+}
+
+// DoctorReport is the check of the workspace's setup that klash doctor
+// prints, as the Markdown /doctor shows.
+func (b *Backend) DoctorReport(workspaceID string) (string, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return "", err
+	}
+	if ws.Cfg == nil {
+		return "", ErrAgentNotInitialized
+	}
+	return doctor.Markdown(doctor.Report(ws.Cfg, exec.LookPath)), nil
 }
 
 // ContextReport is what fills a session's context window ("" for a new

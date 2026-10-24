@@ -1092,6 +1092,12 @@ func (c *Config) skipProvider(id, reason string) {
 	c.Providers.Del(id)
 }
 
+// SkipProviderForTest records that loading left provider id out, and why,
+// as loading does, for tests of what reports it.
+func (c *Config) SkipProviderForTest(id, reason string) {
+	c.skipProvider(id, reason)
+}
+
 // cloneForWrite returns a copy of c that the store's typed field mutators
 // may modify without racing readers of the currently published Config.
 //

@@ -112,6 +112,9 @@ type (
 	// ActionStatusReport shows the session's status, as Claude Code's
 	// /status does.
 	ActionStatusReport struct{}
+	// ActionDoctorReport checks the setup klash runs with, as Claude Code's
+	// /doctor does.
+	ActionDoctorReport struct{}
 	// ActionExportConversation exports the conversation, as Claude Code's
 	// /export does: to the clipboard when Clipboard is set, else to the
 	// file Filename names, else as the export dialog asks.

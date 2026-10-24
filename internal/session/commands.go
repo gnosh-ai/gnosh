@@ -59,6 +59,14 @@ func ParseStatusCommand(line string) bool {
 	return ok
 }
 
+// ParseDoctorCommand reports whether line is Claude Code's /doctor
+// command or its alias /checkup, with or without the slash. What follows
+// it is not used.
+func ParseDoctorCommand(line string) bool {
+	_, ok := parseCommand(line, "doctor", "checkup")
+	return ok
+}
+
 // ParseExportCommand reports whether line is Claude Code's /export
 // command, with or without the slash, and the file it names ("" when
 // none).

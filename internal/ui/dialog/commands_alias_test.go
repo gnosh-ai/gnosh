@@ -39,6 +39,8 @@ func TestPaletteFindsClaudeCodeSlashNames(t *testing.T) {
 		"allowed-tools": "Permissions",
 		"status":        "Status",
 		"export":        "Export Conversation",
+		"doctor":        "Doctor",
+		"checkup":       "Doctor",
 		"rename":        "Rename Session",
 		"name":          "Rename Session",
 		"clear":         "New Session",

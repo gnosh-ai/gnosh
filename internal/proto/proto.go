@@ -178,6 +178,12 @@ type PermissionsReport struct {
 	Markdown string `json:"markdown"`
 }
 
+// DoctorReport is the check of the workspace's setup that klash doctor
+// prints, as the Markdown /doctor shows.
+type DoctorReport struct {
+	Markdown string `json:"markdown"`
+}
+
 // SummarizeRequest is the optional body of a summary request:
 // Instructions is the text given after /compact.
 type SummarizeRequest struct {

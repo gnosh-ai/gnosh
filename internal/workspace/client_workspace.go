@@ -185,6 +185,10 @@ func (w *ClientWorkspace) PermissionsReport(ctx context.Context) (string, error)
 	return w.client.PermissionsReport(ctx, w.workspaceID())
 }
 
+func (w *ClientWorkspace) DoctorReport(ctx context.Context) (string, error) {
+	return w.client.DoctorReport(ctx, w.workspaceID())
+}
+
 func (w *ClientWorkspace) ContextReport(ctx context.Context, sessionID string) (string, error) {
 	return w.client.AgentContextReport(ctx, w.workspaceID(), sessionID)
 }

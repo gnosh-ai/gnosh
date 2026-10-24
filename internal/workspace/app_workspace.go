@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os/exec"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -13,6 +14,7 @@ import (
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/doctor"
 	"github.com/charmbracelet/crush/internal/gitutil"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/lsp"
@@ -67,6 +69,10 @@ func (w *AppWorkspace) RenameSession(ctx context.Context, sessionID, title strin
 
 func (w *AppWorkspace) PermissionsReport(context.Context) (string, error) {
 	return config.PermissionsReport(w.store.Config(), w.store.Overrides(), w.store.WorkingDir(), w.app.Permissions.SkipRequests()), nil
+}
+
+func (w *AppWorkspace) DoctorReport(context.Context) (string, error) {
+	return doctor.Markdown(doctor.Report(w.store, exec.LookPath)), nil
 }
 
 func (w *AppWorkspace) ContextReport(ctx context.Context, sessionID string) (string, error) {

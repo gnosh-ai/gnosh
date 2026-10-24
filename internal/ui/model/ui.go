@@ -2373,6 +2373,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionStatusReport:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		m.openStatusReport()
+	case dialog.ActionDoctorReport:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.doctorReport())
 	case dialog.ActionExportConversation:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		m.dialog.CloseDialog(dialog.ExportID)
@@ -5494,6 +5497,9 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 		m.openStatusReport()
 		return nil
 	}
+	if session.ParseDoctorCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.doctorReport()
+	}
 	if filename, ok := session.ParseExportCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.exportConversation(filename)
 	}
@@ -5558,6 +5564,19 @@ func (m *UI) permissionsReport() tea.Cmd {
 			return util.ReportError(err)()
 		}
 		return reportMsg{title: "Permissions", report: report}
+	}
+}
+
+// doctorReport checks the setup klash runs with, as Claude Code's /doctor
+// does and klash doctor prints it, off the update loop: it looks for the
+// programs hooks and LSP servers run.
+func (m *UI) doctorReport() tea.Cmd {
+	return func() tea.Msg {
+		report, err := m.com.Workspace.DoctorReport(context.Background())
+		if err != nil {
+			return util.ReportError(err)()
+		}
+		return reportMsg{title: "Doctor", report: report}
 	}
 }
 

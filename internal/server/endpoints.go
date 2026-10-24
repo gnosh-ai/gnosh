@@ -411,6 +411,15 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Handle(c.handleGetWorkspacePermissionsReport),
 
+		apigen.Get("/v1/workspaces/{id}/doctor").
+			Summary("Doctor report").
+			Description("The check of the workspace's setup that klash doctor prints, as the Markdown Claude Code's /doctor shows: the config files, the providers it can use and why not the others, the models, the hooks, and the programs it calls.").
+			Tags("workspaces").
+			PathParam("id", "Workspace ID").
+			Responds(proto.DoctorReport{}).
+			Fails(400, 404, 500).
+			Handle(c.handleGetWorkspaceDoctorReport),
+
 		apigen.Get("/v1/workspaces/{id}/agent/context").
 			Summary("Context usage").
 			Description("What fills a session's context window, as the Markdown Claude Code's /context prints; session_id names the session, none a new one.").
