@@ -66,7 +66,7 @@ func TestCompactSummaryOnlyInPostCompactPayloads(t *testing.T) {
 	t.Parallel()
 
 	for _, payload := range [][]byte{
-		BuildPreCompactPayload("s", "/w", PreCompactTriggerAuto),
+		BuildPreCompactPayload("s", "/w", PreCompactTriggerAuto, ""),
 		BuildPayload(EventPreToolUse, "s", "/w", "bash", `{}`),
 	} {
 		var got map[string]any

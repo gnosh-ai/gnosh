@@ -599,9 +599,11 @@ func (c *Client) GetAgentSessionInfo(ctx context.Context, id string, sessionID s
 	return &info, nil
 }
 
-// AgentSummarizeSession requests a session summarization.
-func (c *Client) AgentSummarizeSession(ctx context.Context, id string, sessionID string) error {
-	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/agent/sessions/%s/summarize", id, sessionID), nil, nil, nil)
+// AgentSummarizeSession requests a session summarization, with
+// instructions the text given after /compact ("" for none).
+func (c *Client) AgentSummarizeSession(ctx context.Context, id string, sessionID, instructions string) error {
+	body := jsonBody(proto.SummarizeRequest{Instructions: instructions})
+	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/agent/sessions/%s/summarize", id, sessionID), nil, body, http.Header{"Content-Type": []string{"application/json"}})
 	if err != nil {
 		return fmt.Errorf("failed to summarize session: %w", err)
 	}

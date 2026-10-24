@@ -143,7 +143,9 @@ type Coordinator interface {
 	QueuedPromptsList(sessionID string) []string
 	PopQueuedPrompts(sessionID string) []message.PoppedPrompt
 	ClearQueue(sessionID string)
-	Summarize(context.Context, string) error
+	// Summarize summarizes the session, with instructions the text given
+	// after /compact ("" for none).
+	Summarize(ctx context.Context, sessionID, instructions string) error
 	Model() Model
 	UpdateModels(ctx context.Context) error
 	// ToolInfos builds the coder agent's tools and returns what the model is
@@ -1696,7 +1698,7 @@ func (c *coordinator) PopQueuedPrompts(sessionID string) []message.PoppedPrompt 
 	return c.currentAgent().PopQueuedPrompts(sessionID)
 }
 
-func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
+func (c *coordinator) Summarize(ctx context.Context, sessionID, instructions string) error {
 	agent := c.currentAgent()
 	providerCfg, ok := c.cfg.Config().Providers.Get(agent.Model().ModelCfg.Provider)
 	if !ok {
@@ -1709,7 +1711,7 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
 
 	// Auth failures during summarize flow through fantasy's OnAuthRefresh,
 	// the same path used by regular turns.
-	return agent.Summarize(ctx, sessionID, c.providerOptions(agent.Model(), providerCfg), c.makeAuthRefreshCallback(providerCfg), preCompactTriggerManual)
+	return agent.Summarize(ctx, sessionID, instructions, c.providerOptions(agent.Model(), providerCfg), c.makeAuthRefreshCallback(providerCfg), preCompactTriggerManual)
 }
 
 // GenerateTitle generates a session title using the current agent.

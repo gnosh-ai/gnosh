@@ -100,8 +100,11 @@ type (
 		Name string
 	}
 	ActionInitializeProject struct{}
-	ActionSummarize         struct {
-		SessionID string
+	// ActionSummarize summarizes the session, with Instructions the text
+	// given after /compact, as Claude Code's /compact takes them.
+	ActionSummarize struct {
+		SessionID    string
+		Instructions string
 	}
 	// ActionRenameSession names the session, as Claude Code's /rename
 	// does; Name is "" when none was given.

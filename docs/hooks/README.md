@@ -1558,9 +1558,10 @@ Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
   // context filled up. A matcher on a PreCompact hook is tested against this.
   "trigger": "manual",
 
-  // string. The instructions to fold into the summary, as in Claude Code.
-  // Klash has none of its own, so this is always the empty string.
-  "custom_instructions": "",
+  // string. The instructions to fold into the summary, as in Claude Code:
+  // the text given after /compact ("/compact keep the API decisions"),
+  // empty for a plain /compact and always for an automatic summary.
+  "custom_instructions": "keep the API decisions",
 }
 ```
 

@@ -394,10 +394,12 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 
 		apigen.Post("/v1/workspaces/{id}/agent/sessions/{sid}/summarize").
 			Summary("Summarize session").
+			Description("Summarizes the session; the optional body's instructions are the text given after /compact, as Claude Code's /compact takes them.").
 			Tags("agent").
 			PathParam("id", "Workspace ID").
 			PathParam("sid", "Session ID").
-			Fails(404, 500).
+			Accepts(proto.SummarizeRequest{}).
+			Fails(400, 404, 500).
 			Handle(c.handlePostWorkspaceAgentSessionSummarize),
 
 		apigen.Post("/v1/workspaces/{id}/agent/sessions/{sid}/name").

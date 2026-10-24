@@ -206,7 +206,7 @@ func TestInstructionsLoadedCompactReason(t *testing.T) {
 
 	sumModel := Model{Model: &subSummarizeModel{}, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000}, ModelCfg: config.SelectedModel{Model: "test-model", Provider: "test"}}
 	a.SetModels(sumModel, sumModel)
-	require.NoError(t, a.Summarize(t.Context(), sess.ID, nil, nil, preCompactTriggerManual))
+	require.NoError(t, a.Summarize(t.Context(), sess.ID, "", nil, nil, preCompactTriggerManual))
 	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "after summary"})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool { return reasons() == "session_start\ncompact\n" }, 3*time.Second, 20*time.Millisecond,

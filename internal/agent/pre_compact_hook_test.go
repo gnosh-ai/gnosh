@@ -97,7 +97,7 @@ func compactHookAgent(t *testing.T, event string, subAgent bool, hookCfgs ...con
 // reports the error, the model's summary count, and the hook warnings.
 func (r preCompactRun) summarize(t *testing.T, trigger preCompactTrigger) (error, int, []string) {
 	t.Helper()
-	err := r.agent.Summarize(t.Context(), r.sessionID, fantasy.ProviderOptions{}, nil, trigger)
+	err := r.agent.Summarize(t.Context(), r.sessionID, "", fantasy.ProviderOptions{}, nil, trigger)
 	return err, r.model.count(), r.hookWarningMessages()
 }
 
@@ -147,17 +147,17 @@ func TestSummarize_PreCompactFiresWithTheTrigger(t *testing.T) {
 }
 
 // The payload carries hook_event_name "PreCompact", the session ID, the
-// working directory, the trigger, and custom_instructions, which Klash
-// has none of, so it is the empty string.
+// working directory, the trigger, and custom_instructions: the text given
+// after /compact, as in Claude Code.
 func TestSummarize_PreCompactPayload(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	payloadPath := filepath.Join(dir, "payload.json")
 	r := preCompactAgent(t, false, preCompactHooks("", `cat > `+payloadPath)...)
-	err, summarized, _ := r.summarize(t, preCompactTriggerManual)
+	err := r.agent.Summarize(t.Context(), r.sessionID, "keep the API decisions", fantasy.ProviderOptions{}, nil, preCompactTriggerManual)
 	require.NoError(t, err)
-	require.Equal(t, 1, summarized)
+	require.Equal(t, 1, r.model.count())
 
 	data, err := os.ReadFile(payloadPath)
 	require.NoError(t, err)
@@ -167,7 +167,7 @@ func TestSummarize_PreCompactPayload(t *testing.T) {
 	require.Equal(t, "PreCompact", payload["event"])
 	require.Equal(t, r.sessionID, payload["session_id"])
 	require.Equal(t, "manual", payload["trigger"])
-	require.Equal(t, "", payload["custom_instructions"])
+	require.Equal(t, "keep the API decisions", payload["custom_instructions"])
 }
 
 // A matcher is tested against the trigger, as in Claude Code: a hook
@@ -200,7 +200,7 @@ func TestSummarize_PreCompactMatcherOnTheTrigger(t *testing.T) {
 			}}
 			require.NoError(t, cfg.ValidateHooks())
 			runner := hooks.NewRunner(cfg.Hooks[hooks.EventPreCompact], t.TempDir(), t.TempDir())
-			agg, err := runner.RunPreCompact(t.Context(), "s", string(tc.trigger))
+			agg, err := runner.RunPreCompact(t.Context(), "s", string(tc.trigger), "")
 			require.NoError(t, err)
 			require.Equal(t, tc.want, agg.HookCount,
 				"the hook fires (or not) based on whether the trigger matches")

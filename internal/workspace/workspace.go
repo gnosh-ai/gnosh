@@ -177,7 +177,9 @@ type Workspace interface {
 	AgentPopQueuedPrompts(sessionID string) []message.PoppedPrompt
 	AgentClearQueue(sessionID string)
 	AgentSetMain(agentID string) error
-	AgentSummarize(ctx context.Context, sessionID string) error
+	// AgentSummarize summarizes the session, with instructions the text
+	// given after /compact ("" for none).
+	AgentSummarize(ctx context.Context, sessionID, instructions string) error
 	UpdateAgentModel(ctx context.Context) error
 	InitCoderAgent(ctx context.Context) error
 	InitCoderAgentNonInteractive(ctx context.Context) error

@@ -115,3 +115,29 @@ func TestPaletteResumeTakesTheSession(t *testing.T) {
 	require.Equal(t, ActionResumeSession{Ref: "the auth work"}, enter("continue the auth work"))
 	require.Equal(t, ActionOpenDialog{DialogID: SessionsID}, enter("resume"))
 }
+
+// Claude Code's /compact takes what the summary should keep: typed into
+// the palette with it, Enter summarizes with those instructions; alone,
+// it is the Summarize Session item. With no session there is nothing to
+// summarize.
+func TestPaletteCompactTakesInstructions(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	enter := func(sessionID, typed string) Action {
+		c, err := NewCommands(com, sessionID, sessionID != "", false, false, nil, nil)
+		require.NoError(t, err)
+		for _, r := range typed {
+			c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+		return c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	}
+	require.Equal(t, ActionSummarize{SessionID: "s1", Instructions: "keep the API decisions"}, enter("s1", "compact keep the API decisions"))
+	require.Equal(t, ActionSummarize{SessionID: "s1"}, enter("s1", "compact"))
+	_, summarized := enter("", "compact keep it").(ActionSummarize)
+	require.False(t, summarized)
+}

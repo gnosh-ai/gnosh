@@ -52,7 +52,7 @@ func TestCompactionDoesNotLoop(t *testing.T) {
 	llm := &requestRecordingModel{replies: []string{"the summary"}}
 	a, sessionID, _ := summaryRequestAgent(t, llm)
 	a.compactLevels.Set(sessionID, compactNever)
-	require.NoError(t, a.Summarize(t.Context(), sessionID, fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
+	require.NoError(t, a.Summarize(t.Context(), sessionID, "", fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
 	_, set := a.compactLevels.Get(sessionID)
 	require.False(t, set)
 }

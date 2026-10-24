@@ -2364,13 +2364,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before summarizing session..."))
 			break
 		}
-		cmds = append(cmds, func() tea.Msg {
-			err := m.com.Workspace.AgentSummarize(context.Background(), msg.SessionID)
-			if err != nil {
-				return util.ReportError(err)()
-			}
-			return nil
-		})
+		cmds = append(cmds, m.summarizeSession(msg.SessionID, msg.Instructions))
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleHelp:
 		m.status.ToggleHelp()
@@ -5461,6 +5455,9 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	if ref, ok := session.ParseResumeCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.resumeSession(ref)
 	}
+	if instructions, ok := session.ParseCompactCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.compactFromPrompt(instructions)
+	}
 	return m.sendMessageInternal(content, false, attachments...)
 }
 
@@ -5495,6 +5492,30 @@ func (m *UI) renameSession(name string) tea.Cmd {
 		}
 		return util.NewInfoMsg("Session renamed to: " + name)
 	}
+}
+
+// summarizeSession summarizes the session, with instructions the text
+// given after /compact ("" for none), as Claude Code's /compact takes
+// them.
+func (m *UI) summarizeSession(sessionID, instructions string) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.com.Workspace.AgentSummarize(context.Background(), sessionID, instructions); err != nil {
+			return util.ReportError(err)()
+		}
+		return nil
+	}
+}
+
+// compactFromPrompt is /compact typed in the prompt: the current session
+// summarized, as the palette's Summarize Session does it.
+func (m *UI) compactFromPrompt(instructions string) tea.Cmd {
+	if !m.hasSession() {
+		return util.ReportWarn("There is nothing to summarize yet: send a prompt first")
+	}
+	if m.isAgentBusy() {
+		return util.ReportWarn("Agent is busy, please wait before summarizing session...")
+	}
+	return m.summarizeSession(m.session.ID, instructions)
 }
 
 // resumeSession goes to the session ref names, as Claude Code's /resume

@@ -215,6 +215,11 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 			if ref, ok := session.ParseResumeCommand(c.input.Value()); ok && ref != "" {
 				return ActionResumeSession{Ref: ref}
 			}
+			// And "compact" and what the summary should keep; "compact"
+			// alone is the Summarize Session item.
+			if instructions, ok := session.ParseCompactCommand(c.input.Value()); ok && instructions != "" && c.hasSession {
+				return ActionSummarize{SessionID: c.sessionID, Instructions: instructions}
+			}
 			if selectedItem := c.list.SelectedItem(); selectedItem != nil {
 				if item, ok := selectedItem.(*CommandItem); ok && item != nil {
 					return item.Action()

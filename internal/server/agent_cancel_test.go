@@ -78,7 +78,7 @@ func (s *runCoordinator) IsSessionBusy(string) bool {
 	return false
 }
 
-func (s *runCoordinator) Summarize(context.Context, string) error {
+func (s *runCoordinator) Summarize(context.Context, string, string) error {
 	return nil
 }
 

@@ -233,7 +233,9 @@ type SessionAgent interface {
 	QueuedPromptsList(sessionID string) []string
 	PopQueuedPrompts(sessionID string) []message.PoppedPrompt
 	ClearQueue(sessionID string)
-	Summarize(context.Context, string, fantasy.ProviderOptions, func(context.Context, *fantasy.ProviderError) error, preCompactTrigger) error
+	// Summarize summarizes the session, with instructions the text given
+	// after /compact ("" for none), as Claude Code's /compact takes them.
+	Summarize(ctx context.Context, sessionID, instructions string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) error
 	Model() Model
 	GenerateTitle(ctx context.Context, sessionID, userPrompt string)
 	GenerateSessionName(ctx context.Context, sessionID string) (string, error)
@@ -1441,7 +1443,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 
 	if shouldSummarize {
 		a.activeRequests.Del(call.SessionID)
-		if summarizeErr := a.summarize(genCtx, call.SessionID, call.Channel, call.ProviderOptions, call.OnAuthRefresh, preCompactTriggerAuto); summarizeErr != nil {
+		if summarizeErr := a.summarize(genCtx, call.SessionID, call.Channel, "", call.ProviderOptions, call.OnAuthRefresh, preCompactTriggerAuto); summarizeErr != nil {
 			return nil, summarizeErr
 		}
 		a.justSummarized.Set(call.SessionID, true)
@@ -1614,11 +1616,11 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	return a.Run(ctx, firstQueuedMessage)
 }
 
-func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) error {
+func (a *sessionAgent) Summarize(ctx context.Context, sessionID, instructions string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) error {
 	// A summary asked for by hand starts the session's auto-compaction
 	// afresh (see compacts).
 	a.compactLevels.Del(sessionID)
-	return a.summarize(ctx, sessionID, "", opts, onAuthRefresh, trigger)
+	return a.summarize(ctx, sessionID, "", instructions, opts, onAuthRefresh, trigger)
 }
 
 // summarize replaces the session's conversation with a summary of it.
@@ -1630,8 +1632,9 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 // conversation. It was sent with a system prompt of its own and no
 // tools: on a local server that differed from the cached conversation
 // within its first tokens, and a full session waited twenty minutes
-// while the server read all of it again.
-func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) error {
+// while the server read all of it again. instructions, the text given
+// after /compact, go at the end of the summary instructions.
+func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instructions string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) error {
 	// A turn running in the session stops a summary. A prompt that is
 	// still in its UserPromptSubmit hooks does not: IsSessionBusy counts
 	// it, and the summary at the end of a turn failed as busy when the
@@ -1644,7 +1647,7 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel string,
 	// The user's PreCompact hooks get the first word, just before the
 	// conversation is summarized. They cannot stop it: whatever they
 	// say, the summary goes ahead.
-	a.runPreCompactHooks(ctx, sessionID, trigger)
+	a.runPreCompactHooks(ctx, sessionID, trigger, instructions)
 
 	// Copy mutable fields under lock to avoid races with SetModels.
 	largeModel := a.largeModel.Get()
@@ -1695,7 +1698,7 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel string,
 			fantasy.WithUserAgent(userAgent),
 		)
 		return agent.Stream(genCtx, fantasy.AgentStreamCall{
-			Prompt:          buildSummaryPrompt(currentSession.Todos),
+			Prompt:          buildSummaryPrompt(currentSession.Todos, instructions),
 			Messages:        aiMsgs,
 			Headers:         sessionHeaders(sessionID),
 			ProviderOptions: opts,
@@ -2896,7 +2899,10 @@ func (a *sessionAgent) workaroundProviderMediaLimitations(messages []fantasy.Mes
 
 // buildSummaryPrompt is the message asking for a session's summary: how
 // to write it, then the session's todos to carry over.
-func buildSummaryPrompt(todos []session.Todo) string {
+// buildSummaryPrompt is the summary request's last user message: the
+// summary instructions, the session's todos, and, as Claude Code adds
+// them, the text given after /compact.
+func buildSummaryPrompt(todos []session.Todo, instructions string) string {
 	var sb strings.Builder
 	sb.WriteString(strings.TrimSpace(string(summaryPrompt)))
 	if len(todos) > 0 {
@@ -2906,6 +2912,10 @@ func buildSummaryPrompt(todos []session.Todo) string {
 		}
 		sb.WriteString("\nInclude these tasks and their statuses in your summary. ")
 		sb.WriteString("Instruct the resuming assistant to use the `todos` tool to continue tracking progress on these tasks.")
+	}
+	if instructions = strings.TrimSpace(instructions); instructions != "" {
+		sb.WriteString("\n\nAdditional Instructions:\n")
+		sb.WriteString(instructions)
 	}
 	return sb.String()
 }

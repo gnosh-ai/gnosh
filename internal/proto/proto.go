@@ -166,6 +166,12 @@ type ShellCommandResponse struct {
 	ExitCode int    `json:"exit_code"`
 }
 
+// SummarizeRequest is the optional body of a summary request:
+// Instructions is the text given after /compact.
+type SummarizeRequest struct {
+	Instructions string `json:"instructions,omitempty"`
+}
+
 // SessionNameResponse is the name a session was given from its
 // conversation.
 type SessionNameResponse struct {
