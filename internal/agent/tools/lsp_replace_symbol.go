@@ -133,35 +133,36 @@ func NewReplaceSymbolTool(
 			newContent := strings.Join(newLines, "\n")
 
 			sessionID := GetSessionFromContext(ctx)
-			if sessionID != "" && permissions != nil {
-				// The request names the file absolute, as the tool reads
-				// it, from the process's directory.
-				absFile, err := filepath.Abs(params.FilePath)
-				if err != nil {
-					absFile = params.FilePath
-				}
-				granted, err := permissions.Request(ctx, permission.CreatePermissionRequest{
-					SessionID:   sessionID,
-					ToolCallID:  call.ID,
-					Path:        params.FilePath,
-					FilePath:    absFile,
-					ToolName:    ReplaceSymbolToolName,
-					Description: fmt.Sprintf("%s symbol '%s' in %s", action, params.Symbol, params.FilePath),
-					Params: ReplaceSymbolPermissionsParams{
-						FilePath:   params.FilePath,
-						OldContent: string(content),
-						NewContent: newContent,
-					},
-				})
-				if err != nil {
-					return fantasy.ToolResponse{}, fmt.Errorf("permission request failed: %w", err)
-				}
-				if !granted {
-					return NewPermissionDeniedResponse(), nil
-				}
+			if sessionID == "" {
+				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for replacing a symbol")
+			}
+			// The request names the file absolute, as the tool reads
+			// it, from the process's directory.
+			absFile, err := filepath.Abs(params.FilePath)
+			if err != nil {
+				absFile = params.FilePath
+			}
+			granted, err := permissions.Request(ctx, permission.CreatePermissionRequest{
+				SessionID:   sessionID,
+				ToolCallID:  call.ID,
+				Path:        params.FilePath,
+				FilePath:    absFile,
+				ToolName:    ReplaceSymbolToolName,
+				Description: fmt.Sprintf("%s symbol '%s' in %s", action, params.Symbol, params.FilePath),
+				Params: ReplaceSymbolPermissionsParams{
+					FilePath:   params.FilePath,
+					OldContent: string(content),
+					NewContent: newContent,
+				},
+			})
+			if err != nil {
+				return fantasy.ToolResponse{}, fmt.Errorf("permission request failed: %w", err)
+			}
+			if !granted {
+				return NewPermissionDeniedResponse(), nil
 			}
 
-			if files != nil && sessionID != "" {
+			if files != nil {
 				if _, err := files.CreateVersion(ctx, sessionID, params.FilePath, string(content)); err != nil {
 					slog.Warn("Failed to create file version before replace", "path", params.FilePath, "error", err)
 				}

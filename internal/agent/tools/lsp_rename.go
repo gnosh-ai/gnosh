@@ -63,23 +63,24 @@ func NewRenameTool(
 			affectedFiles := collectAffectedFiles(edit)
 
 			sessionID := GetSessionFromContext(ctx)
-			if sessionID != "" && permissions != nil {
-				granted, err := permissions.Request(ctx, permission.CreatePermissionRequest{
-					SessionID:   sessionID,
-					ToolCallID:  call.ID,
-					ToolName:    RenameToolName,
-					Description: fmt.Sprintf("Rename '%s' to '%s'", params.Symbol, params.NewName),
-					FilePaths:   affectedFiles,
-				})
-				if err != nil {
-					return fantasy.ToolResponse{}, fmt.Errorf("permission request failed: %w", err)
-				}
-				if !granted {
-					return NewPermissionDeniedResponse(), nil
-				}
+			if sessionID == "" {
+				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for renaming a symbol")
+			}
+			granted, err := permissions.Request(ctx, permission.CreatePermissionRequest{
+				SessionID:   sessionID,
+				ToolCallID:  call.ID,
+				ToolName:    RenameToolName,
+				Description: fmt.Sprintf("Rename '%s' to '%s'", params.Symbol, params.NewName),
+				FilePaths:   affectedFiles,
+			})
+			if err != nil {
+				return fantasy.ToolResponse{}, fmt.Errorf("permission request failed: %w", err)
+			}
+			if !granted {
+				return NewPermissionDeniedResponse(), nil
 			}
 
-			if files != nil && sessionID != "" {
+			if files != nil {
 				for _, path := range affectedFiles {
 					content, err := os.ReadFile(path)
 					if err != nil {
