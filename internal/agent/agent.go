@@ -1867,7 +1867,12 @@ func (a *sessionAgent) permissionMode(sessionID string) string {
 // requestSystemPrompt is the system prompt a session's requests send:
 // the agent's, then the instructions of the MCP servers connected now.
 func (a *sessionAgent) requestSystemPrompt() string {
-	systemPrompt := a.systemPrompt.Get()
+	return a.systemPrompt.Get() + mcpInstructions()
+}
+
+// mcpInstructions is what a request's system prompt ends with for the
+// connected MCP servers that give instructions, "" when none do.
+func mcpInstructions() string {
 	var instructions strings.Builder
 	for _, server := range mcp.GetStates() {
 		if server.State != mcp.StateConnected {
@@ -1879,9 +1884,9 @@ func (a *sessionAgent) requestSystemPrompt() string {
 		}
 	}
 	if s := instructions.String(); s != "" {
-		systemPrompt += "\n\n<mcp-instructions>\n" + s + "\n</mcp-instructions>"
+		return "\n\n<mcp-instructions>\n" + s + "\n</mcp-instructions>"
 	}
-	return systemPrompt
+	return ""
 }
 
 // requestTools is the tools a request of a turn in channel lists: the

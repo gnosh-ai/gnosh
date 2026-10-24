@@ -156,6 +156,9 @@ type Coordinator interface {
 	// the coder's or, in plan mode, the plan agent's, MCP tools included.
 	ToolNames() []string
 	GenerateTitle(ctx context.Context, sessionID, prompt string)
+	// ContextUsage estimates what fills a session's context window, as
+	// Claude Code's /context does ("" for a new session).
+	ContextUsage(ctx context.Context, sessionID string) (ContextUsage, error)
 	// GenerateSessionName names a session from the end of its
 	// conversation, as Claude Code's /rename does with no name, and
 	// returns the name.
@@ -274,18 +277,7 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		return nil, errCoderAgentNotConfigured
 	}
 
-	// --system-prompt replaces the coder's instructions, and
-	// --append-system-prompt goes at the end of both top-level agents'
-	// prompts; sub-agents keep their own.
-	overrides := c.cfg.Overrides()
-	appended := prompt.WithTextAfter(overrides.AppendSystemPrompt)
-	var coderSystemPrompt *prompt.Prompt
-	var err error
-	if overrides.SystemPrompt != "" {
-		coderSystemPrompt, err = coderPromptReplacing(overrides.SystemPrompt, prompt.WithWorkingDir(c.cfg.WorkingDir()), appended)
-	} else {
-		coderSystemPrompt, err = coderPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()), appended)
-	}
+	coderSystemPrompt, err := c.coderSystemPrompt()
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +293,8 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		return nil, errPlanAgentNotConfigured
 	}
 
-	planSystemPrompt, err := planPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()), appended)
+	overrides := c.cfg.Overrides()
+	planSystemPrompt, err := planPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()), prompt.WithTextAfter(overrides.AppendSystemPrompt))
 	if err != nil {
 		return nil, err
 	}
@@ -1712,6 +1705,76 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID, instructions str
 	// Auth failures during summarize flow through fantasy's OnAuthRefresh,
 	// the same path used by regular turns.
 	return agent.Summarize(ctx, sessionID, instructions, c.providerOptions(agent.Model(), providerCfg), c.makeAuthRefreshCallback(providerCfg), preCompactTriggerManual)
+}
+
+// coderSystemPrompt is the coder agent's prompt: --system-prompt replaces
+// the coder's instructions, and --append-system-prompt goes at the end of
+// both top-level agents' prompts; sub-agents keep their own.
+func (c *coordinator) coderSystemPrompt() (*prompt.Prompt, error) {
+	overrides := c.cfg.Overrides()
+	appended := prompt.WithTextAfter(overrides.AppendSystemPrompt)
+	if overrides.SystemPrompt != "" {
+		return coderPromptReplacing(overrides.SystemPrompt, prompt.WithWorkingDir(c.cfg.WorkingDir()), appended)
+	}
+	return coderPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()), appended)
+}
+
+// ContextUsage estimates what fills sessionID's context window, as Claude
+// Code's /context does: the coder agent's system prompt and tools as its
+// requests carry them, on the current model, and the session's
+// conversation since its last summary ("" for a new session, which has
+// none).
+func (c *coordinator) ContextUsage(ctx context.Context, sessionID string) (ContextUsage, error) {
+	agent := c.currentAgent()
+	if agent == nil {
+		return ContextUsage{}, errors.New("the agent is not ready")
+	}
+	agentCfg, ok := c.cfg.Config().Agents[config.AgentCoder]
+	if !ok {
+		return ContextUsage{}, errCoderAgentNotConfigured
+	}
+	model := agent.Model()
+	provider, modelID := model.Model.Provider(), model.Model.Model()
+	p, err := c.coderSystemPrompt()
+	if err != nil {
+		return ContextUsage{}, err
+	}
+	data, err := p.Data(ctx, provider, modelID, c.cfg)
+	if err != nil {
+		return ContextUsage{}, err
+	}
+	systemPrompt, err := p.Build(ctx, provider, modelID, c.cfg)
+	if err != nil {
+		return ContextUsage{}, err
+	}
+	agentTools, err := c.buildTools(ctx, agentCfg, false)
+	if err != nil {
+		return ContextUsage{}, err
+	}
+	var msgs []message.Message
+	if sessionID != "" {
+		sess, err := c.sessions.Get(ctx, sessionID)
+		if err != nil {
+			return ContextUsage{}, err
+		}
+		if msgs, err = c.messages.ListFromSummary(ctx, sessionID, sess.SummaryMessageID); err != nil {
+			return ContextUsage{}, err
+		}
+	}
+	window := model.CatwalkCfg.ContextWindow
+	var at int64
+	if !c.cfg.Config().Options.DisableAutoSummarize {
+		at = compactAt(window, true)
+	}
+	return contextUsage(contextUsageInput{
+		model:        modelID,
+		window:       window,
+		systemPrompt: systemPrompt + mcpInstructions(),
+		data:         data,
+		tools:        agentTools,
+		messages:     msgs,
+		compactAt:    at,
+	}), nil
 }
 
 // GenerateTitle generates a session title using the current agent.

@@ -59,6 +59,10 @@ func (*NopCoordinator) GenerateSessionName(context.Context, string) (string, err
 	return "", nil
 }
 
+func (*NopCoordinator) ContextUsage(context.Context, string) (agent.ContextUsage, error) {
+	return agent.ContextUsage{}, nil
+}
+
 func (*NopCoordinator) ToolInfos(context.Context) ([]fantasy.ToolInfo, error) {
 	return nil, nil
 }
