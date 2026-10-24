@@ -258,6 +258,19 @@ func (r *Runner) RunPreCompact(ctx context.Context, sessionID, trigger string) (
 	return agg, err
 }
 
+// RunPostCompact executes the PostCompact hooks whose matcher matches the
+// summary's trigger, once a session's conversation has been summarized
+// to summary. As in Claude Code a PostCompact hook has no say: the caller
+// tells the user about any hook that did not run to a verdict, and
+// UpdatedInput is always cleared.
+func (r *Runner) RunPostCompact(ctx context.Context, sessionID, trigger, summary string) (AggregateResult, error) {
+	envVars := append(BuildEnv(EventPostCompact, "", sessionID, r.cwd, r.projectDir, ""), hookVar("POST_COMPACT_TRIGGER", trigger)...)
+	payload := BuildPostCompactPayload(sessionID, r.cwd, trigger, summary)
+	agg, err := r.run(ctx, r.matchingHooks(trigger), EventPostCompact, "", "", envVars, payload)
+	agg.UpdatedInput = ""
+	return agg, err
+}
+
 // RunSessionEnd executes the SessionEnd hooks whose matcher matches the
 // reason, when a session ends. Reason is the
 // SessionEndReasonClear, SessionEndReasonOther or

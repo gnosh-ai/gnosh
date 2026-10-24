@@ -34,6 +34,9 @@ const (
 	// EventPreCompact fires just before a session's conversation is
 	// summarized, manual or automatic.
 	EventPreCompact = config.EventPreCompact
+	// EventPostCompact fires once a session's conversation has been
+	// summarized, with the summary.
+	EventPostCompact = config.EventPostCompact
 	// EventSessionEnd fires when a session ends; its matcher is tested
 	// against the reason.
 	EventSessionEnd = config.EventSessionEnd

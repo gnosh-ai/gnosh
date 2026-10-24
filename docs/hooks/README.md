@@ -17,7 +17,7 @@ forward.
 - Hooks are Claude Code-compatible
 - Klash ships with a builtin `klash-hook` skill write, edit, and configure
   hooks; just tell Klash how to configure Klash
-- Klash supports nine hooks: `PreToolUse`, which fires before a tool call,
+- Klash supports ten hooks: `PreToolUse`, which fires before a tool call,
   `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
   fails, `UserPromptSubmit`, which fires when you send a prompt and can add
   context to it or block it, `SessionStart`, which fires before the first
@@ -25,8 +25,8 @@ forward.
   the agent is about to finish its turn and can refuse to let it end,
   `SubagentStop`, which fires when a sub-agent is about to finish and can
   refuse to let it end, `PreCompact`, which fires just before the session
-  is summarized and can object to it, and `SessionEnd`, which fires when a
-  session ends; plans are to support the full
+  is summarized and can object to it, `PostCompact`, which fires once it has
+  been, with the summary, and `SessionEnd`, which fires when a session ends; plans are to support the full
   gamut, so please let us know which hooks you'd like to see next
 - Hooks run in parallel for speed, but their results compose in config order
   for determinism
@@ -670,6 +670,33 @@ trigger=$(echo "$input" | jq -r '.trigger')
 [[ "$trigger" == "manual" ]] || exit 0
 echo "The user asked for a summary; make sure the important context is captured." >&2
 exit 2
+```
+
+### PostCompact
+
+This hook fires once a session's conversation has been summarized, with the
+summary, as in Claude Code: to log the summary, or to update something outside
+Klash. It runs after the summary is saved and before any prompt you queued
+meanwhile.
+
+**Matched against**: the trigger, `"manual"` or `"auto"`, as for `PreCompact`.
+
+**Input**: the common fields, `trigger`, and `compact_summary`, the summary the
+conversation was compacted to. `KLASH_POST_COMPACT_TRIGGER` holds the trigger.
+
+**Blocking**: none. The summary is done; a hook that blocks, or that could not
+evaluate, is shown to you as a warning.
+
+**Scope**: like `PreCompact`, only the **top-level agent**'s summaries.
+
+```jsonc
+{
+  "hooks": {
+    "PostCompact": [
+      { "command": "jq -r .compact_summary >> ~/.local/share/klash/summaries.log" }
+    ]
+  }
+}
 ```
 
 Hooks are keyed by event name. Only `command` is required, and you can omit

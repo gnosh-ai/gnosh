@@ -1769,6 +1769,10 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel string,
 	// with source "compact", as in Claude Code.
 	a.sessionStarts.markSummarized(sessionID)
 
+	// The user's PostCompact hooks get the summary, now that it is saved
+	// and before any prompt queued meanwhile runs on it.
+	a.runPostCompactHooks(ctx, sessionID, trigger, summaryMessage.Content().Text)
+
 	// Release the active request before processing queued messages so that
 	// Run() does not see the session as busy.
 	a.activeRequests.Del(sessionID)

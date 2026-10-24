@@ -59,8 +59,15 @@ type preCompactRun struct {
 // sub-agent, which fires no hooks.
 func preCompactAgent(t *testing.T, subAgent bool, hookCfgs ...config.HookConfig) preCompactRun {
 	t.Helper()
+	return compactHookAgent(t, hooks.EventPreCompact, subAgent, hookCfgs...)
+}
+
+// compactHookAgent is preCompactAgent for the hooks of event,
+// PreCompact's or PostCompact's.
+func compactHookAgent(t *testing.T, event string, subAgent bool, hookCfgs ...config.HookConfig) preCompactRun {
+	t.Helper()
 	env := testEnv(t)
-	cfg := &config.Config{Hooks: map[string][]config.HookConfig{hooks.EventPreCompact: hookCfgs}}
+	cfg := &config.Config{Hooks: map[string][]config.HookConfig{event: hookCfgs}}
 	require.NoError(t, cfg.ValidateHooks())
 	llm := &subSummarizeModel{}
 	model := Model{Model: llm, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000}}

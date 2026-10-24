@@ -23,7 +23,7 @@ fires before the first prompt a process sends to a session. `Stop` fires when
 the agent is about to finish its turn. `SubagentStop` fires when a sub-agent
 is about to finish, and works exactly like `Stop` but for sub-agents.
 `PreCompact` fires just before a session's conversation is summarized, manual
-or automatic. `SessionEnd` fires when a session ends: when the user starts a
+or automatic, and `PostCompact` once it has been, with the summary. `SessionEnd` fires when a session ends: when the user starts a
 new one (`clear`), switches to another (`other`), or the process exits with
 the session open (`prompt_input_exit` for the TUI, `other` for `klash run`).
 
@@ -33,9 +33,9 @@ to start on an event name it doesn't fire, rather than accepting a hook that
 would look configured and silently never run.
 
 A `matcher` only makes sense for `PreToolUse`, `PostToolUse`,
-`PostToolUseFailure`, `PreCompact`, `SessionStart` and `SessionEnd`. The
-first three match against the tool name; `PreCompact` matches against its
-trigger (`manual` or `auto`); `SessionStart` matches against its source
+`PostToolUseFailure`, `PreCompact`, `PostCompact`, `SessionStart` and
+`SessionEnd`. The first three match against the tool name; `PreCompact` and
+`PostCompact` match against their trigger (`manual` or `auto`); `SessionStart` matches against its source
 (`startup`, `resume`, `clear` or `compact`); `SessionEnd` matches against
 its reason (`clear`, `other` or `prompt_input_exit`). There is nothing to
 match when a prompt is sent or a turn ends, so a `matcher` on a
@@ -87,6 +87,7 @@ the input/output contract is identical regardless of language.
 | `KLASH_AGENT_ID`             | `SubagentStop`, and a sub-agent's tool calls: its own session ID (`agent_id`) |
 | `KLASH_AGENT_TYPE`           | `SubagentStop`, and a sub-agent's tool calls: its type (`agent_type`), `task` or `agentic_fetch` |
 | `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, as in the payload's `trigger` field |
+| `KLASH_POST_COMPACT_TRIGGER` | `PostCompact` only: `manual` or `auto`, as in the payload's `trigger` field |
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, as in the payload's `source` field |
 | `KLASH_SESSION_END_REASON`   | `SessionEnd` only: `clear`, `other` or `prompt_input_exit`, as in the payload's `reason` field |
 
@@ -240,6 +241,13 @@ stop the summary: exit `2` (or `"decision": "block"`) or `49` is shown to the
 user as a warning and the summary goes ahead. A hook that fails or could not
 evaluate is also shown as a warning. It fires only for the top-level agent, not sub-agents.
 
+**On `PostCompact`** the input is `{"trigger": "manual"|"auto", "compact_summary": "..."}`
+beside the common fields: the summary the conversation was compacted to, once
+it is saved, as in Claude Code. Use it to log the summary or update something
+outside Klash. A `matcher` is tested against `trigger`. The hook has no say: a
+block, or a hook that fails or could not evaluate, is shown to the user as a
+warning. It fires only for the top-level agent, not sub-agents.
+
 **On `SessionEnd`** the input is `{"reason": "clear"|"other"|"prompt_input_exit"}`
 beside the common fields. `reason` names why the session ended: the user
 started a new one (`clear`), switched to another one or `klash run` exited
@@ -385,8 +393,8 @@ value cannot be read, so the hook could not evaluate: it blocks.
 2. `chmod +x` the script.
 3. Add the entry under `hooks.PreToolUse` or `hooks.PostToolUse` (with the
    right matcher), `hooks.Stop` (no matcher), `hooks.SubagentStop` (no
-   matcher; sub-agents only), `hooks.PreCompact` (matcher against
-   `manual`/`auto`), `hooks.SessionStart` (matcher against
+   matcher; sub-agents only), `hooks.PreCompact` or `hooks.PostCompact`
+   (matcher against `manual`/`auto`), `hooks.SessionStart` (matcher against
    `startup`/`resume`/`clear`/`compact`), or `hooks.SessionEnd` (matcher
    against `clear`/`other`/`prompt_input_exit`) in `klash.json`. Spell the
    event name exactly; anything else is a startup error.

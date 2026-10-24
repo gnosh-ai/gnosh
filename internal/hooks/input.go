@@ -70,6 +70,10 @@ type Payload struct {
 	// It is a pointer so that it is left out of every other event's
 	// payload, while a PreCompact payload has it even when empty.
 	CustomInstructions *string `json:"custom_instructions,omitempty"`
+	// CompactSummary is set on an EventPostCompact payload: the summary
+	// the conversation was compacted to, as Claude Code's PostCompact
+	// input carries it. Its Trigger is set too.
+	CompactSummary string `json:"compact_summary,omitempty"`
 
 	// Model is set on an EventSessionStart payload: the ID of the model
 	// answering, as Claude Code's SessionStart input carries it.
@@ -355,6 +359,22 @@ func BuildPreCompactPayload(sessionID, cwd, trigger string) []byte {
 		ToolInput:          json.RawMessage("{}"),
 		Trigger:            trigger,
 		CustomInstructions: new(string),
+	})
+}
+
+// BuildPostCompactPayload constructs the JSON stdin payload for an
+// EventPostCompact hook: the trigger, as PreCompact's has it, and the
+// summary the conversation was compacted to. There is no tool in play,
+// so tool_name is empty and tool_input is an empty object.
+func BuildPostCompactPayload(sessionID, cwd, trigger, summary string) []byte {
+	return marshalPayload(Payload{
+		Event:          EventPostCompact,
+		HookEventName:  EventPostCompact,
+		SessionID:      sessionID,
+		CWD:            cwd,
+		ToolInput:      json.RawMessage("{}"),
+		Trigger:        trigger,
+		CompactSummary: summary,
 	})
 }
 

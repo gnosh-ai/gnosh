@@ -58,6 +58,12 @@ const (
 	// ahead. Hooks for it may carry a Matcher, tested against that
 	// trigger.
 	EventPreCompact = "PreCompact"
+	// EventPostCompact fires once a session's conversation has been
+	// summarized, with the summary, as in Claude Code: to log it, or to
+	// update something outside Klash. It cannot change the summary; a
+	// hook that blocks or fails is shown as a warning. Its Matcher is
+	// tested against the trigger, as PreCompact's is.
+	EventPostCompact = "PostCompact"
 	// EventSessionEnd fires when a session ends: when the user starts a
 	// new one ("clear"), switches to another ("other"), or the process
 	// exits with the session open ("prompt_input_exit" for the TUI,
@@ -70,7 +76,7 @@ const (
 
 // knownHookEvents lists every recognised event name, in the order they
 // are reported to the user.
-var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStop, EventPreCompact, EventSessionEnd}
+var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStop, EventPreCompact, EventPostCompact, EventSessionEnd}
 
 // KnownHookEvents returns the recognised hook event names.
 func KnownHookEvents() []string {
@@ -84,10 +90,10 @@ func IsKnownHookEvent(name string) bool {
 
 // HookEventSupportsMatcher reports whether hooks for the given event may
 // carry a Matcher. Tool events match against the tool name; PreCompact
-// against its trigger; SessionStart against its source; SessionEnd
+// and PostCompact against their trigger; SessionStart against its source; SessionEnd
 // against its reason.
 func HookEventSupportsMatcher(event string) bool {
-	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventSessionStart || event == EventSessionEnd
+	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventPostCompact || event == EventSessionStart || event == EventSessionEnd
 }
 
 // HookMatcher is a hook's matcher read as Claude Code reads one: "*" (or
