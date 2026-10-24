@@ -595,7 +595,8 @@ dialog.
 
 | Theme | Name |
 | --- | --- |
-| Charmtone Pantera | `charmtone-panther` (default) |
+| Klash Cosmos | `klash-cosmos` (default) |
+| Charmtone Pantera | `charmtone-panther`, upstream Crush's default |
 | Gruvbox Dark | `gruvbox-dark` |
 
 ### LSPs

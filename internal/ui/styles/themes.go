@@ -26,19 +26,18 @@ func ThemeKeyForProvider(providerID string) string {
 }
 
 // ThemeForProvider returns the Styles associated with the given provider
-// ID. Unknown or empty provider IDs yield the default Charmtone Pantera
-// theme.
+// ID. Unknown or empty provider IDs yield the default Klash Cosmos theme.
 func ThemeForProvider(providerID string) Styles {
 	switch ThemeKeyForProvider(providerID) {
 	case "hyper":
 		return HypercrushObsidiana()
 	default:
-		return CharmtonePantera()
+		return KlashCosmos()
 	}
 }
 
-// CharmtonePantera returns the Charmtone dark theme. It's the default style
-// for the UI.
+// CharmtonePantera returns the Charmtone dark theme, upstream Crush's
+// default.
 func CharmtonePantera() Styles {
 	return charmtoneOverrides(quickStyle(charmtoneOpts()))
 }
@@ -252,6 +251,7 @@ func gruvboxDarkOverrides(s Styles) Styles {
 var builtinThemes = map[string]func() quickStyleOpts{
 	"charmtone-panther": charmtoneOpts,
 	"gruvbox-dark":      gruvboxDarkOpts,
+	DefaultThemeName:    klashOpts,
 }
 
 // builtinThemeOverrides maps theme names to functions that apply
@@ -260,6 +260,7 @@ var builtinThemes = map[string]func() quickStyleOpts{
 var builtinThemeOverrides = map[string]func(Styles) Styles{
 	"charmtone-panther": charmtoneOverrides,
 	"gruvbox-dark":      gruvboxDarkOverrides,
+	DefaultThemeName:    klashOverrides,
 }
 
 // deprecatedThemeNames maps legacy built-in theme names to their current
@@ -288,15 +289,13 @@ func BuiltinThemeNames() []string {
 	return names
 }
 
-// LoadTheme loads a theme by name. User theme files (in ThemeDirs) take
-// precedence over built-in themes of the same name. Returns
-// CharmtonePantera styles for an empty name. Returns an error if the
-// name is not recognized as either a user file or a built-in.
 // LoadTheme loads a theme by name. Global user theme files take precedence
-// over built-in themes of the same name. Empty names use Charmtone.
+// over built-in themes of the same name. An empty name gives the default,
+// Klash Cosmos. Returns an error if the name is not recognized as either a
+// user file or a built-in.
 func LoadTheme(name string) (Styles, error) {
 	if name == "" {
-		return CharmtonePantera(), nil
+		return KlashCosmos(), nil
 	}
 	key := normalizeThemeName(name)
 
@@ -320,14 +319,14 @@ func LoadTheme(name string) (Styles, error) {
 }
 
 // ThemeFromConfig resolves the configured theme name, falling back to the
-// default Charmtone theme when the config value is empty or invalid. The
+// default Klash Cosmos theme when the config value is empty or invalid. The
 // fallback is logged so a missing or broken theme file is not silently
 // replaced by different colors.
 func ThemeFromConfig(name string) Styles {
 	s, err := LoadTheme(name)
 	if err != nil {
 		slog.Warn("Falling back to the default theme", "configured_theme", name, "reason", err)
-		return CharmtonePantera()
+		return KlashCosmos()
 	}
 	return s
 }
