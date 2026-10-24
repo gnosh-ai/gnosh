@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -204,6 +205,11 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 			}
 			c.list.ScrollToSelected()
 		case key.Matches(msg, c.keyMap.Select):
+			// "rename" and a name, as Claude Code's /rename takes it: the
+			// name is no filter, so no item matches it.
+			if name, ok := session.ParseRenameCommand(c.input.Value()); ok && c.hasSession {
+				return ActionRenameSession{SessionID: c.sessionID, Name: name}
+			}
 			if selectedItem := c.list.SelectedItem(); selectedItem != nil {
 				if item, ok := selectedItem.(*CommandItem); ok && item != nil {
 					return item.Action()
@@ -490,6 +496,9 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	// Only show compact command if there's an active session
 	if c.hasSession {
 		commands = append(commands, NewCommandItem(c.com.Styles, "summarize", "Summarize Session", "", ActionSummarize{SessionID: c.sessionID}).WithAliases("compact"))
+		commands = append(commands, NewCommandItem(c.com.Styles, "rename_session", "Rename Session", "", ActionRenameSession{SessionID: c.sessionID}).
+			WithAliases("rename").
+			WithDescription("Name this session: type rename and the name"))
 	}
 
 	// Add reasoning toggle for models that support it

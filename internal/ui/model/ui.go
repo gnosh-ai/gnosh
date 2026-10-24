@@ -2342,6 +2342,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 		m.dialog.CloseDialog(dialog.CommandsID)
+	case dialog.ActionRenameSession:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.renameSession(msg.Name))
 	case dialog.ActionSummarize:
 		if m.isAgentBusy() {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before summarizing session..."))
@@ -5430,7 +5433,34 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	if enabled, ok := config.ParseThinkingCommand(content); ok {
 		return m.setThinking(enabled)
 	}
+	if name, ok := session.ParseRenameCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.renameSession(name)
+	}
 	return m.sendMessageInternal(content, false, attachments...)
+}
+
+// renameSession names the current session, as Claude Code's /rename does,
+// typed in the prompt or chosen in the command palette. The name is kept
+// as Claude Code keeps one (session.CleanName); with none, the usage is
+// shown.
+func (m *UI) renameSession(name string) tea.Cmd {
+	if !m.hasSession() {
+		return util.ReportWarn("There is no session to rename yet: send a prompt first")
+	}
+	if strings.TrimSpace(name) == "" {
+		return util.ReportWarn("Usage: /rename <name>")
+	}
+	name = session.CleanName(name)
+	if name == "" {
+		return util.ReportWarn("That name is empty once invisible characters are removed. Usage: /rename <name>")
+	}
+	sessionID := m.session.ID
+	return func() tea.Msg {
+		if err := m.com.Workspace.RenameSession(context.Background(), sessionID, name); err != nil {
+			return util.ReportError(err)()
+		}
+		return util.NewInfoMsg("Session renamed to " + name)
+	}
 }
 
 // setThinking stores a typed /think or /no_think as the global switch and

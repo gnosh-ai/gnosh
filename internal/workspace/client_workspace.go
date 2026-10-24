@@ -169,6 +169,18 @@ func (w *ClientWorkspace) SaveSession(ctx context.Context, sess session.Session)
 	return protoToSession(*saved), nil
 }
 
+// RenameSession saves the session with the new title: the server has no
+// rename of its own yet.
+func (w *ClientWorkspace) RenameSession(ctx context.Context, sessionID, title string) error {
+	sess, err := w.GetSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	sess.Title = title
+	_, err = w.SaveSession(ctx, sess)
+	return err
+}
+
 func (w *ClientWorkspace) DeleteSession(ctx context.Context, sessionID string) error {
 	return w.client.DeleteSession(ctx, w.workspaceID(), sessionID)
 }

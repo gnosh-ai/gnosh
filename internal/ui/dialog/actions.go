@@ -103,6 +103,12 @@ type (
 	ActionSummarize         struct {
 		SessionID string
 	}
+	// ActionRenameSession names the session, as Claude Code's /rename
+	// does; Name is "" when none was given.
+	ActionRenameSession struct {
+		SessionID string
+		Name      string
+	}
 	// ActionSelectReasoningEffort is a message indicating a reasoning effort
 	// has been selected.
 	ActionSelectReasoningEffort struct {

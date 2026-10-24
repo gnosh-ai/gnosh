@@ -3,7 +3,6 @@ package dialog
 import (
 	"context"
 	"image"
-	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/help"
@@ -427,14 +426,14 @@ func (s *Session) confirmRenameSession() Action {
 		return nil
 	}
 
-	newTitle := strings.TrimSpace(sessionItem.InputValue())
+	newTitle := session.CleanName(sessionItem.InputValue())
 	if newTitle == "" {
 		return nil
 	}
-	session := sessionItem.Session
-	session.Title = newTitle
-	s.updateSession(session)
-	return ActionCmd{s.updateSessionCmd(session)}
+	renamed := sessionItem.Session
+	renamed.Title = newTitle
+	s.updateSession(renamed)
+	return ActionCmd{s.renameSessionCmd(renamed.ID, newTitle)}
 }
 
 func (s *Session) updateSession(session session.Session) {
@@ -446,10 +445,11 @@ func (s *Session) updateSession(session session.Session) {
 	}
 }
 
-func (s *Session) updateSessionCmd(session session.Session) tea.Cmd {
+// renameSessionCmd gives the session its new title and nothing else, so
+// a turn running in it meanwhile keeps the usage it saves.
+func (s *Session) renameSessionCmd(sessionID, title string) tea.Cmd {
 	return func() tea.Msg {
-		_, err := s.com.Workspace.SaveSession(context.TODO(), session)
-		if err != nil {
+		if err := s.com.Workspace.RenameSession(context.TODO(), sessionID, title); err != nil {
 			return util.NewErrorMsg(err)
 		}
 		return nil
