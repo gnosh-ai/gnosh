@@ -2,10 +2,13 @@ package model
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/stretchr/testify/require"
 )
 
 func artifactCall(label, target string) message.ToolCall {
@@ -92,4 +95,53 @@ func TestUpsertArtifactsFromMessage(t *testing.T) {
 	if m.upsertArtifactsFromMessage(msgWith(40, message.ToolCall{Name: "bash", Input: "{}"})) {
 		t.Fatalf("expected no change for a non-artifact message")
 	}
+}
+
+func TestArtifactList(t *testing.T) {
+	t.Parallel()
+
+	t.Run("shows the label and the target", func(t *testing.T) {
+		t.Parallel()
+		st := minimalFileStyles()
+		arts := []SessionArtifact{
+			{Label: "hebrew ad video", Target: "~/Downloads/video_a_v5.mp4", CreatedAt: 1},
+		}
+		got := stripANSI(artifactList(st, arts, 60, 10))
+		require.Contains(t, got, "hebrew ad video")
+		require.Contains(t, got, "video_a_v5.mp4")
+	})
+
+	t.Run("every line fits the sidebar width", func(t *testing.T) {
+		t.Parallel()
+		st := minimalFileStyles()
+		arts := []SessionArtifact{
+			{Label: "a very long deliverable label that overflows the column", Target: "https://example.com/a/very/long/url/that/keeps/going", CreatedAt: 1},
+		}
+		got := stripANSI(artifactList(st, arts, 12, 10))
+		for _, line := range strings.Split(got, "\n") {
+			require.LessOrEqual(t, lipgloss.Width(line), 12, "line exceeds sidebar width: %q", line)
+		}
+	})
+
+	t.Run("caps the list and shows a more hint", func(t *testing.T) {
+		t.Parallel()
+		st := minimalFileStyles()
+		arts := []SessionArtifact{
+			{Label: "alpha", Target: "/a", CreatedAt: 3},
+			{Label: "beta", Target: "/b", CreatedAt: 2},
+			{Label: "gamma", Target: "/c", CreatedAt: 1},
+		}
+		got := stripANSI(artifactList(st, arts, 40, 2))
+		require.Contains(t, got, "alpha")
+		require.Contains(t, got, "beta")
+		require.NotContains(t, got, "gamma")
+		require.Contains(t, got, "and 1 more")
+	})
+
+	t.Run("max items zero returns empty", func(t *testing.T) {
+		t.Parallel()
+		st := minimalFileStyles()
+		got := artifactList(st, []SessionArtifact{{Label: "x", Target: "/x"}}, 40, 0)
+		require.Empty(t, got)
+	})
 }
