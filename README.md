@@ -231,6 +231,19 @@ or failed without saying so. The ones you will notice:
   them in place. A prompt a hook refused, or one typed while Klash was
   starting, comes back into the editor, attachments and all.
 
+**The sidebar tracks what you make.**
+
+- The sidebar's **Artifacts** section, above the modified files, shows the
+  deliverables the agent produced — a rendered video to open, a report, a URL
+  to share. The agent tags one with the `artifact` tool; re-using a label
+  replaces the old entry, so the sidebar shows the latest version of a thing,
+  not every version it went through.
+- <kbd>Tab</kbd> cycles focus editor → chat → sidebar, so you can scroll the
+  sidebar to read its artifacts and changed files from the keyboard.
+- <kbd>Ctrl</kbd>+<kbd>b</kbd> toggles the sidebar. Inside tmux that is also
+  the prefix key, so it takes two presses there (or remap your tmux prefix);
+  the command palette's "Toggle Sidebar" works regardless of terminal size.
+
 **Better tools.** `view` reads 2,000 lines by default and cuts an oversized
 section instead of failing. `grep` can ignore case, and can search for a
 pattern that starts with a dash. Bash points the agent to the file tools for

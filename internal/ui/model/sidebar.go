@@ -98,16 +98,22 @@ func (m *UI) updateSidebarScrollState() {
 	mcpSection := m.mcpInfo(contentWidth, mcpCount(m.com.Config().MCP.Sorted(), m.mcpStates), true)
 	skillsSection := m.skillsInfo(contentWidth, len(m.skillStatusItems()), true)
 	filesSection := m.filesInfo(m.com.Workspace.WorkingDir(), contentWidth, fileChangeCount(m.sessionFiles), true)
+	artifactsSection := m.artifactsInfo(contentWidth, len(m.sessionArtifacts), true)
 
-	// Build the scrollable content.
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
+	// Build the scrollable content. The Artifacts section sits above the
+	// modified files, and only appears once the agent has tagged one.
+	parts := []string{
 		title,
 		"",
 		cwd,
 		"",
 		m.modelInfo(contentWidth),
 		"",
+	}
+	if len(m.sessionArtifacts) > 0 {
+		parts = append(parts, artifactsSection, "")
+	}
+	parts = append(parts,
 		filesSection,
 		"",
 		lspSection,
@@ -116,6 +122,7 @@ func (m *UI) updateSidebarScrollState() {
 		"",
 		skillsSection,
 	)
+	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	totalLines := strings.Count(content, "\n") + 1
 	m.sidebarContent = content

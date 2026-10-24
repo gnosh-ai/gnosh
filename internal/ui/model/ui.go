@@ -214,9 +214,10 @@ type (
 
 // UI represents the main user interface model.
 type UI struct {
-	com          *common.Common
-	session      *session.Session
-	sessionFiles []SessionFile
+	com              *common.Common
+	session          *session.Session
+	sessionFiles     []SessionFile
+	sessionArtifacts []SessionArtifact
 
 	// keeps track of read files while we don't have a session id
 	sessionFileReads []string
@@ -1048,6 +1049,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.session = msg.session
 		m.sidebarOffset = 0
 		m.sessionFiles = msg.files
+		m.sessionArtifacts = deriveArtifacts(msg.messages)
 		// Session switch: the memoized busy state and queued prompts
 		// belong to the previous session. Drop them and re-fetch
 		// off-thread so the queue pill and esc behavior track the new
@@ -1203,6 +1205,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Type {
 		case pubsub.CreatedEvent:
 			cmds = append(cmds, m.appendSessionMessage(msg.Payload))
+			m.upsertArtifactsFromMessage(msg.Payload)
 			// A new message is a run boundary — a user prompt starting
 			// a turn or the agent replying/dequeueing. Drop the
 			// memoized busy state and re-fetch it and the queue
@@ -1219,6 +1222,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case pubsub.UpdatedEvent:
 			cmds = append(cmds, m.updateSessionMessage(msg.Payload))
+			m.upsertArtifactsFromMessage(msg.Payload)
 		case pubsub.DeletedEvent:
 			m.chat.RemoveMessage(msg.Payload.ID)
 		}
@@ -3635,10 +3639,18 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					cmds = append(cmds, cmd)
 				}
 			case key.Matches(msg, m.keyMap.Tab):
-				m.focus = uiFocusEditor
-				m.sidebarScrollbarVisible = false
-				cmds = append(cmds, m.textarea.Focus())
-				m.chat.Blur()
+				// Tab cycles editor → chat → sidebar → editor. From the
+				// chat, step onto the sidebar when it is shown and long
+				// enough to scroll; otherwise fall back to the editor.
+				if m.state == uiChat && !m.isCompact && m.hasSession() && m.sidebarScrollable {
+					m.focus = uiFocusSidebar
+					m.chat.Blur()
+				} else {
+					m.focus = uiFocusEditor
+					m.sidebarScrollbarVisible = false
+					cmds = append(cmds, m.textarea.Focus())
+					m.chat.Blur()
+				}
 			case key.Matches(msg, m.keyMap.Chat.FocusSidebar):
 				if m.state == uiChat && !m.isCompact && m.hasSession() && m.sidebarScrollable {
 					m.focus = uiFocusSidebar
@@ -6277,6 +6289,7 @@ func (m *UI) newSession() tea.Cmd {
 	m.session = nil
 	m.sidebarOffset = 0
 	m.sessionFiles = nil
+	m.sessionArtifacts = nil
 	m.sessionFileReads = nil
 	m.setState(uiLanding, uiFocusEditor)
 	m.textarea.Focus()

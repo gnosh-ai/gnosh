@@ -1082,14 +1082,15 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 		wrap(tools.NewWriteTool(c.lspManager, c.permissions, c.history, c.filetracker, c.subdirectoryContext, c.cfg.WorkingDir())),
 	)
 
-	// The question tool, and the gnokey and x402_fetch tools that ask the
-	// user for a key's password, need an interactive user; sub-agents have
-	// none.
+	// The question tool, the gnokey and x402_fetch tools that ask the user
+	// for a key's password, and the artifact tool that surfaces deliverables
+	// in the TUI sidebar all need an interactive user; sub-agents have none.
 	if !isSubAgent && c.interactive {
 		allTools = append(allTools,
 			wrap(tools.NewQuestionTool(c.questions)),
 			wrap(tools.NewGnokeyTool(c.permissions, c.questions, c.cfg.WorkingDir())),
 			wrap(tools.NewX402FetchTool(c.permissions, c.questions, c.cfg.WorkingDir(), nil)),
+			wrap(tools.NewArtifactTool()),
 		)
 	}
 
