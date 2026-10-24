@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -15,88 +16,77 @@ import (
 	"github.com/charmbracelet/crush/internal/filetracker"
 )
 
-// changedReadFiles wraps a tool, bash, so that a call that changes files
-// the session has read says which. The agent's next edit of such a file
-// is refused until it views the file again; without being told, it found
+// changedReadFiles wraps a tool so that its result names the files the
+// session read that have changed since: those a bash command changed, in
+// bash's own note, and any other changed by anything but the agent's own
+// edit, multiedit or write (the user's editor, a formatter, a background
+// job), at the end of the next tool call's result, whatever the tool, as
+// Claude Code tells its model. The agent's next edit of such a file is
+// refused until it views the file again; without being told, it found
 // out by having the edit refused, a model round trip each time (runs 13
-// and 14, after their own git stash and Python edits). Claude Code tells
-// its model of a read file that changed, too. A file the call rewrote as
-// it was, as git stash and pop do, is not named.
+// and 14, after their own git stash and Python edits), or worked on with
+// the old text. A file rewritten as it was, as git stash and pop do, is
+// not named.
 type changedReadFiles struct {
 	fantasy.AgentTool
 	files      filetracker.Service
 	workingDir string
-	// named is what the session has been told changed since it read it.
+	// named is what each session has been told changed since it read it.
 	// A change is told once, and a file is named again only when it
 	// changes after it was named, or after the agent reads it again:
 	// reading again records the new content as read, so it is no longer
-	// out of date. It is shared by every tool of an agent, as in
-	// Claude Code.
+	// out of date. It is shared by every tool of every agent the
+	// coordinator builds.
 	named *namedChanges
 }
 
 func (t *changedReadFiles) Unwrap() fantasy.AgentTool { return t.AgentTool }
 
-// namedChanges is the files a session has been told changed since it
-// read them. A change is told once, and a file is named again only when
-// it changes after it was named, or after the agent reads it again. The
-// content at naming is tracked so a second change without an intervening
-// re-read is named again. It is keyed by sessionID and shared across
-// buildTools calls, so a coordinator rebuild does not reset the dedup
-// state. The mutex guards the map: the main agent and a sub-agent can
-// run tool calls concurrently, and Go does not allow concurrent map
-// access even for different keys.
+// namedChanges is what each session has been told changed since it read
+// it: for each named file, a hash of its content when named, so a file
+// that changes again before the agent reads it is named again. The main
+// agent and a sub-agent can run tool calls at once, hence the mutex;
+// files are read outside it.
 type namedChanges struct {
 	mu        sync.Mutex
-	bySession map[string]map[string]*string // sessionID -> path -> content at naming
+	bySession map[string]map[string][sha256.Size]byte // session -> path -> content hash when named
 }
 
 func newNamedChanges() *namedChanges {
-	return &namedChanges{bySession: map[string]map[string]*string{}}
+	return &namedChanges{bySession: map[string]map[string][sha256.Size]byte{}}
 }
 
-// isNamed reports whether a file was named and its content has not
-// changed since it was named. The entire check is under the lock so a
-// concurrent name() in another session cannot overwrite the stored
-// content between the pointer read and the file read.
+// contentHash is a hash of a file's content, or the zero hash for a file
+// that cannot be read, so a file gone when named stays named until it is
+// back.
+func contentHash(path string) [sha256.Size]byte {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return [sha256.Size]byte{}
+	}
+	return sha256.Sum256(data)
+}
+
+// isNamed reports whether a file was named and has not changed since.
 func (n *namedChanges) isNamed(sessionID, path string) bool {
+	now := contentHash(path)
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	stored, ok := n.bySession[sessionID][path]
-	if !ok {
-		return false
-	}
-	// A nil stored content means the file was deleted at naming; it is
-	// still named until it is re-read.
-	if stored == nil {
-		return true
-	}
-	// The content has changed since it was named, so it is not "still
-	// named": the new change has not been told.
-	data, err := os.ReadFile(path)
-	if err == nil && string(data) != *stored {
-		return false
-	}
-	return true
+	then, ok := n.bySession[sessionID][path]
+	return ok && then == now
 }
 
-// name marks a file as named, recording its content so a second change
-// without a re-read is named again.
+// name records that a file was named, with its content now.
 func (n *namedChanges) name(sessionID, path string) {
+	now := contentHash(path)
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	set := n.bySession[sessionID]
 	if set == nil {
-		set = map[string]*string{}
+		set = map[string][sha256.Size]byte{}
 		n.bySession[sessionID] = set
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		set[path] = nil
-		return
-	}
-	s := string(data)
-	set[path] = &s
+	set[path] = now
 }
 
 func (n *namedChanges) clear(sessionID, path string) {
@@ -209,10 +199,7 @@ func (t *changedReadFiles) Run(ctx context.Context, call fantasy.ToolCall) (fant
 	// agent's own edit, multiedit or write, as the user's editor, a
 	// formatter or a background job: told at the end of the result of the
 	// next tool call after it changed, whatever the tool. Each change is
-	// told once, and reading the file again means it is not told. The
-	// stale list is computed regardless of the call's success, so a file
-	// is marked as named even when the call errors; the note is only
-	// appended when the call succeeds.
+	// told once, and reading the file again means it is not told.
 	var stale []string
 	{
 		stale = t.staleFiles(ctx, sessionID)

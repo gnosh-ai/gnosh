@@ -12,7 +12,9 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/filetracker"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
 )
 
@@ -176,6 +178,42 @@ func TestChangedReadFilesNotNamedWhenRewrittenUnchanged(t *testing.T) {
 	}}
 	resp := c.runWith(t, c.wrap(other), other.Info().Name, "{}")
 	require.Equal(t, "done", resp)
+}
+
+// A session resumed in a later run of Klash, which kept no hash of the
+// earlier reads, is not told that every file it read changed: only a
+// file modified after its read is named.
+func TestChangedReadFilesInALaterRun(t *testing.T) {
+	t.Parallel()
+	conn, err := db.Connect(t.Context(), t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+	q := db.New(conn)
+	sess, err := session.NewService(q, conn).Create(t.Context(), "resumed")
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	untouched := filepath.Join(dir, "a.go")
+	changed := filepath.Join(dir, "b.go")
+	earlier := time.Now().Add(-time.Hour)
+	firstRun := filetracker.NewService(q)
+	for _, path := range []string{untouched, changed} {
+		writeFile(t, path, "package a\n")
+		require.NoError(t, os.Chtimes(path, earlier, earlier))
+		firstRun.RecordRead(t.Context(), sess.ID, path)
+	}
+	later := time.Now().Add(time.Hour)
+	writeFile(t, changed, "package b\n")
+	require.NoError(t, os.Chtimes(changed, later, later))
+
+	other := &funcTool{name: "other", run: func(context.Context, fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		return fantasy.NewTextResponse("done"), nil
+	}}
+	tool := &changedReadFiles{AgentTool: other, files: filetracker.NewService(q), workingDir: dir, named: newNamedChanges()}
+	ctx := context.WithValue(t.Context(), tools.SessionIDContextKey, sess.ID)
+	resp, err := tool.Run(ctx, fantasy.ToolCall{ID: "call", Name: other.Info().Name, Input: "{}"})
+	require.NoError(t, err)
+	require.Equal(t, "done\n\nThese files changed since you read them: b.go. View them again before you edit them.", resp.Content)
 }
 
 // A file the agent's own edit, multiedit or write just changed is not
@@ -457,10 +495,9 @@ func TestNamedChangesConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
-// Concurrent isNamed and name calls for the same file in different
-// sessions do not return a stale result: isNamed holds the lock during
-// the file read, so a concurrent name() cannot overwrite the stored
-// content between the pointer read and the file read.
+// Concurrent isNamed and name calls in different sessions do not mix up
+// their records: each session's file is named with its own content, and
+// counts as named until that content changes.
 func TestNamedChangesIsNamedNoStaleResult(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

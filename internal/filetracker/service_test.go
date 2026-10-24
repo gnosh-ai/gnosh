@@ -144,9 +144,11 @@ func TestService_UnchangedSinceRead(t *testing.T) {
 }
 
 // A file larger than maxComparedSize is not hashed at its reads, so it
-// is never taken as unchanged, not even when it is written back as it
-// was at an earlier read: what the agent read last was the large file.
-func TestService_UnchangedSinceReadSkipsLargeFiles(t *testing.T) {
+// is judged by its modification time: unchanged until modified in a
+// later second than the read, even when it is then written back as it
+// was at an earlier read, since what the agent read last was the large
+// file.
+func TestService_UnchangedSinceReadJudgesLargeFilesByTime(t *testing.T) {
 	env := setupTest(t)
 	env.createSession(t, "s")
 	path := filepath.Join(t.TempDir(), "big.log")
@@ -157,8 +159,42 @@ func TestService_UnchangedSinceReadSkipsLargeFiles(t *testing.T) {
 	require.NoError(t, os.Truncate(path, maxComparedSize+1))
 	env.svc.RecordRead(env.ctx, "s", path)
 	require.False(t, env.svc.LastReadTime(env.ctx, "s", path).IsZero(), "the read is still recorded")
-	require.False(t, env.svc.UnchangedSinceRead(env.ctx, "s", path))
+	require.True(t, env.svc.UnchangedSinceRead(env.ctx, "s", path), "not modified since the read")
 
+	later := time.Now().Add(time.Hour)
 	require.NoError(t, os.WriteFile(path, []byte("small\n"), 0o644))
-	require.False(t, env.svc.UnchangedSinceRead(env.ctx, "s", path), "compared with the read before the last")
+	require.NoError(t, os.Chtimes(path, later, later))
+	require.False(t, env.svc.UnchangedSinceRead(env.ctx, "s", path), "not compared with the read before the last")
+}
+
+// A file read in an earlier run of Klash, a session resumed since, has
+// no hash in this run: it counts as unchanged unless modified in a later
+// second than the read, as the edit tool judges it. That includes a file
+// written and read in the same second, as the write tool does.
+func TestService_UnchangedSinceReadInALaterRun(t *testing.T) {
+	env := setupTest(t)
+	env.createSession(t, "s")
+	dir := t.TempDir()
+	untouched := filepath.Join(dir, "a.go")
+	written := filepath.Join(dir, "b.go")
+	changed := filepath.Join(dir, "c.go")
+	earlier := time.Now().Add(-time.Hour)
+	for _, path := range []string{untouched, written, changed} {
+		require.NoError(t, os.WriteFile(path, []byte("package a\n"), 0o644))
+		if path != written {
+			require.NoError(t, os.Chtimes(path, earlier, earlier))
+		}
+		env.svc.RecordRead(env.ctx, "s", path)
+	}
+	later := time.Now().Add(time.Hour)
+	require.NoError(t, os.WriteFile(changed, []byte("package c\n"), 0o644))
+	require.NoError(t, os.Chtimes(changed, later, later))
+
+	resumed := NewService(env.q)
+	require.True(t, resumed.UnchangedSinceRead(env.ctx, "s", untouched))
+	require.True(t, resumed.UnchangedSinceRead(env.ctx, "s", written), "written and read in the same second")
+	require.False(t, resumed.UnchangedSinceRead(env.ctx, "s", changed))
+	require.False(t, resumed.UnchangedSinceRead(env.ctx, "other", untouched), "never read in that session")
+	require.NoError(t, os.Remove(untouched))
+	require.False(t, resumed.UnchangedSinceRead(env.ctx, "s", untouched), "removed")
 }

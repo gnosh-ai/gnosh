@@ -67,11 +67,22 @@ func (s *service) RecordRead(ctx context.Context, sessionID, path string) {
 }
 
 // UnchangedSinceRead reports whether a file holds what it held when it
-// was last read in the session.
-func (s *service) UnchangedSinceRead(_ context.Context, sessionID, path string) bool {
+// was last read in the session. Where this process kept no hash of what
+// was read, because the read was in an earlier run of Klash (a resumed
+// session) or the file is larger than maxComparedSize, the file is
+// judged by its modification time, as the edit and write tools judge
+// every file: unchanged unless modified in a later second than the read,
+// the read time being whole seconds. Without that, every file a resumed
+// session had read counted as changed.
+func (s *service) UnchangedSinceRead(ctx context.Context, sessionID, path string) bool {
 	then, ok := s.sums.Get(readKey{sessionID, relpath(path)})
 	if !ok {
-		return false
+		info, err := os.Stat(path)
+		if err != nil {
+			return false
+		}
+		// Never read, the read time is zero, and any file is later.
+		return !info.ModTime().Truncate(time.Second).After(s.LastReadTime(ctx, sessionID, path))
 	}
 	now, ok := contentSum(path)
 	return ok && now == then
