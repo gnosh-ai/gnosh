@@ -616,7 +616,7 @@
         },
         "update_repo": {
           "type": "string",
-          "description": "GitHub owner/repo whose latest release the update check compares against (e.g. jaekwon/klash). Empty disables the check; Charm's repo is never a default."
+          "description": "GitHub owner/repo whose latest release the update check compares against (e.g. klash-pro/klash). Empty disables the check; Charm's repo is never a default."
         },
         "initialize_as": {
           "type": "string",

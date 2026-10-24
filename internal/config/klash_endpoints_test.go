@@ -33,7 +33,7 @@ func TestUpdateCheckRepo(t *testing.T) {
 	if (&Options{}).UpdateCheckRepo() != "" {
 		t.Fatal("unset repo should be empty, so no check and never Charm")
 	}
-	if got := (&Options{UpdateRepo: "jaekwon/klash"}).UpdateCheckRepo(); got != "jaekwon/klash" {
+	if got := (&Options{UpdateRepo: "klash-pro/klash"}).UpdateCheckRepo(); got != "klash-pro/klash" {
 		t.Fatalf("UpdateCheckRepo() = %q", got)
 	}
 }
