@@ -186,14 +186,32 @@ func TestBashTool_ChainedCommandsRequirePermission(t *testing.T) {
 	tool, perms := newBashToolWithRecordingPerms(workingDir, true)
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
 
-	// ls && echo should trigger permission check.
+	// A chain with a part that writes asks.
 	resp := runBashTool(t, tool, ctx, BashParams{
 		Description: "chained ls",
-		Command:     "ls && echo done",
+		Command:     "ls && touch made.txt",
 	})
 
 	require.False(t, resp.IsError)
 	require.Equal(t, 1, perms.requestCount, "chained command should trigger permission request")
+
+	// A chain whose every part only reads does not, as in Claude Code.
+	perms.requestCount = 0
+	resp = runBashTool(t, tool, ctx, BashParams{
+		Description: "chained reads",
+		Command:     "ls && echo done",
+	})
+	require.False(t, resp.IsError)
+	require.Equal(t, 0, perms.requestCount, "a chain of reading commands should not trigger a permission request")
+
+	// One that only looks like it reads asks: a second line runs too.
+	perms.requestCount = 0
+	resp = runBashTool(t, tool, ctx, BashParams{
+		Description: "two lines",
+		Command:     "echo hi\ntouch second.txt",
+	})
+	require.False(t, resp.IsError)
+	require.Equal(t, 1, perms.requestCount, "a command on a second line should trigger a permission request")
 
 	// Plain ls should NOT trigger permission check.
 	perms.requestCount = 0
