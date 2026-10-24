@@ -658,6 +658,32 @@ func (c *controllerV1) handleGetWorkspacePermissionsReport(w http.ResponseWriter
 	jsonEncode(w, proto.PermissionsReport{Markdown: report})
 }
 
+// handleGetWorkspaceJobs lists the workspace's background jobs.
+func (c *controllerV1) handleGetWorkspaceJobs(w http.ResponseWriter, r *http.Request) {
+	jobs, err := c.backend.BackgroundJobs(r.PathValue("id"))
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	out := make([]proto.BackgroundJob, 0, len(jobs))
+	for _, j := range jobs {
+		out = append(out, proto.BackgroundJob{
+			ID: j.ID, Command: j.Command, Description: j.Description, WorkingDir: j.WorkingDir,
+			StartedAt: j.StartedAt, Done: j.Done, ExitCode: j.ExitCode, Err: j.Err, Output: j.Output,
+		})
+	}
+	jsonEncode(w, out)
+}
+
+// handlePostWorkspaceJobKill stops one of the workspace's background jobs.
+func (c *controllerV1) handlePostWorkspaceJobKill(w http.ResponseWriter, r *http.Request) {
+	if err := c.backend.KillBackgroundJob(r.PathValue("id"), r.PathValue("job")); err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 // handleGetWorkspaceDoctorReport reports the check of the workspace's
 // setup that klash doctor prints.
 func (c *controllerV1) handleGetWorkspaceDoctorReport(w http.ResponseWriter, r *http.Request) {

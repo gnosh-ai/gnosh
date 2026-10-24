@@ -182,3 +182,16 @@ func TestParseDiffCommand(t *testing.T) {
 		require.False(t, ParseDiffCommand(line), line)
 	}
 }
+
+// /tasks, or its alias /bashes, is read as the other commands are; what
+// follows it is not used.
+func TestParseTasksCommand(t *testing.T) {
+	t.Parallel()
+
+	for _, line := range []string{"/tasks", "tasks", " /Tasks now ", "/bashes"} {
+		require.True(t, ParseTasksCommand(line), line)
+	}
+	for _, line := range []string{"/task", "/bash", "/tasked", "list the tasks", ""} {
+		require.False(t, ParseTasksCommand(line), line)
+	}
+}

@@ -1037,6 +1037,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case reportMsg:
 		m.dialog.OpenDialog(dialog.NewReport(m.com, msg.title, msg.report))
+	case tasksMsg:
+		if cmd := m.showTasks(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case loadSessionMsg:
 		if m.forceCompactMode {
 			m.isCompact = true
@@ -2373,6 +2377,13 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionStatusReport:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		m.openStatusReport()
+	case dialog.ActionTasks:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.listTasks())
+	case dialog.ActionRefreshTasks:
+		cmds = append(cmds, m.listTasks())
+	case dialog.ActionStopTask:
+		cmds = append(cmds, m.stopTask(msg.ID))
 	case dialog.ActionDiffReport:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		m.openDiffReport()
@@ -5502,6 +5513,9 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	if session.ParseStatusCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		m.openStatusReport()
 		return nil
+	}
+	if session.ParseTasksCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.listTasks()
 	}
 	if session.ParseDiffCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		m.openDiffReport()

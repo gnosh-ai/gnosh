@@ -527,6 +527,9 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	commands = append(commands, NewCommandItem(c.com.Styles, "permissions_report", "Permissions", "", ActionPermissionsReport{}).
 		WithAliases("permissions", "allowed-tools").
 		WithDescription("What runs without asking: the mode and the allow and deny rules, as Claude Code's /permissions shows them"))
+	commands = append(commands, NewCommandItem(c.com.Styles, "background_tasks", "Background Tasks", "", ActionTasks{}).
+		WithAliases("tasks", "bashes").
+		WithDescription("What the agent runs in the background: see its output, or stop it"))
 	commands = append(commands, NewCommandItem(c.com.Styles, "doctor_report", "Doctor", "", ActionDoctorReport{}).
 		WithAliases("doctor", "checkup").
 		WithDescription("Check the config, providers, models, hooks and programs klash runs with"))

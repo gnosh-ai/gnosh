@@ -635,6 +635,43 @@ func (c *Client) PermissionsReport(ctx context.Context, id string) (string, erro
 	return report.Markdown, nil
 }
 
+// BackgroundJobs lists the workspace's background jobs, the newest first,
+// as /tasks lists them.
+func (c *Client) BackgroundJobs(ctx context.Context, id string) ([]proto.BackgroundJob, error) {
+	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/jobs", id), nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list background jobs: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		if msg := decodeErrorMessage(rsp.Body); msg != "" {
+			return nil, errors.New(msg)
+		}
+		return nil, fmt.Errorf("failed to list background jobs: status code %d", rsp.StatusCode)
+	}
+	var jobs []proto.BackgroundJob
+	if err := json.NewDecoder(rsp.Body).Decode(&jobs); err != nil {
+		return nil, fmt.Errorf("failed to decode background jobs: %w", err)
+	}
+	return jobs, nil
+}
+
+// KillBackgroundJob stops one of the workspace's background jobs.
+func (c *Client) KillBackgroundJob(ctx context.Context, id, jobID string) error {
+	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/jobs/%s/kill", id, jobID), nil, nil, nil)
+	if err != nil {
+		return fmt.Errorf("failed to stop background job: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		if msg := decodeErrorMessage(rsp.Body); msg != "" {
+			return errors.New(msg)
+		}
+		return fmt.Errorf("failed to stop background job: status code %d", rsp.StatusCode)
+	}
+	return nil
+}
+
 // DoctorReport is the check of the workspace's setup that klash doctor
 // prints, as the Markdown /doctor shows.
 func (c *Client) DoctorReport(ctx context.Context, id string) (string, error) {

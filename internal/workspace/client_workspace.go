@@ -28,6 +28,7 @@ import (
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
@@ -183,6 +184,25 @@ func (w *ClientWorkspace) RenameSession(ctx context.Context, sessionID, title st
 
 func (w *ClientWorkspace) PermissionsReport(ctx context.Context) (string, error) {
 	return w.client.PermissionsReport(ctx, w.workspaceID())
+}
+
+func (w *ClientWorkspace) BackgroundJobs(ctx context.Context) ([]shell.JobInfo, error) {
+	jobs, err := w.client.BackgroundJobs(ctx, w.workspaceID())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]shell.JobInfo, 0, len(jobs))
+	for _, j := range jobs {
+		out = append(out, shell.JobInfo{
+			ID: j.ID, Command: j.Command, Description: j.Description, WorkingDir: j.WorkingDir,
+			StartedAt: j.StartedAt, Done: j.Done, ExitCode: j.ExitCode, Err: j.Err, Output: j.Output,
+		})
+	}
+	return out, nil
+}
+
+func (w *ClientWorkspace) KillBackgroundJob(ctx context.Context, id string) error {
+	return w.client.KillBackgroundJob(ctx, w.workspaceID(), id)
 }
 
 func (w *ClientWorkspace) DoctorReport(ctx context.Context) (string, error) {

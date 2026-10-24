@@ -117,6 +117,14 @@ type (
 	ActionCopyResponse struct {
 		N string
 	}
+	// ActionTasks lists the background jobs, as Claude Code's /tasks does.
+	ActionTasks struct{}
+	// ActionRefreshTasks lists the background jobs again.
+	ActionRefreshTasks struct{}
+	// ActionStopTask stops background job ID.
+	ActionStopTask struct {
+		ID string
+	}
 	// ActionDiffReport shows what the session changed, as Claude Code's
 	// /diff shows changes.
 	ActionDiffReport struct{}

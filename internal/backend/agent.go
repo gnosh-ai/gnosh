@@ -235,6 +235,28 @@ func (b *Backend) PermissionsReport(workspaceID string) (string, error) {
 	return config.PermissionsReport(ws.Cfg.Config(), ws.Cfg.Overrides(), ws.Cfg.WorkingDir(), ws.Permissions.SkipRequests()), nil
 }
 
+// BackgroundJobs lists the jobs started in the workspace's directory, the
+// newest first, as /tasks lists them. The server's jobs are all in one
+// list, so one started outside every workspace (with the bash tool's
+// working_dir) is not listed here.
+func (b *Backend) BackgroundJobs(workspaceID string) ([]shell.JobInfo, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return shell.GetBackgroundShellManager().Jobs(ws.Path), nil
+}
+
+// KillBackgroundJob stops one of the workspace's background jobs, as
+// /tasks does.
+func (b *Backend) KillBackgroundJob(workspaceID, jobID string) error {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return err
+	}
+	return shell.GetBackgroundShellManager().KillIn(ws.Path, jobID)
+}
+
 // DoctorReport is the check of the workspace's setup that klash doctor
 // prints, as the Markdown /doctor shows.
 func (b *Backend) DoctorReport(workspaceID string) (string, error) {

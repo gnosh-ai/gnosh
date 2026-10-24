@@ -71,6 +71,16 @@ func (w *AppWorkspace) PermissionsReport(context.Context) (string, error) {
 	return config.PermissionsReport(w.store.Config(), w.store.Overrides(), w.store.WorkingDir(), w.app.Permissions.SkipRequests()), nil
 }
 
+// BackgroundJobs lists every job of the process, which hosts this one
+// workspace: the bash tool's working_dir can start one outside it.
+func (w *AppWorkspace) BackgroundJobs(context.Context) ([]shell.JobInfo, error) {
+	return shell.GetBackgroundShellManager().Jobs(""), nil
+}
+
+func (w *AppWorkspace) KillBackgroundJob(_ context.Context, id string) error {
+	return shell.GetBackgroundShellManager().KillIn("", id)
+}
+
 func (w *AppWorkspace) DoctorReport(context.Context) (string, error) {
 	return doctor.Markdown(doctor.Report(w.store, exec.LookPath)), nil
 }

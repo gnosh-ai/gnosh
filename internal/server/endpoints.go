@@ -411,6 +411,24 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Handle(c.handleGetWorkspacePermissionsReport),
 
+		apigen.Get("/v1/workspaces/{id}/jobs").
+			Summary("Background jobs").
+			Description("The jobs the agent started in the background in the workspace, the newest first, each with how it ended and the end of its output, as Claude Code's /tasks lists them.").
+			Tags("workspaces").
+			PathParam("id", "Workspace ID").
+			Responds([]proto.BackgroundJob{}).
+			Fails(400, 404, 500).
+			Handle(c.handleGetWorkspaceJobs),
+
+		apigen.Post("/v1/workspaces/{id}/jobs/{job}/kill").
+			Summary("Stop a background job").
+			Description("Stops one of the workspace's background jobs, as Claude Code's /tasks does.").
+			Tags("workspaces").
+			PathParam("id", "Workspace ID").
+			PathParam("job", "Job ID").
+			Fails(400, 404, 500).
+			Handle(c.handlePostWorkspaceJobKill),
+
 		apigen.Get("/v1/workspaces/{id}/doctor").
 			Summary("Doctor report").
 			Description("The check of the workspace's setup that klash doctor prints, as the Markdown Claude Code's /doctor shows: the config files, the providers it can use and why not the others, the models, the hooks, and the programs it calls.").

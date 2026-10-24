@@ -6,7 +6,9 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -52,6 +54,8 @@ type BackgroundShell struct {
 	Description string
 	Shell       *Shell
 	WorkingDir  string
+	// StartedAt is when the job was started.
+	StartedAt   time.Time
 	ctx         context.Context
 	cancel      context.CancelFunc
 	stdout      *syncBuffer
@@ -117,6 +121,7 @@ func (m *BackgroundShellManager) StartAfter(ctx context.Context, workingDir stri
 		Command:     command,
 		Description: description,
 		WorkingDir:  workingDir,
+		StartedAt:   time.Now(),
 		Shell:       shell,
 		ctx:         shellCtx,
 		cancel:      cancel,
@@ -220,6 +225,99 @@ func (m *BackgroundShellManager) List() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return slices.Collect(maps.Keys(m.shells))
+}
+
+// jobOutputTail is how much of a job's output JobInfo keeps: its end.
+const jobOutputTail = 4096
+
+// JobInfo is a background job as /tasks lists it.
+type JobInfo struct {
+	ID          string
+	Command     string
+	Description string
+	WorkingDir  string
+	StartedAt   time.Time
+	// Done is whether the job has ended. Then ExitCode is its exit status,
+	// and Err says why when it ended without one, as when it could not run.
+	Done     bool
+	ExitCode int
+	Err      string
+	// Output is the end of what it wrote: its stdout, then its stderr.
+	Output string
+}
+
+// Jobs lists the jobs started in dir or below it, or every job when dir is
+// "", the newest first, as Claude Code's /tasks lists what runs in the
+// background.
+func (m *BackgroundShellManager) Jobs(dir string) []JobInfo {
+	m.mu.Lock()
+	m.prune()
+	shells := slices.Collect(maps.Values(m.shells))
+	m.mu.Unlock()
+
+	var jobs []JobInfo
+	for _, s := range shells {
+		if dir != "" && !inDir(dir, s.WorkingDir) {
+			continue
+		}
+		stdout, stderr, done, err := s.GetOutput()
+		job := JobInfo{
+			ID:          s.ID,
+			Command:     s.Command,
+			Description: s.Description,
+			WorkingDir:  s.WorkingDir,
+			StartedAt:   s.StartedAt,
+			Done:        done,
+			Output:      outputTail(stdout, stderr),
+		}
+		if done {
+			job.ExitCode = ExitCode(err)
+			if err != nil && !IsExitStatus(err) {
+				job.Err = err.Error()
+			}
+		}
+		jobs = append(jobs, job)
+	}
+	slices.SortFunc(jobs, func(a, b JobInfo) int {
+		return cmp.Or(b.StartedAt.Compare(a.StartedAt), cmp.Compare(b.ID, a.ID))
+	})
+	return jobs
+}
+
+// KillIn stops the job id, as /tasks does, if it was started in dir or
+// below it, or wherever when dir is "": a workspace stops only its own
+// jobs.
+func (m *BackgroundShellManager) KillIn(dir, id string) error {
+	if s, ok := m.Get(id); !ok || dir != "" && !inDir(dir, s.WorkingDir) {
+		return fmt.Errorf("background shell not found: %s", id)
+	}
+	return m.Kill(id)
+}
+
+// inDir reports whether path is dir or below it.
+func inDir(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// outputTail is the end of a job's stdout then stderr, at most
+// jobOutputTail bytes, from the start of a line.
+func outputTail(stdout, stderr string) string {
+	var parts []string
+	for _, s := range []string{stdout, stderr} {
+		if s = strings.TrimRight(s, "\n"); s != "" {
+			parts = append(parts, s)
+		}
+	}
+	out := strings.Join(parts, "\n")
+	if len(out) <= jobOutputTail {
+		return out
+	}
+	out = out[len(out)-jobOutputTail:]
+	if i := strings.IndexByte(out, '\n'); i >= 0 {
+		out = out[i+1:]
+	}
+	return out
 }
 
 // KillAll terminates all background shells. The provided context bounds how

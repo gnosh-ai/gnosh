@@ -22,6 +22,7 @@ import (
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/version"
 )
@@ -126,6 +127,11 @@ type Workspace interface {
 	// PermissionsReport is what the agent may do without asking, the
 	// Markdown Claude Code's /permissions shows.
 	PermissionsReport(ctx context.Context) (string, error)
+	// BackgroundJobs lists the jobs the agent started in the background,
+	// the newest first, as Claude Code's /tasks lists them.
+	BackgroundJobs(ctx context.Context) ([]shell.JobInfo, error)
+	// KillBackgroundJob stops one of them.
+	KillBackgroundJob(ctx context.Context, id string) error
 	// DoctorReport is the check of the setup that klash doctor prints,
 	// the Markdown /doctor shows, as Claude Code's /doctor checks it.
 	DoctorReport(ctx context.Context) (string, error)

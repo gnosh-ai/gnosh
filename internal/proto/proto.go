@@ -178,6 +178,20 @@ type PermissionsReport struct {
 	Markdown string `json:"markdown"`
 }
 
+// BackgroundJob is a job the agent started in the background, as /tasks
+// lists it.
+type BackgroundJob struct {
+	ID          string    `json:"id"`
+	Command     string    `json:"command"`
+	Description string    `json:"description,omitempty"`
+	WorkingDir  string    `json:"working_dir"`
+	StartedAt   time.Time `json:"started_at"`
+	Done        bool      `json:"done"`
+	ExitCode    int       `json:"exit_code"`
+	Err         string    `json:"error,omitempty"`
+	Output      string    `json:"output,omitempty"`
+}
+
 // DoctorReport is the check of the workspace's setup that klash doctor
 // prints, as the Markdown /doctor shows.
 type DoctorReport struct {

@@ -66,6 +66,14 @@ func ParseCopyCommand(line string) (n string, ok bool) {
 	return parseCommand(line, "copy")
 }
 
+// ParseTasksCommand reports whether line is Claude Code's /tasks command
+// or its alias /bashes, with or without the slash. What follows it is not
+// used.
+func ParseTasksCommand(line string) bool {
+	_, ok := parseCommand(line, "tasks", "bashes")
+	return ok
+}
+
 // ParseDiffCommand reports whether line is Claude Code's /diff command,
 // with or without the slash. What follows it is not used.
 func ParseDiffCommand(line string) bool {

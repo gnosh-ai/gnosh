@@ -42,6 +42,8 @@ func TestPaletteFindsClaudeCodeSlashNames(t *testing.T) {
 		"doctor":        "Doctor",
 		"copy":          "Copy Last Response",
 		"diff":          "Diff",
+		"tasks":         "Background Tasks",
+		"bashes":        "Background Tasks",
 		"checkup":       "Doctor",
 		"rename":        "Rename Session",
 		"name":          "Rename Session",
