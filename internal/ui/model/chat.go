@@ -1208,6 +1208,41 @@ func (m *Chat) HighlightContent() string {
 	return strings.TrimSpace(sb.String())
 }
 
+// Transcript is every message as the chat shows it, at the chat's width,
+// as plain text: without colours, trailing spaces or the selected
+// message's mark.
+func (m *Chat) Transcript() string {
+	width := m.list.Width()
+	if width <= 0 {
+		width = 80
+	}
+	items := make([]string, 0, m.list.Len())
+	for i := range m.list.Len() {
+		item := m.list.ItemAt(i)
+		if f, ok := item.(list.Focusable); ok {
+			// The next draw marks the selected message again.
+			f.SetFocused(false)
+		}
+		lines := strings.Split(ansi.Strip(item.Render(width)), "\n")
+		for j, line := range lines {
+			lines[j] = strings.TrimRight(line, " ")
+		}
+		items = append(items, strings.Join(lines, "\n"))
+	}
+	return strings.Join(items, strings.Repeat("\n", m.list.Gap()+1))
+}
+
+// FirstPrompt is the text of the first user message, "" when there is
+// none.
+func (m *Chat) FirstPrompt() string {
+	for i := range m.list.Len() {
+		if u, ok := m.list.ItemAt(i).(*chat.UserMessageItem); ok {
+			return u.Text()
+		}
+	}
+	return ""
+}
+
 // ClearMouse clears the current mouse interaction state.
 func (m *Chat) ClearMouse() {
 	m.mouseDown = false

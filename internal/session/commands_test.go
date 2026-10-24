@@ -118,3 +118,22 @@ func TestParseStatusCommand(t *testing.T) {
 		require.False(t, ParseStatusCommand(line), line)
 	}
 }
+
+// /export is read as /rename is, with the file to write after it or none.
+func TestParseExportCommand(t *testing.T) {
+	t.Parallel()
+
+	for line, want := range map[string]string{
+		"/export notes.md":       "notes.md",
+		"export":                 "",
+		" /Export  ~/talk log  ": "~/talk log",
+	} {
+		filename, ok := ParseExportCommand(line)
+		require.True(t, ok, line)
+		require.Equal(t, want, filename, line)
+	}
+	for _, line := range []string{"/exports", "/expo x", "please /export x", ""} {
+		_, ok := ParseExportCommand(line)
+		require.False(t, ok, line)
+	}
+}

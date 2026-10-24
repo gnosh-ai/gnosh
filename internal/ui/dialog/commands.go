@@ -220,6 +220,11 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 			if instructions, ok := session.ParseCompactCommand(c.input.Value()); ok && instructions != "" && c.hasSession {
 				return ActionSummarize{SessionID: c.sessionID, Instructions: instructions}
 			}
+			// And "export" and the file to write; "export" alone is the
+			// Export Conversation item.
+			if filename, ok := session.ParseExportCommand(c.input.Value()); ok && filename != "" && c.hasSession {
+				return ActionExportConversation{Filename: filename}
+			}
 			// "context" with anything after it (Claude Code's takes "all")
 			// is still the report.
 			if session.ParseContextCommand(c.input.Value()) {
@@ -527,6 +532,9 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "rename_session", "Rename Session", "", ActionRenameSession{SessionID: c.sessionID}).
 			WithAliases("rename", "name").
 			WithDescription("Type rename and a name, or rename alone for one made from the conversation"))
+		commands = append(commands, NewCommandItem(c.com.Styles, "export_conversation", "Export Conversation", "", ActionExportConversation{}).
+			WithAliases("export").
+			WithDescription("Copy the conversation, or save it to a file; type export and a file name to save it there"))
 	}
 
 	// Add reasoning toggle for models that support it

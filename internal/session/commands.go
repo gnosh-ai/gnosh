@@ -59,6 +59,13 @@ func ParseStatusCommand(line string) bool {
 	return ok
 }
 
+// ParseExportCommand reports whether line is Claude Code's /export
+// command, with or without the slash, and the file it names ("" when
+// none).
+func ParseExportCommand(line string) (filename string, ok bool) {
+	return parseCommand(line, "export")
+}
+
 // ParseCompactCommand reports whether line is Claude Code's /compact
 // command, with or without the slash, and the instructions after it for
 // the summary ("" when none).

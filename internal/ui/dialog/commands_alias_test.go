@@ -38,6 +38,7 @@ func TestPaletteFindsClaudeCodeSlashNames(t *testing.T) {
 		"permissions":   "Permissions",
 		"allowed-tools": "Permissions",
 		"status":        "Status",
+		"export":        "Export Conversation",
 		"rename":        "Rename Session",
 		"name":          "Rename Session",
 		"clear":         "New Session",
@@ -182,4 +183,30 @@ func TestPaletteHooksOpensTheReport(t *testing.T) {
 		c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 	require.Equal(t, ActionHooksReport{}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
+}
+
+// Claude Code's /export takes the file to write: typed into the palette
+// with it, Enter saves the conversation there; alone, it is the Export
+// Conversation item, which asks how. With no session there is nothing to
+// export.
+func TestPaletteExportTakesTheFile(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	enter := func(sessionID, typed string) Action {
+		c, err := NewCommands(com, sessionID, sessionID != "", false, false, nil, nil)
+		require.NoError(t, err)
+		for _, r := range typed {
+			c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+		return c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	}
+	require.Equal(t, ActionExportConversation{Filename: "notes.md"}, enter("s1", "export notes.md"))
+	require.Equal(t, ActionExportConversation{}, enter("s1", "export"))
+	_, exported := enter("", "export notes.md").(ActionExportConversation)
+	require.False(t, exported)
 }

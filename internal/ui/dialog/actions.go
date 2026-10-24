@@ -112,6 +112,13 @@ type (
 	// ActionStatusReport shows the session's status, as Claude Code's
 	// /status does.
 	ActionStatusReport struct{}
+	// ActionExportConversation exports the conversation, as Claude Code's
+	// /export does: to the clipboard when Clipboard is set, else to the
+	// file Filename names, else as the export dialog asks.
+	ActionExportConversation struct {
+		Clipboard bool
+		Filename  string
+	}
 	// ActionSummarize summarizes the session, with Instructions the text
 	// given after /compact, as Claude Code's /compact takes them.
 	ActionSummarize struct {

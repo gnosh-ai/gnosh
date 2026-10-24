@@ -2373,6 +2373,14 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionStatusReport:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		m.openStatusReport()
+	case dialog.ActionExportConversation:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		m.dialog.CloseDialog(dialog.ExportID)
+		if msg.Clipboard {
+			cmds = append(cmds, m.copyConversation())
+		} else {
+			cmds = append(cmds, m.exportConversation(msg.Filename))
+		}
 	case dialog.ActionSummarize:
 		if m.isAgentBusy() {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before summarizing session..."))
@@ -5485,6 +5493,9 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	if session.ParseStatusCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		m.openStatusReport()
 		return nil
+	}
+	if filename, ok := session.ParseExportCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.exportConversation(filename)
 	}
 	return m.sendMessageInternal(content, false, attachments...)
 }
