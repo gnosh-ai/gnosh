@@ -29,9 +29,10 @@ func TestPermissionModeFlag(t *testing.T) {
 		{[]string{"--permission-mode", "acceptEdits"}, "acceptEdits", ""},
 		{[]string{"--permission-mode", "bypassPermissions"}, "bypassPermissions", ""},
 		{[]string{"--permission-mode", "plan"}, "plan", ""},
-		{[]string{"--permission-mode", "dontAsk"}, "", "--permission-mode dontAsk is not supported yet"},
+		{[]string{"--permission-mode", "dontAsk"}, "dontAsk", ""},
+		{[]string{"--permission-mode", "manual"}, "default", ""},
 		{[]string{"--permission-mode", "auto"}, "", "--permission-mode auto is not supported yet"},
-		{[]string{"--permission-mode", "yolo"}, "", `--permission-mode "yolo": expected default, acceptEdits, bypassPermissions or plan`},
+		{[]string{"--permission-mode", "yolo"}, "", `--permission-mode "yolo": expected default, acceptEdits, dontAsk, bypassPermissions or plan`},
 	} {
 		got, err := permissionModeFlag(permissionModeCmd(t, tc.args...))
 		if tc.fail != "" {
@@ -65,6 +66,7 @@ func TestApplyPermissionMode(t *testing.T) {
 		config.PermissionModeDefault:     {},
 		config.PermissionModePlan:        {MainAgent: config.AgentPlan},
 		config.PermissionModeAcceptEdits: {AcceptEdits: true},
+		config.PermissionModeDontAsk:     {DontAsk: true},
 		config.PermissionModeBypass:      {},
 	} {
 		var o config.RuntimeOverrides

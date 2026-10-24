@@ -202,6 +202,9 @@ type permissionService struct {
 	// acceptEdits is Claude Code's acceptEdits mode: an edit of a file in
 	// the working directory or an added one runs without asking.
 	acceptEdits bool
+	// dontAsk is Claude Code's dontAsk mode: what would be asked about is
+	// denied.
+	dontAsk bool
 	// protectedPaths are directories, besides the protected names, that a
 	// file tool's change in is always asked about (see protectedFile).
 	protectedPaths []string
@@ -383,7 +386,47 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 	if granted, ok := s.hookAnswered(ctx, &permission); ok {
 		return granted, nil
 	}
+	if s.dontAsk {
+		return s.notAsked(ctx, permission), nil
+	}
 	return s.wait(ctx, permission)
+}
+
+// NotAsked records whether a tool call's permission request was denied
+// without being put to the user, as Claude Code's dontAsk mode denies
+// every request it would ask about: see WithNotAsked.
+type NotAsked struct {
+	toolCallID string
+	denied     atomic.Bool
+}
+
+// Denied reports whether a request of the call was denied unasked.
+func (n *NotAsked) Denied() bool {
+	return n != nil && n.denied.Load()
+}
+
+// notAskedKey is the unexported context key of a call's NotAsked.
+type notAskedKey struct{}
+
+// WithNotAsked returns a context whose permission requests about the given
+// tool call record on the returned NotAsked when they are denied without
+// asking, so the call can tell the model why it did not run.
+func WithNotAsked(ctx context.Context, toolCallID string) (context.Context, *NotAsked) {
+	n := &NotAsked{toolCallID: toolCallID}
+	return context.WithValue(ctx, notAskedKey{}, n), n
+}
+
+// notAsked denies req without putting it to the user, under dontAsk.
+func (s *permissionService) notAsked(ctx context.Context, req PermissionRequest) bool {
+	if n, _ := ctx.Value(notAskedKey{}).(*NotAsked); n != nil && n.toolCallID == req.ToolCallID {
+		n.denied.Store(true)
+	}
+	s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{
+		SessionID:  req.SessionID,
+		ToolCallID: req.ToolCallID,
+		Denied:     true,
+	})
+	return false
 }
 
 // hookAnswered runs the PermissionRequest hooks of the request's call
@@ -426,6 +469,9 @@ func (s *permissionService) ask(ctx context.Context, opts CreatePermissionReques
 	req.AlwaysAsks = true
 	if granted, ok := s.hookAnswered(ctx, &req); ok {
 		return granted, nil
+	}
+	if s.dontAsk {
+		return s.notAsked(ctx, req), nil
 	}
 	return s.wait(ctx, req)
 }
@@ -550,6 +596,9 @@ type Options struct {
 	AddedDirs []string
 	// AcceptEdits is Claude Code's acceptEdits mode (see acceptsEdit).
 	AcceptEdits bool
+	// DontAsk is Claude Code's dontAsk mode: a request that would be put
+	// to the user is denied instead (see NotAsked).
+	DontAsk bool
 	// ProtectedPaths are directories, as absolute paths, a file tool's
 	// change in is always asked about, as in the protected names: the
 	// session env files, which run ahead of every bash command.
@@ -568,6 +617,7 @@ func New(opts Options) Service {
 		pendingRequests:     csync.NewMap[string, chan bool](),
 		addedDirs:           opts.AddedDirs,
 		acceptEdits:         opts.AcceptEdits,
+		dontAsk:             opts.DontAsk,
 		protectedPaths:      opts.ProtectedPaths,
 	}
 	svc.skip.Store(opts.Skip)

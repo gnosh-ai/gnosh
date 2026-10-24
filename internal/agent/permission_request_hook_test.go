@@ -266,3 +266,31 @@ func TestPermissionRequestHooksWrapTheTools(t *testing.T) {
 	_, ok := out[0].(*hookedTool)
 	require.True(t, ok, "the tool is wrapped")
 }
+
+// Under dontAsk a call that would be asked about does not run, and the
+// model reads why and goes on, where a user's deny would end the turn; a
+// PermissionRequest hook's allow still lets it run.
+func TestDontAskTellsTheModelWhy(t *testing.T) {
+	t.Parallel()
+
+	perms := permission.New(permission.Options{WorkingDir: t.TempDir(), DontAsk: true})
+	inner, resp, dialog := permissionRequestCall(t, perms, toolHooks{dontAsk: true, interactive: true}, nil)
+	require.Nil(t, dialog)
+	require.False(t, inner.ran)
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "--permission-mode dontAsk")
+	require.False(t, resp.StopTurn, "the turn goes on")
+
+	inner, resp, dialog = permissionRequestCall(t, perms, toolHooks{dontAsk: true, interactive: true, permissionRequest: permissionRequestRunner(t, "", claudeCodeDecision(`{"behavior":"allow"}`))}, nil)
+	require.Nil(t, dialog)
+	require.True(t, inner.ran)
+	require.Equal(t, "ran", resp.Content)
+
+	const ask = `echo '{"decision":"ask"}'`
+	inner, resp, _ = permissionRequestCall(t, perms, toolHooks{dontAsk: true, interactive: true, pre: newRunner(t, ask)}, nil)
+	require.False(t, inner.ran, "a PreToolUse hook's question is denied too")
+	require.Contains(t, resp.Content, "--permission-mode dontAsk")
+	require.False(t, resp.StopTurn)
+
+	require.IsType(t, &hookedTool{}, wrapToolsWithHooks([]fantasy.AgentTool{&fakeTool{name: "bash"}}, toolHooks{dontAsk: true})[0], "dontAsk alone wraps the tools")
+}

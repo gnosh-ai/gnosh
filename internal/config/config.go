@@ -97,6 +97,7 @@ const (
 	PermissionModeAcceptEdits = "acceptEdits"
 	PermissionModeBypass      = "bypassPermissions"
 	PermissionModePlan        = "plan"
+	PermissionModeDontAsk     = "dontAsk"
 )
 
 type SelectedModel struct {

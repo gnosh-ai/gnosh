@@ -96,6 +96,10 @@ type RuntimeOverrides struct {
 	// the permission service lets edits of files in the project run
 	// without asking, and hooks are told the mode.
 	AcceptEdits bool
+	// DontAsk is set by Claude Code's --permission-mode dontAsk: a request
+	// that would be put to the user is denied instead, and a klash run
+	// does not grant its session's requests.
+	DontAsk bool
 	// AddedDirs are the directories added with --add-dir, as absolute
 	// paths: read without asking, as the working directory, and named in
 	// the system prompt's environment.

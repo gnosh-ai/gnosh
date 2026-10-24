@@ -120,6 +120,7 @@ func permissionOptions(store *config.ConfigStore) permission.Options {
 		Skip:        store.Overrides().SkipPermissionRequests,
 		AddedDirs:   store.Overrides().AddedDirs,
 		AcceptEdits: store.Overrides().AcceptEdits,
+		DontAsk:     store.Overrides().DontAsk,
 		// What a session env file holds runs ahead of every bash command.
 		ProtectedPaths: []string{config.SessionEnvDir()},
 	}
@@ -583,8 +584,10 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	}
 
 	// Automatically approve all permission requests for this non-interactive
-	// session.
-	app.Permissions.AutoApproveSession(sess.ID)
+	// session, but under --permission-mode dontAsk, which denies them.
+	if !app.config.Overrides().DontAsk {
+		app.Permissions.AutoApproveSession(sess.ID)
+	}
 
 	// Report session identity to herdr.
 	app.ReportCurrentSession(sess.ID)

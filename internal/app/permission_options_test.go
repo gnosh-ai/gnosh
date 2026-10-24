@@ -20,12 +20,14 @@ func TestPermissionOptions(t *testing.T) {
 	store.Overrides().AcceptEdits = true
 	store.Overrides().AddedDirs = []string{"/other"}
 	store.Overrides().SkipPermissionRequests = true
+	store.Overrides().DontAsk = true
 	require.Equal(t, permission.Options{
 		WorkingDir:     dir,
 		Skip:           true,
 		AllowedTools:   []string{"view"},
 		AddedDirs:      []string{"/other"},
 		AcceptEdits:    true,
+		DontAsk:        true,
 		ProtectedPaths: []string{config.SessionEnvDir()},
 	}, permissionOptions(store))
 }

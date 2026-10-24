@@ -391,14 +391,16 @@ func onDemandContextFile(f prompt.ContextFile) string {
 // permissionMode is a session's permission mode as Claude Code names it
 // to hooks, for any agent but the plan agent: bypassPermissions when its
 // permission requests are all granted (yolo, or a klash run's session and
-// its sub-agents'), acceptEdits under --permission-mode acceptEdits, else
-// default.
+// its sub-agents'), acceptEdits or dontAsk under that --permission-mode,
+// else default.
 func (c *coordinator) permissionMode(sessionID string) string {
 	switch {
 	case c.permissions != nil && (c.permissions.SkipRequests() || c.permissions.IsSessionAutoApproved(sessionID)):
 		return config.PermissionModeBypass
 	case c.cfg != nil && c.cfg.Overrides().AcceptEdits:
 		return config.PermissionModeAcceptEdits
+	case c.cfg != nil && c.cfg.Overrides().DontAsk:
+		return config.PermissionModeDontAsk
 	default:
 		return config.PermissionModeDefault
 	}
@@ -1160,7 +1162,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 // buildToolHooks builds the runners for the hooks configured around tool
 // calls, for every agent's tools.
 func (c *coordinator) buildToolHooks() toolHooks {
-	th := toolHooks{files: c.filetracker, workingDir: c.cfg.WorkingDir(), permissions: c.permissions, interactive: c.interactive}
+	th := toolHooks{files: c.filetracker, workingDir: c.cfg.WorkingDir(), permissions: c.permissions, interactive: c.interactive, dontAsk: c.cfg.Overrides().DontAsk}
 	if preToolHooks := c.cfg.Config().Hooks[hooks.EventPreToolUse]; len(preToolHooks) > 0 {
 		th.pre = hooks.NewRunner(preToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
 	}

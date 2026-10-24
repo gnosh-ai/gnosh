@@ -41,6 +41,10 @@ type toolHooks struct {
 	// refused.
 	permissions permission.Service
 	interactive bool
+	// dontAsk is Claude Code's dontAsk mode, where the permission service
+	// denies what it would ask about: the model is told why the call did
+	// not run, and the turn goes on.
+	dontAsk bool
 }
 
 // hookedTool wraps a fantasy.AgentTool to run PreToolUse hooks before
@@ -58,7 +62,7 @@ func newHookedTool(inner fantasy.AgentTool, th toolHooks) *hookedTool {
 // hookedTool, or the original slice when no hooks fire around tool calls.
 // A sub-agent's tools are wrapped too, as in Claude Code.
 func wrapToolsWithHooks(tools []fantasy.AgentTool, th toolHooks) []fantasy.AgentTool {
-	if th.pre == nil && th.post == nil && th.postFailure == nil && th.permissionRequest == nil {
+	if th.pre == nil && th.post == nil && th.postFailure == nil && th.permissionRequest == nil && !th.dontAsk {
 		return tools
 	}
 	out := make([]fantasy.AgentTool, len(tools))
@@ -109,6 +113,10 @@ func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 	}); ok {
 		ctx = hooks.WithToolAliases(ctx, "mcp__"+m.MCP()+"__"+m.MCPToolName())
 	}
+	var notAsked *permission.NotAsked
+	if h.hooks.dontAsk {
+		ctx, notAsked = permission.WithNotAsked(ctx, call.ID)
+	}
 	var result hooks.AggregateResult
 	if h.hooks.pre != nil {
 		var err error
@@ -145,6 +153,9 @@ func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 		ctx = permission.WithHookApproval(ctx, call.ID)
 	case hooks.DecisionAsk:
 		if resp, ok, err := h.confirm(ctx, sessionID, call, result); !ok {
+			if err == nil && notAsked.Denied() {
+				return notAskedResponse(result), nil
+			}
 			return resp, err
 		}
 		ctx = permission.WithHookApproval(ctx, call.ID)
@@ -175,6 +186,9 @@ func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 		resp.StopTurn = asked.Halt
 		resp.Metadata = hookMetadataJSON(result)
 		return resp, nil
+	}
+	if notAsked.Denied() {
+		return notAskedResponse(result), nil
 	}
 
 	// The PostToolUse or PostToolUseFailure hooks see what the tool
@@ -241,6 +255,18 @@ func (h *hookedTool) confirm(ctx context.Context, sessionID string, call fantasy
 		return refuse(tools.NewPermissionDeniedResponse())
 	}
 	return fantasy.ToolResponse{}, true, nil
+}
+
+// notAskedResponse is what the model reads of a call whose permission
+// request was denied unasked under dontAsk. The tool took the denial as a
+// user's, which ends the turn; here the turn goes on, as in Claude Code,
+// where dontAsk is for runs no one watches.
+func notAskedResponse(result hooks.AggregateResult) fantasy.ToolResponse {
+	resp := fantasy.NewTextErrorResponse("Permission denied: Klash runs with --permission-mode dontAsk, which denies a call it would ask about instead of asking. Only read-only commands and calls allowed with --allowedTools or permissions.allow run.")
+	if result.HookCount > 0 {
+		resp.Metadata = hookMetadataJSON(result)
+	}
+	return resp
 }
 
 // answerPermission runs the PermissionRequest hooks of call, whose
