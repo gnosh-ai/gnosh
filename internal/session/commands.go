@@ -52,6 +52,13 @@ func ParsePermissionsCommand(line string) bool {
 	return ok
 }
 
+// ParseStatusCommand reports whether line is Claude Code's /status
+// command, with or without the slash. What follows it is not used.
+func ParseStatusCommand(line string) bool {
+	_, ok := parseCommand(line, "status")
+	return ok
+}
+
 // ParseCompactCommand reports whether line is Claude Code's /compact
 // command, with or without the slash, and the instructions after it for
 // the summary ("" when none).

@@ -517,6 +517,9 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	commands = append(commands, NewCommandItem(c.com.Styles, "permissions_report", "Permissions", "", ActionPermissionsReport{}).
 		WithAliases("permissions", "allowed-tools").
 		WithDescription("What runs without asking: the mode and the allow and deny rules, as Claude Code's /permissions shows them"))
+	commands = append(commands, NewCommandItem(c.com.Styles, "status_report", "Status", "", ActionStatusReport{}).
+		WithAliases("status").
+		WithDescription("Version, session, models, context, and the MCP and LSP servers, as Claude Code's /status shows them"))
 
 	// Only show compact command if there's an active session
 	if c.hasSession {

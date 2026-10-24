@@ -106,3 +106,15 @@ func TestParsePermissionsCommand(t *testing.T) {
 		require.False(t, ParsePermissionsCommand(line), line)
 	}
 }
+
+// /status is read as the other commands are; what follows it is not used.
+func TestParseStatusCommand(t *testing.T) {
+	t.Parallel()
+
+	for _, line := range []string{"/status", "status", " /Status now "} {
+		require.True(t, ParseStatusCommand(line), line)
+	}
+	for _, line := range []string{"/stat", "/statusline", "git status", ""} {
+		require.False(t, ParseStatusCommand(line), line)
+	}
+}

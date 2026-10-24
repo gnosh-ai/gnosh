@@ -109,6 +109,9 @@ type (
 	// ActionPermissionsReport shows what the agent may do without asking,
 	// as Claude Code's /permissions does.
 	ActionPermissionsReport struct{}
+	// ActionStatusReport shows the session's status, as Claude Code's
+	// /status does.
+	ActionStatusReport struct{}
 	// ActionSummarize summarizes the session, with Instructions the text
 	// given after /compact, as Claude Code's /compact takes them.
 	ActionSummarize struct {

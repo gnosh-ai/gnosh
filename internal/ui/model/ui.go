@@ -2370,6 +2370,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionPermissionsReport:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.permissionsReport())
+	case dialog.ActionStatusReport:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		m.openStatusReport()
 	case dialog.ActionSummarize:
 		if m.isAgentBusy() {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before summarizing session..."))
@@ -5478,6 +5481,10 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	}
 	if session.ParsePermissionsCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.permissionsReport()
+	}
+	if session.ParseStatusCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		m.openStatusReport()
+		return nil
 	}
 	return m.sendMessageInternal(content, false, attachments...)
 }
