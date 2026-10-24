@@ -48,6 +48,7 @@ func NewReplaceSymbolTool(
 	permissions permission.Service,
 	files history.Service,
 	filetracker filetracker.Service,
+	subdirectoryContext SubdirectoryContext,
 ) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		ReplaceSymbolToolName,
@@ -181,6 +182,9 @@ func NewReplaceSymbolTool(
 			}
 
 			resp := fantasy.NewTextResponse(summary + "\n" + getDiagnostics(params.FilePath, lspManager))
+			if subdirectoryContext != nil && sessionID != "" {
+				resp = fantasy.NewTextResponse(resp.Content + subdirectoryContext(ctx, sessionID, params.FilePath))
+			}
 			resp = fantasy.WithResponseMetadata(resp, ReplaceSymbolResponseMetadata{
 				FilePath:   params.FilePath,
 				OldContent: string(content),

@@ -60,6 +60,7 @@ func NewEditTool(
 	permissions permission.Service,
 	files history.Service,
 	filetracker filetracker.Service,
+	subdirectoryContext SubdirectoryContext,
 	workingDir string,
 ) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
@@ -98,6 +99,11 @@ func NewEditTool(
 
 			text := fmt.Sprintf("<result>\n%s\n</result>\n", response.Content)
 			text += getDiagnostics(params.FilePath, lspManager)
+			if subdirectoryContext != nil {
+				if sessionID := GetSessionFromContext(ctx); sessionID != "" {
+					text += subdirectoryContext(ctx, sessionID, params.FilePath)
+				}
+			}
 			response.Content = text
 			return response, nil
 		},

@@ -279,3 +279,52 @@ func TestEditAfterAFileIsWrittenBackAsItWas(t *testing.T) {
 	require.False(t, tracker.UnchangedSinceRead(t.Context(), "session", path),
 		"after an edit of a changed file it still counts as changed since the agent read it")
 }
+
+// The edit tool gives a session the subdirectory's context files once it
+// edits a file there; a failed edit adds nothing.
+func TestEditToolAddsTheSubdirectoryContext(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "sub")
+	require.NoError(t, os.Mkdir(sub, 0o755))
+	path := filepath.Join(sub, "a.go")
+	require.NoError(t, os.WriteFile(path, []byte("package sub\n"), 0o644))
+	tracker := realTracker(t, "s1")
+	tracker.RecordRead(t.Context(), "s1", path)
+	ctx := context.WithValue(t.Context(), SessionIDContextKey, "s1")
+	called := 0
+	subctx := func(_ context.Context, sessionID, filePath string) string {
+		called++
+		return "\n<project_context>\nSUB RULES\n</project_context>\n"
+	}
+	tool := NewEditTool(nil, &mockPermissionService{}, &mockHistoryService{}, tracker, subctx, dir)
+
+	marshal := func(p EditParams) string {
+		t.Helper()
+		b, err := json.Marshal(p)
+		require.NoError(t, err)
+		return string(b)
+	}
+
+	resp, err := tool.Run(ctx, fantasy.ToolCall{
+		ID:    "call",
+		Name:  EditToolName,
+		Input: marshal(EditParams{FilePath: "sub/a.go", OldString: "package sub", NewString: "package sub2"}),
+	})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+	require.Contains(t, resp.Content, "SUB RULES")
+	require.Equal(t, 1, called)
+
+	// A failed edit (no match) adds nothing.
+	resp, err = tool.Run(ctx, fantasy.ToolCall{
+		ID:    "call-failed",
+		Name:  EditToolName,
+		Input: marshal(EditParams{FilePath: "sub/a.go", OldString: "no such text", NewString: "x"}),
+	})
+	require.NoError(t, err)
+	require.True(t, resp.IsError, resp.Content)
+	require.NotContains(t, resp.Content, "SUB RULES")
+	require.Equal(t, 1, called, "a failed edit adds nothing")
+}

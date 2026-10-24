@@ -48,6 +48,7 @@ func NewWriteTool(
 	permissions permission.Service,
 	files history.Service,
 	filetracker filetracker.Service,
+	subdirectoryContext SubdirectoryContext,
 	workingDir string,
 ) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
@@ -185,6 +186,9 @@ func NewWriteTool(
 			result := fmt.Sprintf("File successfully written: %s", filePath)
 			result = fmt.Sprintf("<result>\n%s\n</result>", result)
 			result += getDiagnostics(filePath, lspManager)
+			if subdirectoryContext != nil {
+				result += subdirectoryContext(ctx, sessionID, filePath)
+			}
 			return fantasy.WithResponseMetadata(
 				fantasy.NewTextResponse(result),
 				WriteResponseMetadata{

@@ -100,9 +100,10 @@ func (e contentTooLargeError) Error() string {
 	return fmt.Sprintf("content section is too large (%d bytes). Maximum size is %d bytes", e.Size, e.Max)
 }
 
-// SubdirectoryContext returns what a session reads with a file it views:
-// the instructions of the subdirectories between the working directory
-// and the file that it has not been given yet, or "".
+// SubdirectoryContext returns, for a file a session views, writes or
+// edits, the instructions of the subdirectories between the working
+// directory and the file that it has not been given since its last
+// summary, or "".
 type SubdirectoryContext func(ctx context.Context, sessionID, filePath string) string
 
 // NewViewTool returns the view tool. subdirectoryContext, when not nil,

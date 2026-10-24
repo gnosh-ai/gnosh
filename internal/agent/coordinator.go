@@ -309,11 +309,19 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 	return c, nil
 }
 
-// subdirectoryContext returns, for a file a session views, the
-// instructions in the context files of the subdirectories between the
-// working directory and the file that the session has not been given
-// since its last summary, as Claude Code loads a subdirectory's
-// CLAUDE.md once it reads a file there. Started at the root of Jae's gno
+// onDemandContextLimit is how many characters of a context file, given on
+// demand for a subdirectory, a session gets: 40,000, the per-file limit
+// Claude Code applies in a 200K-token context window. Files loaded at the
+// start of a session are not cut.
+const onDemandContextLimit = 40000
+
+// subdirectoryContext returns, for a file a session views, writes or
+// edits, the instructions in the context files of the subdirectories
+// between the working directory and the file that the session has not
+// been given since its last summary, as Claude Code loads a
+// subdirectory's CLAUDE.md once it reads, writes or edits a file there.
+// A file over onDemandContextLimit characters is given cut, with a note
+// to read the rest with the view tool. Started at the root of Jae's gno
 // checkout, Klash never read misc/gnoe2e's own AGENTS.md.
 func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePath string) string {
 	if c.subdirectoryGiven == nil {
@@ -336,13 +344,25 @@ func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePa
 			continue
 		}
 		c.subdirectoryGiven[key] = true
-		fmt.Fprintf(&b, "<file path=\"%s\">\n%s\n</file>\n", f.Path, f.Content)
+		fmt.Fprintf(&b, "<file path=\"%s\">\n%s\n</file>\n", f.Path, onDemandContextFile(f))
 	}
 	c.subdirectoryMu.Unlock()
 	if b.Len() == 0 {
 		return ""
 	}
 	return "\n<project_context>\nThis file's directory has context files of its own. Follow their instructions for the files there:\n" + b.String() + "</project_context>\n"
+}
+
+// onDemandContextFile cuts a context file over the on-demand limit to
+// it, naming the file and telling the session to read the rest with the
+// view tool, as Claude Code does. The limit is in characters, not bytes:
+// a multi-byte UTF-8 character counts as one.
+func onDemandContextFile(f prompt.ContextFile) string {
+	runes := []rune(f.Content)
+	if len(runes) <= onDemandContextLimit {
+		return f.Content
+	}
+	return string(runes[:onDemandContextLimit]) + fmt.Sprintf("\n\n(%s is over %d characters. You have only been given its start; read the rest with the view tool.)", f.Path, onDemandContextLimit)
 }
 
 // permissionMode is a session's permission mode as Claude Code names it
@@ -1023,8 +1043,8 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 		wrap(tools.NewJobOutputTool(c.cfg.Config().Options.DataDirectory)),
 		wrap(tools.NewJobKillTool()),
 		wrap(tools.NewDownloadTool(c.permissions, c.cfg.WorkingDir(), nil)),
-		wrap(tools.NewEditTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir())),
-		wrap(tools.NewMultiEditTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir())),
+		wrap(tools.NewEditTool(c.lspManager, c.permissions, c.history, c.filetracker, c.subdirectoryContext, c.cfg.WorkingDir())),
+		wrap(tools.NewMultiEditTool(c.lspManager, c.permissions, c.history, c.filetracker, c.subdirectoryContext, c.cfg.WorkingDir())),
 		wrap(tools.NewFetchTool(c.permissions, c.cfg.WorkingDir(), nil)),
 		wrap(tools.NewGlobTool(c.cfg.WorkingDir(), c.cfg.Config().Tools.Glob)),
 		wrap(tools.NewGrepTool(c.cfg.WorkingDir(), c.cfg.Config().Tools.Grep)),
@@ -1032,7 +1052,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 		wrap(tools.NewSourcegraphTool(nil)),
 		wrap(tools.NewTodosTool(c.sessions)),
 		wrap(tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, c.skillTracker, c.subdirectoryContext, c.cfg.WorkingDir(), c.cfg.Config().Options.SkillsPaths...)),
-		wrap(tools.NewWriteTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir())),
+		wrap(tools.NewWriteTool(c.lspManager, c.permissions, c.history, c.filetracker, c.subdirectoryContext, c.cfg.WorkingDir())),
 	)
 
 	// The question tool, and the gnokey and x402_fetch tools that ask the
@@ -1057,7 +1077,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 			wrap(tools.NewDefinitionTool(c.lspManager)),
 			wrap(tools.NewCallHierarchyTool(c.lspManager)),
 			wrap(tools.NewRenameTool(c.lspManager, c.permissions, c.history, c.filetracker)),
-			wrap(tools.NewReplaceSymbolTool(c.lspManager, c.permissions, c.history, c.filetracker)),
+			wrap(tools.NewReplaceSymbolTool(c.lspManager, c.permissions, c.history, c.filetracker, c.subdirectoryContext)),
 		)
 	}
 

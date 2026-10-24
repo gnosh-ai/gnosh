@@ -34,7 +34,7 @@ func TestWriteToolWritesEmptyNewFile(t *testing.T) {
 	workingDir := t.TempDir()
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
 
-	tool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, mockFileTrackerService{}, workingDir)
+	tool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, mockFileTrackerService{}, nil, workingDir)
 
 	input, err := json.Marshal(WriteParams{FilePath: "empty.txt", Content: ""})
 	require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestWriteToolRefusesAFileNeverRead(t *testing.T) {
 	path := filepath.Join(workingDir, "probe_test.go")
 	require.NoError(t, os.WriteFile(path, []byte("package probe\n"), 0o644))
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
-	tool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, &mockEditFileTracker{}, workingDir)
+	tool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, &mockEditFileTracker{}, nil, workingDir)
 
 	input, err := json.Marshal(WriteParams{FilePath: "probe_test.go", Content: "package other\n"})
 	require.NoError(t, err)
@@ -87,7 +87,7 @@ func TestWriteToolRefusesAFileChangedSinceItWasRead(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("changed by a command\n"), 0o644))
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
 	tracker := &mockEditFileTracker{lastRead: time.Now().Add(-time.Hour)}
-	tool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, tracker, workingDir)
+	tool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, tracker, nil, workingDir)
 
 	input, err := json.Marshal(WriteParams{FilePath: "notes.md", Content: "new\n"})
 	require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestWriteAfterAFileIsWrittenBackAsItWas(t *testing.T) {
 	tracker := realTracker(t, "session")
 	tracker.RecordRead(t.Context(), "session", path)
 	ctx := context.WithValue(t.Context(), SessionIDContextKey, "session")
-	tool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, tracker, dir)
+	tool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, tracker, nil, dir)
 	write := func(content string) fantasy.ToolResponse {
 		t.Helper()
 		input, err := json.Marshal(WriteParams{FilePath: "a.go", Content: content})
@@ -131,4 +131,63 @@ func TestWriteAfterAFileIsWrittenBackAsItWas(t *testing.T) {
 	resp = write("package d\n")
 	require.True(t, resp.IsError)
 	require.Contains(t, resp.Content, "modified since it was last read")
+}
+
+// A successful write of a new file in a subdirectory ends with the
+// subdirectory's own context files, and a failed one adds nothing.
+func TestWriteToolAddsTheSubdirectoryContext(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "sub")
+	require.NoError(t, os.Mkdir(sub, 0o755))
+	ctx := context.WithValue(t.Context(), SessionIDContextKey, "s1")
+	called := 0
+	subctx := func(_ context.Context, sessionID, filePath string) string {
+		called++
+		return "\n<project_context>\nSUB RULES\n</project_context>\n"
+	}
+
+	tool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, mockFileTrackerService{}, subctx, dir)
+
+	marshal := func(p WriteParams) string {
+		t.Helper()
+		b, err := json.Marshal(p)
+		require.NoError(t, err)
+		return string(b)
+	}
+
+	resp, err := tool.Run(ctx, fantasy.ToolCall{
+		ID:    "call",
+		Name:  WriteToolName,
+		Input: marshal(WriteParams{FilePath: "sub/new.go", Content: "package sub\n"}),
+	})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+	require.Contains(t, resp.Content, "SUB RULES")
+	require.Equal(t, 1, called)
+
+	// A write that is refused, as one for a file the session never read,
+	// adds nothing.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "unread.go"), []byte("old\n"), 0o644))
+	failedTool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, &mockEditFileTracker{}, subctx, dir)
+	resp, err = failedTool.Run(ctx, fantasy.ToolCall{
+		ID:    "call-failed",
+		Name:  WriteToolName,
+		Input: marshal(WriteParams{FilePath: "sub/unread.go", Content: "x"}),
+	})
+	require.NoError(t, err)
+	require.True(t, resp.IsError, resp.Content)
+	require.NotContains(t, resp.Content, "SUB RULES")
+	require.Equal(t, 1, called, "a failed write adds nothing")
+
+	resp, err = tool.Run(ctx, fantasy.ToolCall{
+		ID:    "call2",
+		Name:  WriteToolName,
+		Input: marshal(WriteParams{FilePath: "sub/other.go", Content: "y"}),
+	})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+	require.Contains(t, resp.Content, "SUB RULES")
+	require.Equal(t, 2, called, "a successful write after a failure adds it again")
 }
