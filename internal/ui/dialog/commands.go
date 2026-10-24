@@ -210,6 +210,11 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 			if name, ok := session.ParseRenameCommand(c.input.Value()); ok && c.hasSession {
 				return ActionRenameSession{SessionID: c.sessionID, Name: name}
 			}
+			// So are "resume" and the session it names; "resume" alone is
+			// the Sessions item.
+			if ref, ok := session.ParseResumeCommand(c.input.Value()); ok && ref != "" {
+				return ActionResumeSession{Ref: ref}
+			}
 			if selectedItem := c.list.SelectedItem(); selectedItem != nil {
 				if item, ok := selectedItem.(*CommandItem); ok && item != nil {
 					return item.Action()
@@ -460,7 +465,7 @@ func (c *Commands) setCommandItems(commandType CommandType) {
 func (c *Commands) defaultCommands() []*CommandItem {
 	commands := []*CommandItem{
 		NewCommandItem(c.com.Styles, "new_session", "New Session", "ctrl+n", ActionNewSession{}).WithAliases("clear", "new", "reset"),
-		NewCommandItem(c.com.Styles, "switch_session", "Sessions", "ctrl+s", ActionOpenDialog{SessionsID}).WithAliases("resume"),
+		NewCommandItem(c.com.Styles, "switch_session", "Sessions", "ctrl+s", ActionOpenDialog{SessionsID}).WithAliases("resume", "continue"),
 		NewCommandItem(c.com.Styles, "switch_model", "Switch Model", "ctrl+l", ActionOpenDialog{ModelsID}).WithAliases("model"),
 	}
 

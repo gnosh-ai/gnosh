@@ -109,6 +109,11 @@ type (
 		SessionID string
 		Name      string
 	}
+	// ActionResumeSession goes to the session Ref names, by ID or name, as
+	// Claude Code's /resume does.
+	ActionResumeSession struct {
+		Ref string
+	}
 	// ActionSelectReasoningEffort is a message indicating a reasoning effort
 	// has been selected.
 	ActionSelectReasoningEffort struct {

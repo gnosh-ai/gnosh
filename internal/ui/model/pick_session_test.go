@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
@@ -33,7 +34,7 @@ func TestStartupSessionPicker(t *testing.T) {
 		u.com.Workspace = ws
 		u.state = uiLanding
 		if pick {
-			u.PickSessionAtStart()
+			u.PickSessionAtStart("")
 		}
 		cmd := u.startupSessionPicker()
 		if cmd == nil {
@@ -64,7 +65,7 @@ func TestStartupSessionPickerWaitsOutOnboarding(t *testing.T) {
 	u := newTestUI()
 	u.com.Workspace = &pickSessionWorkspace{sessions: []session.Session{{ID: "s1"}}}
 	u.state = uiOnboarding
-	u.PickSessionAtStart()
+	u.PickSessionAtStart("")
 	require.Nil(t, u.startupSessionPicker())
 }
 
@@ -84,7 +85,7 @@ func TestStartStateLetsAnAskedForSessionPastTheInitQuestion(t *testing.T) {
 	u := newTestUI()
 	u.com.Workspace = &pickSessionWorkspace{sessions: []session.Session{{ID: "s1"}}}
 	u.state = uiInitialize
-	u.PickSessionAtStart()
+	u.PickSessionAtStart("")
 	require.Equal(t, uiLanding, u.state)
 	require.NotNil(t, u.startupSessionPicker())
 }
@@ -113,4 +114,24 @@ func TestStartInPlanMode(t *testing.T) {
 	require.Equal(t, uiInputModeCode, u.mode)
 	u.StartInPlanMode()
 	require.Equal(t, uiInputModePlan, u.mode)
+}
+
+// `klash -r <name>` with a name no session or several have opens the list
+// filtered by the name, as Claude Code's --resume opens its picker on the
+// search; the filter reaches the list, so Enter takes the first match.
+func TestStartupSessionPickerSearches(t *testing.T) {
+	t.Parallel()
+
+	u := newTestUI()
+	u.dialog = dialog.NewOverlay()
+	sessions := []session.Session{{ID: "s1", Title: "fix-login-bug"}, {ID: "s2", Title: "add-auth"}}
+	u.com.Workspace = &pickSessionWorkspace{sessions: sessions}
+	u.state = uiLanding
+	u.PickSessionAtStart("auth")
+	msg := u.startupSessionPicker()()
+	require.Equal(t, pickSessionMsg{search: "auth"}, msg)
+
+	_, _ = u.Update(msg)
+	require.True(t, u.dialog.ContainsDialog(dialog.SessionsID))
+	require.Equal(t, dialog.ActionSelectSession{Session: sessions[1]}, u.dialog.Update(tea.KeyPressMsg{Code: tea.KeyEnter}))
 }

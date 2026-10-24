@@ -135,8 +135,12 @@ klash --continue
 		}
 		defer cleanup()
 
+		var search string
 		if sessionID != "" {
 			sess, err := resolveWorkspaceSessionID(cmd.Context(), ws, sessionID)
+			if resume, _ := cmd.Flags().GetString("resume"); err != nil && resume != "" {
+				sess, search, err = resumeByName(cmd.Context(), ws, resume)
+			}
 			if err != nil {
 				return err
 			}
@@ -147,8 +151,8 @@ klash --continue
 
 		com := common.DefaultCommon(ws)
 		model := ui.New(com, sessionID, continueLast)
-		if pick {
-			model.PickSessionAtStart()
+		if pick || search != "" {
+			model.PickSessionAtStart(search)
 		}
 		if mode, _ := permissionModeFlag(cmd); mode == config.PermissionModePlan {
 			model.StartInPlanMode()
@@ -352,7 +356,7 @@ func workspaceYolo(cmd *cobra.Command) bool {
 // and --continue; read the session with sessionFlag.
 func addSessionFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
-	cmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it; with no ID, pick a session from a list")
+	cmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it, and also by a session's name; with no ID, or a name no session or several have, pick a session from a list")
 	cmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	cmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
 }
@@ -1250,6 +1254,21 @@ func readPipe(in io.Reader, wait time.Duration) (data []byte, arrived bool, err 
 // UUID, full hash, or hash prefix. Works against the Workspace
 // interface so both local and client/server paths get hash prefix
 // support.
+// resumeByName is the session --resume names when it is no session's ID,
+// as Claude Code's --resume takes a name: the one session whose title it
+// is, ignoring case. When no session or several have it, search is the
+// name instead, for the list of sessions to open on.
+func resumeByName(ctx context.Context, ws workspace.Workspace, name string) (sess session.Session, search string, err error) {
+	sessions, err := ws.ListSessions(ctx)
+	if err != nil {
+		return session.Session{}, "", err
+	}
+	if named := session.Named(sessions, name); len(named) == 1 {
+		return named[0], "", nil
+	}
+	return session.Session{}, strings.TrimSpace(name), nil
+}
+
 func resolveWorkspaceSessionID(ctx context.Context, ws workspace.Workspace, id string) (session.Session, error) {
 	if sess, err := ws.GetSession(ctx, id); err == nil {
 		return sess, nil
