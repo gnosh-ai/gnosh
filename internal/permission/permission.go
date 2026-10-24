@@ -81,6 +81,10 @@ type CreatePermissionRequest struct {
 	Action      string `json:"action"`
 	Params      any    `json:"params"`
 	Path        string `json:"path"`
+	// FilePath is the file a file-editing tool would change, as an
+	// absolute path, for acceptEdits (see acceptsEdit). Path names only
+	// the working directory for a file in it.
+	FilePath string `json:"file_path,omitempty"`
 }
 
 type PermissionNotification struct {
@@ -152,8 +156,12 @@ type permissionService struct {
 	allowedTools          []string
 	// addedDirs are the directories added with --add-dir (Claude Code's):
 	// reading or listing under them needs no permission, as under the
-	// working directory. Edits there are asked about as usual.
+	// working directory. Edits there are asked about as usual, but under
+	// acceptEdits.
 	addedDirs []string
+	// acceptEdits is Claude Code's acceptEdits mode: an edit of a file in
+	// the working directory or an added one runs without asking.
+	acceptEdits bool
 
 	// used to make sure we only process one request at a time
 	requestMu       sync.Mutex
@@ -245,6 +253,10 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 	}
 
 	if action, ok := addedDirTools[opts.ToolName]; ok && action == opts.Action && s.inAddedDir(opts.Path) {
+		return true, nil
+	}
+
+	if s.acceptEdits && acceptEditsTools[opts.ToolName] && s.acceptsEdit(opts.FilePath) {
 		return true, nil
 	}
 
@@ -430,16 +442,38 @@ func (s *permissionService) inAddedDir(path string) bool {
 // workingDir. addedDirs are the directories added with --add-dir, as
 // absolute paths.
 func NewPermissionService(workingDir string, skip bool, allowedTools []string, addedDirs ...string) Service {
+	return New(Options{WorkingDir: workingDir, Skip: skip, AllowedTools: allowedTools, AddedDirs: addedDirs})
+}
+
+// Options are what a workspace's permission service is made with.
+type Options struct {
+	// WorkingDir is the workspace's directory.
+	WorkingDir string
+	// Skip grants every request (yolo).
+	Skip bool
+	// AllowedTools are granted without asking: a tool's name, or
+	// "tool:action".
+	AllowedTools []string
+	// AddedDirs are the directories added with --add-dir, as absolute
+	// paths.
+	AddedDirs []string
+	// AcceptEdits is Claude Code's acceptEdits mode (see acceptsEdit).
+	AcceptEdits bool
+}
+
+// New makes the permission service opts describe.
+func New(opts Options) Service {
 	svc := &permissionService{
 		Broker:              pubsub.NewBroker[PermissionRequest](),
 		notificationBroker:  pubsub.NewBroker[PermissionNotification](),
-		workingDir:          workingDir,
+		workingDir:          opts.WorkingDir,
 		sessionPermissions:  csync.NewMap[PermissionKey, bool](),
 		autoApproveSessions: make(map[string]bool),
-		allowedTools:        allowedTools,
+		allowedTools:        opts.AllowedTools,
 		pendingRequests:     csync.NewMap[string, chan bool](),
-		addedDirs:           addedDirs,
+		addedDirs:           opts.AddedDirs,
+		acceptEdits:         opts.AcceptEdits,
 	}
-	svc.skip.Store(skip)
+	svc.skip.Store(opts.Skip)
 	return svc
 }

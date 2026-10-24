@@ -139,6 +139,7 @@ func createNewFile(edit editContext, filePath, content string, call fantasy.Tool
 		permission.CreatePermissionRequest{
 			SessionID:   sessionID,
 			Path:        fsext.PathOrPrefix(filePath, edit.workingDir),
+			FilePath:    filePath,
 			ToolCallID:  call.ID,
 			ToolName:    EditToolName,
 			Action:      "write",
@@ -405,6 +406,7 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 		permission.CreatePermissionRequest{
 			SessionID:   sessionID,
 			Path:        fsext.PathOrPrefix(filePath, edit.workingDir),
+			FilePath:    filePath,
 			ToolCallID:  call.ID,
 			ToolName:    EditToolName,
 			Action:      "write",
@@ -478,6 +480,7 @@ func replaceContent(edit editContext, filePath, oldString, newString string, rep
 		permission.CreatePermissionRequest{
 			SessionID:   sessionID,
 			Path:        fsext.PathOrPrefix(filePath, edit.workingDir),
+			FilePath:    filePath,
 			ToolCallID:  call.ID,
 			ToolName:    EditToolName,
 			Action:      "write",

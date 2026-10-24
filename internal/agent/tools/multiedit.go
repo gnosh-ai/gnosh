@@ -201,6 +201,7 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 	p, err := edit.permissions.Request(edit.ctx, permission.CreatePermissionRequest{
 		SessionID:   sessionID,
 		Path:        fsext.PathOrPrefix(params.FilePath, edit.workingDir),
+		FilePath:    params.FilePath,
 		ToolCallID:  call.ID,
 		ToolName:    MultiEditToolName,
 		Action:      "write",
@@ -328,6 +329,7 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 	p, err := edit.permissions.Request(edit.ctx, permission.CreatePermissionRequest{
 		SessionID:   sessionID,
 		Path:        fsext.PathOrPrefix(params.FilePath, edit.workingDir),
+		FilePath:    params.FilePath,
 		ToolCallID:  call.ID,
 		ToolName:    MultiEditToolName,
 		Action:      "write",

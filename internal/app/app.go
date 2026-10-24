@@ -110,6 +110,22 @@ type App struct {
 	nonInteractive bool
 }
 
+// permissionOptions is what the workspace's permission service is made
+// with: yolo, the allowed tools, the directories added with --add-dir, and
+// --permission-mode acceptEdits.
+func permissionOptions(store *config.ConfigStore) permission.Options {
+	opts := permission.Options{
+		WorkingDir:  store.WorkingDir(),
+		Skip:        store.Overrides().SkipPermissionRequests,
+		AddedDirs:   store.Overrides().AddedDirs,
+		AcceptEdits: store.Overrides().AcceptEdits,
+	}
+	if cfg := store.Config(); cfg.Permissions != nil {
+		opts.AllowedTools = cfg.Permissions.AllowedTools
+	}
+	return opts
+}
+
 // New initializes a new application instance. skillsMgr carries the
 // per-workspace skill discovery results computed by the caller; the
 // caller is responsible for constructing it (typically via
@@ -120,17 +136,12 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 	messages := message.NewService(q)
 	files := history.NewService(q, conn)
 	cfg := store.Config()
-	skipPermissionsRequests := store.Overrides().SkipPermissionRequests
-	var allowedTools []string
-	if cfg.Permissions != nil && cfg.Permissions.AllowedTools != nil {
-		allowedTools = cfg.Permissions.AllowedTools
-	}
 
 	app := &App{
 		Sessions:    sessions,
 		Messages:    messages,
 		History:     files,
-		Permissions: permission.NewPermissionService(store.WorkingDir(), skipPermissionsRequests, allowedTools, store.Overrides().AddedDirs...),
+		Permissions: permission.New(permissionOptions(store)),
 		Questions:   question.NewService(),
 		FileTracker: filetracker.NewService(q),
 		LSPManager:  lsp.NewManager(store),

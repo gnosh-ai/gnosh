@@ -128,6 +128,7 @@ func NewWriteTool(
 				permission.CreatePermissionRequest{
 					SessionID:   sessionID,
 					Path:        fsext.PathOrPrefix(filePath, workingDir),
+					FilePath:    filePath,
 					ToolCallID:  call.ID,
 					ToolName:    WriteToolName,
 					Action:      "write",

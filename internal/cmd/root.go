@@ -418,9 +418,6 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	if err != nil {
 		return nil, nil, err
 	}
-	if permissionMode == config.PermissionModeAcceptEdits {
-		allowedTools = append(allowedTools, acceptEditsTools...)
-	}
 	addedDirs, err := addDirFlag(cmd)
 	if err != nil {
 		return nil, nil, err
