@@ -176,9 +176,9 @@ func TestShellConfigKlashEndpoints(t *testing.T) {
 	require.Equal(t, "klash", key)
 
 	set := loadCrushSh(t, `option metrics-url https://my.collector
-option update-repo jaekwon/klash`).Config().Options
+option update-repo klash-pro/klash`).Config().Options
 	gotURL, gotKey := set.MetricsSink()
 	require.Equal(t, "https://my.collector", gotURL)
 	require.Equal(t, "klash", gotKey, "a sink with no key defaults to klash")
-	require.Equal(t, "jaekwon/klash", set.UpdateCheckRepo())
+	require.Equal(t, "klash-pro/klash", set.UpdateCheckRepo())
 }
