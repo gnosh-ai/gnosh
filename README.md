@@ -149,7 +149,10 @@ Claude Code's names work here too.
   `timeout` in milliseconds; and `view`'s `offset` is the line number to start
   at. Klash used to drop these without a word, so a model asking for context
   lines, a list of files or a ten-minute test run got none of them, and one
-  viewing from line 120 started at line 121.
+  viewing from line 120 started at line 121. A file the agent looked at in
+  bash, with `cat`, `head`, `tail`, `sed -n '10,20p'`, `grep` or `rg` on that
+  one file, counts as read, as in Claude Code, so its next edit is not refused
+  as an edit of a file it never read.
 - **`/loop`** keeps a session working on a task until it is done.
 
 ## What else changed from Crush
@@ -188,9 +191,10 @@ or failed without saying so. The ones you will notice:
 - When an edit is refused because the file changed, when a multi-edit fails,
   or when a grep for code with brackets finds nothing, the agent is told why
   and what to do.
-- When a command changes a file the agent has read, its result says so, so
-  the next edit is not refused as stale. An edit is refused only when the
-  file's content really changed: `git stash` and `pop`, which put the same
+- When a file the agent has read changes, by one of its commands, your editor,
+  a formatter or a background job, the next tool result says so, as in Claude
+  Code, so its next edit is not refused as stale. An edit is refused only when
+  the file's content really changed: `git stash` and `pop`, which put the same
   content back, no longer count.
 - A Klash tool typed as a shell command, `job_kill 077` say, is answered with
   the tool to call.

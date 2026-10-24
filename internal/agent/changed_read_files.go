@@ -156,6 +156,17 @@ func (t *changedReadFiles) Run(ctx context.Context, call fantasy.ToolCall) (fant
 		return resp, err
 	}
 
+	// A bash command that showed the agent one file, as cat, head, sed -n
+	// or grep on it do, counts as reading it, as in Claude Code: the edit
+	// tool takes the file without a view first, and a change made to it
+	// before is not named, since the agent has just seen what it holds.
+	if toolName == tools.BashToolName && err == nil {
+		if path := fileViewedByBash(call, resp); path != "" {
+			t.files.RecordRead(ctx, sessionID, path)
+			t.named.clear(sessionID, path)
+		}
+	}
+
 	// What the call itself changed, when it is bash: its own note for the
 	// files it touched, as before.
 	var commandChanged []string
