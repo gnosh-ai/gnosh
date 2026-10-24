@@ -49,6 +49,12 @@ const (
 	// agent_id and agent_type name the sub-agent. There is no tool in
 	// play, so hooks for it may not carry a Matcher.
 	EventSubagentStop = "SubagentStop"
+	// EventSubagentStart fires when a sub-agent starts, before its first
+	// prompt: the agent tool's (agent_type "task") or agentic_fetch's. As
+	// in Claude Code it cannot stop the sub-agent; what a hook adds as
+	// context (additionalContext) goes to the sub-agent with its first
+	// prompt. Its Matcher is tested against the agent type.
+	EventSubagentStart = "SubagentStart"
 	// EventStopFailure fires instead of EventStop when the main agent's
 	// turn ends on an error from the model's API: a rate limit, a
 	// refused key, a server error, a model server that never came back.
@@ -85,7 +91,7 @@ const (
 
 // knownHookEvents lists every recognised event name, in the order they
 // are reported to the user.
-var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStop, EventStopFailure, EventPreCompact, EventPostCompact, EventSessionEnd}
+var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStart, EventSubagentStop, EventStopFailure, EventPreCompact, EventPostCompact, EventSessionEnd}
 
 // KnownHookEvents returns the recognised hook event names.
 func KnownHookEvents() []string {
@@ -99,10 +105,11 @@ func IsKnownHookEvent(name string) bool {
 
 // HookEventSupportsMatcher reports whether hooks for the given event may
 // carry a Matcher. Tool events match against the tool name; PreCompact
-// and PostCompact against their trigger; StopFailure against the error's kind; SessionStart against its source; SessionEnd
+// and PostCompact against their trigger; StopFailure against the error's kind;
+// SubagentStart against the agent type; SessionStart against its source; SessionEnd
 // against its reason.
 func HookEventSupportsMatcher(event string) bool {
-	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventPostCompact || event == EventStopFailure || event == EventSessionStart || event == EventSessionEnd
+	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventPostCompact || event == EventStopFailure || event == EventSubagentStart || event == EventSessionStart || event == EventSessionEnd
 }
 
 // HookMatcher is a hook's matcher read as Claude Code reads one: "*" (or

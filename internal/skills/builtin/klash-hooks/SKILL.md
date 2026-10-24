@@ -23,7 +23,9 @@ fires before the first prompt a process sends to a session. `Stop` fires when
 the agent is about to finish its turn. `SubagentStop` fires when a sub-agent
 is about to finish, and works exactly like `Stop` but for sub-agents.
 `StopFailure` fires instead of `Stop` when a turn ends on an error from the
-model's API, to log it or raise an alert.
+model's API, to log it or raise an alert. `SubagentStart` fires when a
+sub-agent starts, and what it adds as context goes to the sub-agent with its
+first prompt.
 `PreCompact` fires just before a session's conversation is summarized, manual
 or automatic, and `PostCompact` once it has been, with the summary. `SessionEnd` fires when a session ends: when the user starts a
 new one (`clear`), switches to another (`other`), or the process exits with
@@ -36,11 +38,12 @@ would look configured and silently never run.
 
 A `matcher` only makes sense for `PreToolUse`, `PostToolUse`,
 `PostToolUseFailure`, `PreCompact`, `PostCompact`, `StopFailure`,
-`SessionStart` and `SessionEnd`. The first three match against the tool name;
+`SubagentStart`, `SessionStart` and `SessionEnd`. The first three match against the tool name;
 `PreCompact` and `PostCompact` match against their trigger; `StopFailure`
 against the error's kind (`rate_limit`, `overloaded`, `authentication_failed`,
 `billing_error`, `model_not_found`, `invalid_request`, `server_error`, or
-`unknown`) (`manual` or `auto`); `SessionStart` matches against its source
+`unknown`); `SubagentStart` against the agent type (`task` for the `agent`
+tool's sub-agent, `agentic_fetch` for that tool's) (`manual` or `auto`); `SessionStart` matches against its source
 (`startup`, `resume`, `clear` or `compact`); `SessionEnd` matches against
 its reason (`clear`, `other` or `prompt_input_exit`). There is nothing to
 match when a prompt is sent or a turn ends, so a `matcher` on a
@@ -246,6 +249,13 @@ asked (`manual`), or the context filled up (`auto`). A `matcher` on a
 stop the summary: exit `2` (or `"decision": "block"`) or `49` is shown to the
 user as a warning and the summary goes ahead. A hook that fails or could not
 evaluate is also shown as a warning. It fires only for the top-level agent, not sub-agents.
+
+**On `SubagentStart`** the input is `{"agent_id": "...", "agent_type": "task"|"agentic_fetch"}`
+beside the common fields, as in Claude Code: `session_id` is the session the
+sub-agent works for, `agent_id` its own session. What the hook returns as
+`hookSpecificOutput.additionalContext` (or `context`) goes to the sub-agent with
+its first prompt. It cannot stop the sub-agent; a hook that fails or could not
+evaluate is shown as a warning, and the sub-agent starts without it.
 
 **On `StopFailure`** the input is `{"error": "<kind>", "error_details": "...",
 "last_assistant_message": "..."}` beside the common fields, as in Claude Code:

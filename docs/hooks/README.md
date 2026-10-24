@@ -17,14 +17,15 @@ forward.
 - Hooks are Claude Code-compatible
 - Klash ships with a builtin `klash-hook` skill write, edit, and configure
   hooks; just tell Klash how to configure Klash
-- Klash supports eleven hooks: `PreToolUse`, which fires before a tool call,
+- Klash supports twelve hooks: `PreToolUse`, which fires before a tool call,
   `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
   fails, `UserPromptSubmit`, which fires when you send a prompt and can add
   context to it or block it, `SessionStart`, which fires before the first
   prompt to a session and can add context to it, `Stop`, which fires when
   the agent is about to finish its turn and can refuse to let it end,
-  `SubagentStop`, which fires when a sub-agent is about to finish and can
-  refuse to let it end, `StopFailure`, which fires instead of `Stop` when a
+  `SubagentStart`, which fires when a sub-agent starts and can add to its
+  first prompt, `SubagentStop`, which fires when a sub-agent is about to
+  finish and can refuse to let it end, `StopFailure`, which fires instead of `Stop` when a
   turn ends on an error from the model's API, `PreCompact`, which fires just before the session
   is summarized and can object to it, `PostCompact`, which fires once it has
   been, with the summary, and `SessionEnd`, which fires when a session ends; plans are to support the full
@@ -671,6 +672,36 @@ trigger=$(echo "$input" | jq -r '.trigger')
 [[ "$trigger" == "manual" ]] || exit 0
 echo "The user asked for a summary; make sure the important context is captured." >&2
 exit 2
+```
+
+### SubagentStart
+
+This hook fires when a sub-agent starts, before its first prompt, as in Claude
+Code: the `agent` tool's sub-agent, or `agentic_fetch`'s. What it returns as
+context goes to the sub-agent with that prompt, so instructions meant for every
+sub-agent reach them.
+
+**Matched against**: the agent type, `task` (the `agent` tool's) or
+`agentic_fetch`.
+
+**Input**: the common fields, with `session_id` the session the sub-agent works
+for, `agent_id` the sub-agent's own session, and `agent_type`.
+`KLASH_AGENT_ID` and `KLASH_AGENT_TYPE` hold them too.
+
+**Output**: `hookSpecificOutput.additionalContext` (or Klash's `context`) is
+added to the sub-agent's first prompt.
+
+**Blocking**: none. A hook that could not evaluate is shown as a warning, and
+the sub-agent starts without it.
+
+```jsonc
+{
+  "hooks": {
+    "SubagentStart": [
+      { "matcher": "task", "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SubagentStart\",\"additionalContext\":\"Run the tests before you report back.\"}}'" }
+    ]
+  }
+}
 ```
 
 ### StopFailure

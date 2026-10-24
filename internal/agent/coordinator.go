@@ -1873,20 +1873,25 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 	// The sub-agent's tool calls are its own, and their hooks say so.
 	ctx = hooks.WithSubAgent(ctx, params.SessionID, params.AgentType)
 
+	// What the user's SubagentStart hooks add goes to the sub-agent with
+	// its first prompt, as Claude Code gives it.
+	startContext := c.runSubagentStartHooks(ctx, params.SessionID, session.ID, params.AgentType)
+
 	// Run the agent
 	run := func() (*fantasy.AgentResult, error) {
 		return params.Agent.Run(ctx, SessionAgentCall{
-			SessionID:        session.ID,
-			Prompt:           params.Prompt,
-			MaxOutputTokens:  maxTokens,
-			ProviderOptions:  c.providerOptions(model, providerCfg),
-			Temperature:      model.ModelCfg.Temperature,
-			TopP:             model.ModelCfg.TopP,
-			TopK:             callTopK(providerCfg, model.ModelCfg.TopK),
-			FrequencyPenalty: model.ModelCfg.FrequencyPenalty,
-			PresencePenalty:  model.ModelCfg.PresencePenalty,
-			NonInteractive:   true,
-			OnAuthRefresh:    c.makeAuthRefreshCallback(providerCfg),
+			SessionID:         session.ID,
+			Prompt:            params.Prompt,
+			promptHookContext: startContext,
+			MaxOutputTokens:   maxTokens,
+			ProviderOptions:   c.providerOptions(model, providerCfg),
+			Temperature:       model.ModelCfg.Temperature,
+			TopP:              model.ModelCfg.TopP,
+			TopK:              callTopK(providerCfg, model.ModelCfg.TopK),
+			FrequencyPenalty:  model.ModelCfg.FrequencyPenalty,
+			PresencePenalty:   model.ModelCfg.PresencePenalty,
+			NonInteractive:    true,
+			OnAuthRefresh:     c.makeAuthRefreshCallback(providerCfg),
 		})
 	}
 	result, err := run()

@@ -199,6 +199,18 @@ func (r *Runner) RunSubagentStop(ctx context.Context, sessionID, agentID, agentT
 	return agg, err
 }
 
+// RunSubagentStart executes the SubagentStart hooks whose matcher matches
+// agentType, when a sub-agent starts (see BuildSubagentStartPayload). As
+// in Claude Code a hook cannot stop the sub-agent: the caller gives it
+// the aggregated Context with its first prompt. UpdatedInput is always
+// cleared.
+func (r *Runner) RunSubagentStart(ctx context.Context, sessionID, agentID, agentType string) (AggregateResult, error) {
+	envVars := append(BuildEnv(EventSubagentStart, "", sessionID, r.cwd, r.projectDir, ""), agentVars(agentID, agentType)...)
+	agg, err := r.run(ctx, r.matchingHooks(agentType), EventSubagentStart, "", "", envVars, BuildSubagentStartPayload(sessionID, agentID, agentType, r.cwd))
+	agg.UpdatedInput = ""
+	return agg, err
+}
+
 // RunUserPromptSubmit executes every configured hook for the
 // UserPromptSubmit event, which fires when the user sends a prompt and
 // before the agent sees it. Matchers do not apply, as for Stop.

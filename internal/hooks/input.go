@@ -287,6 +287,23 @@ func BuildStopFailurePayload(sessionID, cwd, kind, details, lastAssistantMessage
 	})
 }
 
+// BuildSubagentStartPayload constructs the JSON stdin payload for an
+// EventSubagentStart hook, which fires when a sub-agent starts. As in
+// Claude Code's SubagentStart input, sessionID is the session the
+// sub-agent works for, and agentID and agentType name the sub-agent: its
+// own session and its type. There is no tool in play.
+func BuildSubagentStartPayload(sessionID, agentID, agentType, cwd string) []byte {
+	return marshalPayload(Payload{
+		Event:         EventSubagentStart,
+		HookEventName: EventSubagentStart,
+		SessionID:     sessionID,
+		CWD:           cwd,
+		AgentID:       agentID,
+		AgentType:     agentType,
+		ToolInput:     json.RawMessage("{}"),
+	})
+}
+
 // BuildSubagentStopPayload constructs the JSON stdin payload for an
 // EventSubagentStop hook, which fires when a sub-agent is about to
 // finish. There is no tool in play, so tool_name is empty and
