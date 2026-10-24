@@ -744,8 +744,9 @@ func (p *Permissions) renderLSContent(width int) string {
 func (p *Permissions) renderDefaultContent(width int) string {
 	t := p.com.Styles
 	var content string
-	// do not add the description for mcp tools
-	if !strings.HasPrefix(p.permission.ToolName, "mcp_") {
+	// do not add the description for mcp tools, but a hook's question,
+	// whose reason is in it
+	if !strings.HasPrefix(p.permission.ToolName, "mcp_") || p.permission.Action == permission.HookAskAction {
 		content = p.permission.Description
 	}
 

@@ -1116,7 +1116,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 // buildToolHooks builds the runners for the hooks configured around tool
 // calls, for every agent's tools.
 func (c *coordinator) buildToolHooks() toolHooks {
-	th := toolHooks{files: c.filetracker, workingDir: c.cfg.WorkingDir(), permissions: c.permissions}
+	th := toolHooks{files: c.filetracker, workingDir: c.cfg.WorkingDir(), permissions: c.permissions, interactive: c.interactive}
 	if preToolHooks := c.cfg.Config().Hooks[hooks.EventPreToolUse]; len(preToolHooks) > 0 {
 		th.pre = hooks.NewRunner(preToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
 	}
@@ -1870,8 +1870,11 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 		return fantasy.ToolResponse{}, errModelProviderNotConfigured
 	}
 
-	// The sub-agent's tool calls are its own, and their hooks say so.
+	// The sub-agent's tool calls are its own, and their hooks say so. A
+	// hook's approval of the call that started it, or its question about
+	// it, is not theirs: their calls can carry the same ID.
 	ctx = hooks.WithSubAgent(ctx, params.SessionID, params.AgentType)
+	ctx = permission.WithoutHookAnswers(ctx)
 
 	// What the user's SubagentStart hooks add goes to the sub-agent with
 	// its first prompt, as Claude Code gives it.

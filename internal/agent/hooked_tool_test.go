@@ -196,9 +196,11 @@ func TestWrapToolsWithHooks(t *testing.T) {
 }
 
 // A PreToolUse hook that answers "ask" puts the call to the user, as in
-// Claude Code, even where it would run unasked (yolo here), and the tool
-// runs only once they allow it, then needing no other approval. Where no
-// one can answer, as in klash run, the call is refused with the reason.
+// Claude Code, even where it would run unasked (yolo here, or a session
+// that grants its own requests, as agentic_fetch's sub-agent's does), and
+// the tool runs only once they allow it, then needing no other approval.
+// Where no one can answer, as in klash run, the call is refused with the
+// reason, and so is a call with no ID to ask about.
 func TestHookedTool_AskPutsTheCallToTheUser(t *testing.T) {
 	t.Parallel()
 
@@ -207,7 +209,7 @@ func TestHookedTool_AskPutsTheCallToTheUser(t *testing.T) {
 	run := func(t *testing.T, perms permission.Service, answer func(permission.PermissionRequest) bool) (*fakeTool, fantasy.ToolResponse, permission.PermissionRequest) {
 		t.Helper()
 		inner := &fakeTool{name: "bash", resp: fantasy.NewTextResponse("ran")}
-		tool := newHookedTool(inner, toolHooks{pre: newRunner(t, ask), permissions: perms})
+		tool := newHookedTool(inner, toolHooks{pre: newRunner(t, ask), permissions: perms, interactive: answer != nil})
 		asked := make(chan permission.PermissionRequest, 1)
 		if answer != nil {
 			events := perms.Subscribe(t.Context())
@@ -259,6 +261,16 @@ func TestHookedTool_AskPutsTheCallToTheUser(t *testing.T) {
 		require.Contains(t, resp.Content, "User denied permission")
 	})
 
+	t.Run("a session that grants its own requests", func(t *testing.T) {
+		t.Parallel()
+		perms := permission.NewPermissionService(t.TempDir(), false, nil)
+		perms.AutoApproveSession("s1")
+		inner, resp, req := run(t, perms, perms.Grant)
+		require.True(t, inner.called, "agentic_fetch's sub-agent in the TUI is asked too")
+		require.Equal(t, "ran", resp.Content)
+		require.Equal(t, permission.HookAskAction, req.Action)
+	})
+
 	t.Run("no one to answer", func(t *testing.T) {
 		t.Parallel()
 		perms := permission.NewPermissionService(t.TempDir(), true, nil)
@@ -268,5 +280,16 @@ func TestHookedTool_AskPutsTheCallToTheUser(t *testing.T) {
 		require.True(t, resp.IsError)
 		require.Contains(t, resp.Content, "no one is here to answer")
 		require.Contains(t, resp.Content, "deploys need a second look")
+	})
+
+	t.Run("no ID to ask about", func(t *testing.T) {
+		t.Parallel()
+		perms := permission.NewPermissionService(t.TempDir(), true, nil)
+		inner := &fakeTool{name: "bash", resp: fantasy.NewTextResponse("ran")}
+		tool := newHookedTool(inner, toolHooks{pre: newRunner(t, ask), permissions: perms, interactive: true})
+		resp, err := tool.Run(sessionCtx(t), fantasy.ToolCall{Name: "bash", Input: call.Input})
+		require.NoError(t, err)
+		require.False(t, inner.called)
+		require.Contains(t, resp.Content, "no ID to ask about")
 	})
 }

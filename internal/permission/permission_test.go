@@ -720,9 +720,9 @@ func TestNotificationsCarrySessionID(t *testing.T) {
 }
 
 // A request a hook asked for goes to the user whatever would grant it
-// unasked: yolo, --allowedTools, an earlier "allow for this session". A
-// session that grants all its requests unasked has no one to answer, so
-// there it is refused.
+// unasked: yolo, --allowedTools, an earlier "allow for this session", a
+// session that grants its own requests. Whether anyone is there to
+// answer is the caller's to know.
 func TestPermissionService_HookAsk(t *testing.T) {
 	t.Parallel()
 
@@ -766,13 +766,11 @@ func TestPermissionService_HookAsk(t *testing.T) {
 		assert.False(t, answer(t, service, service.Deny), "asked again, and denied")
 	})
 
-	t.Run("no one to answer", func(t *testing.T) {
+	t.Run("a session that grants its own requests", func(t *testing.T) {
 		t.Parallel()
-		service := NewPermissionService("/tmp", true, nil)
+		service := NewPermissionService("/tmp", false, nil)
 		service.AutoApproveSession("s1")
-		granted, err := service.Request(WithHookAsk(t.Context(), "call-1"), req)
-		require.NoError(t, err)
-		assert.False(t, granted)
+		assert.True(t, answer(t, service, service.Grant), "asked, as agentic_fetch's sub-agent is in the TUI")
 	})
 
 	t.Run("only for its own call", func(t *testing.T) {
@@ -784,4 +782,17 @@ func TestPermissionService_HookAsk(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, granted, "yolo still grants another call")
 	})
+}
+
+// A sub-agent's calls carry no hook approval of, or question about, the
+// call that started it: theirs can carry the same ID.
+func TestWithoutHookAnswers(t *testing.T) {
+	t.Parallel()
+
+	ctx := WithHookAsk(WithHookApproval(t.Context(), "call-1"), "call-1")
+	require.True(t, hookApproved(ctx, "call-1"))
+	require.True(t, hookAsked(ctx, "call-1"))
+	ctx = WithoutHookAnswers(ctx)
+	require.False(t, hookApproved(ctx, "call-1"))
+	require.False(t, hookAsked(ctx, "call-1"))
 }

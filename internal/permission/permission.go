@@ -36,6 +36,14 @@ func hookApproved(ctx context.Context, toolCallID string) bool {
 	return v == toolCallID
 }
 
+// WithoutHookAnswers returns ctx without a hook's approval of, or question
+// about, any tool call: for the calls of a sub-agent that a tool call
+// started, which can carry its ID, as a provider that numbers calls
+// tool-call-0, tool-call-1 in each response gives them.
+func WithoutHookAnswers(ctx context.Context) context.Context {
+	return context.WithValue(context.WithValue(ctx, hookApprovalKey{}, ""), hookAskKey{}, "")
+}
+
 // HookAskAction is the action of the request a PreToolUse hook that
 // answered "ask" puts to the user about a tool call: see WithHookAsk.
 const HookAskAction = "hook_ask"
@@ -47,10 +55,10 @@ type hookAskKey struct{}
 
 // WithHookAsk returns a context that marks the request for the given tool
 // call ID as asked for by a hook, as Claude Code's "ask" is: it goes to
-// the user even when yolo, --allowedTools, an added directory or an
-// earlier "allow for this session" would grant it unasked, and a session
-// that grants all its requests unasked, where no one is there to answer
-// (klash run), is refused it.
+// the user even when yolo, --allowedTools, an added directory, an earlier
+// "allow for this session" or a session that grants all its requests
+// would grant it unasked. Whether anyone is there to answer is the
+// caller's to know (klash run has no one).
 func WithHookAsk(ctx context.Context, toolCallID string) context.Context {
 	return context.WithValue(ctx, hookAskKey{}, toolCallID)
 }
@@ -308,11 +316,8 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 }
 
 // ask puts a request a hook asked for (WithHookAsk) to the user, whatever
-// would grant it unasked, or refuses it in a session no one answers for.
+// would grant it unasked.
 func (s *permissionService) ask(ctx context.Context, opts CreatePermissionRequest) (bool, error) {
-	if s.IsSessionAutoApproved(opts.SessionID) {
-		return false, nil
-	}
 	s.requestMu.Lock()
 	defer s.requestMu.Unlock()
 	s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{

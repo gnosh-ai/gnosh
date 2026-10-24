@@ -32,8 +32,11 @@ type toolHooks struct {
 	files      filetracker.Service
 	workingDir string
 	// permissions puts a call a PreToolUse hook answered "ask" for to the
-	// user. Nil, as in tests, such a call is refused.
+	// user, when there is one: interactive is false where no one can
+	// answer, as in klash run. Without them, as in tests, such a call is
+	// refused.
 	permissions permission.Service
+	interactive bool
 }
 
 // hookedTool wraps a fantasy.AgentTool to run PreToolUse hooks before
@@ -172,9 +175,10 @@ func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 // confirm puts a call a PreToolUse hook answered "ask" for to the user, as
 // Claude Code does: even a call that would run without asking (yolo,
 // --allowedTools, acceptEdits, a tool that never asks) waits for their
-// answer, with the hook's reason. Where no one can answer, as in klash
-// run, whose session grants all its requests unasked, the call is
-// refused with that reason, as Claude Code refuses one in a -p run. A
+// answer, with the hook's reason. Where no one can answer, in klash run,
+// the call is refused with that reason, as Claude Code refuses one in a
+// -p run. A sub-agent's call is asked about as the main agent's is, even
+// agentic_fetch's, whose session grants its own requests. A
 // hook's "ask" used to count as no opinion here, so the calls it asked
 // about ran unasked wherever nothing else asked.
 func (h *hookedTool) confirm(ctx context.Context, sessionID string, call fantasy.ToolCall, result hooks.AggregateResult) (fantasy.ToolResponse, bool, error) {
@@ -183,8 +187,13 @@ func (h *hookedTool) confirm(ctx context.Context, sessionID string, call fantasy
 		resp.Metadata = hookMetadataJSON(result)
 		return resp, false, nil
 	}
-	if h.hooks.permissions == nil || h.hooks.permissions.IsSessionAutoApproved(sessionID) {
+	if h.hooks.permissions == nil || !h.hooks.interactive {
 		return refuse(fantasy.NewTextErrorResponse("Tool call blocked: a hook asks the user to confirm it, and no one is here to answer. Reason: " + reason))
+	}
+	// The question and the approval that answers it are the call's, by
+	// its ID: without one neither can be told from another call's.
+	if call.ID == "" {
+		return refuse(fantasy.NewTextErrorResponse("Tool call blocked: a hook asks the user to confirm it, and the call has no ID to ask about. Reason: " + reason))
 	}
 	granted, err := h.hooks.permissions.Request(permission.WithHookAsk(ctx, call.ID), permission.CreatePermissionRequest{
 		SessionID:   sessionID,
