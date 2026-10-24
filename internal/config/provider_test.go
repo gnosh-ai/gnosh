@@ -310,7 +310,7 @@ func TestCachePathFor(t *testing.T) {
 			if tt.expected != "" {
 				require.Equal(t, tt.expected, filepath.ToSlash(result))
 			} else {
-				require.Regexp(t, `cr[au]sh`, result, "under the program's data directory, by either name")
+				require.Regexp(t, `klash|cr[au]sh`, result, "under the program's data directory, by any of its names")
 				require.Contains(t, result, "providers.json")
 			}
 		})
