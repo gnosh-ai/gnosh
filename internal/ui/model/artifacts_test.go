@@ -138,6 +138,14 @@ func TestArtifactList(t *testing.T) {
 		require.Contains(t, got, "and 1 more")
 	})
 
+	t.Run("applies nebula styling", func(t *testing.T) {
+		t.Parallel()
+		st := minimalFileStyles()
+		arts := []SessionArtifact{{Label: "deliverable", Target: "/x.mp4", CreatedAt: 1}}
+		got := artifactList(st, arts, 60, 10)
+		require.NotEqual(t, stripANSI(got), got, "label should be color-styled (gradient), not plain text")
+	})
+
 	t.Run("max items zero returns empty", func(t *testing.T) {
 		t.Parallel()
 		st := minimalFileStyles()

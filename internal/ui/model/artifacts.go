@@ -122,30 +122,47 @@ func (m *UI) artifactsInfo(width, maxItems int, isSection bool) string {
 	return lipgloss.NewStyle().Width(width).Render(fmt.Sprintf("%s\n\n%s", title, list))
 }
 
-// artifactList renders the artifacts, truncating to maxItems with a
-// "…and N more" hint. Each entry is two lines: the label, then the path or
-// URL dimmed beneath it.
+// artifactList renders the artifacts newest-first, truncating to maxItems
+// with a "…and N more" hint. Each entry is two lines — a sparkle marker and
+// the label, then the path or URL beneath it. The label fades through the
+// Crush wordmark's purple→hot-pink nebula (flipped row to row so the list
+// scintillates); the marker is a sparing faint-green sparkle for a file or
+// faint-gold for a link, and a link's target is underlined.
 func artifactList(t *styles.Styles, arts []SessionArtifact, width, maxItems int) string {
 	if maxItems <= 0 {
 		return ""
 	}
+	grad1, grad2 := t.Header.LogoGradFromColor, t.Header.LogoGradToColor
+	dim := t.Files.TruncationHint
+	link := dim.Underline(true)
+
 	var lines []string
 	shown := 0
-	for _, a := range arts {
+	for i, a := range arts {
 		if shown >= maxItems {
 			break
 		}
-		label := ansi.Truncate(a.Label, max(width, 1), "…")
-		target := ansi.Truncate(a.Target, max(width-2, 1), "…")
-		lines = append(lines,
-			t.Files.Path.Render(label),
-			t.Files.TruncationHint.Render("  "+target),
-		)
+		// Sparing green/yellow: a faint sparkle marks the kind — green for a
+		// file, gold for a link — faded, not solid, against the nebula.
+		marker := t.Files.Additions.Render("✦")
+		targetText := ansi.Truncate(a.Target, max(width-2, 1), "…")
+		target := "  " + dim.Render(targetText)
+		if a.IsURL {
+			marker = t.LSP.WarningDiagnostic.Render("✦")
+			target = "  " + link.Render(targetText)
+		}
+		// Scintillate: flip the nebula's direction row to row.
+		c1, c2 := grad1, grad2
+		if i%2 == 1 {
+			c1, c2 = grad2, grad1
+		}
+		label := styles.ApplyForegroundGrad(lipgloss.NewStyle(), ansi.Truncate(a.Label, max(width-2, 1), "…"), c1, c2)
+		lines = append(lines, marker+" "+label, target)
 		shown++
 	}
 	if len(arts) > maxItems {
 		remaining := len(arts) - maxItems
-		lines = append(lines, t.Files.TruncationHint.Render(fmt.Sprintf("…and %d more", remaining)))
+		lines = append(lines, dim.Render(fmt.Sprintf("…and %d more", remaining)))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
