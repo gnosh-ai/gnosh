@@ -69,7 +69,8 @@ const (
 
 // autoSummarize reports whether a session whose running token total is tokens
 // should be compacted before the next request, given the model's context
-// window cw. It returns false when auto-summarize is disabled.
+// window cw (see compactAt). It returns false when auto-summarize is
+// disabled.
 //
 // When cw is unknown (<= 0, e.g. a local or custom model whose window could
 // not be discovered) it falls back to unknownContextWindowFallback instead of
@@ -78,19 +79,7 @@ const (
 // the session. Over-summarizing a model that is in fact larger is wasteful but
 // recoverable; crashing is not. A discovered real window is always preferred.
 func autoSummarize(cw, tokens int64, disabled bool) bool {
-	if disabled {
-		return false
-	}
-	if cw <= 0 {
-		cw = unknownContextWindowFallback
-	}
-	var threshold int64
-	if cw > largeContextWindowThreshold {
-		threshold = largeContextWindowBuffer
-	} else {
-		threshold = int64(float64(cw) * smallContextWindowRatio)
-	}
-	return cw-tokens <= threshold
+	return !disabled && tokens >= compactAt(cw)
 }
 
 var userAgent = fmt.Sprintf("Charm-Crush/%s (https://charm.land/crush)", version.Version)

@@ -1087,6 +1087,21 @@ model add ollama/qwen3:30b \
 The `--discover-models true` flag merges discovered models with the one above;
 your explicit model fields win on conflicts.
 
+#### Compacting earlier
+
+Klash summarizes a long conversation when it comes within 20k tokens of the
+model's context window (within a fifth of a small one). Claude Code's
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW`, how full the context may get (`100k` to
+`1M`), and `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, the percentage of that at which
+to compact, make it compact earlier, never later. A shorter conversation is
+quicker for a local model to read again when its cache has lost it:
+
+```json
+{
+  "env": { "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50" }
+}
+```
+
 #### Waiting for a local model
 
 Klash waits as long as a model on your machine or local network takes to
