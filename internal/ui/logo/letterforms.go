@@ -426,13 +426,15 @@ func LetterK(stretch bool) string {
 	// Here's what we're making:
 	//
 	// █ ▄▀
-	// █▀
-	// ▀ ▀▄
+	// █▀▄
+	// ▀  ▀
+	//
+	// The leg ends on the same row as the other letters' feet.
 	_ = stretch
 	return heredoc.Doc(`
 		█ ▄▀
-		█▀
-		▀ ▀▄
+		█▀▄
+		▀  ▀
 	`)
 }
 
