@@ -14,11 +14,18 @@ import (
 // cancelled wait; one that is let run returns at once.
 func runsUnasked(t *testing.T, ctx context.Context, s Service, tool, path string) bool {
 	t.Helper()
+	return runsUnaskedAt(t, ctx, s, tool, path, filepath.Dir(path))
+}
+
+// runsUnaskedAt is runsUnasked for a request whose Path is requestPath:
+// the edit tools give the working directory for any file in it.
+func runsUnaskedAt(t *testing.T, ctx context.Context, s Service, tool, path, requestPath string) bool {
+	t.Helper()
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
 	granted, err := s.Request(cancelled, CreatePermissionRequest{
 		SessionID: "s1", ToolCallID: "call-1", ToolName: tool, Action: "write",
-		Path: filepath.Dir(path), FilePath: path,
+		Path: requestPath, FilePath: path,
 	})
 	if granted {
 		require.NoError(t, err)
@@ -90,4 +97,50 @@ func TestWithoutAcceptEditsEditsAsk(t *testing.T) {
 	project := t.TempDir()
 	s := New(Options{WorkingDir: project})
 	require.False(t, runsUnasked(t, t.Context(), s, "edit", filepath.Join(project, "a.go")))
+}
+
+// A change of a protected file is asked about however its tool is allowed:
+// by name in the allowed tools, or by an earlier "allow for this session"
+// of a change in the project, which covers the project's other files. As
+// in Claude Code, whose allow rules do not pre-approve protected-path
+// writes, only yolo, a session that grants all its requests, and a hook
+// let it run unasked.
+func TestProtectedFilesAreAskedAboutHoweverTheToolIsAllowed(t *testing.T) {
+	t.Parallel()
+
+	project := t.TempDir()
+	plain := filepath.Join(project, "a.go")
+	hook := filepath.Join(project, ".git", "hooks", "pre-commit")
+
+	dangling := filepath.Join(project, "dangling.go")
+	require.NoError(t, os.Symlink(filepath.Join(t.TempDir(), "nothing.go"), dangling))
+
+	allowed := New(Options{WorkingDir: project, AllowedTools: []string{"edit", "write:write", "download"}})
+	require.True(t, runsUnasked(t, t.Context(), allowed, "edit", plain))
+	require.False(t, runsUnasked(t, t.Context(), allowed, "edit", hook))
+	require.False(t, runsUnasked(t, t.Context(), allowed, "edit", dangling), "a link that leads nowhere")
+	require.False(t, runsUnasked(t, t.Context(), allowed, "write", filepath.Join(project, ".zshrc")))
+	require.False(t, runsUnasked(t, t.Context(), allowed, "download", filepath.Join(project, ".claude", "settings.json")))
+
+	// "Allow for this session" of an edit in the project.
+	granted := New(Options{WorkingDir: project})
+	events := granted.Subscribe(t.Context())
+	done := make(chan bool, 1)
+	go func() {
+		ok, _ := granted.Request(t.Context(), CreatePermissionRequest{
+			SessionID: "s1", ToolCallID: "call-0", ToolName: "edit", Action: "write", Path: project, FilePath: plain,
+		})
+		done <- ok
+	}()
+	granted.GrantPersistent((<-events).Payload)
+	require.True(t, <-done)
+	require.True(t, runsUnaskedAt(t, t.Context(), granted, "edit", filepath.Join(project, "b.go"), project), "the grant covers the project")
+	require.False(t, runsUnaskedAt(t, t.Context(), granted, "edit", hook, project), "but not a git hook in it")
+
+	yolo := New(Options{WorkingDir: project, Skip: true})
+	require.True(t, runsUnasked(t, t.Context(), yolo, "edit", hook))
+	auto := New(Options{WorkingDir: project})
+	auto.AutoApproveSession("s1")
+	require.True(t, runsUnasked(t, t.Context(), auto, "edit", hook), "a klash run's session")
+	require.True(t, runsUnasked(t, WithHookApproval(t.Context(), "call-1"), New(Options{WorkingDir: project}), "edit", hook), "a hook's allow")
 }

@@ -93,6 +93,7 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 					SessionID:   sessionID,
 					ToolCallID:  call.ID,
 					Path:        filePath,
+					FilePath:    filePath,
 					ToolName:    DownloadToolName,
 					Action:      "download",
 					Description: fmt.Sprintf("Download file from URL: %s to %s", params.URL, filePath),

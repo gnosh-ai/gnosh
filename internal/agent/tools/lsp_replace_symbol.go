@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"charm.land/fantasy"
@@ -133,10 +134,17 @@ func NewReplaceSymbolTool(
 
 			sessionID := GetSessionFromContext(ctx)
 			if sessionID != "" && permissions != nil {
+				// The request names the file absolute, as the tool reads
+				// it, from the process's directory.
+				absFile, err := filepath.Abs(params.FilePath)
+				if err != nil {
+					absFile = params.FilePath
+				}
 				granted, err := permissions.Request(ctx, permission.CreatePermissionRequest{
 					SessionID:   sessionID,
 					ToolCallID:  call.ID,
 					Path:        params.FilePath,
+					FilePath:    absFile,
 					ToolName:    ReplaceSymbolToolName,
 					Description: fmt.Sprintf("%s symbol '%s' in %s", action, params.Symbol, params.FilePath),
 					Params: ReplaceSymbolPermissionsParams{

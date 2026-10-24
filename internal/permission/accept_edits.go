@@ -13,11 +13,12 @@ import (
 // lsp_replace_symbol, which change files too, still ask.
 var acceptEditsTools = map[string]bool{"edit": true, "multiedit": true, "write": true}
 
-// protectedDirs and protectedFiles are the paths acceptEdits never lets
-// an edit of run unasked, as Claude Code's never does: what they hold
-// runs code or sets things up (git hooks and config, a shell's startup
-// files, editor and package-manager settings, Claude Code's and Klash's
-// own settings), so an edit there is asked about in every mode but yolo.
+// protectedDirs and protectedFiles are the paths no allowed tool, earlier
+// grant for the session or acceptEdits lets a change of run unasked, as
+// Claude Code's never do: what they hold runs code or sets things up (git
+// hooks and config, a shell's startup files, editor and package-manager
+// settings, Claude Code's and Klash's own settings), so a change there is
+// asked about in every mode but yolo.
 // A directory counts anywhere in a path; ".config/git" is two names in a
 // row.
 var (
@@ -41,14 +42,10 @@ var (
 // which let them write anywhere unasked: a shell's startup file, a git
 // hook, Klash's own config.
 func (s *permissionService) acceptsEdit(path string) bool {
-	if !filepath.IsAbs(path) {
+	if !filepath.IsAbs(path) || protectedFile(path) {
 		return false
 	}
-	path = filepath.Clean(path)
-	real, ok := resolvedPath(path)
-	if !ok || protected(path) || protected(real) {
-		return false
-	}
+	real, _ := resolvedPath(filepath.Clean(path))
 	for _, root := range append([]string{s.workingDir}, s.addedDirs...) {
 		if root == "" {
 			continue
@@ -58,6 +55,18 @@ func (s *permissionService) acceptsEdit(path string) bool {
 		}
 	}
 	return false
+}
+
+// protectedFile reports whether a change of path, a file a tool would
+// change, is always asked about: path, as given or with its symlinks
+// resolved, is or lies in one of the protected paths, or ends in a symlink
+// that leads nowhere. "" is no file.
+func protectedFile(path string) bool {
+	if path == "" {
+		return false
+	}
+	real, ok := resolvedPath(filepath.Clean(path))
+	return !ok || protected(path) || protected(real)
 }
 
 // resolvedPath is path with every symlink resolved, the part of it that

@@ -81,9 +81,10 @@ type CreatePermissionRequest struct {
 	Action      string `json:"action"`
 	Params      any    `json:"params"`
 	Path        string `json:"path"`
-	// FilePath is the file a file-editing tool would change, as an
-	// absolute path, for acceptEdits (see acceptsEdit). Path names only
-	// the working directory for a file in it.
+	// FilePath is the file a tool would change, as an absolute path, for
+	// acceptEdits (see acceptsEdit) and the protected files, which are
+	// always asked about (see protectedFile). Path names only the working
+	// directory for a file in it.
 	FilePath string `json:"file_path,omitempty"`
 }
 
@@ -246,9 +247,15 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 		return true, nil
 	}
 
+	// A change of a protected file is asked about however the tool is
+	// allowed or was granted for the session, as in Claude Code, where
+	// allow rules do not pre-approve protected-path writes: only yolo, a
+	// session that grants all its requests, and a hook skip the question.
+	protected := protectedFile(opts.FilePath)
+
 	// Check if the tool/action combination is in the allowlist
 	commandKey := opts.ToolName + ":" + opts.Action
-	if slices.Contains(s.allowedTools, commandKey) || slices.Contains(s.allowedTools, opts.ToolName) {
+	if !protected && (slices.Contains(s.allowedTools, commandKey) || slices.Contains(s.allowedTools, opts.ToolName)) {
 		return true, nil
 	}
 
@@ -315,7 +322,7 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 		ToolName:  permission.ToolName,
 		Action:    permission.Action,
 		Path:      permission.Path,
-	}); ok {
+	}); ok && !protected {
 		s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{
 			SessionID:  opts.SessionID,
 			ToolCallID: opts.ToolCallID,
