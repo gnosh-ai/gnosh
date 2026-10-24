@@ -1,4 +1,4 @@
-// Package logo renders a Crush wordmark in a stylized way.
+// Package logo renders the Klash wordmark in a stylized way.
 package logo
 
 import (
@@ -19,12 +19,20 @@ type letterform func(bool) string
 
 const diag = `╱`
 
+// Mark is the maker's mark printed above the wordmark, where upstream Crush
+// prints Charm™. SmallMark stands beside the name where there is no room
+// for it.
+const (
+	Mark      = "klash.pro"
+	SmallMark = "✦"
+)
+
 // Opts are the options for rendering the Klash title art.
 type Opts struct {
 	FieldColor   color.Color // diagonal lines
 	TitleColorA  color.Color // left gradient ramp point
 	TitleColorB  color.Color // right gradient ramp point
-	CharmColor   color.Color // Charm™ text color
+	CharmColor   color.Color // maker's mark color
 	VersionColor color.Color // version text color
 	Width        int         // width of the rendered logo, used for truncation
 	Hyper        bool        // whether it is Crush or Hypercrush
@@ -41,7 +49,7 @@ type Opts struct {
 // The compact argument determines whether it renders compact for the sidebar
 // or wider for the main pane.
 func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
-	charm := "Charm™"
+	charm := Mark
 	if !o.Hyper {
 		charm = " " + charm
 	}
@@ -154,8 +162,7 @@ func SmallRender(t *styles.Styles, width int, o Opts) string {
 	if o.Hyper {
 		name = "HYPERCRUSH"
 	}
-	charm := "Charm™"
-	title := t.Logo.SmallCharm.Render(charm)
+	title := t.Logo.SmallCharm.Render(SmallMark)
 	title = fmt.Sprintf("%s %s", title, styles.ApplyBoldForegroundGrad(t.Logo.GradCanvas, name, t.Logo.SmallGradFromColor, t.Logo.SmallGradToColor))
 	remainingWidth := width - lipgloss.Width(title) - 1 // 1 for the space after the name
 	if remainingWidth > 0 {
