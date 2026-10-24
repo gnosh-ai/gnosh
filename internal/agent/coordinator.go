@@ -168,6 +168,10 @@ type coordinator struct {
 	notify      pubsub.Publisher[notify.Notification]
 	runComplete pubsub.Publisher[notify.RunComplete]
 	interactive bool
+	// named is the files each session has been told changed since it read
+	// them, shared across buildTools calls so a coordinator rebuild does
+	// not reset the dedup state.
+	named *namedChanges
 
 	// agentMu guards mainAgent and mainAgentName: SetMainAgent runs on
 	// HTTP handler goroutines while runs, cancels, and probes read the
@@ -248,6 +252,7 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		activeSkills:  activeSkills,
 		skillTracker:  skillTracker,
 		interactive:   opts.Interactive,
+		named:         newNamedChanges(),
 
 		subdirectoryGiven: map[string]bool{},
 	}
@@ -967,21 +972,6 @@ func (c *coordinator) ToolInfos(ctx context.Context) ([]fantasy.ToolInfo, error)
 
 func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubAgent bool) ([]fantasy.AgentTool, error) {
 	var allTools []fantasy.AgentTool
-	if slices.Contains(agent.AllowedTools, AgentToolName) {
-		agentTool, err := c.agentTool(ctx)
-		if err != nil {
-			return nil, err
-		}
-		allTools = append(allTools, agentTool)
-	}
-
-	if slices.Contains(agent.AllowedTools, tools.AgenticFetchToolName) {
-		agenticFetchTool, err := c.agenticFetchTool(ctx, nil)
-		if err != nil {
-			return nil, err
-		}
-		allTools = append(allTools, agenticFetchTool)
-	}
 
 	// Get the model name for the agent
 	modelID := ""
@@ -993,28 +983,56 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 
 	logFile := config.LogFile(filepath.Join(c.cfg.Config().Options.DataDirectory, "logs"))
 
+	// One namedChanges per coordinator, shared across every tool and
+	// every buildTools call: a file the session read, changed by anything
+	// other than the agent's own edit, multiedit or write, is named at
+	// the end of the result of the next tool call after it changed,
+	// whatever the tool. Sharing the named state is what makes a file
+	// told once and not told again after the agent reads it, and a
+	// coordinator rebuild does not reset the dedup state.
+	wrap := func(tool fantasy.AgentTool) fantasy.AgentTool {
+		return &changedReadFiles{AgentTool: tool, files: c.filetracker, workingDir: c.cfg.WorkingDir(), named: c.named}
+	}
+
+	if slices.Contains(agent.AllowedTools, AgentToolName) {
+		agentTool, err := c.agentTool(ctx)
+		if err != nil {
+			return nil, err
+		}
+		allTools = append(allTools, wrap(agentTool))
+	}
+
+	if slices.Contains(agent.AllowedTools, tools.AgenticFetchToolName) {
+		agenticFetchTool, err := c.agenticFetchTool(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		allTools = append(allTools, wrap(agenticFetchTool))
+	}
+
 	allTools = append(
 		allTools,
 		&changedReadFiles{
 			AgentTool:  tools.NewBashTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.cfg.Config().Options.Attribution, modelID, c.cfg.Config().Options.GetMaxBackgroundJobs()),
 			files:      c.filetracker,
 			workingDir: c.cfg.WorkingDir(),
+			named:      c.named,
 		},
-		tools.NewKlashInfoTool(c.cfg, c.lspManager, c.allSkills, c.activeSkills, c.skillTracker),
-		tools.NewKlashLogsTool(logFile),
-		tools.NewJobOutputTool(c.cfg.Config().Options.DataDirectory),
-		tools.NewJobKillTool(),
-		tools.NewDownloadTool(c.permissions, c.cfg.WorkingDir(), nil),
-		tools.NewEditTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir()),
-		tools.NewMultiEditTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir()),
-		tools.NewFetchTool(c.permissions, c.cfg.WorkingDir(), nil),
-		tools.NewGlobTool(c.cfg.WorkingDir(), c.cfg.Config().Tools.Glob),
-		tools.NewGrepTool(c.cfg.WorkingDir(), c.cfg.Config().Tools.Grep),
-		tools.NewLsTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Tools.Ls),
-		tools.NewSourcegraphTool(nil),
-		tools.NewTodosTool(c.sessions),
-		tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, c.skillTracker, c.subdirectoryContext, c.cfg.WorkingDir(), c.cfg.Config().Options.SkillsPaths...),
-		tools.NewWriteTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir()),
+		wrap(tools.NewKlashInfoTool(c.cfg, c.lspManager, c.allSkills, c.activeSkills, c.skillTracker)),
+		wrap(tools.NewKlashLogsTool(logFile)),
+		wrap(tools.NewJobOutputTool(c.cfg.Config().Options.DataDirectory)),
+		wrap(tools.NewJobKillTool()),
+		wrap(tools.NewDownloadTool(c.permissions, c.cfg.WorkingDir(), nil)),
+		wrap(tools.NewEditTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir())),
+		wrap(tools.NewMultiEditTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir())),
+		wrap(tools.NewFetchTool(c.permissions, c.cfg.WorkingDir(), nil)),
+		wrap(tools.NewGlobTool(c.cfg.WorkingDir(), c.cfg.Config().Tools.Glob)),
+		wrap(tools.NewGrepTool(c.cfg.WorkingDir(), c.cfg.Config().Tools.Grep)),
+		wrap(tools.NewLsTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Tools.Ls)),
+		wrap(tools.NewSourcegraphTool(nil)),
+		wrap(tools.NewTodosTool(c.sessions)),
+		wrap(tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, c.skillTracker, c.subdirectoryContext, c.cfg.WorkingDir(), c.cfg.Config().Options.SkillsPaths...)),
+		wrap(tools.NewWriteTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir())),
 	)
 
 	// The question tool, and the gnokey and x402_fetch tools that ask the
@@ -1022,9 +1040,9 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	// none.
 	if !isSubAgent && c.interactive {
 		allTools = append(allTools,
-			tools.NewQuestionTool(c.questions),
-			tools.NewGnokeyTool(c.permissions, c.questions, c.cfg.WorkingDir()),
-			tools.NewX402FetchTool(c.permissions, c.questions, c.cfg.WorkingDir(), nil),
+			wrap(tools.NewQuestionTool(c.questions)),
+			wrap(tools.NewGnokeyTool(c.permissions, c.questions, c.cfg.WorkingDir())),
+			wrap(tools.NewX402FetchTool(c.permissions, c.questions, c.cfg.WorkingDir(), nil)),
 		)
 	}
 
@@ -1032,22 +1050,22 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	if len(c.cfg.Config().LSP) > 0 || c.cfg.Config().Options.AutoLSP == nil || *c.cfg.Config().Options.AutoLSP {
 		allTools = append(
 			allTools,
-			tools.NewDiagnosticsTool(c.lspManager),
-			tools.NewReferencesTool(c.lspManager),
-			tools.NewLSPRestartTool(c.lspManager),
-			tools.NewSymbolsTool(c.lspManager),
-			tools.NewDefinitionTool(c.lspManager),
-			tools.NewCallHierarchyTool(c.lspManager),
-			tools.NewRenameTool(c.lspManager, c.permissions, c.history, c.filetracker),
-			tools.NewReplaceSymbolTool(c.lspManager, c.permissions, c.history, c.filetracker),
+			wrap(tools.NewDiagnosticsTool(c.lspManager)),
+			wrap(tools.NewReferencesTool(c.lspManager)),
+			wrap(tools.NewLSPRestartTool(c.lspManager)),
+			wrap(tools.NewSymbolsTool(c.lspManager)),
+			wrap(tools.NewDefinitionTool(c.lspManager)),
+			wrap(tools.NewCallHierarchyTool(c.lspManager)),
+			wrap(tools.NewRenameTool(c.lspManager, c.permissions, c.history, c.filetracker)),
+			wrap(tools.NewReplaceSymbolTool(c.lspManager, c.permissions, c.history, c.filetracker)),
 		)
 	}
 
 	if len(c.cfg.Config().MCP) > 0 {
 		allTools = append(
 			allTools,
-			tools.NewListMCPResourcesTool(c.cfg, c.permissions),
-			tools.NewReadMCPResourceTool(c.cfg, c.permissions),
+			wrap(tools.NewListMCPResourcesTool(c.cfg, c.permissions)),
+			wrap(tools.NewReadMCPResourceTool(c.cfg, c.permissions)),
 		)
 	}
 
@@ -1061,7 +1079,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	for _, tool := range tools.GetMCPTools(c.permissions, c.cfg, c.cfg.WorkingDir()) {
 		if agent.AllowedMCP == nil {
 			// No MCP restrictions
-			filteredTools = append(filteredTools, tool)
+			filteredTools = append(filteredTools, wrap(tool))
 			continue
 		}
 		if len(agent.AllowedMCP) == 0 {
@@ -1075,7 +1093,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 				continue
 			}
 			if len(tools) == 0 || slices.Contains(tools, tool.MCPToolName()) {
-				filteredTools = append(filteredTools, tool)
+				filteredTools = append(filteredTools, wrap(tool))
 				break
 			}
 			slog.Debug("MCP not allowed", "tool", tool.Name(), "agent", agent.Name)
