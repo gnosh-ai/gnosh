@@ -20,29 +20,39 @@ func TestFileViewedBy(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	for _, name := range []string{"a.go", "b.go", filepath.Join("sub", "c.go")} {
+	for _, name := range []string{"a.go", "b.go", "README.md", filepath.Join("sub", "c.go")} {
 		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755))
 		writeFile(t, filepath.Join(dir, name), "package a\n")
 	}
 	a := filepath.Join(dir, "a.go")
 	for command, want := range map[string]string{
-		"cat a.go":                 a,
-		"cat " + a:                 a,
-		"cat 'a.go'":               a,
-		`cat "a.go"`:               a,
-		"nl a.go":                  a,
-		"head -n 20 a.go":          a,
-		"tail -5 a.go":             a,
-		"bat --style=plain a.go":   a,
-		"batcat a.go":              a,
-		"sed -n '10,20p' a.go":     a,
-		"sed -n 5p a.go":           a,
-		"sed -n '3,$p' a.go":       a,
-		`grep -n "func main" a.go`: a,
-		"rg -n main a.go":          a,
-		"egrep 'a|b' a.go":         a,
-		"fgrep main a.go":          a,
-		"cat sub/c.go":             filepath.Join(dir, "sub", "c.go"),
+		"cat a.go":                   a,
+		"cat " + a:                   a,
+		"cat 'a.go'":                 a,
+		`cat "a.go"`:                 a,
+		"nl a.go":                    a,
+		"head -n 20 a.go":            a,
+		"tail -5 a.go":               a,
+		"bat --style=plain a.go":     a,
+		"batcat a.go":                a,
+		"sed -n '10,20p' a.go":       a,
+		"sed -n 5p a.go":             a,
+		"sed -n '3,$p' a.go":         a,
+		`grep -n "func main" a.go`:   a,
+		"rg -n main a.go":            a,
+		"egrep 'a|b' a.go":           a,
+		"fgrep main a.go":            a,
+		"cat sub/c.go":               filepath.Join(dir, "sub", "c.go"),
+		"cat -- a.go":                a,
+		"head -n20 a.go":             a,
+		"tail -n +5 a.go":            a,
+		"nl -ba a.go":                a,
+		"grep -A3 -n main a.go":      a,
+		"grep main a.go -n":          a,
+		"grep -e main a.go":          a,
+		"grep -- -main a.go":         a,
+		"rg -C 2 -i main a.go":       a,
+		"rg --max-count=3 main a.go": a,
 
 		"cat a.go b.go":         "",
 		"cat a.go | head":       "",
@@ -65,6 +75,23 @@ func TestFileViewedBy(t *testing.T) {
 		"cat missing.go":        "",
 		"cat sub":               "",
 		"cat":                   "",
+		// A search pattern that names a file is no file shown: rg
+		// README.md searches every file for that text.
+		"rg README.md":           "",
+		"grep -n README.md":      "",
+		"grep -rn TODO a.go sub": "",
+		"grep -n TODO a.go b.go": "",
+		"grep -l main a.go":      "",
+		"grep -c main a.go":      "",
+		"grep -q main a.go":      "",
+		"rg --files a.go":        "",
+		"rg -l main a.go":        "",
+		"rg -g '*.go' main a.go": "",
+		"rg --json main a.go":    "",
+		"tail -f a.go":           "",
+		"head -n":                "",
+		"cat -":                  "",
+		"grep -e main -e other":  "",
 	} {
 		require.Equalf(t, want, fileViewedBy(command, dir), "%s", command)
 	}
