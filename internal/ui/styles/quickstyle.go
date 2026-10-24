@@ -715,7 +715,7 @@ func quickStyle(o quickStyleOpts) Styles {
 		DisabledFile:     base.Foreground(o.fgMoreSubtle),
 		DisabledSelected: base.Background(o.bgMostVisible).Foreground(o.fgMoreSubtle),
 		Permission:       base.Foreground(o.fgMoreSubtle),
-		Selected:         base.Background(o.primary).Foreground(o.fgBase),
+		Selected:         base.Background(o.primary).Foreground(o.onPrimary),
 		FileSize:         base.Foreground(o.fgMoreSubtle),
 		EmptyDirectory:   base.Foreground(o.fgMoreSubtle).PaddingLeft(2).SetString("Empty directory"),
 	}
@@ -864,7 +864,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Editor.PromptBangIconBlurred = s.Editor.PromptBangIconFocused.Foreground(o.bgBase).Background(o.fgMoreSubtle)
 	s.Editor.PromptBangDotsFocused = lipgloss.NewStyle().MarginRight(1).Foreground(o.primary).SetString(":::")
 	s.Editor.PromptBangDotsBlurred = s.Editor.PromptBangDotsFocused.Foreground(o.fgMoreSubtle)
-	s.Editor.PromptQuestionIconFocused = lipgloss.NewStyle().MarginRight(1).Foreground(o.fgBase).Background(o.primary).Bold(true).SetString(" ? ")
+	s.Editor.PromptQuestionIconFocused = lipgloss.NewStyle().MarginRight(1).Foreground(o.onPrimary).Background(o.primary).Bold(true).SetString(" ? ")
 	s.Editor.PromptQuestionIconBlurred = s.Editor.PromptQuestionIconFocused.Foreground(o.bgBase).Background(o.fgMoreSubtle)
 	s.Editor.QuestionSelected = lipgloss.NewStyle().Foreground(o.secondary).Bold(true)
 	s.Editor.QuestionUnselected = lipgloss.NewStyle().Foreground(o.fgBase)
@@ -1160,7 +1160,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Dialog.Sessions.InfoFocused = lipgloss.NewStyle().Foreground(o.fgBase)
 
 	s.Status.Help = lipgloss.NewStyle().Padding(0, 1)
-	s.Status.ModeBadgePlan = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.primary).Padding(0, 1).Bold(true).SetString("PLAN MODE")
+	s.Status.ModeBadgePlan = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.primary).Padding(0, 1).Bold(true).SetString("PLAN MODE")
 	s.Status.ModeBadgeYolo = lipgloss.NewStyle().Foreground(o.bgBase).Background(o.busy).Padding(0, 1).Bold(true).SetString("YOLO MODE")
 	s.Status.ModeBannerPlanBadge = s.Status.ModeBadgePlan
 	s.Status.ModeBannerPlan = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.planMoreSubtle).Padding(0, 1)
