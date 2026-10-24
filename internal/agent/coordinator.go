@@ -1290,10 +1290,7 @@ func (c *coordinator) buildAnthropicProvider(baseURL, apiKey string, headers map
 		opts = append(opts, anthropic.WithBaseURL(baseURL))
 	}
 
-	if c.cfg.Config().Options.Debug {
-		httpClient := log.NewHTTPClient()
-		opts = append(opts, anthropic.WithHTTPClient(httpClient))
-	}
+	opts = append(opts, anthropic.WithHTTPClient(c.modelHTTPClient(baseURL)))
 	return anthropic.New(opts...)
 }
 
@@ -1302,25 +1299,17 @@ func (c *coordinator) buildOpenaiProvider(baseURL, apiKey string, headers map[st
 		openai.WithAPIKey(apiKey),
 		openai.WithUseResponsesAPI(),
 	}
-	var httpClient *http.Client
-	if c.cfg.Config().Options.Debug {
-		httpClient = log.NewHTTPClient()
-	}
+	httpClient := c.modelHTTPClient(baseURL)
 	if token != nil {
 		// ChatGPT OAuth: requests go through the Codex backend, which
 		// expects account headers and rejects some request fields, so
 		// they pass through the Codex transport.
-		if httpClient == nil {
-			httpClient = &http.Client{}
-		}
 		httpClient.Transport = &openaioauth.Transport{
 			Base:  httpClient.Transport,
 			Token: token,
 		}
 	}
-	if httpClient != nil {
-		opts = append(opts, openai.WithHTTPClient(httpClient))
-	}
+	opts = append(opts, openai.WithHTTPClient(httpClient))
 	if len(headers) > 0 {
 		opts = append(opts, openai.WithHeaders(headers))
 	}
@@ -1394,12 +1383,10 @@ func (c *coordinator) buildOpenaiCompatProvider(baseURL, apiKey string, headers 
 			),
 		)
 	}
-	if httpClient == nil && c.cfg.Config().Options.Debug {
-		httpClient = log.NewHTTPClient()
+	if httpClient == nil {
+		httpClient = c.modelHTTPClient(baseURL)
 	}
-	if httpClient != nil {
-		opts = append(opts, openaicompat.WithHTTPClient(httpClient))
-	}
+	opts = append(opts, openaicompat.WithHTTPClient(httpClient))
 
 	if len(headers) > 0 {
 		opts = append(opts, openaicompat.WithHeaders(headers))
