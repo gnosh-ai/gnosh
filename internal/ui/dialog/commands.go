@@ -540,6 +540,9 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "rename_session", "Rename Session", "", ActionRenameSession{SessionID: c.sessionID}).
 			WithAliases("rename", "name").
 			WithDescription("Type rename and a name, or rename alone for one made from the conversation"))
+		commands = append(commands, NewCommandItem(c.com.Styles, "diff_report", "Diff", "", ActionDiffReport{}).
+			WithAliases("diff").
+			WithDescription("What the session changed, file by file"))
 		commands = append(commands, NewCommandItem(c.com.Styles, "copy_response", "Copy Last Response", "", ActionCopyResponse{}).
 			WithAliases("copy").
 			WithDescription("Copy the latest response to the clipboard; type copy and N for the Nth-latest"))

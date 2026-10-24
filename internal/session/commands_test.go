@@ -170,3 +170,15 @@ func TestParseCopyCommand(t *testing.T) {
 		require.False(t, ok, line)
 	}
 }
+
+// /diff is read as the other commands are; what follows it is not used.
+func TestParseDiffCommand(t *testing.T) {
+	t.Parallel()
+
+	for _, line := range []string{"/diff", "diff", " /Diff now "} {
+		require.True(t, ParseDiffCommand(line), line)
+	}
+	for _, line := range []string{"/dif", "/diffs", "git diff", ""} {
+		require.False(t, ParseDiffCommand(line), line)
+	}
+}

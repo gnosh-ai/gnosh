@@ -117,6 +117,9 @@ type (
 	ActionCopyResponse struct {
 		N string
 	}
+	// ActionDiffReport shows what the session changed, as Claude Code's
+	// /diff shows changes.
+	ActionDiffReport struct{}
 	// ActionDoctorReport checks the setup klash runs with, as Claude Code's
 	// /doctor does.
 	ActionDoctorReport struct{}
