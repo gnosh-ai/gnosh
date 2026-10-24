@@ -143,7 +143,9 @@ Claude Code's names work here too.
 - **Context and skills.** Klash reads `CLAUDE.md` and `CLAUDE.local.md`
   alongside `KLASH.md` and `AGENTS.md`, from the working directory and the
   directories above it (and a subdirectory's own, the first time the agent
-  reads a file there), and follows their `@path` imports, as Claude Code does.
+  reads, writes or edits a file there; one over 40,000 characters comes cut,
+  with a note to read the rest), and follows their `@path` imports, as Claude
+  Code does.
   A project's files import only the project's own, and a directory above gives
   only files you or root own, so a repository or a shared directory cannot put
   your keys or its instructions in the prompt. Skills load from

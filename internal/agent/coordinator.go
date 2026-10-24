@@ -322,10 +322,16 @@ const onDemandContextLimit = 40000
 // subdirectory's CLAUDE.md once it reads, writes or edits a file there.
 // A file over onDemandContextLimit characters is given cut, with a note
 // to read the rest with the view tool. Started at the root of Jae's gno
-// checkout, Klash never read misc/gnoe2e's own AGENTS.md.
+// checkout, Klash never read misc/gnoe2e's own AGENTS.md. A call with no
+// session gives nothing: what is given is recorded per session. A
+// relative filePath, as lsp_replace_symbol passes on as the model wrote
+// it, is taken from the working directory.
 func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePath string) string {
-	if c.subdirectoryGiven == nil {
+	if c.subdirectoryGiven == nil || sessionID == "" {
 		return ""
+	}
+	if !filepath.IsAbs(filePath) {
+		filePath = filepath.Join(c.cfg.WorkingDir(), filePath)
 	}
 	files := prompt.SubdirectoryContextFiles(c.cfg.Config().Options.ContextPaths, c.cfg, filePath)
 	if len(files) == 0 {

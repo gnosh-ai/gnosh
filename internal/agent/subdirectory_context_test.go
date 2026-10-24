@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,13 +107,10 @@ func TestSubdirectoryContextOnWriteAndEdit(t *testing.T) {
 	require.Contains(t, resp.Content, "the sub rules", "a summary gives them again")
 }
 
-// A call without a session ID, as a tool call whose context lacks the
-// session key, does not invoke subdirectoryContext, so the empty-session
-// key is not marked given and a later call with a real session ID still
-// gets the context.
-func TestSubdirectoryContextEmptySessionDoesNotMarkGiven(t *testing.T) {
-	t.Parallel()
-
+// subdirectoryTest is a coordinator whose working directory has a
+// subdirectory, sub, with an AGENTS.md of its own.
+func subdirectoryTest(t *testing.T) (*coordinator, fakeEnv, string) {
+	t.Helper()
 	env := testEnv(t)
 	sub := filepath.Join(env.workingDir, "sub")
 	require.NoError(t, os.Mkdir(sub, 0o755))
@@ -124,36 +120,66 @@ func TestSubdirectoryContextEmptySessionDoesNotMarkGiven(t *testing.T) {
 		sessions:          env.sessions,
 		subdirectoryGiven: map[string]bool{},
 	}
+	return c, env, sub
+}
+
+// A call with no session gives nothing and records nothing, so the
+// session's own first call still gets the files; a relative path is
+// taken from the working directory.
+func TestSubdirectoryContextNeedsASessionAndTakesARelativePath(t *testing.T) {
+	t.Parallel()
+
+	c, env, _ := subdirectoryTest(t)
 	one, err := env.sessions.Create(t.Context(), "one")
 	require.NoError(t, err)
 
-	sess := env.permissions
-	tracker := *env.filetracker
-	hist := env.history
+	require.Empty(t, c.subdirectoryContext(t.Context(), "", "sub/main.go"))
+	require.Empty(t, c.subdirectoryGiven, "nothing recorded")
+	require.Contains(t, c.subdirectoryContext(t.Context(), one.ID, "sub/main.go"), "the sub rules")
+}
 
-	marshal := func(p tools.WriteParams) string {
-		t.Helper()
-		b, err := json.Marshal(p)
-		require.NoError(t, err)
-		return string(b)
+// Each of the tools that read, write or edit a file gives a session the
+// subdirectory's context files the first time it touches a file there,
+// with the path as the model writes it, relative to the working
+// directory.
+func TestSubdirectoryContextFromEachTool(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{tools.ViewToolName, tools.WriteToolName, tools.EditToolName, tools.MultiEditToolName} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c, env, sub := subdirectoryTest(t)
+			sess, err := env.sessions.Create(t.Context(), name)
+			require.NoError(t, err)
+			ctx := context.WithValue(t.Context(), tools.SessionIDContextKey, sess.ID)
+			tracker := *env.filetracker
+			file := filepath.Join(sub, "a.go")
+			if name != tools.WriteToolName {
+				require.NoError(t, os.WriteFile(file, []byte("package sub\n"), 0o644))
+				tracker.RecordRead(ctx, sess.ID, file)
+			}
+
+			var tool fantasy.AgentTool
+			input := `{"file_path":"sub/a.go","old_string":"package sub","new_string":"package sub2"}`
+			switch name {
+			case tools.ViewToolName:
+				tool = tools.NewViewTool(nil, env.permissions, tracker, nil, c.subdirectoryContext, env.workingDir)
+				input = `{"file_path":"sub/a.go"}`
+			case tools.WriteToolName:
+				tool = tools.NewWriteTool(nil, env.permissions, env.history, tracker, c.subdirectoryContext, env.workingDir)
+				input = `{"file_path":"sub/a.go","content":"package sub\n"}`
+			case tools.EditToolName:
+				tool = tools.NewEditTool(nil, env.permissions, env.history, tracker, c.subdirectoryContext, env.workingDir)
+			case tools.MultiEditToolName:
+				tool = tools.NewMultiEditTool(nil, env.permissions, env.history, tracker, c.subdirectoryContext, env.workingDir)
+				input = `{"file_path":"sub/a.go","edits":[{"old_string":"package sub","new_string":"package sub2"}]}`
+			}
+			resp, err := tool.Run(ctx, fantasy.ToolCall{ID: "c1", Name: name, Input: input})
+			require.NoError(t, err)
+			require.False(t, resp.IsError, resp.Content)
+			require.Contains(t, resp.Content, "the sub rules")
+		})
 	}
-
-	// A call with no session ID in the context: the write tool returns
-	// an error ("session_id is required"), but the guard ensures
-	// subdirectoryContext is not called with an empty session ID.
-	noSessionCtx := t.Context()
-	writeTool := tools.NewWriteTool(nil, sess, hist, tracker, c.subdirectoryContext, env.workingDir)
-	_, _ = writeTool.Run(noSessionCtx, fantasy.ToolCall{ID: "w1", Name: tools.WriteToolName, Input: marshal(tools.WriteParams{FilePath: "sub/new.go", Content: "package sub\n"})})
-
-	// The empty-session key is not marked given.
-	require.NotContains(t, c.subdirectoryGiven, "\x00\x00"+filepath.Join(sub, "AGENTS.md"), "empty-session key not set")
-
-	// A real session still gets the context.
-	ctx := context.WithValue(t.Context(), tools.SessionIDContextKey, one.ID)
-	resp, err := writeTool.Run(ctx, fantasy.ToolCall{ID: "w2", Name: tools.WriteToolName, Input: marshal(tools.WriteParams{FilePath: "sub/new.go", Content: "package sub\n"})})
-	require.NoError(t, err)
-	require.False(t, resp.IsError, resp.Content)
-	require.Contains(t, resp.Content, "the sub rules", "a real session gets the context")
 }
 
 // A subdirectory context file over 40,000 characters is given cut at the

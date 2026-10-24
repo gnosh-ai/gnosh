@@ -109,9 +109,7 @@ func NewMultiEditTool(
 			text := fmt.Sprintf("<result>\n%s\n</result>\n", response.Content)
 			text += getDiagnostics(params.FilePath, lspManager)
 			if subdirectoryContext != nil {
-				if sessionID := GetSessionFromContext(ctx); sessionID != "" {
-					text += subdirectoryContext(ctx, sessionID, params.FilePath)
-				}
+				text += subdirectoryContext(ctx, GetSessionFromContext(ctx), params.FilePath)
 			}
 			response.Content = text
 			return response, nil
