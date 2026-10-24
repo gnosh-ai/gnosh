@@ -15,29 +15,30 @@ import (
 // --disallowedTools; read them with toolFlags.
 func addToolFlags(cmd *cobra.Command) {
 	cmd.Flags().String("tools", "", `The only built-in tools the agent is given, comma- or space-separated; "" for none, "default" for all; Claude Code's names (Read, Bash) work too`)
-	cmd.Flags().StringArray("allowed-tools", nil, "Tools that run without asking permission, comma- or space-separated; Claude Code's names (Read, Bash) work too")
+	cmd.Flags().StringArray("allowed-tools", nil, `Tools that run without asking permission, comma- or space-separated; Claude Code's names (Read, Bash) work too, and so do its allow rules for commands, such as "Bash(git diff *)"`)
 	cmd.Flags().StringArray("allowedTools", nil, "Same as --allowed-tools, by Claude Code's name for it")
 	cmd.Flags().StringArray("disallowed-tools", nil, `Tools the agent is not given, comma- or space-separated; Claude Code's names (Edit, Bash) work too, and so do its deny rules for commands, such as "Bash(git push *)"`)
 	cmd.Flags().StringArray("disallowedTools", nil, "Same as --disallowed-tools, by Claude Code's name for it")
 }
 
 // toolFlags returns the tools cmd's tool flags name, in Klash's names, and
-// the patterns of the Bash(pattern) deny rules --disallowed-tools gives. A
+// the patterns of the Bash(pattern) rules: the allow rules
+// --allowed-tools gives and the deny rules --disallowed-tools gives. A
 // name that is not a tool, or a rule klash cannot apply, is an error, so
 // a typo cannot leave a tool or a command on that was meant to be off. A
 // command without the flags names none.
-func toolFlags(cmd *cobra.Command) (allowed, disallowed, denyRules []string, err error) {
-	if allowed, _, err = toolFlagNames(cmd, "allowed-tools", "allowedTools", true, false); err != nil {
-		return nil, nil, nil, err
+func toolFlags(cmd *cobra.Command) (allowed, allowRules, disallowed, denyRules []string, err error) {
+	if allowed, allowRules, err = toolFlagNames(cmd, "allowed-tools", "allowedTools", true, true); err != nil {
+		return nil, nil, nil, nil, err
 	}
 	if disallowed, denyRules, err = toolFlagNames(cmd, "disallowed-tools", "disallowedTools", false, true); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	others, err := toolsFlagOthers(cmd)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
-	return allowed, append(disallowed, others...), denyRules, nil
+	return allowed, allowRules, append(disallowed, others...), denyRules, nil
 }
 
 // toolsFlagOthers returns the built-in tools that --tools leaves out, as
@@ -134,7 +135,7 @@ func ruleWords(value string) []string {
 // any case, or Claude Code's, or, where mcpOK, an MCP tool's name.
 func toolFlagName(word string, mcpOK bool) (string, error) {
 	if strings.ContainsAny(word, "()") {
-		return "", fmt.Errorf("klash takes whole tools here, not a rule like %q; a Bash(...) deny rule goes in --disallowed-tools", word)
+		return "", fmt.Errorf("klash takes whole tools here, not a rule like %q; its Bash(...) rules are the ones it applies", word)
 	}
 	if tool := tooldefs.FromClaudeCode(word); tool != "" {
 		return tool, nil

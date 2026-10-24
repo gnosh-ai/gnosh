@@ -118,7 +118,7 @@ Claude Code's names work here too.
 | `--permission-mode plan`         | `--permission-mode plan` (or `acceptEdits`, `bypassPermissions`) | Start in plan mode; or let edits in the project (not `.git`, shell or tool settings), or everything, run without asking |
 | `--add-dir ../other`            | `--add-dir ../other` (repeatable)                  | Let the agent read another directory without asking         |
 | `--mcp-config ./mcp.json`        | `--mcp-config ./mcp.json` (repeatable), `--strict-mcp-config` | Load MCP servers from a file in `.mcp.json`'s shape, or its JSON; with the second flag, only those |
-| `--allowedTools Read Grep`       | `--allowedTools "Read Grep"`, or `Read,Grep`       | Let these tools run without asking; the file tools still ask before changing `.git`, shell or tool settings, or keys |
+| `--allowedTools Read Grep`       | `--allowedTools "Read Grep"`, or `Read,Grep`       | Let these tools run without asking; the file tools still ask before changing `.git`, shell or tool settings, or keys; `"Bash(git diff *)"` lets the commands it matches run, as `permissions.allow` does |
 | `--disallowedTools Bash Edit`    | `--disallowedTools "Bash Edit"`, or `Bash,Edit`    | Do not give the agent these tools; `"Bash(git push *)"` refuses the commands it matches, as `permissions.deny` does |
 | `--tools "Read,Grep"`            | `--tools "Read,Grep"` (`""`: none)                 | Give the agent only these built-in tools                    |
 | `--system-prompt "…"`            | `--system-prompt "…"`, or `--system-prompt-file`   | Use these instructions in place of Klash's own              |
@@ -734,6 +734,27 @@ permissions. Use this with care.
 ```bash
 permissions allow view ls grep edit mcp_context7_get-library-doc
 ```
+
+Claude Code's `permissions.allow` works too, with its rules for commands:
+
+```json
+{
+  "permissions": {
+    "allow": ["Read", "Bash(git diff *)", "Bash(npm run *)", "Bash(go test:*)"]
+  }
+}
+```
+
+A `Bash(...)` rule matches as in Claude Code: `*` stands for any text, a
+trailing ` *` or `:*` also matches the bare command, and the wrappers Claude
+Code strips (`timeout`, `nice`, `nohup`, `stdbuf`, `time`, `command`, a bare
+`xargs`) come off first. A command line runs without asking only when each
+command in it matches a rule or only reads, so `Bash(git diff *)` does not let
+`git diff && rm -rf ~` through, and a rule with a `*` never approves `watch`,
+`setsid`, `ionice`, `flock` or a `find` that runs, deletes or writes. Klash
+asks where Claude Code would look further: at a command substitution, a
+variable assignment, a background job, a subshell or loop, or a redirect to a
+file.
 
 ### Disabling Built-In Tools
 

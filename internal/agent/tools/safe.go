@@ -20,7 +20,15 @@ import (
 // rm -rf ~", "echo x > ~/.zshrc" and "timeout 5 rm -rf ~" all ran
 // unasked.
 func readOnlyCommand(command string) bool {
-	// As Claude Code, a command too long to analyze is asked about.
+	return eachCall(command, readOnlyCall)
+}
+
+// eachCall reports whether the shell parses all of command into commands
+// each of which callOK takes, joined only by &&, ||, ; , newlines or
+// pipes, with no background job and redirections only as
+// harmlessRedirect allows. As Claude Code, a command too long to analyze
+// or one that cannot be parsed is asked about.
+func eachCall(command string, callOK func(*syntax.CallExpr) bool) bool {
 	if len(command) > 10000 {
 		return false
 	}
@@ -29,15 +37,15 @@ func readOnlyCommand(command string) bool {
 		return false
 	}
 	for _, stmt := range file.Stmts {
-		if !readOnlyStmt(stmt) {
+		if !stmtCalls(stmt, callOK) {
 			return false
 		}
 	}
 	return true
 }
 
-// readOnlyStmt reports whether stmt only reads: see readOnlyCommand.
-func readOnlyStmt(stmt *syntax.Stmt) bool {
+// stmtCalls reports whether stmt is commands callOK takes: see eachCall.
+func stmtCalls(stmt *syntax.Stmt, callOK func(*syntax.CallExpr) bool) bool {
 	if stmt.Background || stmt.Coprocess {
 		return false
 	}
@@ -48,10 +56,10 @@ func readOnlyStmt(stmt *syntax.Stmt) bool {
 	}
 	switch cmd := stmt.Cmd.(type) {
 	case *syntax.CallExpr:
-		return readOnlyCall(cmd)
+		return callOK(cmd)
 	case *syntax.BinaryCmd:
 		// &&, ||, | and |&: each side on its own.
-		return readOnlyStmt(cmd.X) && readOnlyStmt(cmd.Y)
+		return stmtCalls(cmd.X, callOK) && stmtCalls(cmd.Y, callOK)
 	default:
 		return false
 	}

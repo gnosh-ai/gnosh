@@ -169,7 +169,7 @@ func (m *recordingPermissionService) SubscribeNotifications(ctx context.Context)
 func newBashToolForTest(workingDir string) fantasy.AgentTool {
 	permissions := &mockBashPermissionService{Broker: pubsub.NewBroker[permission.PermissionRequest]()}
 	attribution := &config.Attribution{TrailerStyle: config.TrailerStyleNone}
-	return NewBashTool(permissions, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs, nil)
+	return NewBashTool(permissions, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs, nil, nil)
 }
 
 func newBashToolWithRecordingPerms(workingDir string, allow bool) (fantasy.AgentTool, *recordingPermissionService) {
@@ -178,7 +178,7 @@ func newBashToolWithRecordingPerms(workingDir string, allow bool) (fantasy.Agent
 		allow:  allow,
 	}
 	attribution := &config.Attribution{TrailerStyle: config.TrailerStyleNone}
-	return NewBashTool(perms, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs, nil), perms
+	return NewBashTool(perms, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs, nil, nil), perms
 }
 
 func TestBashTool_ChainedCommandsRequirePermission(t *testing.T) {
@@ -438,7 +438,7 @@ func TestBashTool_DenyRules(t *testing.T) {
 	workingDir := t.TempDir()
 	perms := &mockBashPermissionService{Broker: pubsub.NewBroker[permission.PermissionRequest]()}
 	attribution := &config.Attribution{TrailerStyle: config.TrailerStyleNone}
-	tool := NewBashTool(perms, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs, []string{"touch *"})
+	tool := NewBashTool(perms, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs, []string{"touch *"}, nil)
 	require.Contains(t, tool.Info().Description, "deny, wherever they appear in a command line: touch *")
 	require.NotContains(t, newBashToolForTest(workingDir).Info().Description, "permission rules deny")
 
@@ -449,4 +449,34 @@ func TestBashTool_DenyRules(t *testing.T) {
 
 	resp = runBashTool(t, tool, ctx, BashParams{Description: "echo", Command: "echo fine"})
 	require.Contains(t, resp.Content, "fine")
+}
+
+// A Bash allow rule given to the bash tool lets the commands it matches
+// run without asking, as Claude Code's permissions.allow does, but only
+// when every command on the line is allowed or only reads.
+func TestBashTool_AllowRules(t *testing.T) {
+	workingDir := t.TempDir()
+	perms := &recordingPermissionService{Broker: pubsub.NewBroker[permission.PermissionRequest](), allow: true}
+	attribution := &config.Attribution{TrailerStyle: config.TrailerStyleNone}
+	tool := NewBashTool(perms, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs, nil, []string{"touch *"})
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+
+	for command, asks := range map[string]int{
+		"touch a.txt":                 0,
+		"ls && touch b.txt":           0,
+		"touch c.txt && rm c.txt":     1,
+		"mkdir d":                     1,
+		"touch e.txt > f.txt":         1,
+		"timeout 5 touch g.txt":       0,
+		"echo $(touch h.txt)":         1,
+		"touch i.txt &":               1,
+		"X=1 touch j.txt":             1,
+		"touch k.txt; echo done | wc": 0,
+	} {
+		perms.requestCount = 0
+		resp := runBashTool(t, tool, ctx, BashParams{Description: "touch", Command: command})
+		require.False(t, resp.IsError, command)
+		require.Equal(t, asks, perms.requestCount, command)
+	}
+	require.FileExists(t, filepath.Join(workingDir, "a.txt"))
 }

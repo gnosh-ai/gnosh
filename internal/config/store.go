@@ -78,8 +78,11 @@ type RuntimeOverrides struct {
 	DisabledTools []string
 	AllowedTools  []string
 	// DenyRules are the patterns of the Bash(pattern) deny rules given with
-	// --disallowed-tools, added to the config's permissions.deny.
-	DenyRules []string
+	// --disallowed-tools, added to the config's permissions.deny, and
+	// AllowRules those of the allow rules given with --allowed-tools,
+	// added to its permissions.allow.
+	DenyRules  []string
+	AllowRules []string
 	// SystemPrompt and AppendSystemPrompt are the text of Claude Code's
 	// --system-prompt and --append-system-prompt (or their -file forms).
 	// The first takes the place of the coder agent's instructions; the
@@ -319,6 +322,16 @@ func applyToolOverrides(cfg *Config, o RuntimeOverrides) {
 			rules[i] = "Bash(" + pattern + ")"
 		}
 		cfg.Permissions.Deny = appendMissing(cfg.Permissions.Deny, rules)
+	}
+	if len(o.AllowRules) > 0 {
+		if cfg.Permissions == nil {
+			cfg.Permissions = &Permissions{}
+		}
+		rules := make([]string, len(o.AllowRules))
+		for i, pattern := range o.AllowRules {
+			rules[i] = "Bash(" + pattern + ")"
+		}
+		cfg.Permissions.Allow = appendMissing(cfg.Permissions.Allow, rules)
 	}
 }
 

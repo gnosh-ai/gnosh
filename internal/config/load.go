@@ -1704,6 +1704,34 @@ func (c *Config) ValidateTools() error {
 				c.Options.DisabledTools = append(c.Options.DisabledTools, tool)
 			}
 		}
+		for _, rule := range c.Permissions.Allow {
+			name := rule
+			if pattern, ok := BashRulePattern(rule); ok {
+				if strings.TrimSpace(pattern) != "*" {
+					if strings.TrimSpace(strings.TrimSuffix(pattern, ":*")) == "" {
+						return fmt.Errorf("permissions.allow: %q names no command", rule)
+					}
+					continue
+				}
+				// Bash(*) is Bash, as in Claude Code.
+				name = "Bash"
+			}
+			// A tool's name lets the tool run without asking, as
+			// allowed_tools does.
+			tool := name
+			if !tooldefs.IsMCPToolName(name) {
+				tool = tooldefs.FromClaudeCode(name)
+				if tool == "" {
+					tool = tooldefs.Canonical(strings.ToLower(name))
+				}
+				if !IsKnownToolName(tool) {
+					return fmt.Errorf("permissions.allow: %q is neither a tool's name nor a Bash(...) rule, the allow rules klash applies", rule)
+				}
+			}
+			if !slices.Contains(c.Permissions.AllowedTools, tool) {
+				c.Permissions.AllowedTools = append(c.Permissions.AllowedTools, tool)
+			}
+		}
 	}
 	if c.Options != nil {
 		for _, name := range c.Options.DisabledTools {

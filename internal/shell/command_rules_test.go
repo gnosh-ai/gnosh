@@ -80,3 +80,48 @@ func TestRunRefusesACommandADenyRuleMatches(t *testing.T) {
 	require.NoError(t, Run(t.Context(), RunOptions{Command: "echo allowed", Cwd: t.TempDir(), Stdout: &stdout, BlockFuncs: blocks}))
 	require.Equal(t, "allowed\n", stdout.String())
 }
+
+// An allow rule matches a command as Claude Code's do: with the wrappers
+// Claude Code strips taken off, xargs only without options, the trailing
+// " *" also matching the bare command, and only a rule with no "*"
+// approving an exec wrapper or a find that runs, deletes or writes.
+func TestCommandRuleAllows(t *testing.T) {
+	t.Parallel()
+
+	for pattern, cases := range map[string]map[string]bool{
+		"npm test *": {
+			"npm test":                       true,
+			"npm test --watch":               true,
+			"timeout 30 npm test":            true,
+			"timeout -s KILL 30 npm test":    true,
+			"nice -n 5 nohup npm test":       true,
+			"command npm test":               true,
+			"stdbuf -o0 npm test --coverage": true,
+			"npm install":                    false,
+			"npm testing":                    false,
+			"xargs npm test":                 true,
+			"xargs -n1 npm test":             false,
+			"timeout 30 npm install":         false,
+		},
+		"ls:*": {"ls": true, "ls -la": true, "lsof": false},
+		"git log * main": {
+			"git log --oneline main": true,
+			"git log main":           false,
+		},
+		"find *": {
+			"find . -name x":        true,
+			"find . -exec rm {} ;":  false,
+			"find . -delete":        false,
+			"find . -fprint out":    false,
+			"find -files0-from f .": false,
+		},
+		"find . -delete":  {"find . -delete": true, "find . -delete -x": false},
+		"watch *":         {"watch ls": false},
+		"flock /tmp/l ls": {"flock /tmp/l ls": true},
+	} {
+		rule := NewCommandRule(pattern)
+		for command, want := range cases {
+			require.Equal(t, want, rule.Allows(strings.Fields(command)), "%s / %s", pattern, command)
+		}
+	}
+}

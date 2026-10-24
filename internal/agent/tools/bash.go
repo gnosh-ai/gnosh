@@ -236,8 +236,11 @@ func blockFuncs(denyRules []string) []shell.BlockFunc {
 
 // NewBashTool returns the bash tool. denyRules are the patterns of the
 // Bash(pattern) deny rules of the permissions: the shell refuses every
-// command one matches, wherever in a command line it is.
-func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, modelID string, maxBackgroundJobs int, denyRules []string) fantasy.AgentTool {
+// command one matches, wherever in a command line it is. allowRules are
+// the patterns of the Bash(pattern) allow rules: a command line runs
+// without asking when each command in it matches one or only reads.
+func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, modelID string, maxBackgroundJobs int, denyRules, allowRules []string) fantasy.AgentTool {
+	allowed := commandRules(allowRules)
 	return fantasy.NewAgentTool(
 		BashToolName,
 		string(bashDescription(attribution, modelID, denyRules)),
@@ -249,7 +252,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			// Determine working directory
 			execWorkingDir := cmp.Or(params.WorkingDir, workingDir)
 
-			isSafeReadOnly := readOnlyCommand(params.Command)
+			isSafeReadOnly := readOnlyCommand(params.Command) || allowedCommand(params.Command, allowed)
 
 			sessionID := GetSessionFromContext(ctx)
 			if sessionID == "" {

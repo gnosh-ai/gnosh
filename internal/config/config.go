@@ -480,6 +480,12 @@ const (
 
 type Permissions struct {
 	AllowedTools []string `json:"allowed_tools,omitempty" jsonschema:"description=List of tools that don't require permission prompts,example=bash,example=view"`
+	// Allow are Claude Code's permissions.allow rules of the two kinds
+	// klash applies: a tool's name, which lets the tool run without
+	// asking as allowed_tools does, and Bash(pattern), which lets the
+	// commands the pattern matches run without asking (see
+	// shell.CommandRule). Another kind of rule is refused at load.
+	Allow []string `json:"allow,omitempty" jsonschema:"description=Claude Code's allow rules: a tool's name to let it run without asking or Bash(pattern) to let the commands the pattern matches run without asking,example=Bash(git diff *),example=Read"`
 	// Deny are Claude Code's permissions.deny rules of the two kinds klash
 	// applies: a tool's name, which takes the tool from the agent as
 	// options.disabled_tools does, and Bash(pattern), which stops every
@@ -498,6 +504,22 @@ func (p *Permissions) BashDenyPatterns() []string {
 	var patterns []string
 	for _, rule := range p.Deny {
 		if pattern, ok := BashRulePattern(rule); ok {
+			patterns = append(patterns, pattern)
+		}
+	}
+	return patterns
+}
+
+// BashAllowPatterns returns the patterns of the Bash(pattern) rules in
+// permissions.allow, but Bash(*): that is Bash, which ValidateTools puts
+// in allowed_tools.
+func (p *Permissions) BashAllowPatterns() []string {
+	if p == nil {
+		return nil
+	}
+	var patterns []string
+	for _, rule := range p.Allow {
+		if pattern, ok := BashRulePattern(rule); ok && strings.TrimSpace(pattern) != "*" {
 			patterns = append(patterns, pattern)
 		}
 	}

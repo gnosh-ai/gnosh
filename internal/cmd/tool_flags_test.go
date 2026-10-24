@@ -22,8 +22,9 @@ func TestToolFlags(t *testing.T) {
 		if err := cmd.Execute(); err != nil {
 			return nil, nil, err
 		}
-		allowed, disallowed, rules, err := toolFlags(cmd)
-		require.Empty(t, rules)
+		allowed, allowRules, disallowed, denyRules, err := toolFlags(cmd)
+		require.Empty(t, allowRules)
+		require.Empty(t, denyRules)
 		return allowed, disallowed, err
 	}
 
@@ -43,8 +44,6 @@ func TestToolFlags(t *testing.T) {
 
 	_, _, err = parse("--disallowedTools", "Bsh")
 	require.ErrorContains(t, err, `unknown tool "Bsh"`)
-	_, _, err = parse("--allowedTools", "Bash(git log:*)")
-	require.ErrorContains(t, err, "deny rule goes in --disallowed-tools")
 	_, _, err = parse("--disallowedTools", "mcp_github_search")
 	require.Error(t, err, "an MCP tool is turned off in its server's config, not here")
 }
@@ -53,11 +52,12 @@ func TestToolFlags(t *testing.T) {
 func TestToolFlagsWithoutTheFlags(t *testing.T) {
 	t.Parallel()
 
-	allowed, disallowed, rules, err := toolFlags(&cobra.Command{Use: "klash"})
+	allowed, allowRules, disallowed, denyRules, err := toolFlags(&cobra.Command{Use: "klash"})
 	require.NoError(t, err)
 	require.Empty(t, allowed)
+	require.Empty(t, allowRules)
 	require.Empty(t, disallowed)
-	require.Empty(t, rules)
+	require.Empty(t, denyRules)
 }
 
 // --tools names the only built-in tools the agent gets, as Claude Code's
@@ -74,7 +74,7 @@ func TestToolsFlag(t *testing.T) {
 		if err := cmd.Execute(); err != nil {
 			return nil, err
 		}
-		_, disallowed, _, err := toolFlags(cmd)
+		_, _, disallowed, _, err := toolFlags(cmd)
 		return disallowed, err
 	}
 
@@ -112,8 +112,8 @@ func TestToolsFlag(t *testing.T) {
 }
 
 // --disallowed-tools takes Claude Code's Bash deny rules beside the tools,
-// a rule's spaces and commas kept inside its parentheses; any other rule,
-// or one in --allowed-tools, is an error.
+// and --allowed-tools its allow rules, a rule's spaces and commas kept
+// inside its parentheses; any other rule is an error.
 func TestToolFlagsDenyRules(t *testing.T) {
 	t.Parallel()
 
@@ -125,7 +125,7 @@ func TestToolFlagsDenyRules(t *testing.T) {
 		if err := cmd.Execute(); err != nil {
 			return nil, nil, err
 		}
-		_, disallowed, rules, err := toolFlags(cmd)
+		_, _, disallowed, rules, err := toolFlags(cmd)
 		return disallowed, rules, err
 	}
 
@@ -138,4 +138,24 @@ func TestToolFlagsDenyRules(t *testing.T) {
 	require.ErrorContains(t, err, "names no command")
 	_, _, err = parse("--disallowedTools", "Edit(src/**)")
 	require.ErrorContains(t, err, `not a rule like "Edit(src/**)"`)
+
+	allowArgs := func(args ...string) ([]string, []string, error) {
+		cmd := &cobra.Command{Use: "klash", RunE: func(*cobra.Command, []string) error { return nil }}
+		cmd.SilenceErrors, cmd.SilenceUsage = true, true
+		addToolFlags(cmd)
+		cmd.SetArgs(args)
+		if err := cmd.Execute(); err != nil {
+			return nil, nil, err
+		}
+		allowed, rules, _, _, err := toolFlags(cmd)
+		return allowed, rules, err
+	}
+	allowed, rules, err := allowArgs("--allowedTools", "Bash(git log:*) Read", "--allowed-tools", "Bash(npm run *)")
+	require.NoError(t, err)
+	require.Equal(t, []string{"view"}, allowed)
+	require.Equal(t, []string{"npm run *", "git log:*"}, rules)
+	_, _, err = allowArgs("--allowedTools", "Bash( )")
+	require.ErrorContains(t, err, "names no command")
+	_, _, err = allowArgs("--allowedTools", "WebFetch(domain:example.com)")
+	require.ErrorContains(t, err, `not a rule like "WebFetch(domain:example.com)"`)
 }

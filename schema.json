@@ -699,6 +699,17 @@
           "type": "array",
           "description": "List of tools that don't require permission prompts"
         },
+        "allow": {
+          "items": {
+            "type": "string",
+            "examples": [
+              "Bash(git diff *)",
+              "Read"
+            ]
+          },
+          "type": "array",
+          "description": "Claude Code's allow rules: a tool's name to let it run without asking or Bash(pattern) to let the commands the pattern matches run without asking"
+        },
         "deny": {
           "items": {
             "type": "string",

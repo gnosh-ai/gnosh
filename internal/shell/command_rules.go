@@ -127,3 +127,67 @@ func skipOptions(args []string, valued map[string]bool) []string {
 	}
 	return args
 }
+
+// CommandRule is one of Claude Code's Bash allow rules: Bash(pattern),
+// read as CommandRuleBlocker reads a deny rule.
+type CommandRule struct {
+	re *regexp.Regexp
+	// exact is set for a rule with no "*": only it may approve an exec
+	// wrapper or a find that runs, deletes or writes.
+	exact bool
+}
+
+// NewCommandRule compiles an allow rule's pattern, what Bash(...) holds.
+func NewCommandRule(pattern string) CommandRule {
+	return CommandRule{re: commandRuleRegexp(pattern), exact: !strings.Contains(pattern, "*")}
+}
+
+// Allows reports whether the rule lets the command args run without
+// asking, as Claude Code's allow rules do: the rule must match the
+// command with the wrappers Claude Code strips taken off (xargs only when
+// it has no options, so a rule for grep does not approve "xargs -n1 grep
+// ..."), and only a rule with no "*" approves an exec wrapper (watch,
+// setsid, ionice, flock) or a find that runs, deletes or writes, whose
+// arguments a prefix cannot vouch for. Where a deny rule matches any of a
+// command's forms, an allow rule must match the one that runs.
+func (r CommandRule) Allows(args []string) bool {
+	args = AllowForm(args)
+	if len(args) == 0 {
+		return false
+	}
+	if !r.exact && RunsWhatItIsGiven(args) {
+		return false
+	}
+	return r.re.MatchString(strings.Join(args, " "))
+}
+
+// AllowForm is the command args runs, as Claude Code's allow rules see
+// it: with the wrappers it strips taken off, xargs only when it has no
+// options.
+func AllowForm(args []string) []string {
+	for {
+		inner := unwrapCommand(args)
+		if inner == nil || (args[0] == "xargs" && strings.HasPrefix(args[1], "-")) {
+			return args
+		}
+		args = inner
+	}
+}
+
+// RunsWhatItIsGiven reports whether args is an exec wrapper, which runs
+// the command it is given, or a find with an action that runs a command,
+// deletes or writes files, or reads its paths from a file.
+func RunsWhatItIsGiven(args []string) bool {
+	switch args[0] {
+	case "watch", "setsid", "ionice", "flock":
+		return true
+	case "find":
+		for _, arg := range args[1:] {
+			switch arg {
+			case "-exec", "-execdir", "-ok", "-okdir", "-delete", "-rm", "-fprint", "-fprint0", "-fprintf", "-fls", "-files0-from":
+				return true
+			}
+		}
+	}
+	return false
+}

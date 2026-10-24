@@ -106,3 +106,18 @@ permissions deny 'Bash(git push *)' 'bash(rm -rf *)'`)
 	_, err := loadCrushShErr(t, `permissions deny 'Bash()'`)
 	require.ErrorContains(t, err, "names no command")
 }
+
+// permissions allow takes Claude Code's Bash(pattern) allow rules beside
+// tools: they go into permissions.allow, and let the commands they match
+// run without asking.
+func TestShellConfigPermissionsAllowRules(t *testing.T) {
+	store := loadCrushSh(t, `permissions allow 'Bash(git diff *)' view
+permissions allow 'Bash(git diff *)' 'bash(npm run *)'`)
+
+	require.Equal(t, []string{"Bash(git diff *)", "bash(npm run *)"}, store.Config().Permissions.Allow)
+	require.Equal(t, []string{"git diff *", "npm run *"}, store.Config().Permissions.BashAllowPatterns())
+	require.Contains(t, store.Config().Permissions.AllowedTools, "view")
+
+	_, err := loadCrushShErr(t, `permissions allow 'Bash(:*)'`)
+	require.ErrorContains(t, err, "names no command")
+}
