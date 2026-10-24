@@ -1,10 +1,12 @@
 package tools
 
 import (
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 
+	"github.com/charmbracelet/crush/internal/shell"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -19,8 +21,86 @@ import (
 // ";", "|", "&&", "$(" or backquote, so "echo hi" and a second line, "ls &
 // rm -rf ~", "echo x > ~/.zshrc" and "timeout 5 rm -rf ~" all ran
 // unasked.
-func readOnlyCommand(command string) bool {
-	return eachCall(command, readOnlyCall)
+func readOnlyCommand(command string, dirs workDirs) bool {
+	return eachCallIn(command, dirs, readOnlyCall)
+}
+
+// workDirs are where a command line starts and the project it may cd
+// around in (see eachCallIn); with none, a cd asks.
+type workDirs struct {
+	start, project string
+}
+
+// eachCallIn is eachCall that takes cd as Claude Code's read-only set does:
+// a cd, written in plain text, into the project or a directory in it is
+// let through, and any other cd asks. A line that cds into another
+// directory and runs git asks too: git in a repository other than the one
+// it was in can run a command that repository's config names
+// (core.fsmonitor, say). Each cd is resolved from where the line starts.
+func eachCallIn(command string, dirs workDirs, callOK func(*syntax.CallExpr) bool) bool {
+	moved, git := false, false
+	ok := eachCall(command, func(call *syntax.CallExpr) bool {
+		words := plainWords(call)
+		if len(words) > 0 && words[0] == "cd" {
+			into, ok := cdInto(call, dirs)
+			moved = moved || (ok && into != realPath(dirs.start))
+			return ok
+		}
+		if form := shell.AllowForm(words); len(form) > 0 && form[0] == "git" {
+			git = true
+		}
+		return callOK(call)
+	})
+	return ok && !(moved && git)
+}
+
+// plainWords is call's words when each is plain text with nothing to
+// expand, else as many as come before the first that is not.
+func plainWords(call *syntax.CallExpr) []string {
+	var words []string
+	for _, word := range call.Args {
+		text, uncertain, ok := plainWord(word)
+		if !ok || uncertain {
+			break
+		}
+		words = append(words, text)
+	}
+	return words
+}
+
+// cdInto is the directory a cd call moves into, as a real path, when it
+// is one directory written in plain text (no option, no ~, nothing to
+// expand) that exists in the project; ok is false for any other cd.
+func cdInto(call *syntax.CallExpr, dirs workDirs) (string, bool) {
+	words := plainWords(call)
+	if dirs.start == "" || dirs.project == "" || len(call.Assigns) > 0 || len(call.Args) != 2 || len(words) != 2 {
+		return "", false
+	}
+	target := words[1]
+	if strings.HasPrefix(target, "-") || strings.HasPrefix(target, "~") {
+		return "", false
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(dirs.start, target)
+	}
+	into, project := realPath(target), realPath(dirs.project)
+	if into == "" || project == "" {
+		return "", false
+	}
+	rel, err := filepath.Rel(project, into)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return into, true
+}
+
+// realPath is path with its links resolved, "" when it does not exist.
+func realPath(path string) string {
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return ""
+	}
+	return real
 }
 
 // eachCall reports whether the shell parses all of command into commands

@@ -33,7 +33,7 @@ func TestAllowedCommand(t *testing.T) {
 		"watch -n1 ls",
 		"xargs go test < pkgs.txt",
 	} {
-		require.True(t, allowedCommand(command, rules), command)
+		require.True(t, allowedCommand(command, workDirs{}, rules), command)
 	}
 	for _, command := range []string{
 		"git diff && rm -rf ~",
@@ -56,19 +56,19 @@ func TestAllowedCommand(t *testing.T) {
 		"watch -n2 ls",
 		"git diff " + strings.Repeat("a", 10000),
 	} {
-		require.False(t, allowedCommand(command, rules), command)
+		require.False(t, allowedCommand(command, workDirs{}, rules), command)
 	}
-	require.False(t, allowedCommand("git diff", nil), "no rules, no allowing")
+	require.False(t, allowedCommand("git diff", workDirs{}, nil), "no rules, no allowing")
 
 	finds := commandRules([]string{"find *"})
-	require.True(t, allowedCommand("find . -name x.go", finds))
-	require.False(t, allowedCommand("find . -name x.go -delete", finds), "a prefix rule does not approve a find that deletes")
-	require.False(t, allowedCommand("find . -name *.go", finds), "an unquoted glob could expand to -delete")
-	require.False(t, allowedCommand("watch ls", commandRules([]string{"watch *"})), "nor an exec wrapper")
+	require.True(t, allowedCommand("find . -name x.go", workDirs{}, finds))
+	require.False(t, allowedCommand("find . -name x.go -delete", workDirs{}, finds), "a prefix rule does not approve a find that deletes")
+	require.False(t, allowedCommand("find . -name *.go", workDirs{}, finds), "an unquoted glob could expand to -delete")
+	require.False(t, allowedCommand("watch ls", workDirs{}, commandRules([]string{"watch *"})), "nor an exec wrapper")
 
 	versions := commandRules([]string{"* --version"})
-	require.True(t, allowedCommand("node --version", versions))
-	require.True(t, allowedCommand("timeout 5 node --version", versions))
-	require.False(t, allowedCommand("$X --version", versions), "the program must be named in plain text")
-	require.False(t, allowedCommand("timeout 5 $X --version", versions), "past its wrappers too")
+	require.True(t, allowedCommand("node --version", workDirs{}, versions))
+	require.True(t, allowedCommand("timeout 5 node --version", workDirs{}, versions))
+	require.False(t, allowedCommand("$X --version", workDirs{}, versions), "the program must be named in plain text")
+	require.False(t, allowedCommand("timeout 5 $X --version", workDirs{}, versions), "past its wrappers too")
 }

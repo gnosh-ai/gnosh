@@ -15,11 +15,11 @@ import (
 // is read as readOnlyCommand reads one, and asked about wherever that
 // asks: a substitution, an assignment, a background job, a redirect to a
 // file, a line it cannot parse.
-func allowedCommand(command string, rules []shell.CommandRule) bool {
+func allowedCommand(command string, dirs workDirs, rules []shell.CommandRule) bool {
 	if len(rules) == 0 {
 		return false
 	}
-	return eachCall(command, func(call *syntax.CallExpr) bool {
+	return eachCallIn(command, dirs, func(call *syntax.CallExpr) bool {
 		return readOnlyCall(call) || allowedCall(call, rules)
 	})
 }

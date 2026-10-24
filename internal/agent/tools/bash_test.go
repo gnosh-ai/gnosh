@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -460,6 +461,8 @@ func TestBashTool_AllowRules(t *testing.T) {
 	attribution := &config.Attribution{TrailerStyle: config.TrailerStyleNone}
 	tool := NewBashTool(perms, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs, nil, []string{"touch *"})
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+	require.NoError(t, os.Mkdir(filepath.Join(workingDir, "sub"), 0o755))
+	require.NoError(t, exec.Command("git", "init", "-q", workingDir).Run(), "git status needs a repository")
 
 	for command, asks := range map[string]int{
 		"touch a.txt":                 0,
@@ -472,6 +475,8 @@ func TestBashTool_AllowRules(t *testing.T) {
 		"touch i.txt &":               1,
 		"X=1 touch j.txt":             1,
 		"touch k.txt; echo done | wc": 0,
+		"cd sub && touch l.txt":       0,
+		"cd sub && git status":        1,
 	} {
 		perms.requestCount = 0
 		resp := runBashTool(t, tool, ctx, BashParams{Description: "touch", Command: command})
@@ -479,4 +484,11 @@ func TestBashTool_AllowRules(t *testing.T) {
 		require.Equal(t, asks, perms.requestCount, command)
 	}
 	require.FileExists(t, filepath.Join(workingDir, "a.txt"))
+
+	// A cd is read from where the command starts.
+	perms.requestCount = 0
+	resp := runBashTool(t, tool, ctx, BashParams{Description: "touch", Command: "cd .. && touch m.txt", WorkingDir: filepath.Join(workingDir, "sub")})
+	require.False(t, resp.IsError, resp.Content)
+	require.Equal(t, 0, perms.requestCount, "from sub, cd .. is the project")
+	require.FileExists(t, filepath.Join(workingDir, "m.txt"))
 }

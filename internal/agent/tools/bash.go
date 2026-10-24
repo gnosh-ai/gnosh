@@ -291,7 +291,8 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			// Determine working directory
 			execWorkingDir := cmp.Or(params.WorkingDir, workingDir)
 
-			isSafeReadOnly := readOnlyCommand(params.Command) || allowedCommand(params.Command, allowed)
+			dirs := workDirs{start: execWorkingDir, project: workingDir}
+			isSafeReadOnly := readOnlyCommand(params.Command, dirs) || allowedCommand(params.Command, dirs, allowed)
 
 			sessionID := GetSessionFromContext(ctx)
 			if sessionID == "" {
