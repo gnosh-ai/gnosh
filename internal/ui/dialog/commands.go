@@ -220,6 +220,11 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 			if instructions, ok := session.ParseCompactCommand(c.input.Value()); ok && instructions != "" && c.hasSession {
 				return ActionSummarize{SessionID: c.sessionID, Instructions: instructions}
 			}
+			// "context" with anything after it (Claude Code's takes "all")
+			// is still the report.
+			if session.ParseContextCommand(c.input.Value()) {
+				return ActionContextUsage{}
+			}
 			if selectedItem := c.list.SelectedItem(); selectedItem != nil {
 				if item, ok := selectedItem.(*CommandItem); ok && item != nil {
 					return item.Action()
@@ -502,6 +507,10 @@ func (c *Commands) defaultCommands() []*CommandItem {
 			WithAliases("noloop", "no_loop", "no-loop", "/noloop").
 			WithDescription("Stop looping after the current turn"),
 	)
+
+	commands = append(commands, NewCommandItem(c.com.Styles, "context_usage", "Context Usage", "", ActionContextUsage{}).
+		WithAliases("context").
+		WithDescription("What fills the context window, as Claude Code's /context shows it"))
 
 	// Only show compact command if there's an active session
 	if c.hasSession {

@@ -647,6 +647,17 @@ func (c *controllerV1) handlePostWorkspaceAgentSessionSummarize(w http.ResponseW
 	w.WriteHeader(http.StatusOK)
 }
 
+// handleGetWorkspaceAgentContext reports what fills a session's context
+// window.
+func (c *controllerV1) handleGetWorkspaceAgentContext(w http.ResponseWriter, r *http.Request) {
+	report, err := c.backend.ContextReport(r.Context(), r.PathValue("id"), r.URL.Query().Get("session_id"))
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	jsonEncode(w, proto.ContextReport{Markdown: report})
+}
+
 // handlePostWorkspaceAgentSessionName names a session from its
 // conversation.
 func (c *controllerV1) handlePostWorkspaceAgentSessionName(w http.ResponseWriter, r *http.Request) {

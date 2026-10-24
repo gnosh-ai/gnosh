@@ -33,6 +33,7 @@ func TestPaletteFindsClaudeCodeSlashNames(t *testing.T) {
 		"resume":   "Sessions",
 		"continue": "Sessions",
 		"compact":  "Summarize Session",
+		"context":  "Context Usage",
 		"rename":   "Rename Session",
 		"name":     "Rename Session",
 		"clear":    "New Session",
@@ -140,4 +141,24 @@ func TestPaletteCompactTakesInstructions(t *testing.T) {
 	require.Equal(t, ActionSummarize{SessionID: "s1"}, enter("s1", "compact"))
 	_, summarized := enter("", "compact keep it").(ActionSummarize)
 	require.False(t, summarized)
+}
+
+// Claude Code's /context, with or without its "all", opens the report;
+// what follows it is not used, even text that matches no command.
+func TestPaletteContextOpensTheReport(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	for _, typed := range []string{"context", "context all", "context qz"} {
+		c, err := NewCommands(com, "", false, false, false, nil, nil)
+		require.NoError(t, err)
+		for _, r := range typed {
+			c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+		require.Equal(t, ActionContextUsage{}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}), "typed %q", typed)
+	}
 }

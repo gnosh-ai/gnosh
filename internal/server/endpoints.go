@@ -402,6 +402,16 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Handle(c.handlePostWorkspaceAgentSessionSummarize),
 
+		apigen.Get("/v1/workspaces/{id}/agent/context").
+			Summary("Context usage").
+			Description("What fills a session's context window, as the Markdown Claude Code's /context prints; session_id names the session, none a new one.").
+			Tags("agent").
+			PathParam("id", "Workspace ID").
+			QueryParam("session_id", "Session ID; none for a new session").
+			Responds(proto.ContextReport{}).
+			Fails(404, 500).
+			Handle(c.handleGetWorkspaceAgentContext),
+
 		apigen.Post("/v1/workspaces/{id}/agent/sessions/{sid}/name").
 			Summary("Name session from its conversation").
 			Description("Names the session from the end of its conversation, as Claude Code's /rename does with no name, and returns the name.").

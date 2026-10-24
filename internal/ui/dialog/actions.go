@@ -100,6 +100,9 @@ type (
 		Name string
 	}
 	ActionInitializeProject struct{}
+	// ActionContextUsage shows what fills the context window, as Claude
+	// Code's /context does.
+	ActionContextUsage struct{}
 	// ActionSummarize summarizes the session, with Instructions the text
 	// given after /compact, as Claude Code's /compact takes them.
 	ActionSummarize struct {

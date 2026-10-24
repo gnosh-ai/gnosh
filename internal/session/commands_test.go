@@ -69,3 +69,15 @@ func TestParseCompactCommand(t *testing.T) {
 		require.False(t, ok, line)
 	}
 }
+
+// /context is read as the other commands are; what follows it is not used.
+func TestParseContextCommand(t *testing.T) {
+	t.Parallel()
+
+	for _, line := range []string{"/context", "context", " /Context all "} {
+		require.True(t, ParseContextCommand(line), line)
+	}
+	for _, line := range []string{"/contexts", "/compact", "what is the context", ""} {
+		require.False(t, ParseContextCommand(line), line)
+	}
+}

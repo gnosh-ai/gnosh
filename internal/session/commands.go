@@ -30,6 +30,13 @@ func parseCommand(line string, names ...string) (string, bool) {
 	return strings.TrimSpace(rest), true
 }
 
+// ParseContextCommand reports whether line is Claude Code's /context
+// command, with or without the slash. What follows it is not used.
+func ParseContextCommand(line string) bool {
+	_, ok := parseCommand(line, "context")
+	return ok
+}
+
 // ParseCompactCommand reports whether line is Claude Code's /compact
 // command, with or without the slash, and the instructions after it for
 // the summary ("" when none).

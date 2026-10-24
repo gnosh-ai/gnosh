@@ -1035,6 +1035,8 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.openSessionsDialog(msg.search); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case contextReportMsg:
+		m.dialog.OpenDialog(dialog.NewContextUsage(m.com, msg.report))
 	case loadSessionMsg:
 		if m.forceCompactMode {
 			m.isCompact = true
@@ -2359,6 +2361,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionResumeSession:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.resumeSession(msg.Ref))
+	case dialog.ActionContextUsage:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.contextReport())
 	case dialog.ActionSummarize:
 		if m.isAgentBusy() {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before summarizing session..."))
@@ -5458,6 +5463,9 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	if instructions, ok := session.ParseCompactCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.compactFromPrompt(instructions)
 	}
+	if session.ParseContextCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.contextReport()
+	}
 	return m.sendMessageInternal(content, false, attachments...)
 }
 
@@ -5491,6 +5499,29 @@ func (m *UI) renameSession(name string) tea.Cmd {
 			return util.ReportError(err)()
 		}
 		return util.NewInfoMsg("Session renamed to: " + name)
+	}
+}
+
+// contextReportMsg carries the report /context shows.
+type contextReportMsg struct {
+	report string
+}
+
+// contextReport works out what fills the current session's context
+// window, as Claude Code's /context shows it (a new session's when there
+// is none yet), off the update loop: it builds the prompt and the tools
+// and reads the conversation.
+func (m *UI) contextReport() tea.Cmd {
+	sessionID := ""
+	if m.hasSession() {
+		sessionID = m.session.ID
+	}
+	return func() tea.Msg {
+		report, err := m.com.Workspace.ContextReport(context.Background(), sessionID)
+		if err != nil {
+			return util.ReportError(err)()
+		}
+		return contextReportMsg{report: report}
 	}
 }
 

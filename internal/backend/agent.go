@@ -220,6 +220,25 @@ func (b *Backend) SummarizeSession(ctx context.Context, workspaceID, sessionID, 
 	return ws.AgentCoordinator.Summarize(ctx, sessionID, instructions)
 }
 
+// ContextReport is what fills a session's context window ("" for a new
+// session), the Markdown Claude Code's /context prints.
+func (b *Backend) ContextReport(ctx context.Context, workspaceID, sessionID string) (string, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return "", err
+	}
+
+	if ws.AgentCoordinator == nil {
+		return "", ErrAgentNotInitialized
+	}
+
+	usage, err := ws.AgentCoordinator.ContextUsage(ctx, sessionID)
+	if err != nil {
+		return "", err
+	}
+	return usage.Markdown(), nil
+}
+
 // GenerateSessionName names a session from the end of its conversation,
 // as Claude Code's /rename does with no name, and returns the name.
 func (b *Backend) GenerateSessionName(ctx context.Context, workspaceID, sessionID string) (string, error) {

@@ -614,6 +614,27 @@ func (c *Client) AgentSummarizeSession(ctx context.Context, id string, sessionID
 	return nil
 }
 
+// AgentContextReport is what fills a session's context window ("" for a
+// new session), the Markdown Claude Code's /context prints.
+func (c *Client) AgentContextReport(ctx context.Context, id, sessionID string) (string, error) {
+	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/agent/context", id), url.Values{"session_id": []string{sessionID}}, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get context usage: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		if msg := decodeErrorMessage(rsp.Body); msg != "" {
+			return "", errors.New(msg)
+		}
+		return "", fmt.Errorf("failed to get context usage: status code %d", rsp.StatusCode)
+	}
+	var report proto.ContextReport
+	if err := json.NewDecoder(rsp.Body).Decode(&report); err != nil {
+		return "", fmt.Errorf("failed to decode context usage: %w", err)
+	}
+	return report.Markdown, nil
+}
+
 // AgentGenerateSessionName names a session from the end of its
 // conversation and returns the name.
 func (c *Client) AgentGenerateSessionName(ctx context.Context, id string, sessionID string) (string, error) {
