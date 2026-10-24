@@ -112,6 +112,11 @@ type (
 	// ActionStatusReport shows the session's status, as Claude Code's
 	// /status does.
 	ActionStatusReport struct{}
+	// ActionCopyResponse copies a response to the clipboard, as Claude
+	// Code's /copy does: N picks the Nth-latest ("" for the latest).
+	ActionCopyResponse struct {
+		N string
+	}
 	// ActionDoctorReport checks the setup klash runs with, as Claude Code's
 	// /doctor does.
 	ActionDoctorReport struct{}

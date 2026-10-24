@@ -2373,6 +2373,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionStatusReport:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		m.openStatusReport()
+	case dialog.ActionCopyResponse:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.copyResponse(msg.N))
 	case dialog.ActionDoctorReport:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.doctorReport())
@@ -5496,6 +5499,9 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	if session.ParseStatusCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		m.openStatusReport()
 		return nil
+	}
+	if n, ok := session.ParseCopyCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.copyResponse(n)
 	}
 	if session.ParseDoctorCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.doctorReport()

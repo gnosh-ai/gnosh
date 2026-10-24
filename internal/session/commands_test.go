@@ -150,3 +150,23 @@ func TestParseDoctorCommand(t *testing.T) {
 		require.False(t, ParseDoctorCommand(line), line)
 	}
 }
+
+// /copy is read as /rename is, with the N that picks the Nth-latest
+// response after it or nothing.
+func TestParseCopyCommand(t *testing.T) {
+	t.Parallel()
+
+	for line, want := range map[string]string{
+		"/copy":     "",
+		"copy 2":    "2",
+		" /Copy 3 ": "3",
+	} {
+		n, ok := ParseCopyCommand(line)
+		require.True(t, ok, line)
+		require.Equal(t, want, n, line)
+	}
+	for _, line := range []string{"/copying", "/cop 2", "please /copy", ""} {
+		_, ok := ParseCopyCommand(line)
+		require.False(t, ok, line)
+	}
+}

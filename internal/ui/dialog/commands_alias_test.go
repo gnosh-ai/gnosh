@@ -40,6 +40,7 @@ func TestPaletteFindsClaudeCodeSlashNames(t *testing.T) {
 		"status":        "Status",
 		"export":        "Export Conversation",
 		"doctor":        "Doctor",
+		"copy":          "Copy Last Response",
 		"checkup":       "Doctor",
 		"rename":        "Rename Session",
 		"name":          "Rename Session",
@@ -211,4 +212,29 @@ func TestPaletteExportTakesTheFile(t *testing.T) {
 	require.Equal(t, ActionExportConversation{}, enter("s1", "export"))
 	_, exported := enter("", "export notes.md").(ActionExportConversation)
 	require.False(t, exported)
+}
+
+// Claude Code's /copy takes the N of the Nth-latest response: typed into
+// the palette with it, Enter copies that one; alone, it is the Copy Last
+// Response item. With no session there is nothing to copy.
+func TestPaletteCopyTakesN(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	enter := func(sessionID, typed string) Action {
+		c, err := NewCommands(com, sessionID, sessionID != "", false, false, nil, nil)
+		require.NoError(t, err)
+		for _, r := range typed {
+			c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+		return c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	}
+	require.Equal(t, ActionCopyResponse{N: "2"}, enter("s1", "copy 2"))
+	require.Equal(t, ActionCopyResponse{}, enter("s1", "copy"))
+	_, copied := enter("", "copy 2").(ActionCopyResponse)
+	require.False(t, copied)
 }

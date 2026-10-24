@@ -280,6 +280,11 @@ func (a *AssistantMessageItem) Advance() bool {
 	return true
 }
 
+// Text is the response's text, as the model wrote it.
+func (a *AssistantMessageItem) Text() string {
+	return a.message.Content().Text
+}
+
 // ID implements MessageItem.
 func (a *AssistantMessageItem) ID() string {
 	return a.message.ID

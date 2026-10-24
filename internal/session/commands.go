@@ -59,6 +59,13 @@ func ParseStatusCommand(line string) bool {
 	return ok
 }
 
+// ParseCopyCommand reports whether line is Claude Code's /copy command,
+// with or without the slash, and the N after it that picks the
+// Nth-latest response ("" for the latest).
+func ParseCopyCommand(line string) (n string, ok bool) {
+	return parseCommand(line, "copy")
+}
+
 // ParseDoctorCommand reports whether line is Claude Code's /doctor
 // command or its alias /checkup, with or without the slash. What follows
 // it is not used.

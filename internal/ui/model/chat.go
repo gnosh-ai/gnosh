@@ -1243,6 +1243,18 @@ func (m *Chat) FirstPrompt() string {
 	return ""
 }
 
+// RecentResponses is the text of the latest responses, newest first, at
+// most limit of them, leaving out those with none (a step of tool calls).
+func (m *Chat) RecentResponses(limit int) []string {
+	var texts []string
+	for i := m.list.Len() - 1; i >= 0 && len(texts) < limit; i-- {
+		if a, ok := m.list.ItemAt(i).(*chat.AssistantMessageItem); ok && strings.TrimSpace(a.Text()) != "" {
+			texts = append(texts, a.Text())
+		}
+	}
+	return texts
+}
+
 // ClearMouse clears the current mouse interaction state.
 func (m *Chat) ClearMouse() {
 	m.mouseDown = false
