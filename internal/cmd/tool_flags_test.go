@@ -22,7 +22,9 @@ func TestToolFlags(t *testing.T) {
 		if err := cmd.Execute(); err != nil {
 			return nil, nil, err
 		}
-		return toolFlags(cmd)
+		allowed, disallowed, rules, err := toolFlags(cmd)
+		require.Empty(t, rules)
+		return allowed, disallowed, err
 	}
 
 	allowed, disallowed, err := parse()
@@ -42,7 +44,7 @@ func TestToolFlags(t *testing.T) {
 	_, _, err = parse("--disallowedTools", "Bsh")
 	require.ErrorContains(t, err, `unknown tool "Bsh"`)
 	_, _, err = parse("--allowedTools", "Bash(git log:*)")
-	require.ErrorContains(t, err, "command pattern")
+	require.ErrorContains(t, err, "deny rule goes in --disallowed-tools")
 	_, _, err = parse("--disallowedTools", "mcp_github_search")
 	require.Error(t, err, "an MCP tool is turned off in its server's config, not here")
 }
@@ -51,10 +53,11 @@ func TestToolFlags(t *testing.T) {
 func TestToolFlagsWithoutTheFlags(t *testing.T) {
 	t.Parallel()
 
-	allowed, disallowed, err := toolFlags(&cobra.Command{Use: "klash"})
+	allowed, disallowed, rules, err := toolFlags(&cobra.Command{Use: "klash"})
 	require.NoError(t, err)
 	require.Empty(t, allowed)
 	require.Empty(t, disallowed)
+	require.Empty(t, rules)
 }
 
 // --tools names the only built-in tools the agent gets, as Claude Code's
@@ -71,7 +74,7 @@ func TestToolsFlag(t *testing.T) {
 		if err := cmd.Execute(); err != nil {
 			return nil, err
 		}
-		_, disallowed, err := toolFlags(cmd)
+		_, disallowed, _, err := toolFlags(cmd)
 		return disallowed, err
 	}
 
@@ -106,4 +109,33 @@ func TestToolsFlag(t *testing.T) {
 	_, err = parse("--tools", "Bsh")
 	require.ErrorContains(t, err, `unknown tool "Bsh"`)
 	require.ErrorContains(t, err, "(in --tools)")
+}
+
+// --disallowed-tools takes Claude Code's Bash deny rules beside the tools,
+// a rule's spaces and commas kept inside its parentheses; any other rule,
+// or one in --allowed-tools, is an error.
+func TestToolFlagsDenyRules(t *testing.T) {
+	t.Parallel()
+
+	parse := func(args ...string) ([]string, []string, error) {
+		cmd := &cobra.Command{Use: "klash", RunE: func(*cobra.Command, []string) error { return nil }}
+		cmd.SilenceErrors, cmd.SilenceUsage = true, true
+		addToolFlags(cmd)
+		cmd.SetArgs(args)
+		if err := cmd.Execute(); err != nil {
+			return nil, nil, err
+		}
+		_, disallowed, rules, err := toolFlags(cmd)
+		return disallowed, rules, err
+	}
+
+	disallowed, rules, err := parse("--disallowed-tools", "Bash(rm -rf *),write", "--disallowedTools", "Bash(git push *) Edit Bash(echo a,b)")
+	require.NoError(t, err)
+	require.Equal(t, []string{"write", "edit"}, disallowed)
+	require.Equal(t, []string{"rm -rf *", "git push *", "echo a,b"}, rules)
+
+	_, _, err = parse("--disallowedTools", "Bash()")
+	require.ErrorContains(t, err, "names no command")
+	_, _, err = parse("--disallowedTools", "Edit(src/**)")
+	require.ErrorContains(t, err, `not a rule like "Edit(src/**)"`)
 }

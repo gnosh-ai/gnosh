@@ -1682,6 +1682,28 @@ func (c *Config) ValidateTools() error {
 		for i, name := range c.Permissions.AllowedTools {
 			c.Permissions.AllowedTools[i] = tooldefs.Canonical(name)
 		}
+		for _, rule := range c.Permissions.Deny {
+			if pattern, ok := BashRulePattern(rule); ok {
+				if strings.TrimSpace(strings.TrimSuffix(pattern, ":*")) == "" {
+					return fmt.Errorf("permissions.deny: %q names no command", rule)
+				}
+				continue
+			}
+			tool := tooldefs.FromClaudeCode(rule)
+			if tool == "" {
+				tool = tooldefs.Canonical(strings.ToLower(rule))
+			}
+			if !IsKnownToolName(tool) {
+				return fmt.Errorf("permissions.deny: %q is neither a built-in tool nor a Bash(...) rule, the deny rules klash applies", rule)
+			}
+			// A tool's name takes the tool away, as in Claude Code.
+			if c.Options == nil {
+				c.Options = &Options{}
+			}
+			if !slices.Contains(c.Options.DisabledTools, tool) {
+				c.Options.DisabledTools = append(c.Options.DisabledTools, tool)
+			}
+		}
 	}
 	if c.Options != nil {
 		for _, name := range c.Options.DisabledTools {

@@ -698,6 +698,17 @@
           },
           "type": "array",
           "description": "List of tools that don't require permission prompts"
+        },
+        "deny": {
+          "items": {
+            "type": "string",
+            "examples": [
+              "Bash(git push *)",
+              "WebFetch"
+            ]
+          },
+          "type": "array",
+          "description": "Claude Code's deny rules: a tool's name to take the tool away or Bash(pattern) to stop the commands the pattern matches"
         }
       },
       "additionalProperties": false,

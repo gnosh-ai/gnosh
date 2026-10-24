@@ -15,27 +15,29 @@ import (
 // --disallowedTools; read them with toolFlags.
 func addToolFlags(cmd *cobra.Command) {
 	cmd.Flags().String("tools", "", `The only built-in tools the agent is given, comma- or space-separated; "" for none, "default" for all; Claude Code's names (Read, Bash) work too`)
-	cmd.Flags().StringSlice("allowed-tools", nil, "Tools that run without asking permission, comma- or space-separated; Claude Code's names (Read, Bash) work too")
-	cmd.Flags().StringSlice("allowedTools", nil, "Same as --allowed-tools, by Claude Code's name for it")
-	cmd.Flags().StringSlice("disallowed-tools", nil, "Tools the agent is not given, comma- or space-separated; Claude Code's names (Edit, Bash) work too")
-	cmd.Flags().StringSlice("disallowedTools", nil, "Same as --disallowed-tools, by Claude Code's name for it")
+	cmd.Flags().StringArray("allowed-tools", nil, "Tools that run without asking permission, comma- or space-separated; Claude Code's names (Read, Bash) work too")
+	cmd.Flags().StringArray("allowedTools", nil, "Same as --allowed-tools, by Claude Code's name for it")
+	cmd.Flags().StringArray("disallowed-tools", nil, `Tools the agent is not given, comma- or space-separated; Claude Code's names (Edit, Bash) work too, and so do its deny rules for commands, such as "Bash(git push *)"`)
+	cmd.Flags().StringArray("disallowedTools", nil, "Same as --disallowed-tools, by Claude Code's name for it")
 }
 
-// toolFlags returns the tools cmd's tool flags name, in Klash's names. A
-// name that is not a tool is an error, so a typo cannot leave a tool on
-// that was meant to be off. A command without the flags names none.
-func toolFlags(cmd *cobra.Command) (allowed, disallowed []string, err error) {
-	if allowed, err = toolFlagNames(cmd, "allowed-tools", "allowedTools", true); err != nil {
-		return nil, nil, err
+// toolFlags returns the tools cmd's tool flags name, in Klash's names, and
+// the patterns of the Bash(pattern) deny rules --disallowed-tools gives. A
+// name that is not a tool, or a rule klash cannot apply, is an error, so
+// a typo cannot leave a tool or a command on that was meant to be off. A
+// command without the flags names none.
+func toolFlags(cmd *cobra.Command) (allowed, disallowed, denyRules []string, err error) {
+	if allowed, _, err = toolFlagNames(cmd, "allowed-tools", "allowedTools", true, false); err != nil {
+		return nil, nil, nil, err
 	}
-	if disallowed, err = toolFlagNames(cmd, "disallowed-tools", "disallowedTools", false); err != nil {
-		return nil, nil, err
+	if disallowed, denyRules, err = toolFlagNames(cmd, "disallowed-tools", "disallowedTools", false, true); err != nil {
+		return nil, nil, nil, err
 	}
 	others, err := toolsFlagOthers(cmd)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return allowed, append(disallowed, others...), nil
+	return allowed, append(disallowed, others...), denyRules, nil
 }
 
 // toolsFlagOthers returns the built-in tools that --tools leaves out, as
@@ -69,36 +71,70 @@ func toolsFlagOthers(cmd *cobra.Command) ([]string, error) {
 	return others, nil
 }
 
-func toolFlagNames(cmd *cobra.Command, flag, claudeFlag string, mcpOK bool) ([]string, error) {
+// toolFlagNames returns the tools flag and claudeFlag name and, where
+// rulesOK, the patterns of the Bash(pattern) rules they give.
+func toolFlagNames(cmd *cobra.Command, flag, claudeFlag string, mcpOK, rulesOK bool) (tools, rules []string, err error) {
 	var values []string
 	for _, name := range []string{flag, claudeFlag} {
-		v, err := cmd.Flags().GetStringSlice(name)
+		v, err := cmd.Flags().GetStringArray(name)
 		if err != nil {
 			// The command does not take the flag.
 			continue
 		}
 		values = append(values, v...)
 	}
-	var tools []string
 	for _, value := range values {
-		// Claude Code takes the tools as separate words of one argument,
-		// so split on spaces as well as the commas StringSlice splits on.
-		for _, word := range strings.Fields(value) {
+		// Claude Code takes the tools as separate words of one argument.
+		for _, word := range ruleWords(value) {
+			if pattern, ok := config.BashRulePattern(word); ok && rulesOK {
+				if strings.TrimSpace(strings.TrimSuffix(pattern, ":*")) == "" {
+					return nil, nil, fmt.Errorf("%q names no command (in --%s)", word, flag)
+				}
+				rules = append(rules, pattern)
+				continue
+			}
 			tool, err := toolFlagName(word, mcpOK)
 			if err != nil {
-				return nil, fmt.Errorf("%w (in --%s)", err, flag)
+				return nil, nil, fmt.Errorf("%w (in --%s)", err, flag)
 			}
 			tools = append(tools, tool)
 		}
 	}
-	return tools, nil
+	return tools, rules, nil
+}
+
+// ruleWords splits value into its tools and rules: at commas and spaces,
+// but not inside a rule's parentheses, so "Bash(git push *) Edit" is two.
+func ruleWords(value string) []string {
+	var words []string
+	var word strings.Builder
+	depth := 0
+	for _, r := range value {
+		switch {
+		case r == '(':
+			depth++
+		case r == ')' && depth > 0:
+			depth--
+		case depth == 0 && (r == ',' || unicode.IsSpace(r)):
+			if word.Len() > 0 {
+				words = append(words, word.String())
+				word.Reset()
+			}
+			continue
+		}
+		word.WriteRune(r)
+	}
+	if word.Len() > 0 {
+		words = append(words, word.String())
+	}
+	return words
 }
 
 // toolFlagName is the built-in tool word names: Klash's name for it in
 // any case, or Claude Code's, or, where mcpOK, an MCP tool's name.
 func toolFlagName(word string, mcpOK bool) (string, error) {
 	if strings.ContainsAny(word, "()") {
-		return "", fmt.Errorf("klash takes whole tools only, not a command pattern like %q", word)
+		return "", fmt.Errorf("klash takes whole tools here, not a rule like %q; a Bash(...) deny rule goes in --disallowed-tools", word)
 	}
 	if tool := tooldefs.FromClaudeCode(word); tool != "" {
 		return tool, nil

@@ -407,7 +407,7 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 		return nil, nil, err
 	}
 
-	allowedTools, disallowedTools, err := toolFlags(cmd)
+	allowedTools, disallowedTools, denyRules, err := toolFlags(cmd)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -440,9 +440,10 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	store.Overrides().AppendSystemPrompt = appendSystemPrompt
 	applyPermissionMode(store.Overrides(), permissionMode)
 	store.Overrides().AddedDirs = addedDirs
-	if len(allowedTools) > 0 || len(disallowedTools) > 0 || len(mcpServers) > 0 || strictMCP {
+	if len(allowedTools) > 0 || len(disallowedTools) > 0 || len(denyRules) > 0 || len(mcpServers) > 0 || strictMCP {
 		store.Overrides().AllowedTools = allowedTools
 		store.Overrides().DisabledTools = disallowedTools
+		store.Overrides().DenyRules = denyRules
 		store.Overrides().MCP = mcpServers
 		store.Overrides().StrictMCP = strictMCP
 		store.SetupAgents()
@@ -548,10 +549,10 @@ func setupClientServerWorkspace(cmd *cobra.Command) (workspace.Workspace, func()
 func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func(), error) {
 	// The workspace's config lives on the server, so tools named here
 	// would not reach it; say so rather than run with them ignored.
-	if allowed, disallowed, err := toolFlags(cmd); err != nil {
+	if allowed, disallowed, denyRules, err := toolFlags(cmd); err != nil {
 		return nil, nil, nil, err
-	} else if len(allowed) > 0 || len(disallowed) > 0 {
-		return nil, nil, nil, fmt.Errorf("tools named with --allowed-tools or --disallowed-tools cannot reach the server's config with %s=1 yet; set options.disabled_tools or permissions.allowed_tools in the project's klash.json instead", "KLASH_CLIENT_SERVER")
+	} else if len(allowed) > 0 || len(disallowed) > 0 || len(denyRules) > 0 {
+		return nil, nil, nil, fmt.Errorf("tools named with --allowed-tools or --disallowed-tools cannot reach the server's config with %s=1 yet; set options.disabled_tools, permissions.allowed_tools or permissions.deny in the project's klash.json instead", "KLASH_CLIENT_SERVER")
 	}
 	if dirs, err := addDirFlag(cmd); err != nil {
 		return nil, nil, nil, err

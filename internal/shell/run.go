@@ -343,7 +343,7 @@ func blockHandler(blockFuncs []BlockFunc) execMiddleware {
 			}
 			for _, blockFunc := range blockFuncs {
 				if blockFunc(args) {
-					return fmt.Errorf("command is not allowed for security reasons: %q", args[0])
+					return fmt.Errorf("command is not allowed for security reasons: %q", strings.Join(args, " "))
 				}
 			}
 			return next(ctx, args)

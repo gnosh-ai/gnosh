@@ -24,6 +24,7 @@ func TestToolOverridesSurviveAReload(t *testing.T) {
 	require.NoError(t, err)
 	store.Overrides().DisabledTools = []string{"bash"}
 	store.Overrides().AllowedTools = []string{"view"}
+	store.Overrides().DenyRules = []string{"git push *"}
 	store.SetupAgents()
 
 	check := func(when string) {
@@ -32,6 +33,7 @@ func TestToolOverridesSurviveAReload(t *testing.T) {
 		require.NotContains(t, cfg.Agents[AgentCoder].AllowedTools, "bash", when)
 		require.Contains(t, cfg.Agents[AgentCoder].AllowedTools, "edit", when)
 		require.Contains(t, cfg.Permissions.AllowedTools, "view", when)
+		require.Equal(t, []string{"git push *"}, cfg.Permissions.BashDenyPatterns(), when)
 	}
 	check("after the flags are applied")
 

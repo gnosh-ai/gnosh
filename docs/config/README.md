@@ -426,7 +426,9 @@ Flags:
 ### permissions
 
 Configure tool permissions. `allow` skips approval prompts; `deny` hides tools
-from the agent entirely.
+from the agent entirely, or, given Claude Code's `Bash(pattern)` rule, stops the
+commands the pattern matches wherever they appear in a command line (in JSON,
+`"permissions": {"deny": ["Bash(git push *)"]}`).
 
 ```text
 Usage:
@@ -448,16 +450,19 @@ Usage:
 
 #### `permissions deny`
 
-Hide one or more tools from the agent so they cannot be called.
+Hide one or more tools from the agent so they cannot be called, or stop
+commands with Claude Code's deny rules. A `*` stands for any text, and a
+trailing ` *` also matches the bare command: `Bash(git push *)` stops
+`git push origin main` and `cd x && git push`, not `git status`.
 
 ```text
 Usage:
-  permissions deny <tool> [<tool> ...]
+  permissions deny <tool|'Bash(pattern)'> [...]
 ```
 
 ```bash
 permissions allow view ls grep edit
-permissions deny bash
+permissions deny sourcegraph 'Bash(git push *)' 'Bash(rm -rf *)'
 ```
 
 ### option

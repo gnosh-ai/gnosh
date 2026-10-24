@@ -480,6 +480,38 @@ const (
 
 type Permissions struct {
 	AllowedTools []string `json:"allowed_tools,omitempty" jsonschema:"description=List of tools that don't require permission prompts,example=bash,example=view"`
+	// Deny are Claude Code's permissions.deny rules of the two kinds klash
+	// applies: a tool's name, which takes the tool from the agent as
+	// options.disabled_tools does, and Bash(pattern), which stops every
+	// command the pattern matches (shell.CommandRuleBlocker). Another kind
+	// of rule is refused at load, so a rule meant to protect something is
+	// never ignored.
+	Deny []string `json:"deny,omitempty" jsonschema:"description=Claude Code's deny rules: a tool's name to take the tool away or Bash(pattern) to stop the commands the pattern matches,example=Bash(git push *),example=WebFetch"`
+}
+
+// BashDenyPatterns returns the patterns of the Bash(pattern) rules in
+// permissions.deny.
+func (p *Permissions) BashDenyPatterns() []string {
+	if p == nil {
+		return nil
+	}
+	var patterns []string
+	for _, rule := range p.Deny {
+		if pattern, ok := BashRulePattern(rule); ok {
+			patterns = append(patterns, pattern)
+		}
+	}
+	return patterns
+}
+
+// BashRulePattern is the pattern of rule when it is a Bash(pattern) rule,
+// in Claude Code's spelling or klash's (bash).
+func BashRulePattern(rule string) (string, bool) {
+	tool, rest, ok := strings.Cut(rule, "(")
+	if !ok || !strings.EqualFold(tool, "bash") {
+		return "", false
+	}
+	return strings.CutSuffix(rest, ")")
 }
 
 type TrailerStyle string

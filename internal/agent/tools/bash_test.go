@@ -169,7 +169,7 @@ func (m *recordingPermissionService) SubscribeNotifications(ctx context.Context)
 func newBashToolForTest(workingDir string) fantasy.AgentTool {
 	permissions := &mockBashPermissionService{Broker: pubsub.NewBroker[permission.PermissionRequest]()}
 	attribution := &config.Attribution{TrailerStyle: config.TrailerStyleNone}
-	return NewBashTool(permissions, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs)
+	return NewBashTool(permissions, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs, nil)
 }
 
 func newBashToolWithRecordingPerms(workingDir string, allow bool) (fantasy.AgentTool, *recordingPermissionService) {
@@ -178,7 +178,7 @@ func newBashToolWithRecordingPerms(workingDir string, allow bool) (fantasy.Agent
 		allow:  allow,
 	}
 	attribution := &config.Attribution{TrailerStyle: config.TrailerStyleNone}
-	return NewBashTool(perms, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs), perms
+	return NewBashTool(perms, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs, nil), perms
 }
 
 func TestBashTool_ChainedCommandsRequirePermission(t *testing.T) {
@@ -289,7 +289,7 @@ func TestBashTool_RefusesGnokeyPasswordOnStdin(t *testing.T) {
 	t.Parallel()
 
 	blockedParts := func(parts []string) bool {
-		for _, block := range blockFuncs() {
+		for _, block := range blockFuncs(nil) {
 			if block(parts) {
 				return true
 			}
@@ -411,4 +411,24 @@ func TestWithSessionEnvFileKeepsTheParents(t *testing.T) {
 	parent := WithSessionEnvFile(context.Background(), "/data/session-env/parent.sh")
 	require.Equal(t, "/data/session-env/parent.sh", SessionEnvFileFromContext(WithSessionEnvFile(parent, "/data/session-env/child.sh")))
 	require.Empty(t, SessionEnvFileFromContext(context.Background()))
+}
+
+// A Bash deny rule given to the bash tool stops the commands it matches,
+// even after another command on the line, and the tool's description
+// names the rule for the model; other commands run.
+func TestBashTool_DenyRules(t *testing.T) {
+	workingDir := t.TempDir()
+	perms := &mockBashPermissionService{Broker: pubsub.NewBroker[permission.PermissionRequest]()}
+	attribution := &config.Attribution{TrailerStyle: config.TrailerStyleNone}
+	tool := NewBashTool(perms, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs, []string{"touch *"})
+	require.Contains(t, tool.Info().Description, "deny, wherever they appear in a command line: touch *")
+	require.NotContains(t, newBashToolForTest(workingDir).Info().Description, "permission rules deny")
+
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+	resp := runBashTool(t, tool, ctx, BashParams{Description: "touch", Command: "echo start && touch denied.txt"})
+	require.Contains(t, resp.Content, `not allowed for security reasons: "touch denied.txt"`)
+	require.NoFileExists(t, filepath.Join(workingDir, "denied.txt"))
+
+	resp = runBashTool(t, tool, ctx, BashParams{Description: "echo", Command: "echo fine"})
+	require.Contains(t, resp.Content, "fine")
 }

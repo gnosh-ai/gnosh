@@ -15,11 +15,13 @@ import (
 // Usage:
 //
 //	permissions allow <tool> [<tool> ...]
-//	permissions deny <tool> [<tool> ...]
+//	permissions deny <tool|'Bash(pattern)'> [...]
 //
 // "allow" adds tools to the allow-list (tools that skip permission prompts).
 // "deny" hides tools from the agent entirely (options.disabled_tools) — the
-// inverse of allow. Adding the same tool twice is a no-op.
+// inverse of allow — and takes Claude Code's Bash(pattern) deny rules,
+// which go into permissions.deny and stop the commands they match. Adding
+// the same tool or rule twice is a no-op.
 //
 // Precedence: deny wins. If a tool appears in both allow and deny, it is
 // still removed from the agent's effective tool set via disabled_tools.
@@ -85,27 +87,51 @@ func permissionsAllow(b *ConfigBuilder, args []string, stderr io.Writer) error {
 }
 
 // permissionsDeny hides tools from the agent by adding them to
-// options.disabled_tools. It is the inverse of allow.
+// options.disabled_tools, the inverse of allow, and adds Bash(pattern)
+// deny rules to permissions.deny.
 func permissionsDeny(b *ConfigBuilder, args []string, stderr io.Writer) error {
 	if len(args) < 3 {
-		return usage(stderr, "usage: permissions deny <tool> [<tool> ...]")
+		return usage(stderr, "usage: permissions deny <tool|'Bash(pattern)'> [...]")
+	}
+	var tools, rules []string
+	for _, arg := range args[2:] {
+		tool, pattern, isRule := strings.Cut(arg, "(")
+		if !isRule || !strings.EqualFold(tool, "bash") || !strings.HasSuffix(pattern, ")") {
+			tools = append(tools, arg)
+			continue
+		}
+		if strings.TrimSpace(strings.TrimSuffix(strings.TrimSuffix(pattern, ")"), ":*")) == "" {
+			return usage(stderr, fmt.Sprintf("permissions deny: %q names no command", arg))
+		}
+		rules = append(rules, arg)
 	}
 	// deny writes options.disabled_tools, which filters the built-in set
 	// only: an MCP name there would be a no-op, so it is not accepted.
-	if err := checkToolNames(args[2:], false, "permissions deny", stderr); err != nil {
+	if err := checkToolNames(tools, false, "permissions deny", stderr); err != nil {
 		return err
 	}
-	opts := b.section("options")
-	disabled, _ := opts["disabled_tools"].([]any)
-
-	for _, tool := range args[2:] {
-		if !containsAny(disabled, tool) {
-			disabled = append(disabled, tool)
+	if len(tools) > 0 {
+		opts := b.section("options")
+		disabled, _ := opts["disabled_tools"].([]any)
+		for _, tool := range tools {
+			if !containsAny(disabled, tool) {
+				disabled = append(disabled, tool)
+			}
 		}
+		opts["disabled_tools"] = disabled
 	}
-	opts["disabled_tools"] = disabled
+	if len(rules) > 0 {
+		perms := b.section("permissions")
+		deny, _ := perms["deny"].([]any)
+		for _, rule := range rules {
+			if !containsAny(deny, rule) {
+				deny = append(deny, rule)
+			}
+		}
+		perms["deny"] = deny
+	}
 
-	slog.Info("Permissions denied in shell config", "tools", args[2:])
+	slog.Info("Permissions denied in shell config", "tools", tools, "rules", rules)
 	return nil
 }
 

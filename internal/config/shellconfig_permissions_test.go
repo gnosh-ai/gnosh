@@ -92,3 +92,17 @@ permissions deny bash`)
 	require.NotContains(t, cfg.Agents[config.AgentCoder].AllowedTools, "bash")
 	require.Contains(t, cfg.Agents[config.AgentCoder].AllowedTools, "view")
 }
+
+// permissions deny takes Claude Code's Bash(pattern) deny rules beside
+// tools: they go into permissions.deny, and stop the commands they match.
+func TestShellConfigPermissionsDenyRules(t *testing.T) {
+	store := loadCrushSh(t, `permissions deny 'Bash(git push *)' sourcegraph
+permissions deny 'Bash(git push *)' 'bash(rm -rf *)'`)
+
+	require.Equal(t, []string{"Bash(git push *)", "bash(rm -rf *)"}, store.Config().Permissions.Deny)
+	require.Equal(t, []string{"git push *", "rm -rf *"}, store.Config().Permissions.BashDenyPatterns())
+	require.Contains(t, store.Config().Options.DisabledTools, "sourcegraph")
+
+	_, err := loadCrushShErr(t, `permissions deny 'Bash()'`)
+	require.ErrorContains(t, err, "names no command")
+}

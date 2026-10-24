@@ -90,6 +90,7 @@ var bashDescriptionTpl = template.Must(
 
 type bashDescriptionData struct {
 	BannedCommands  string
+	DenyRules       string
 	MaxOutputLength int
 	Attribution     config.Attribution
 	ModelID         string
@@ -170,11 +171,12 @@ var bannedCommands = []string{
 	"ufw",
 }
 
-func bashDescription(attribution *config.Attribution, modelID string) string {
+func bashDescription(attribution *config.Attribution, modelID string, denyRules []string) string {
 	bannedCommandsStr := strings.Join(bannedCommands, ", ")
 	var out bytes.Buffer
 	if err := bashDescriptionTpl.Execute(&out, bashDescriptionData{
 		BannedCommands:  bannedCommandsStr,
+		DenyRules:       strings.Join(denyRules, ", "),
 		MaxOutputLength: MaxOutputLength,
 		Attribution:     *attribution,
 		ModelID:         modelID,
@@ -187,8 +189,10 @@ func bashDescription(attribution *config.Attribution, modelID string) string {
 	return out.String()
 }
 
-func blockFuncs() []shell.BlockFunc {
-	return []shell.BlockFunc{
+// blockFuncs are the commands the shell refuses to run: the banned ones,
+// and those the Bash(pattern) deny rules of the permissions match.
+func blockFuncs(denyRules []string) []shell.BlockFunc {
+	funcs := []shell.BlockFunc{
 		shell.CommandsBlocker(bannedCommands),
 
 		// System package managers
@@ -224,12 +228,19 @@ func blockFuncs() []shell.BlockFunc {
 		shell.ArgumentsBlocker("gnokey", nil, []string{"-insecure-password-stdin"}),
 		shell.ArgumentsBlocker("gnokey", nil, []string{"--insecure-password-stdin"}),
 	}
+	for _, pattern := range denyRules {
+		funcs = append(funcs, shell.CommandRuleBlocker(pattern))
+	}
+	return funcs
 }
 
-func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, modelID string, maxBackgroundJobs int) fantasy.AgentTool {
+// NewBashTool returns the bash tool. denyRules are the patterns of the
+// Bash(pattern) deny rules of the permissions: the shell refuses every
+// command one matches, wherever in a command line it is.
+func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, modelID string, maxBackgroundJobs int, denyRules []string) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		BashToolName,
-		string(bashDescription(attribution, modelID)),
+		string(bashDescription(attribution, modelID, denyRules)),
 		func(ctx context.Context, params BashParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			if params.Command == "" {
 				return fantasy.NewTextErrorResponse("missing command"), nil
@@ -282,7 +293,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				startTime := time.Now()
 				bgManager := shell.GetBackgroundShellManager()
 				// Use background context so it continues after tool returns
-				bgShell, err := bgManager.StartAfter(context.Background(), execWorkingDir, blockFuncs(), sessionEnvSetup(ctx), params.Command, params.Description, maxBackgroundJobs)
+				bgShell, err := bgManager.StartAfter(context.Background(), execWorkingDir, blockFuncs(denyRules), sessionEnvSetup(ctx), params.Command, params.Description, maxBackgroundJobs)
 				if err != nil {
 					return fantasy.ToolResponse{}, fmt.Errorf("error starting background shell: %w", err)
 				}
@@ -337,7 +348,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 
 			// Start with detached context so it can survive if moved to background
 			bgManager := shell.GetBackgroundShellManager()
-			bgShell, err := bgManager.StartAfter(context.Background(), execWorkingDir, blockFuncs(), sessionEnvSetup(ctx), params.Command, params.Description, maxBackgroundJobs)
+			bgShell, err := bgManager.StartAfter(context.Background(), execWorkingDir, blockFuncs(denyRules), sessionEnvSetup(ctx), params.Command, params.Description, maxBackgroundJobs)
 			if err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("error starting shell: %w", err)
 			}

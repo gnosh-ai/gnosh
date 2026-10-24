@@ -119,7 +119,7 @@ Claude Code's names work here too.
 | `--add-dir ../other`            | `--add-dir ../other` (repeatable)                  | Let the agent read another directory without asking         |
 | `--mcp-config ./mcp.json`        | `--mcp-config ./mcp.json` (repeatable), `--strict-mcp-config` | Load MCP servers from a file in `.mcp.json`'s shape, or its JSON; with the second flag, only those |
 | `--allowedTools Read Grep`       | `--allowedTools "Read Grep"`, or `Read,Grep`       | Let these tools run without asking; the file tools still ask before changing `.git`, shell or tool settings, or keys |
-| `--disallowedTools Bash Edit`    | `--disallowedTools "Bash Edit"`, or `Bash,Edit`    | Do not give the agent these tools                           |
+| `--disallowedTools Bash Edit`    | `--disallowedTools "Bash Edit"`, or `Bash,Edit`    | Do not give the agent these tools; `"Bash(git push *)"` refuses the commands it matches, as `permissions.deny` does |
 | `--tools "Read,Grep"`            | `--tools "Read,Grep"` (`""`: none)                 | Give the agent only these built-in tools                    |
 | `--system-prompt "…"`            | `--system-prompt "…"`, or `--system-prompt-file`   | Use these instructions in place of Klash's own              |
 | `--append-system-prompt "…"`     | `--append-system-prompt "…"`, or its `-file` form  | Add this text at the end of the system prompt               |
