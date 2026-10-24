@@ -1,25 +1,49 @@
-# Klash
+<p align="center">
+  <a href="https://klash.pro"><img src="docs/brand/banner.svg" width="100%" alt="Klash: a security-first harness for coding agents, in your terminal"></a>
+</p>
 
-**A security-first harness for coding agents, in your terminal.**
+<p align="center">
+  <a href="#nothing-phones-home"><img alt="Telemetry: opt-in" src="https://img.shields.io/badge/telemetry-opt--in-12E89A?style=flat-square&labelColor=0F1B16"></a>
+  <a href="#local-models"><img alt="Models: hosted or local" src="https://img.shields.io/badge/models-hosted%20or%20local-BBF132?style=flat-square&labelColor=0F1B16"></a>
+  <a href="#coming-from-claude-code"><img alt="Speaks Claude Code" src="https://img.shields.io/badge/speaks-Claude%20Code-FED835?style=flat-square&labelColor=0F1B16"></a>
+  <a href="./LICENSE.md"><img alt="License: FSL-1.1-MIT" src="https://img.shields.io/badge/license-FSL--1.1--MIT-819183?style=flat-square&labelColor=0F1B16"></a>
+</p>
+
+<p align="center"><strong>A security-first harness for coding agents, in your terminal.</strong><br>
+A fork of Charm's <a href="https://github.com/charmbracelet/crush">Crush</a> that closes the doors a coding agent usually leaves open.</p>
+
+<p align="center">
+  <a href="#security-first">Security first</a> ·
+  <a href="#coming-from-claude-code">Coming from Claude Code</a> ·
+  <a href="#what-else-changed-from-crush">What else changed</a> ·
+  <a href="#built-for-gnoland">Built for gno.land</a> ·
+  <a href="#installation">Installation</a>
+</p>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/divider-dark.svg">
+  <img src="docs/brand/divider-light.svg" width="100%" alt="">
+</picture>
 
 Klash is a fork of Charm's [Crush](https://github.com/charmbracelet/crush):
 the same terminal UI, sessions, LSP and MCP support, and any model you like,
-from a hosted API to one running on your own machine. On top of that it closes
-doors a coding agent usually leaves open: nothing phones home, text from a tool
-cannot pose as the conversation, the sub-agent that reads web pages for it
-cannot read your files, a misspelt guard stops it instead of being ignored,
-and a check that cannot run holds the work up instead of waving it through.
-It also speaks Claude Code's flags and hooks, fixes a long list of
-things that broke, hung or failed without saying so, and knows Gno and
-gno.land. There every signature waits for you to type the key's password,
-which the model never sees, and a session key caps what even a transaction
-you approved can spend.
+from a hosted API to one running on your own machine. On top of that:
 
-- [Security first](#security-first)
-- [Coming from Claude Code](#coming-from-claude-code)
-- [What else changed from Crush](#what-else-changed-from-crush)
-- [Built for gno.land](#built-for-gnoland)
-- [Installation](#installation)
+- **Nothing phones home.** No usage metrics, no provider catalog fetch, no
+  update check, unless you turn them on.
+- **Tool text can't pose as the conversation.** A model's control tokens in a
+  web page or command output are defused before the model reads them.
+- **The web reader can't read your files.** The sub-agent that reads web pages
+  for it can open only the pages it fetched.
+- **Mistakes fail closed.** A misspelt guard stops Klash instead of being
+  ignored, and a check that cannot run holds the work up instead of waving it
+  through.
+- **Speaks Claude Code.** Its flags and its hooks.
+- **Fixes what broke.** A long list of things that broke, hung or failed
+  without saying so.
+- **Knows Gno and gno.land.** Every signature waits for you to type the key's
+  password, which the model never sees, and a session key caps what even a
+  transaction you approved can spend.
 
 ## Security first
 
@@ -1257,3 +1281,7 @@ becomes MIT two years after Charm released it.
 Klash is a fork of [Crush](https://github.com/charmbracelet/crush) by
 [Charm](https://charm.land). Crush and Charm are Charmbracelet's names; this
 fork is not affiliated with or endorsed by them.
+
+<p align="center">
+  <a href="https://klash.pro"><img src="docs/brand/signoff.svg" width="100%" alt="Klash, klash.pro"></a>
+</p>
