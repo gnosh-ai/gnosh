@@ -86,6 +86,10 @@ type CreatePermissionRequest struct {
 	// always asked about (see protectedFile). Path names only the working
 	// directory for a file in it.
 	FilePath string `json:"file_path,omitempty"`
+	// FilePaths are more files the tool would change, as absolute paths:
+	// lsp_rename changes every file a rename reaches. A protected one makes
+	// the request always asked about, as FilePath does.
+	FilePaths []string `json:"file_paths,omitempty"`
 }
 
 type PermissionNotification struct {
@@ -163,6 +167,9 @@ type permissionService struct {
 	// acceptEdits is Claude Code's acceptEdits mode: an edit of a file in
 	// the working directory or an added one runs without asking.
 	acceptEdits bool
+	// protectedPaths are directories, besides the protected names, that a
+	// file tool's change in is always asked about (see protectedFile).
+	protectedPaths []string
 
 	// used to make sure we only process one request at a time
 	requestMu       sync.Mutex
@@ -247,11 +254,13 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 		return true, nil
 	}
 
-	// A change of a protected file is asked about however the tool is
-	// allowed or was granted for the session, as in Claude Code, where
-	// allow rules do not pre-approve protected-path writes: only yolo, a
-	// session that grants all its requests, and a hook skip the question.
-	protected := protectedFile(opts.FilePath)
+	// A file tool's change of a protected file is asked about however the
+	// tool is allowed or was granted for the session, as in Claude Code,
+	// where allow rules do not pre-approve protected-path writes: only
+	// yolo, a session that grants all its requests, and a hook skip the
+	// question. A bash command is not read for the files it writes, so
+	// allowing bash still allows whatever it does, as in Claude Code.
+	protected := s.protectedFile(opts.FilePath) || slices.ContainsFunc(opts.FilePaths, s.protectedFile)
 
 	// Check if the tool/action combination is in the allowlist
 	commandKey := opts.ToolName + ":" + opts.Action
@@ -317,12 +326,15 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 	}
 	permission := s.newRequest(opts, dir)
 
+	// A grant for the session covers a file only where it really is: a
+	// link in the project to a file outside is not in the project.
 	if _, ok := s.sessionPermissions.Get(PermissionKey{
 		SessionID: permission.SessionID,
 		ToolName:  permission.ToolName,
 		Action:    permission.Action,
 		Path:      permission.Path,
-	}); ok && !protected {
+	}); ok && !protected && fileIn(opts.FilePath, permission.Path) &&
+		!slices.ContainsFunc(opts.FilePaths, func(f string) bool { return !fileIn(f, permission.Path) }) {
 		s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{
 			SessionID:  opts.SessionID,
 			ToolCallID: opts.ToolCallID,
@@ -466,6 +478,10 @@ type Options struct {
 	AddedDirs []string
 	// AcceptEdits is Claude Code's acceptEdits mode (see acceptsEdit).
 	AcceptEdits bool
+	// ProtectedPaths are directories, as absolute paths, a file tool's
+	// change in is always asked about, as in the protected names: the
+	// session env files, which run ahead of every bash command.
+	ProtectedPaths []string
 }
 
 // New makes the permission service opts describe.
@@ -480,6 +496,7 @@ func New(opts Options) Service {
 		pendingRequests:     csync.NewMap[string, chan bool](),
 		addedDirs:           opts.AddedDirs,
 		acceptEdits:         opts.AcceptEdits,
+		protectedPaths:      opts.ProtectedPaths,
 	}
 	svc.skip.Store(opts.Skip)
 	return svc

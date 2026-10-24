@@ -11,5 +11,11 @@ import "path/filepath"
 // permission prompts and hooks, so it must not be where the agent's edits
 // of the project go.
 func SessionEnvFile(sessionID string) string {
-	return filepath.Join(filepath.Dir(GlobalConfigData()), "session-env", sessionID+".sh")
+	return filepath.Join(SessionEnvDir(), sessionID+".sh")
+}
+
+// SessionEnvDir is the directory of the sessions' env files. A file tool's
+// change in it is always asked about, however the tool is allowed.
+func SessionEnvDir() string {
+	return filepath.Join(filepath.Dir(GlobalConfigData()), "session-env")
 }

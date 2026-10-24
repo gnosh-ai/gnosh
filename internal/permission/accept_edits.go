@@ -14,17 +14,18 @@ import (
 var acceptEditsTools = map[string]bool{"edit": true, "multiedit": true, "write": true}
 
 // protectedDirs and protectedFiles are the paths no allowed tool, earlier
-// grant for the session or acceptEdits lets a change of run unasked, as
-// Claude Code's never do: what they hold runs code or sets things up (git
-// hooks and config, a shell's startup files, editor and package-manager
-// settings, Claude Code's and Klash's own settings), so a change there is
-// asked about in every mode but yolo.
-// A directory counts anywhere in a path; ".config/git" is two names in a
-// row.
+// grant for the session or acceptEdits lets a file tool's change of run
+// unasked, as Claude Code's never do: what they hold runs code, sets
+// things up or lets someone in (git hooks and config, a shell's startup
+// files, editor and package-manager settings, ssh and gpg keys, Claude
+// Code's and Klash's own settings), so such a change is asked about in
+// every mode but yolo. A directory counts anywhere in a path;
+// ".config/git" is two names in a row. Names match in any case: on a
+// case-insensitive disk, as a Mac's, .GIT/hooks is .git/hooks.
 var (
 	protectedDirs = []string{
 		".git", ".vscode", ".idea", ".husky", ".cargo", ".devcontainer", ".yarn", ".mvn",
-		".claude", ".klash", ".crush",
+		".claude", ".klash", ".crush", ".ssh", ".gnupg",
 	}
 	protectedFiles = []string{
 		".gitconfig", ".gitmodules", ".bashrc", ".bash_profile", ".bash_login", ".profile",
@@ -42,7 +43,7 @@ var (
 // which let them write anywhere unasked: a shell's startup file, a git
 // hook, Klash's own config.
 func (s *permissionService) acceptsEdit(path string) bool {
-	if !filepath.IsAbs(path) || protectedFile(path) {
+	if !filepath.IsAbs(path) || s.protectedFile(path) {
 		return false
 	}
 	real, _ := resolvedPath(filepath.Clean(path))
@@ -59,14 +60,35 @@ func (s *permissionService) acceptsEdit(path string) bool {
 
 // protectedFile reports whether a change of path, a file a tool would
 // change, is always asked about: path, as given or with its symlinks
-// resolved, is or lies in one of the protected paths, or ends in a symlink
-// that leads nowhere. "" is no file.
-func protectedFile(path string) bool {
+// resolved, is or lies in one of the protected paths or in one of the
+// service's protectedPaths, or ends in a symlink that leads nowhere. ""
+// is no file.
+func (s *permissionService) protectedFile(path string) bool {
 	if path == "" {
 		return false
 	}
 	real, ok := resolvedPath(filepath.Clean(path))
-	return !ok || protected(path) || protected(real)
+	if !ok || protected(path) || protected(real) {
+		return true
+	}
+	for _, dir := range s.protectedPaths {
+		if withinFold(dir, path) || withinFold(dir, real) {
+			return true
+		}
+	}
+	return false
+}
+
+// fileIn reports whether path, a file a tool would change, lies in dir
+// once both have their symlinks resolved; true for "", a request that
+// names no file.
+func fileIn(path, dir string) bool {
+	if path == "" {
+		return true
+	}
+	real, ok := resolvedPath(filepath.Clean(path))
+	realDir, dirOK := resolvedPath(filepath.Clean(dir))
+	return ok && dirOK && within(realDir, real)
 }
 
 // resolvedPath is path with every symlink resolved, the part of it that
@@ -98,10 +120,21 @@ func within(root, path string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
+// withinFold is within with the names compared in any case, and root's
+// symlinks resolved as well as written.
+func withinFold(root, path string) bool {
+	path = strings.ToLower(path)
+	if within(strings.ToLower(root), path) {
+		return true
+	}
+	real, ok := resolvedPath(filepath.Clean(root))
+	return ok && within(strings.ToLower(real), path)
+}
+
 // protected reports whether path is or lies in one of the protected
 // paths.
 func protected(path string) bool {
-	names := strings.Split(filepath.ToSlash(path), "/")
+	names := strings.Split(strings.ToLower(filepath.ToSlash(path)), "/")
 	for i, name := range names {
 		if slices.Contains(protectedDirs, name) || (name == ".config" && i+1 < len(names) && names[i+1] == "git") {
 			return true

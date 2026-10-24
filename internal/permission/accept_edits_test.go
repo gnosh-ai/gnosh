@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -75,6 +76,12 @@ func TestAcceptEditsLetsEditsInTheProjectRun(t *testing.T) {
 		filepath.Join(project, "dangling.go"):                 false,
 		filepath.Join(project, "gitdir", "config"):            false,
 		filepath.Join(project, ".vscode", "settings.json"):    false,
+		filepath.Join(project, ".GIT", "hooks", "pre-commit"): false,
+		filepath.Join(project, "KLASH.JSON"):                  false,
+		filepath.Join(project, ".Claude", "settings.json"):    false,
+		filepath.Join(project, ".config", "GIT", "config"):    false,
+		filepath.Join(project, ".ssh", "authorized_keys"):     false,
+		filepath.Join(project, ".gnupg", "gpg.conf"):          false,
 		"a.go": false,
 		"":     false,
 	} {
@@ -143,4 +150,47 @@ func TestProtectedFilesAreAskedAboutHoweverTheToolIsAllowed(t *testing.T) {
 	auto.AutoApproveSession("s1")
 	require.True(t, runsUnasked(t, t.Context(), auto, "edit", hook), "a klash run's session")
 	require.True(t, runsUnasked(t, WithHookApproval(t.Context(), "call-1"), New(Options{WorkingDir: project}), "edit", hook), "a hook's allow")
+}
+
+// A grant for the session covers a file only where it really is: a link in
+// the project to a file outside it is asked about, as is a file in a
+// directory given as protected (the session env files'), in any case.
+func TestGrantsCoverFilesWhereTheyReallyAre(t *testing.T) {
+	t.Parallel()
+
+	project, outside, envDir := t.TempDir(), t.TempDir(), t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "notes.txt"), []byte("x\n"), 0o644))
+	link := filepath.Join(project, "notes.txt")
+	require.NoError(t, os.Symlink(filepath.Join(outside, "notes.txt"), link))
+
+	granted := New(Options{WorkingDir: project})
+	events := granted.Subscribe(t.Context())
+	done := make(chan bool, 1)
+	go func() {
+		ok, _ := granted.Request(t.Context(), CreatePermissionRequest{
+			SessionID: "s1", ToolCallID: "call-0", ToolName: "write", Action: "write", Path: project, FilePath: filepath.Join(project, "a.go"),
+		})
+		done <- ok
+	}()
+	granted.GrantPersistent((<-events).Payload)
+	require.True(t, <-done)
+	require.True(t, runsUnaskedAt(t, t.Context(), granted, "write", filepath.Join(project, "b.go"), project))
+	require.False(t, runsUnaskedAt(t, t.Context(), granted, "write", link, project), "a link out of the project")
+
+	allowed := New(Options{WorkingDir: project, AllowedTools: []string{"write", "lsp_rename"}, ProtectedPaths: []string{envDir}})
+	require.True(t, runsUnasked(t, t.Context(), allowed, "write", filepath.Join(project, "b.go")))
+	require.False(t, runsUnasked(t, t.Context(), allowed, "write", filepath.Join(envDir, "s1.sh")), "a session env file")
+	require.False(t, runsUnasked(t, t.Context(), allowed, "write", strings.ToUpper(envDir)+"/S1.SH"), "in any case")
+
+	rename := func(files ...string) bool {
+		cancelled, cancel := context.WithCancel(t.Context())
+		cancel()
+		ok, err := allowed.Request(cancelled, CreatePermissionRequest{SessionID: "s1", ToolCallID: "call-2", ToolName: "lsp_rename", FilePaths: files})
+		if !ok {
+			require.ErrorIs(t, err, context.Canceled)
+		}
+		return ok
+	}
+	require.True(t, rename(filepath.Join(project, "a.go"), filepath.Join(project, "b.go")))
+	require.False(t, rename(filepath.Join(project, "a.go"), filepath.Join(project, ".git", "config")), "a rename that reaches a protected file")
 }

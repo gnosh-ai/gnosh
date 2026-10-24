@@ -111,14 +111,17 @@ type App struct {
 }
 
 // permissionOptions is what the workspace's permission service is made
-// with: yolo, the allowed tools, the directories added with --add-dir, and
-// --permission-mode acceptEdits.
+// with: yolo, the allowed tools, the directories added with --add-dir,
+// --permission-mode acceptEdits, and the session env files' directory,
+// which no allowed tool may change unasked.
 func permissionOptions(store *config.ConfigStore) permission.Options {
 	opts := permission.Options{
 		WorkingDir:  store.WorkingDir(),
 		Skip:        store.Overrides().SkipPermissionRequests,
 		AddedDirs:   store.Overrides().AddedDirs,
 		AcceptEdits: store.Overrides().AcceptEdits,
+		// What a session env file holds runs ahead of every bash command.
+		ProtectedPaths: []string{config.SessionEnvDir()},
 	}
 	if cfg := store.Config(); cfg.Permissions != nil {
 		opts.AllowedTools = cfg.Permissions.AllowedTools
