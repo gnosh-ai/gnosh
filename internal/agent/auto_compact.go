@@ -18,14 +18,18 @@ import (
 // that window at which to compact, and like it can only bring compaction
 // earlier. Compacting earlier keeps a long session short, and with it the
 // time a local model takes to read the conversation again when its cache
-// was lost.
-func compactAt(cw int64) int64 {
+// was lost. Without overrides, the variables are not read: the default
+// point.
+func compactAt(cw int64, overrides bool) int64 {
 	if cw <= 0 {
 		cw = unknownContextWindowFallback
 	}
 	at := cw - int64(float64(cw)*smallContextWindowRatio)
 	if cw > largeContextWindowThreshold {
 		at = cw - largeContextWindowBuffer
+	}
+	if !overrides {
+		return at
 	}
 	window := cw
 	if w, ok := envAutoCompactWindow(); ok {
@@ -93,4 +97,36 @@ func warnCompactVariable(name, value, why string) {
 	if _, seen := warnedCompactVariables.LoadOrStore(name+"="+value, true); !seen {
 		slog.Warn("An auto-compaction variable has a value Klash cannot use as given", "variable", name, "value", value, "why", why)
 	}
+}
+
+// How far a session's auto-compaction goes; see sessionAgent.compacts.
+const (
+	compactAsAsked   = iota // at the point compactAt gives, overrides read
+	compactAtDefault        // at the default point, overrides dropped
+	compactNever            // not at all
+)
+
+// compacts reports whether a session whose running token total is tokens,
+// on a model with context window cw, is summarized before its next step
+// (see autoSummarize). A summary that leaves the conversation still over
+// the point that set it off cannot bring it under, and summarizing again
+// would only repeat it on every step, in a loop: then the session drops
+// the earlier point the variables gave for the default, and if it is over
+// that too, it stops compacting, until it is summarized by hand.
+func (a *sessionAgent) compacts(sessionID string, cw, tokens int64) bool {
+	level, _ := a.compactLevels.Get(sessionID)
+	if _, justSummarized := a.justSummarized.Take(sessionID); justSummarized {
+		if level == compactAsAsked && autoSummarize(cw, tokens, a.disableAutoSummarize, true) {
+			level = compactAtDefault
+			slog.Warn("A summary left the conversation over the point at which it is compacted; compacting at the default point from now on",
+				"session_id", sessionID, "tokens", tokens, "point", compactAt(cw, true))
+		}
+		if level == compactAtDefault && autoSummarize(cw, tokens, a.disableAutoSummarize, false) {
+			level = compactNever
+			slog.Warn("A summary left the conversation over the default point at which it is compacted; not compacting it again unless asked",
+				"session_id", sessionID, "tokens", tokens, "point", compactAt(cw, false))
+		}
+		a.compactLevels.Set(sessionID, level)
+	}
+	return level != compactNever && autoSummarize(cw, tokens, a.disableAutoSummarize, level == compactAsAsked)
 }

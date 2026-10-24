@@ -69,8 +69,8 @@ const (
 
 // autoSummarize reports whether a session whose running token total is tokens
 // should be compacted before the next request, given the model's context
-// window cw (see compactAt). It returns false when auto-summarize is
-// disabled.
+// window cw (see compactAt, which reads the variables when overrides is
+// set). It returns false when auto-summarize is disabled.
 //
 // When cw is unknown (<= 0, e.g. a local or custom model whose window could
 // not be discovered) it falls back to unknownContextWindowFallback instead of
@@ -78,8 +78,8 @@ const (
 // the request ("request exceeds the available context size"), which dead-ends
 // the session. Over-summarizing a model that is in fact larger is wasteful but
 // recoverable; crashing is not. A discovered real window is always preferred.
-func autoSummarize(cw, tokens int64, disabled bool) bool {
-	return !disabled && tokens >= compactAt(cw)
+func autoSummarize(cw, tokens int64, disabled, overrides bool) bool {
+	return !disabled && tokens >= compactAt(cw, overrides)
 }
 
 var userAgent = fmt.Sprintf("Charm-Crush/%s (https://charm.land/crush)", version.Version)
@@ -306,6 +306,11 @@ type sessionAgent struct {
 	// cancel. It is only raised by Cancel when acceptedRuns > 0, so an
 	// idle Escape never records a mark.
 	cancelMark *csync.Map[string, uint64]
+	// justSummarized marks the sessions auto-summarized since their last
+	// step, and compactLevels how far each session's auto-compaction
+	// still goes: see compacts.
+	justSummarized *csync.Map[string, bool]
+	compactLevels  *csync.Map[string, int]
 	// dispatchMuCreate guards lazy creation of per-session entries in
 	// dispatchMu so two goroutines can't race to lock different mutex
 	// instances for the same session.
@@ -396,6 +401,8 @@ func NewSessionAgent(
 		submitting:           csync.NewMap[string, []*activeCancel](),
 		acceptedRuns:         csync.NewMap[string, int](),
 		cancelMark:           csync.NewMap[string, uint64](),
+		justSummarized:       csync.NewMap[string, bool](),
+		compactLevels:        csync.NewMap[string, int](),
 		sessionStarts:        sessionStarts,
 		instructionsLoaded:   instructionsLoaded,
 	}
@@ -1310,7 +1317,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		StopWhen: []fantasy.StopCondition{
 			func(_ []fantasy.StepResult) bool {
 				tokens := currentSession.CompletionTokens + currentSession.PromptTokens
-				if autoSummarize(int64(largeModel.CatwalkCfg.ContextWindow), tokens, a.disableAutoSummarize) {
+				if a.compacts(call.SessionID, int64(largeModel.CatwalkCfg.ContextWindow), tokens) {
 					shouldSummarize = true
 					return true
 				}
@@ -1424,6 +1431,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		if summarizeErr := a.summarize(genCtx, call.SessionID, call.Channel, call.ProviderOptions, call.OnAuthRefresh, preCompactTriggerAuto); summarizeErr != nil {
 			return nil, summarizeErr
 		}
+		a.justSummarized.Set(call.SessionID, true)
 		// If the agent wasn't done...
 		if len(currentAssistant.ToolCalls()) > 0 {
 			call.Prompt = fmt.Sprintf("The previous session was interrupted because it got too long, the initial user request was: `%s`", call.Prompt)
@@ -1591,6 +1599,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 }
 
 func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) error {
+	// A summary asked for by hand starts the session's auto-compaction
+	// afresh (see compacts).
+	a.compactLevels.Del(sessionID)
 	return a.summarize(ctx, sessionID, "", opts, onAuthRefresh, trigger)
 }
 

@@ -17,7 +17,7 @@ func TestAutoCompactVariables(t *testing.T) {
 		t.Helper()
 		t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", window)
 		t.Setenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", percent)
-		return compactAt(cw)
+		return compactAt(cw, true)
 	}
 
 	require.EqualValues(t, qwen-20_000, at("", "", qwen), "by default, 20k short of a large window")
@@ -42,9 +42,12 @@ func TestAutoCompactVariables(t *testing.T) {
 	require.EqualValues(t, qwen-20_000, at("lots", "", qwen), "no number is ignored")
 	require.EqualValues(t, 32_768-6_553, at("150k", "", 0))
 
-	t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "")
+	t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "150k")
 	t.Setenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "50")
-	require.True(t, autoSummarize(qwen, qwen/2, false))
-	require.False(t, autoSummarize(qwen, qwen/2-1, false))
-	require.False(t, autoSummarize(qwen, qwen, true), "disabled stays disabled")
+	require.EqualValues(t, qwen-20_000, compactAt(qwen, false), "the default point reads no variable")
+
+	t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "")
+	require.True(t, autoSummarize(qwen, qwen/2, false, true))
+	require.False(t, autoSummarize(qwen, qwen/2-1, false, true))
+	require.False(t, autoSummarize(qwen, qwen, true, true), "disabled stays disabled")
 }
