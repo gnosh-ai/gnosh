@@ -264,7 +264,7 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 }
 
 func processMultiEditExistingFile(edit editContext, params MultiEditParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-	sessionID, oldContent, isCrlf, resp, err := loadExistingFile(edit, params.FilePath, "session ID is required for editing a file")
+	sessionID, oldContent, isCrlf, stale, resp, err := loadExistingFile(edit, params.FilePath, "session ID is required for editing a file")
 	if err != nil {
 		return fantasy.ToolResponse{}, err
 	}
@@ -272,7 +272,29 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 		return resp, nil
 	}
 
-	currentContent, failedEdits, whitespaceCorrected := applyEditsToContent(oldContent, params.Edits, 0)
+	var (
+		currentContent      string
+		failedEdits         []FailedEdit
+		whitespaceCorrected bool
+	)
+	if stale == "" {
+		currentContent, failedEdits, whitespaceCorrected = applyEditsToContent(oldContent, params.Edits, 0)
+	} else {
+		// The file changed since the agent read it: every edit must match
+		// it exactly, or none is made, rather than some edits of a file
+		// the agent has not seen.
+		currentContent = oldContent
+		for _, op := range params.Edits {
+			if op.OldString == "" && op.NewString == "" {
+				continue
+			}
+			next, ok := replaceExactly(currentContent, op.OldString, op.NewString, op.ReplaceAll)
+			if !ok {
+				return fantasy.NewTextErrorResponse(stale), nil
+			}
+			currentContent = next
+		}
+	}
 
 	// Check if content actually changed
 	if oldContent == currentContent {
@@ -343,7 +365,7 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 	} else {
 		message = fmt.Sprintf("Applied %d edits to file: %s", len(params.Edits), params.FilePath)
 	}
-	message = withWhitespaceNote(message, whitespaceCorrected)
+	message = editedMessage(message, whitespaceCorrected, stale)
 
 	return fantasy.WithResponseMetadata(
 		fantasy.NewTextResponse(message),

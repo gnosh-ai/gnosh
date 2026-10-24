@@ -269,27 +269,34 @@ func commitFileChange(edit editContext, sessionID, filePath, oldContent, newCont
 	return nil
 }
 
-func loadExistingFile(edit editContext, filePath, sessionError string) (sessionID, oldContent string, isCrlf bool, resp fantasy.ToolResponse, err error) {
+// loadExistingFile reads the file an edit changes. stale is set when the
+// file changed since the session last read it, and the file is inside the
+// working directory: the edit is then made only where it matches the file
+// as it is now exactly (replaceExactly), as Claude Code makes one, and
+// stale is the refusal to give when it does not. A stale file outside the
+// working directory, which the agent may not read without asking, is
+// refused outright.
+func loadExistingFile(edit editContext, filePath, sessionError string) (sessionID, oldContent string, isCrlf bool, stale string, resp fantasy.ToolResponse, err error) {
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", "", false, fantasy.NewTextErrorResponse(fmt.Sprintf("file not found: %s", filePath)), nil
+			return "", "", false, "", fantasy.NewTextErrorResponse(fmt.Sprintf("file not found: %s", filePath)), nil
 		}
-		return "", "", false, fantasy.ToolResponse{}, fmt.Errorf("failed to access file: %w", err)
+		return "", "", false, "", fantasy.ToolResponse{}, fmt.Errorf("failed to access file: %w", err)
 	}
 
 	if fileInfo.IsDir() {
-		return "", "", false, fantasy.NewTextErrorResponse(fmt.Sprintf("path is a directory, not a file: %s", filePath)), nil
+		return "", "", false, "", fantasy.NewTextErrorResponse(fmt.Sprintf("path is a directory, not a file: %s", filePath)), nil
 	}
 
 	sessionID = GetSessionFromContext(edit.ctx)
 	if sessionID == "" {
-		return "", "", false, fantasy.ToolResponse{}, fmt.Errorf("%s", sessionError)
+		return "", "", false, "", fantasy.ToolResponse{}, fmt.Errorf("%s", sessionError)
 	}
 
 	lastRead := edit.filetracker.LastReadTime(edit.ctx, sessionID, filePath)
 	if lastRead.IsZero() {
-		return "", "", false, fantasy.NewTextErrorResponse("you must read the file before editing it. Use the view tool first"), nil
+		return "", "", false, "", fantasy.NewTextErrorResponse("you must read the file before editing it. Use the view tool first"), nil
 	}
 
 	// A file a command wrote back as it was, as git stash and pop do, is
@@ -297,27 +304,74 @@ func loadExistingFile(edit editContext, filePath, sessionError string) (sessionI
 	// the file changed.
 	modTime := fileInfo.ModTime().Truncate(time.Second)
 	if modTime.After(lastRead) && !edit.filetracker.UnchangedSinceRead(edit.ctx, sessionID, filePath) {
-		return "", "", false, fantasy.NewTextErrorResponse(
-			fmt.Sprintf(
-				"file %s has been modified since it was last read (mod time: %s, last read: %s), "+
-					"perhaps by a command you ran. Read it again with the view tool before editing it, "+
-					"so the edit is made against its current content.",
-				filePath, modTime.Format(time.RFC3339), lastRead.Format(time.RFC3339),
-			),
-		), nil
+		stale = fmt.Sprintf(
+			"file %s has been modified since it was last read (mod time: %s, last read: %s), "+
+				"perhaps by a command you ran. Read it again with the view tool before editing it, "+
+				"so the edit is made against its current content.",
+			filePath, modTime.Format(time.RFC3339), lastRead.Format(time.RFC3339),
+		)
+		if !fsext.HasPrefix(filePath, edit.workingDir) {
+			return "", "", false, "", fantasy.NewTextErrorResponse(stale), nil
+		}
 	}
 
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", "", false, fantasy.ToolResponse{}, fmt.Errorf("failed to read file: %w", err)
+		return "", "", false, "", fantasy.ToolResponse{}, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	oldContent, isCrlf = fsext.ToUnixLineEndings(string(content))
-	return sessionID, oldContent, isCrlf, fantasy.ToolResponse{}, nil
+	return sessionID, oldContent, isCrlf, stale, fantasy.ToolResponse{}, nil
+}
+
+// staleEditNote ends the result of an edit made to a file that changed
+// since the agent last read it.
+const staleEditNote = "Note: this file had changed since you last read it, and it holds changes you have not seen besides this edit. View it again before an edit that depends on the text around this one."
+
+// replaceExactly makes the replacement only where old appears in content
+// exactly as written: once, or, with replaceAll, anywhere. An edit of a
+// file that changed since the agent read it is made this way or not at
+// all, as Claude Code makes one: an exact, unambiguous match against the
+// file as it is now is safe, while the whitespace-forgiving match of
+// findAndReplace could land on text the agent has not seen.
+func replaceExactly(content, old, new string, replaceAll bool) (string, bool) {
+	index := strings.Index(content, old)
+	switch {
+	case old == "" || index == -1:
+		return "", false
+	case replaceAll:
+		return strings.ReplaceAll(content, old, new), true
+	case index != strings.LastIndex(content, old):
+		return "", false
+	}
+	return content[:index] + new + content[index+len(old):], true
+}
+
+// findAndReplaceIn is findAndReplace, or, for a stale file (see
+// loadExistingFile), replaceExactly with stale as the refusal.
+func findAndReplaceIn(content, old, new string, replaceAll bool, stale string) (string, bool, error) {
+	if stale == "" {
+		return findAndReplace(content, old, new, replaceAll)
+	}
+	result, ok := replaceExactly(content, old, new, replaceAll)
+	if !ok {
+		return "", false, errors.New(stale)
+	}
+	return result, false, nil
+}
+
+// editedMessage is the result of an edit: what it did, and what the
+// agent should know about how it matched.
+func editedMessage(message string, whitespaceCorrected bool, stale string) string {
+	message = withWhitespaceNote(message, whitespaceCorrected)
+	if stale != "" {
+		message += "\n" + staleEditNote
+	}
+	return message
 }
 
 func deleteContent(edit editContext, filePath, oldString string, replaceAll bool, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-	sessionID, oldContent, isCrlf, resp, err := loadExistingFile(edit, filePath, "session ID is required for deleting content")
+	sessionID, oldContent, isCrlf, stale, resp, err := loadExistingFile(edit, filePath, "session ID is required for deleting content")
 	if err != nil {
 		return fantasy.ToolResponse{}, err
 	}
@@ -325,7 +379,7 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 		return resp, nil
 	}
 
-	newContent, whitespaceCorrected, err := findAndReplace(oldContent, oldString, "", replaceAll)
+	newContent, whitespaceCorrected, err := findAndReplaceIn(oldContent, oldString, "", replaceAll, stale)
 	if err != nil {
 		return fantasy.NewTextErrorResponse(err.Error()), nil
 	}
@@ -376,7 +430,7 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 	}
 
 	return fantasy.WithResponseMetadata(
-		fantasy.NewTextResponse(withWhitespaceNote("Content deleted from file: "+filePath, whitespaceCorrected)),
+		fantasy.NewTextResponse(editedMessage("Content deleted from file: "+filePath, whitespaceCorrected, stale)),
 		EditResponseMetadata{
 			OldContent: oldContent,
 			NewContent: writeContent,
@@ -387,7 +441,7 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 }
 
 func replaceContent(edit editContext, filePath, oldString, newString string, replaceAll bool, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-	sessionID, oldContent, isCrlf, resp, err := loadExistingFile(edit, filePath, "session ID is required for editing a file")
+	sessionID, oldContent, isCrlf, stale, resp, err := loadExistingFile(edit, filePath, "session ID is required for editing a file")
 	if err != nil {
 		return fantasy.ToolResponse{}, err
 	}
@@ -395,7 +449,7 @@ func replaceContent(edit editContext, filePath, oldString, newString string, rep
 		return resp, nil
 	}
 
-	result, whitespaceCorrected, err := findAndReplace(oldContent, oldString, newString, replaceAll)
+	result, whitespaceCorrected, err := findAndReplaceIn(oldContent, oldString, newString, replaceAll, stale)
 	if err != nil {
 		return fantasy.NewTextErrorResponse(err.Error()), nil
 	}
@@ -449,7 +503,7 @@ func replaceContent(edit editContext, filePath, oldString, newString string, rep
 	}
 
 	return fantasy.WithResponseMetadata(
-		fantasy.NewTextResponse(withWhitespaceNote("Content replaced in file: "+filePath, whitespaceCorrected)),
+		fantasy.NewTextResponse(editedMessage("Content replaced in file: "+filePath, whitespaceCorrected, stale)),
 		EditResponseMetadata{
 			OldContent: oldContent,
 			NewContent: writeContent,

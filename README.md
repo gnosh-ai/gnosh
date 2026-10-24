@@ -193,9 +193,11 @@ or failed without saying so. The ones you will notice:
   and what to do.
 - When a file the agent has read changes, by one of its commands, your editor,
   a formatter or a background job, the next tool result says so, as in Claude
-  Code, so its next edit is not refused as stale. An edit is refused only when
-  the file's content really changed: `git stash` and `pop`, which put the same
-  content back, no longer count.
+  Code. An edit of such a file is still made when its text matches the file as
+  it is now exactly, and only once, and the agent is told the file holds
+  changes it has not seen; any looser match is refused, with word to view the
+  file again. `git stash` and `pop`, which put the same content back, do not
+  count as a change.
 - A Klash tool typed as a shell command, `job_kill 077` say, is answered with
   the tool to call.
 - With your model server out of reach, Klash still starts and says which
