@@ -64,7 +64,15 @@ func TestModelResponseTimeout(t *testing.T) {
 	require.Equal(t, 1500*time.Millisecond, modelResponseTimeout(local))
 	require.Equal(t, 1500*time.Millisecond, modelResponseTimeout(remote))
 
-	for _, bad := range []string{"0", "-5", "ten", ""} {
+	t.Setenv("API_TIMEOUT_MS", " 1500\n")
+	require.Equal(t, 1500*time.Millisecond, modelResponseTimeout(remote), "spaces around the number do not matter")
+
+	// 0 is no limit, as in Claude Code (v2.1.305 and later).
+	t.Setenv("API_TIMEOUT_MS", "0")
+	require.Zero(t, modelResponseTimeout(local))
+	require.Zero(t, modelResponseTimeout(remote))
+
+	for _, bad := range []string{"-5", "ten", "", " "} {
 		t.Setenv("API_TIMEOUT_MS", bad)
 		require.Zero(t, modelResponseTimeout(local), bad)
 		require.Equal(t, 10*time.Minute, modelResponseTimeout(remote), bad)

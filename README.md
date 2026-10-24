@@ -1113,7 +1113,7 @@ while it reads a long conversation or works through another request first;
 Klash used to give up after ten and show "Provider Error". A model API
 elsewhere still gets ten minutes, as in Claude Code, and `API_TIMEOUT_MS`
 sets the wait in milliseconds for the Anthropic, OpenAI and OpenAI-compatible
-providers, as it does there. Local means `localhost`, a loopback, private,
+providers, as it does there, with `0` for no limit. Local means `localhost`, a loopback, private,
 link-local or Tailscale address, a host name of one label, or a name under
 `.local`, `.lan`, `.internal` or `.home.arpa`.
 

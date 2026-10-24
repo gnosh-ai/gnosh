@@ -23,13 +23,14 @@ var tailnet = &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)
 
 // modelResponseTimeout is how long a request to the model server at
 // baseURL waits for the server to start answering, 0 for no limit.
-// API_TIMEOUT_MS sets it in milliseconds, as in Claude Code. Otherwise a
+// API_TIMEOUT_MS sets it in milliseconds, as in Claude Code, where 0 is
+// no limit (one that is no whole number is ignored). Otherwise a
 // server on this machine or the local network has no limit: it can send
 // nothing for longer than 10 minutes while it reads a long conversation
 // or works through a request ahead of this one, and one that dies closes
 // the connection.
 func modelResponseTimeout(baseURL string) time.Duration {
-	if ms, err := strconv.Atoi(os.Getenv("API_TIMEOUT_MS")); err == nil && ms > 0 {
+	if ms, err := strconv.Atoi(strings.TrimSpace(os.Getenv("API_TIMEOUT_MS"))); err == nil && ms >= 0 {
 		return time.Duration(ms) * time.Millisecond
 	}
 	if localModelServer(baseURL) {
