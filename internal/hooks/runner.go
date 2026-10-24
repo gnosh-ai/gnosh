@@ -549,6 +549,11 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, event
 		exitCode := shell.ExitCode(err)
 		switch exitCode {
 		case 2:
+			if eventName == EventPermissionRequest {
+				// As in Claude Code, exit 2 leaves the permission flow as
+				// it was: the user is asked. Its stderr is not used.
+				return HookResult{Decision: DecisionNone}
+			}
 			// Exit code 2 = block this tool call. Stderr is the reason.
 			reason := strings.TrimSpace(stderr.String())
 			if reason == "" {

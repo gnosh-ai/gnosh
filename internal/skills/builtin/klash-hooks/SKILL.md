@@ -35,7 +35,9 @@ prompt or given on demand: at session start for the files already in the
 prompt, again after a summary, for a subdirectory's files when a tool touches
 a file there, or for a file a context file imports with `@path`. As in Claude
 Code, it has no decision control: its output is ignored, its exit code is
-ignored, and the turn does not wait for it.
+ignored, and the turn does not wait for it. `PermissionRequest` fires when a
+permission dialog about a tool call is about to show, and its hook can allow
+or deny the call in the user's place, as in Claude Code.
 
 Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
 `PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Klash refuses
@@ -44,8 +46,9 @@ would look configured and silently never run.
 
 A `matcher` only makes sense for `PreToolUse`, `PostToolUse`,
 `PostToolUseFailure`, `PreCompact`, `PostCompact`, `StopFailure`,
-`SubagentStart`, `SessionStart`, `SessionEnd` and `InstructionsLoaded`. The
-first three match against the tool name;
+`SubagentStart`, `SessionStart`, `SessionEnd`, `InstructionsLoaded` and
+`PermissionRequest`. The first three and `PermissionRequest` match against
+the tool name;
 `PreCompact` and `PostCompact` match against their trigger; `StopFailure`
 against the error's kind (`rate_limit`, `overloaded`, `authentication_failed`,
 `billing_error`, `model_not_found`, `invalid_request`, `server_error`, or
@@ -309,6 +312,18 @@ is ignored, its exit code is ignored, and the turn does not wait for it. A
 hook that fails is logged. It fires only for the top-level agent, not
 sub-agents. `KLASH_INSTRUCTIONS_LOAD_REASON` holds the load reason.
 
+**On `PermissionRequest`** the input is `PreToolUse`'s (`tool_name`,
+`tool_input`), and the hook fires only when a permission dialog about the call
+is due. It answers in Claude Code's `{"hookSpecificOutput":
+{"hookEventName": "PermissionRequest", "decision": {"behavior": "allow"}}}`
+or `{"behavior": "deny", "message": "why", "interrupt": false}`; Klash's
+top-level `"decision": "allow"`/`"deny"` works too. An allow runs the call with
+no dialog; a deny refuses it with the message, and the model goes on unless
+`interrupt` is true. Exit 2 leaves the decision to the user, and so does a hook
+that could not check, whose reason the dialog shows. `updatedInput` and
+`updatedPermissions` are not applied: the user is asked about the call as it
+is.
+
 ## Aggregation (Multiple Hooks)
 
 Composed in **config order**:
@@ -444,8 +459,9 @@ value cannot be read, so the hook could not evaluate: it blocks.
    matcher; sub-agents only), `hooks.PreCompact` or `hooks.PostCompact`
    (matcher against `manual`/`auto`), `hooks.SessionStart` (matcher against
    `startup`/`resume`/`clear`/`compact`), `hooks.SessionEnd` (matcher
-   against `clear`/`other`/`prompt_input_exit`), or `hooks.InstructionsLoaded`
-   (matcher against `session_start`/`nested_traversal`/`include`/`compact`)
+   against `clear`/`other`/`prompt_input_exit`), `hooks.InstructionsLoaded`
+   (matcher against `session_start`/`nested_traversal`/`include`/`compact`),
+   or `hooks.PermissionRequest` (matcher against the tool name)
    in `klash.json`. Spell the
    event name exactly; anything else is a startup error.
 4. Decide intent: inject context (omit `decision`), auto-approve (`"allow"`),

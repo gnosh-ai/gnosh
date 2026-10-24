@@ -1170,6 +1170,9 @@ func (c *coordinator) buildToolHooks() toolHooks {
 	if failureHooks := c.cfg.Config().Hooks[hooks.EventPostToolUseFailure]; len(failureHooks) > 0 {
 		th.postFailure = hooks.NewRunner(failureHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
 	}
+	if requestHooks := c.cfg.Config().Hooks[hooks.EventPermissionRequest]; len(requestHooks) > 0 {
+		th.permissionRequest = hooks.NewRunner(requestHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
+	}
 	return th
 }
 

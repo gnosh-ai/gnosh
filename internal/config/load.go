@@ -1809,7 +1809,7 @@ func (c *Config) ValidateHooks() error {
 			if err != nil {
 				return fmt.Errorf("hook %s[%d]: invalid matcher regex %q: %w", event, i, h.Matcher, err)
 			}
-			if event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure {
+			if event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPermissionRequest {
 				for _, name := range m.Names() {
 					if !namesSomeTool(name) {
 						slog.Warn("A hook's matcher names no tool, so it matches nothing; a name is matched exactly, and a regular expression such as mcp_github_.* matches a server's tools",

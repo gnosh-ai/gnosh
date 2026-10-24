@@ -799,6 +799,11 @@ func applyClaudeCodeOutput(result *HookResult, data json.RawMessage) {
 		}
 	}
 
+	// A PermissionRequest hook answers in Claude Code's decision object.
+	if raw, ok := fields["decision"]; ok && string(raw) != "null" {
+		applyPermissionDecision(result, raw)
+	}
+
 	// Claude Code's updatedInput is an object and nothing else: unlike
 	// Crush's own updated_input, a string holding one is not accepted.
 	if raw := fields["updatedInput"]; len(raw) > 0 && string(raw) != "null" {
@@ -809,6 +814,47 @@ func applyClaudeCodeOutput(result *HookResult, data json.RawMessage) {
 				"hookSpecificOutput.updatedInput must be a JSON object, got %s", jsonTypeName(raw),
 			))
 		}
+	}
+}
+
+// applyPermissionDecision reads a PermissionRequest hook's answer, Claude
+// Code's hookSpecificOutput.decision: behavior "allow" or "deny"; for an
+// allow, updatedInput, the input to run instead; for a deny, message, why,
+// and interrupt, whether to stop the turn. updatedPermissions, rules to
+// add for later calls, is not applied: being asked again is safe.
+func applyPermissionDecision(result *HookResult, raw json.RawMessage) {
+	var d struct {
+		Behavior           string          `json:"behavior"`
+		UpdatedInput       json.RawMessage `json:"updatedInput"`
+		UpdatedPermissions json.RawMessage `json:"updatedPermissions"`
+		Message            string          `json:"message"`
+		Interrupt          bool            `json:"interrupt"`
+	}
+	if err := json.Unmarshal(raw, &d); err != nil {
+		setParseError(result, fmt.Errorf("hookSpecificOutput.decision must be an object with a string behavior, got %s", string(raw)))
+		return
+	}
+	switch d.Behavior {
+	case "allow":
+		result.Decision = DecisionAllow
+		if u := d.UpdatedInput; len(u) > 0 && string(u) != "null" {
+			if u[0] == '{' {
+				result.UpdatedInput = string(u)
+			} else {
+				rejectRewrite(result, fmt.Errorf(
+					"hookSpecificOutput.decision.updatedInput must be a JSON object, got %s", jsonTypeName(u),
+				))
+			}
+		}
+	case "deny":
+		result.Decision = DecisionDeny
+		result.Reason = d.Message
+		result.Halt = d.Interrupt
+	default:
+		setParseError(result, fmt.Errorf("hookSpecificOutput.decision.behavior must be allow or deny, got %q", d.Behavior))
+	}
+	if len(d.UpdatedPermissions) > 0 && string(d.UpdatedPermissions) != "null" {
+		slog.Info("A PermissionRequest hook's updatedPermissions are not applied; the next call is asked about as usual")
 	}
 }
 

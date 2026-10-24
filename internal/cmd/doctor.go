@@ -166,6 +166,8 @@ func missingHookCost(event string) (mark, cost string) {
 		return "✗", "every sub-agent is held at its end"
 	case config.EventPostToolUse, config.EventPostToolUseFailure:
 		return "!", "every call it matches ends with a note that it could not run"
+	case config.EventPermissionRequest:
+		return "!", "every dialog it matches is put to you, with a note that it could not run"
 	default:
 		return "!", "it is skipped, with a warning, each time it fires"
 	}

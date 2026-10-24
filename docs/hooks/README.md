@@ -819,6 +819,49 @@ logged.
 Hooks are keyed by event name. Only `command` is required, and you can omit
 `matcher` to match every load reason.
 
+### PermissionRequest
+
+This hook fires when a permission dialog about a tool call is about to show,
+and answers it in your place, as in Claude Code: say `allow` and the call runs,
+`deny` and it does not, with no dialog either way. With no answer you are asked
+as usual. It does not fire for a call that needs no permission (an allowed
+tool, a grant for the session, yolo, `klash run`), and `PreToolUse` hooks run
+first, before every call. Where no one can answer a `PreToolUse` hook's `ask`,
+in `klash run`, its `allow` still lets the call run.
+
+**Matched against**: the tool name, as for `PreToolUse`, Claude Code's names
+(`Bash`, `Edit|Write`) included.
+
+**Input**: the same as `PreToolUse`'s: `tool_name` and `tool_input`, with the
+common fields.
+
+**Output**: Claude Code's `hookSpecificOutput.decision`: `{"behavior":
+"allow"}`, or `{"behavior": "deny", "message": "why"}`, with `"interrupt":
+true` to end the turn. The model reads the message and goes on, unless the
+hook interrupts; a `deny` you give in the dialog ends the turn. Klash's own
+top-level `"decision": "allow"` or `"deny"` works too, as does exit 49 (a deny
+that ends the turn).
+
+**Blocking**: exit 2 leaves the decision to you, as in Claude Code, and its
+stderr is not used. A hook that could not check (exit 3, a crash, a timeout, an
+answer Klash could not read) gives no answer either: the dialog shows, and
+says why the hook did not answer. An `allow` with `updatedInput` cannot be run
+as asked, since the tool has already read its input, so the dialog shows the
+call as it is; `updatedPermissions` are not applied.
+
+```jsonc
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "command": "jq -e '.tool_input.command | startswith(\"git status\")' >/dev/null && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}' || true"
+      }
+    ]
+  }
+}
+```
+
 ## Building Hooks
 
 When a hook fires, Klash:

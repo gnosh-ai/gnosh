@@ -41,7 +41,37 @@ func hookApproved(ctx context.Context, toolCallID string) bool {
 // started, which can carry its ID, as a provider that numbers calls
 // tool-call-0, tool-call-1 in each response gives them.
 func WithoutHookAnswers(ctx context.Context) context.Context {
+	ctx = context.WithValue(ctx, hookAnswerKey{}, hookAnswerer{})
 	return context.WithValue(context.WithValue(ctx, hookApprovalKey{}, ""), hookAskKey{}, "")
+}
+
+// HookAnswer is what a tool call's PermissionRequest hooks answered when a
+// dialog about it was due: allow or deny it in the user's place, or
+// neither, and the user is asked. Note says why they gave no answer when
+// one could not check, for the dialog to show.
+type HookAnswer struct {
+	Allow bool
+	Deny  bool
+	Note  string
+}
+
+// hookAnswerKey is the unexported context key of a tool call's
+// PermissionRequest hooks: see WithHookAnswer.
+type hookAnswerKey struct{}
+
+type hookAnswerer struct {
+	toolCallID string
+	answer     func(context.Context) HookAnswer
+}
+
+// WithHookAnswer returns a context whose permission request about the
+// given tool call runs answer right before the request would be put to
+// the user, as Claude Code runs its PermissionRequest hooks: an allow
+// grants the request and a deny denies it, with no dialog. A request that
+// needs no dialog (an allowed tool, a grant for the session, yolo) does
+// not run it.
+func WithHookAnswer(ctx context.Context, toolCallID string, answer func(context.Context) HookAnswer) context.Context {
+	return context.WithValue(ctx, hookAnswerKey{}, hookAnswerer{toolCallID: toolCallID, answer: answer})
 }
 
 // HookAskAction is the action of the request a PreToolUse hook that
@@ -350,7 +380,36 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 		return true, nil
 	}
 
+	if granted, ok := s.hookAnswered(ctx, &permission); ok {
+		return granted, nil
+	}
 	return s.wait(ctx, permission)
+}
+
+// hookAnswered runs the PermissionRequest hooks of the request's call
+// (WithHookAnswer), now that the request is about to be put to the user,
+// and reports whether they answered it and how. When they did not, a
+// note on why one could not check goes in the request's description.
+func (s *permissionService) hookAnswered(ctx context.Context, req *PermissionRequest) (granted, ok bool) {
+	h, _ := ctx.Value(hookAnswerKey{}).(hookAnswerer)
+	if h.answer == nil || req.ToolCallID == "" || h.toolCallID != req.ToolCallID {
+		return false, false
+	}
+	answer := h.answer(ctx)
+	if !answer.Allow && !answer.Deny {
+		if answer.Note != "" {
+			req.Description = strings.TrimSpace(req.Description + "\n\n" + answer.Note)
+		}
+		return false, false
+	}
+	granted = answer.Allow && !answer.Deny
+	s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{
+		SessionID:  req.SessionID,
+		ToolCallID: req.ToolCallID,
+		Granted:    granted,
+		Denied:     !granted,
+	})
+	return granted, true
 }
 
 // ask puts a request a hook asked for (WithHookAsk) to the user, whatever
@@ -365,6 +424,9 @@ func (s *permissionService) ask(ctx context.Context, opts CreatePermissionReques
 	// A hook's question comes every time, whatever was granted before.
 	req := s.newRequest(opts, opts.Path)
 	req.AlwaysAsks = true
+	if granted, ok := s.hookAnswered(ctx, &req); ok {
+		return granted, nil
+	}
 	return s.wait(ctx, req)
 }
 

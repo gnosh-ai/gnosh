@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"charm.land/fantasy"
@@ -26,6 +27,9 @@ type toolHooks struct {
 	pre         *hooks.Runner // PreToolUse hooks; nil when none are configured.
 	post        *hooks.Runner // PostToolUse hooks; nil when none are configured.
 	postFailure *hooks.Runner // PostToolUseFailure hooks; nil when none are configured.
+	// permissionRequest answers a call's permission dialog in the user's
+	// place; nil when no PermissionRequest hooks are configured.
+	permissionRequest *hooks.Runner
 	// files and workingDir let a PostToolUse hook rewrite the file a call
 	// just wrote (a formatter, most likely) without the agent's next edit
 	// of it being refused as stale. files may be nil, as in tests.
@@ -54,7 +58,7 @@ func newHookedTool(inner fantasy.AgentTool, th toolHooks) *hookedTool {
 // hookedTool, or the original slice when no hooks fire around tool calls.
 // A sub-agent's tools are wrapped too, as in Claude Code.
 func wrapToolsWithHooks(tools []fantasy.AgentTool, th toolHooks) []fantasy.AgentTool {
-	if th.pre == nil && th.post == nil && th.postFailure == nil {
+	if th.pre == nil && th.post == nil && th.postFailure == nil && th.permissionRequest == nil {
 		return tools
 	}
 	out := make([]fantasy.AgentTool, len(tools))
@@ -146,10 +150,31 @@ func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 		ctx = permission.WithHookApproval(ctx, call.ID)
 	}
 
+	// If the call's permission dialog comes, its PermissionRequest hooks
+	// answer it first.
+	var asked hooks.AggregateResult
+	var answer permission.HookAnswer
+	if h.hooks.permissionRequest != nil {
+		ctx = permission.WithHookAnswer(ctx, call.ID, func(ctx context.Context) permission.HookAnswer {
+			answer, asked = h.answerPermission(ctx, sessionID, call)
+			return answer
+		})
+	}
+
 	start := time.Now()
 	resp, err := h.inner.Run(ctx, call)
 	if err != nil {
 		return resp, err
+	}
+	result = combineHookResults(result, asked)
+	if answer.Deny {
+		// The tool took the denial as a user's, which ends the turn. A
+		// hook's deny tells the model why and lets it go on, as in Claude
+		// Code, unless the hook halted.
+		resp = fantasy.NewTextErrorResponse("Tool call denied by a PermissionRequest hook. Reason: " + cmp.Or(deniedReason(asked), "none given"))
+		resp.StopTurn = asked.Halt
+		resp.Metadata = hookMetadataJSON(result)
+		return resp, nil
 	}
 
 	// The PostToolUse or PostToolUseFailure hooks see what the tool
@@ -188,6 +213,11 @@ func (h *hookedTool) confirm(ctx context.Context, sessionID string, call fantasy
 		return resp, false, nil
 	}
 	if h.hooks.permissions == nil || !h.hooks.interactive {
+		// A PermissionRequest hook can answer where no one else can, as in
+		// Claude Code, which denies the call when none allows it.
+		if answer, _ := h.answerPermission(ctx, sessionID, call); answer.Allow {
+			return fantasy.ToolResponse{}, true, nil
+		}
 		return refuse(fantasy.NewTextErrorResponse("Tool call blocked: a hook asks the user to confirm it, and no one is here to answer. Reason: " + reason))
 	}
 	// The question and the approval that answers it are the call's, by
@@ -211,6 +241,52 @@ func (h *hookedTool) confirm(ctx context.Context, sessionID string, call fantasy
 		return refuse(tools.NewPermissionDeniedResponse())
 	}
 	return fantasy.ToolResponse{}, true, nil
+}
+
+// answerPermission runs the PermissionRequest hooks of call, whose
+// permission dialog is due, and turns what they said into the answer for
+// the dialog: a deny from any hook denies (a halt too), else an allow from
+// one allows; a hook that could not check leaves the user to answer, with
+// a note on why. An allow with changed input cannot be honored here, after
+// the tool read its input, so the user is asked about the input as it is.
+func (h *hookedTool) answerPermission(ctx context.Context, sessionID string, call fantasy.ToolCall) (permission.HookAnswer, hooks.AggregateResult) {
+	if h.hooks.permissionRequest == nil {
+		return permission.HookAnswer{}, hooks.AggregateResult{}
+	}
+	result, err := h.hooks.permissionRequest.Run(ctx, hooks.EventPermissionRequest, sessionID, call.Name, call.Input)
+	if err != nil {
+		slog.Warn("PermissionRequest hook execution error; asking the user", "tool", call.Name, "error", err)
+		return permission.HookAnswer{}, result
+	}
+	var couldNot []string
+	for _, hook := range result.Hooks {
+		if hook.CouldNotEvaluate {
+			couldNot = append(couldNot, hook.Reason)
+		}
+	}
+	switch {
+	case result.Objected:
+		return permission.HookAnswer{Deny: true}, result
+	case len(couldNot) > 0:
+		return permission.HookAnswer{Note: "A PermissionRequest hook could not answer this, so you are asked: " + strings.Join(couldNot, "; ")}, result
+	case result.Decision == hooks.DecisionAllow && result.UpdatedInput != "":
+		return permission.HookAnswer{Note: "A PermissionRequest hook allowed this with changed input, which Klash cannot run, so you are asked about the input as it is."}, result
+	case result.Decision == hooks.DecisionAllow:
+		return permission.HookAnswer{Allow: true}, result
+	}
+	return permission.HookAnswer{}, result
+}
+
+// deniedReason is the reasons of the hooks in result that denied the call,
+// not counting those that could not check.
+func deniedReason(result hooks.AggregateResult) string {
+	var reasons []string
+	for _, hook := range result.Hooks {
+		if hook.Decision == hooks.DecisionDeny.String() && !hook.CouldNotEvaluate && hook.Reason != "" {
+			reasons = append(reasons, hook.Reason)
+		}
+	}
+	return strings.Join(reasons, "\n")
 }
 
 // runPostToolUse runs the hooks that follow a call: PostToolUse for one

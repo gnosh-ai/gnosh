@@ -52,6 +52,10 @@ const (
 	// load reason. It has no decision control: its output is ignored and
 	// the load does not wait for it.
 	EventInstructionsLoaded = config.EventInstructionsLoaded
+	// EventPermissionRequest fires when a permission dialog about a tool
+	// call is due; its matcher is tested against the tool name. A hook can
+	// allow or deny the call in the user's place.
+	EventPermissionRequest = config.EventPermissionRequest
 )
 
 // HaltExitCode is the exit code that halts the whole turn. 2 blocks the

@@ -96,11 +96,16 @@ const (
 	// does not wait for them. Its Matcher is tested against the load
 	// reason.
 	EventInstructionsLoaded = "InstructionsLoaded"
+	// EventPermissionRequest fires when a permission dialog about a tool
+	// call is due, matched against the tool name as PreToolUse is. As in
+	// Claude Code a hook can allow or deny the call in the user's place,
+	// and the dialog does not show; with no answer the user is asked.
+	EventPermissionRequest = "PermissionRequest"
 )
 
 // knownHookEvents lists every recognised event name, in the order they
 // are reported to the user.
-var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStart, EventSubagentStop, EventStopFailure, EventPreCompact, EventPostCompact, EventSessionEnd, EventInstructionsLoaded}
+var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStart, EventSubagentStop, EventStopFailure, EventPreCompact, EventPostCompact, EventSessionEnd, EventInstructionsLoaded, EventPermissionRequest}
 
 // KnownHookEvents returns the recognised hook event names.
 func KnownHookEvents() []string {
@@ -113,12 +118,13 @@ func IsKnownHookEvent(name string) bool {
 }
 
 // HookEventSupportsMatcher reports whether hooks for the given event may
-// carry a Matcher. Tool events match against the tool name; PreCompact
+// carry a Matcher. Tool events and PermissionRequest match against the
+// tool name; PreCompact
 // and PostCompact against their trigger; StopFailure against the error's kind;
 // SubagentStart against the agent type; SessionStart against its source;
 // SessionEnd against its reason; InstructionsLoaded against the load reason.
 func HookEventSupportsMatcher(event string) bool {
-	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventPostCompact || event == EventStopFailure || event == EventSubagentStart || event == EventSessionStart || event == EventSessionEnd || event == EventInstructionsLoaded
+	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventPostCompact || event == EventStopFailure || event == EventSubagentStart || event == EventSessionStart || event == EventSessionEnd || event == EventInstructionsLoaded || event == EventPermissionRequest
 }
 
 // HookMatcher is a hook's matcher read as Claude Code reads one: "*" (or
