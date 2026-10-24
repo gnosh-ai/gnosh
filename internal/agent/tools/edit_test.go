@@ -136,6 +136,8 @@ func TestReplaceContentInAFileChangedSinceItWasRead(t *testing.T) {
 		got, err := os.ReadFile(filePath)
 		require.NoError(t, err)
 		require.Equal(t, "ALPHA\nbeta\n", string(got))
+		require.Empty(t, edit.filetracker.(*mockEditFileTracker).reads,
+			"the file holds changes the agent has not seen, so it is not read: a write of it is still refused")
 	})
 	t.Run("replace_all", func(t *testing.T) {
 		edit, filePath := stale(t, "alpha\nalpha\n", "")
@@ -183,15 +185,17 @@ func TestReplaceContentInAFileChangedSinceItWasRead(t *testing.T) {
 func TestMultiEditInAFileChangedSinceItWasRead(t *testing.T) {
 	t.Parallel()
 
+	var tracker *mockEditFileTracker
 	run := func(t *testing.T, edits ...MultiEditOperation) (fantasy.ToolResponse, string) {
 		dir := t.TempDir()
 		filePath := filepath.Join(dir, "test.txt")
 		require.NoError(t, os.WriteFile(filePath, []byte("alpha\nbeta\n"), 0o644))
+		tracker = &mockEditFileTracker{lastRead: time.Now().Add(-time.Hour)}
 		edit := editContext{
 			ctx:         context.WithValue(t.Context(), SessionIDContextKey, "session"),
 			permissions: &mockPermissionService{},
 			files:       &mockHistoryService{},
-			filetracker: &mockEditFileTracker{lastRead: time.Now().Add(-time.Hour)},
+			filetracker: tracker,
 			workingDir:  dir,
 		}
 		resp, err := processMultiEditExistingFile(edit, MultiEditParams{FilePath: filePath, Edits: edits}, fantasy.ToolCall{ID: "call"})
@@ -203,6 +207,7 @@ func TestMultiEditInAFileChangedSinceItWasRead(t *testing.T) {
 
 	resp, got := run(t, MultiEditOperation{OldString: "alpha", NewString: "ALPHA"}, MultiEditOperation{OldString: "beta", NewString: "BETA"})
 	require.False(t, resp.IsError, resp.Content)
+	require.Empty(t, tracker.reads, "the file holds changes the agent has not seen, so it is not read")
 	require.Contains(t, resp.Content, staleEditNote)
 	require.Equal(t, "ALPHA\nBETA\n", got)
 
@@ -271,4 +276,6 @@ func TestEditAfterAFileIsWrittenBackAsItWas(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	require.Contains(t, resp.Content, staleEditNote)
+	require.False(t, tracker.UnchangedSinceRead(t.Context(), "session", path),
+		"after an edit of a changed file it still counts as changed since the agent read it")
 }

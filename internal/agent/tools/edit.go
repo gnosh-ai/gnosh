@@ -241,9 +241,13 @@ func notFoundError(content, old string) error {
 }
 
 // commitFileChange writes newContent to filePath, updates the file history,
-// and records the read in the file tracker. Callers must convert line endings
-// before calling this function.
-func commitFileChange(edit editContext, sessionID, filePath, oldContent, newContent string) error {
+// and records the read in the file tracker, unless the file was stale: an
+// edit made to a file that changed since the agent read it (see
+// loadExistingFile) leaves it unread, since it holds changes the agent has
+// not seen, so a write of it is still refused and its next edit still
+// matches exactly. Recording that read let a write replace them. Callers
+// must convert line endings before calling this function.
+func commitFileChange(edit editContext, sessionID, filePath, oldContent, newContent string, stale bool) error {
 	if err := os.WriteFile(filePath, []byte(newContent), 0o644); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
@@ -265,7 +269,9 @@ func commitFileChange(edit editContext, sessionID, filePath, oldContent, newCont
 		slog.Error("Error creating file history version", "error", err)
 	}
 
-	edit.filetracker.RecordRead(edit.ctx, sessionID, filePath)
+	if !stale {
+		edit.filetracker.RecordRead(edit.ctx, sessionID, filePath)
+	}
 	return nil
 }
 
@@ -326,7 +332,7 @@ func loadExistingFile(edit editContext, filePath, sessionError string) (sessionI
 
 // staleEditNote ends the result of an edit made to a file that changed
 // since the agent last read it.
-const staleEditNote = "Note: this file had changed since you last read it, and it holds changes you have not seen besides this edit. View it again before an edit that depends on the text around this one."
+const staleEditNote = "Note: this file had changed since you last read it, and it holds changes you have not seen besides this edit. View it again before you change it further: until then an edit of it must match it exactly, and it cannot be written over."
 
 // replaceExactly makes the replacement only where old appears in content
 // exactly as written: once, or, with replaceAll, anywhere. An edit of a
@@ -425,7 +431,7 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 		writeContent, _ = fsext.ToWindowsLineEndings(writeContent)
 	}
 
-	if err := commitFileChange(edit, sessionID, filePath, oldContent, writeContent); err != nil {
+	if err := commitFileChange(edit, sessionID, filePath, oldContent, writeContent, stale != ""); err != nil {
 		return fantasy.ToolResponse{}, err
 	}
 
@@ -498,7 +504,7 @@ func replaceContent(edit editContext, filePath, oldString, newString string, rep
 		writeContent, _ = fsext.ToWindowsLineEndings(writeContent)
 	}
 
-	if err := commitFileChange(edit, sessionID, filePath, oldContent, writeContent); err != nil {
+	if err := commitFileChange(edit, sessionID, filePath, oldContent, writeContent, stale != ""); err != nil {
 		return fantasy.ToolResponse{}, err
 	}
 
