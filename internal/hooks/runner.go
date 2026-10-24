@@ -143,15 +143,19 @@ func (r *Runner) RunPostToolUseFailure(ctx context.Context, sessionID, toolName,
 }
 
 // afterTheCall clears from a hook result what means nothing once a tool
-// call has run: an allow counts as no opinion, and an input rewrite is
-// dropped, on the aggregate and on each hook.
+// call has run: an allow or an ask counts as no opinion, and an input
+// rewrite is dropped, on the aggregate and on each hook.
 func afterTheCall(agg AggregateResult) AggregateResult {
-	if agg.Decision == DecisionAllow {
+	if agg.Decision == DecisionAllow || agg.Decision == DecisionAsk {
 		agg.Decision = DecisionNone
 	}
+	agg.AskReason = ""
 	agg.UpdatedInput = ""
 	for i := range agg.Hooks {
 		agg.Hooks[i].InputRewrite = false
+		if agg.Hooks[i].Decision == DecisionAsk.String() {
+			agg.Hooks[i].Decision = DecisionNone.String()
+		}
 	}
 	return agg
 }

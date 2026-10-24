@@ -718,3 +718,70 @@ func TestNotificationsCarrySessionID(t *testing.T) {
 	assert.Equal(t, "s-notify", second.Payload.SessionID)
 	assert.True(t, second.Payload.Granted)
 }
+
+// A request a hook asked for goes to the user whatever would grant it
+// unasked: yolo, --allowedTools, an earlier "allow for this session". A
+// session that grants all its requests unasked has no one to answer, so
+// there it is refused.
+func TestPermissionService_HookAsk(t *testing.T) {
+	t.Parallel()
+
+	req := CreatePermissionRequest{SessionID: "s1", ToolCallID: "call-1", ToolName: "bash", Action: HookAskAction, Description: "a hook asks", Path: "/tmp"}
+	answer := func(t *testing.T, service Service, grant func(PermissionRequest) bool) bool {
+		t.Helper()
+		events := service.Subscribe(t.Context())
+		var (
+			wg      sync.WaitGroup
+			granted bool
+			err     error
+		)
+		wg.Go(func() { granted, err = service.Request(WithHookAsk(t.Context(), "call-1"), req) })
+		select {
+		case event := <-events:
+			require.Equal(t, HookAskAction, event.Payload.Action)
+			grant(event.Payload)
+		case <-time.After(5 * time.Second):
+			t.Fatal("the request was not put to the user")
+		}
+		wg.Wait()
+		require.NoError(t, err)
+		return granted
+	}
+
+	for name, service := range map[string]Service{
+		"yolo":          NewPermissionService("/tmp", true, nil),
+		"allowed tools": NewPermissionService("/tmp", false, []string{"bash"}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assert.True(t, answer(t, service, service.Grant))
+			assert.False(t, answer(t, service, service.Deny))
+		})
+	}
+
+	t.Run("a session grant does not answer it", func(t *testing.T) {
+		t.Parallel()
+		service := NewPermissionService("/tmp", false, nil)
+		assert.True(t, answer(t, service, service.GrantPersistent))
+		assert.False(t, answer(t, service, service.Deny), "asked again, and denied")
+	})
+
+	t.Run("no one to answer", func(t *testing.T) {
+		t.Parallel()
+		service := NewPermissionService("/tmp", true, nil)
+		service.AutoApproveSession("s1")
+		granted, err := service.Request(WithHookAsk(t.Context(), "call-1"), req)
+		require.NoError(t, err)
+		assert.False(t, granted)
+	})
+
+	t.Run("only for its own call", func(t *testing.T) {
+		t.Parallel()
+		service := NewPermissionService("/tmp", true, nil)
+		other := req
+		other.ToolCallID, other.Action = "call-2", "execute"
+		granted, err := service.Request(WithHookAsk(t.Context(), "call-1"), other)
+		require.NoError(t, err)
+		assert.True(t, granted, "yolo still grants another call")
+	})
+}

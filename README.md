@@ -83,6 +83,10 @@ you let it open cannot redirect it there.
   the agent could walk around the guard through those tools. Such a hook can
   stop them but not approve them: a hook that approves every Write does not
   let a download run without asking.
+- A hook that answers Claude Code's `"ask"` puts the call to you, with its
+  reason, even when the call would run without asking (yolo, `--allowedTools`,
+  `acceptEdits`); in `klash run`, where no one can answer, the call is refused.
+  Upstream read `"ask"` as no opinion, so the call ran unasked.
 - A project's `klash.json` written by another user, with sudo say, stops
   Klash and says whose it is and what to do, instead of being skipped without
   a word along with any tools it turned off.

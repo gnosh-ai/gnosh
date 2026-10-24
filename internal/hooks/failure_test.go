@@ -174,7 +174,7 @@ func TestRunnerUnreadableAnswerBlocks(t *testing.T) {
 	r = preRunner(t, config.HookConfig{Command: `echo '{"hookSpecificOutput":{"permissionDecision":"ask"}}'`})
 	result, err = r.Run(context.Background(), EventPreToolUse, "sess", "bash", `{}`)
 	require.NoError(t, err)
-	require.Equal(t, DecisionNone, result.Decision)
+	require.Equal(t, DecisionAsk, result.Decision)
 	require.False(t, result.Hooks[0].CouldNotEvaluate)
 }
 

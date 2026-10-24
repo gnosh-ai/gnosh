@@ -1041,6 +1041,7 @@ func hookVerdict(sty *styles.Styles, hi hooks.HookInfo) string {
 		couldNotEvaluateMessage = "Could Not Evaluate"
 		rewroteMessage          = "Rewrote Output"
 		feedbackMessage         = "Feedback"
+		askedMessage            = "Asked You"
 	)
 	// A hook that could not check blocked the call, or for a PostToolUse
 	// hook sent the agent its reason, as a denial would; the line says it
@@ -1065,6 +1066,15 @@ func hookVerdict(sty *styles.Styles, hi hooks.HookInfo) string {
 			return sty.Tool.HookDenied.Render(denialMessage) + " " + sty.Tool.HookDeniedReason.Render(hi.Reason)
 		}
 		return sty.Tool.HookDenied.Render(denialMessage)
+	case "ask":
+		result := sty.Tool.HookOK.Render(askedMessage)
+		if hi.Reason != "" {
+			result += " " + sty.Tool.HookDeniedReason.Render(hi.Reason)
+		}
+		if hi.InputRewrite {
+			result += " " + sty.Tool.HookRewrote.Render(rewroteMessage)
+		}
+		return result
 	case "allow":
 		result := sty.Tool.HookOK.Render(okMessage)
 		if hi.InputRewrite {

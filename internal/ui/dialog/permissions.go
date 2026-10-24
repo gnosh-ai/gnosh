@@ -545,6 +545,12 @@ func prettyName(name string) string {
 }
 
 func (p *Permissions) renderContent(width int) string {
+	// A hook asking about a call shows its reason and the call's input as
+	// sent, whatever the tool: the tool's own view expects its own
+	// permission details, which only the tool builds.
+	if p.permission.Action == permission.HookAskAction {
+		return p.renderDefaultContent(width)
+	}
 	switch p.permission.ToolName {
 	case tools.BashToolName, tools.GnokeyToolName:
 		return p.renderBashContent(width)

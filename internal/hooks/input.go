@@ -728,8 +728,10 @@ func rawToString(raw json.RawMessage) string {
 //   - Claude Code's top-level "decision": "approve", "block". Claude Code
 //     Stop hooks keep the agent working with {"decision": "block"}.
 //   - Claude Code's hookSpecificOutput.permissionDecision: "allow",
-//     "deny", "ask". "ask" means show the normal permission prompt, which
-//     is exactly what DecisionNone already does here.
+//     "deny", "ask". "ask" puts the tool call to the user, as Claude
+//     Code's does, even one that would run without asking: it used to
+//     count as no opinion here, so a hook asking about a call that
+//     --allowedTools, acceptEdits or klash run let through was ignored.
 //
 // Matching is exact, as it is for event names.
 var decisionWords = map[string]Decision{
@@ -737,7 +739,7 @@ var decisionWords = map[string]Decision{
 	"approve": DecisionAllow,
 	"deny":    DecisionDeny,
 	"block":   DecisionDeny,
-	"ask":     DecisionNone,
+	"ask":     DecisionAsk,
 }
 
 // parseDecision maps a hook's decision value to a Decision. An empty

@@ -31,6 +31,9 @@ type toolHooks struct {
 	// of it being refused as stale. files may be nil, as in tests.
 	files      filetracker.Service
 	workingDir string
+	// permissions puts a call a PreToolUse hook answered "ask" for to the
+	// user. Nil, as in tests, such a call is refused.
+	permissions permission.Service
 }
 
 // hookedTool wraps a fantasy.AgentTool to run PreToolUse hooks before
@@ -128,8 +131,15 @@ func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 
 	// An explicit allow from a hook pre-approves the permission prompt for
 	// this tool call. Deny is already handled above; silence falls through
-	// to the normal permission flow.
-	if result.Decision == hooks.DecisionAllow {
+	// to the normal permission flow. An ask puts the call to the user
+	// first, and once they allow it, it needs no other approval.
+	switch result.Decision {
+	case hooks.DecisionAllow:
+		ctx = permission.WithHookApproval(ctx, call.ID)
+	case hooks.DecisionAsk:
+		if resp, ok, err := h.confirm(ctx, sessionID, call, result); !ok {
+			return resp, err
+		}
 		ctx = permission.WithHookApproval(ctx, call.ID)
 	}
 
@@ -157,6 +167,41 @@ func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 
 	resp.Metadata = mergeHookMetadata(resp.Metadata, combineHookResults(result, post))
 	return resp, nil
+}
+
+// confirm puts a call a PreToolUse hook answered "ask" for to the user, as
+// Claude Code does: even a call that would run without asking (yolo,
+// --allowedTools, acceptEdits, a tool that never asks) waits for their
+// answer, with the hook's reason. Where no one can answer, as in klash
+// run, whose session grants all its requests unasked, the call is
+// refused with that reason, as Claude Code refuses one in a -p run. A
+// hook's "ask" used to count as no opinion here, so the calls it asked
+// about ran unasked wherever nothing else asked.
+func (h *hookedTool) confirm(ctx context.Context, sessionID string, call fantasy.ToolCall, result hooks.AggregateResult) (fantasy.ToolResponse, bool, error) {
+	reason := cmp.Or(result.AskReason, "no reason given")
+	refuse := func(resp fantasy.ToolResponse) (fantasy.ToolResponse, bool, error) {
+		resp.Metadata = hookMetadataJSON(result)
+		return resp, false, nil
+	}
+	if h.hooks.permissions == nil || h.hooks.permissions.IsSessionAutoApproved(sessionID) {
+		return refuse(fantasy.NewTextErrorResponse("Tool call blocked: a hook asks the user to confirm it, and no one is here to answer. Reason: " + reason))
+	}
+	granted, err := h.hooks.permissions.Request(permission.WithHookAsk(ctx, call.ID), permission.CreatePermissionRequest{
+		SessionID:   sessionID,
+		ToolCallID:  call.ID,
+		ToolName:    call.Name,
+		Action:      permission.HookAskAction,
+		Description: "A PreToolUse hook asks you to confirm this call: " + reason,
+		Params:      call.Input,
+		Path:        h.hooks.workingDir,
+	})
+	if err != nil {
+		return fantasy.ToolResponse{}, false, err
+	}
+	if !granted {
+		return refuse(tools.NewPermissionDeniedResponse())
+	}
+	return fantasy.ToolResponse{}, true, nil
 }
 
 // runPostToolUse runs the hooks that follow a call: PostToolUse for one

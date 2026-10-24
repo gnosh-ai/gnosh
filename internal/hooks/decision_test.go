@@ -16,7 +16,7 @@ func TestParseDecisionVocabulary(t *testing.T) {
 		"deny":    DecisionDeny,
 		"approve": DecisionAllow, // Claude Code top-level
 		"block":   DecisionDeny,  // Claude Code top-level
-		"ask":     DecisionNone,  // Claude Code permissionDecision: the normal prompt
+		"ask":     DecisionAsk,   // Claude Code permissionDecision: put it to the user
 		"":        DecisionNone,  // no opinion
 	} {
 		got, err := parseDecision(word)
@@ -63,12 +63,36 @@ func TestParseStdoutUnknownDecisionIsAnError(t *testing.T) {
 func TestParseClaudeCodeOutputAsk(t *testing.T) {
 	t.Parallel()
 
-	r := parseStdout(`{"hookSpecificOutput":{"permissionDecision":"ask"}}`)
-	require.Equal(t, DecisionNone, r.Decision, "ask defers to the normal permission prompt")
+	r := parseStdout(`{"hookSpecificOutput":{"permissionDecision":"ask","permissionDecisionReason":"deploys need a second look"}}`)
+	require.Equal(t, DecisionAsk, r.Decision, "ask puts the call to the user")
+	require.Equal(t, "deploys need a second look", r.Reason)
 	require.Empty(t, r.Error, "ask is a real answer, not a failure")
 
 	bad := parseStdout(`{"hookSpecificOutput":{"permissionDecision":"maybe"}}`)
 	require.Contains(t, bad.Error, `unknown decision "maybe"`)
+}
+
+// Between hooks, deny beats ask and ask beats allow, as in Claude Code:
+// one hook's allow does not take away another's question. The reasons of
+// the hooks that asked go to the user's prompt.
+func TestAggregateAskPrecedence(t *testing.T) {
+	t.Parallel()
+
+	ask := HookResult{Decision: DecisionAsk, Reason: "a second look"}
+	allow := HookResult{Decision: DecisionAllow}
+	deny := HookResult{Decision: DecisionDeny, Reason: "never"}
+
+	got := aggregate([]HookResult{allow, ask}, "{}")
+	require.Equal(t, DecisionAsk, got.Decision)
+	require.Equal(t, "a second look", got.AskReason)
+	require.Empty(t, got.Reason, "an ask's reason is not a denial's")
+	require.Equal(t, DecisionAsk, aggregate([]HookResult{ask, allow}, "{}").Decision)
+	require.Equal(t, DecisionDeny, aggregate([]HookResult{ask, deny, allow}, "{}").Decision)
+	require.Equal(t, DecisionAllow, aggregate([]HookResult{{}, allow}, "{}").Decision)
+
+	after := afterTheCall(aggregate([]HookResult{ask}, "{}"))
+	require.Equal(t, DecisionNone, after.Decision, "after the call there is nothing to ask")
+	require.Empty(t, after.AskReason)
 }
 
 // End to end: a Claude Code PreToolUse hook that blocks really blocks.

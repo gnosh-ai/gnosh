@@ -1116,7 +1116,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 // buildToolHooks builds the runners for the hooks configured around tool
 // calls, for every agent's tools.
 func (c *coordinator) buildToolHooks() toolHooks {
-	th := toolHooks{files: c.filetracker, workingDir: c.cfg.WorkingDir()}
+	th := toolHooks{files: c.filetracker, workingDir: c.cfg.WorkingDir(), permissions: c.permissions}
 	if preToolHooks := c.cfg.Config().Hooks[hooks.EventPreToolUse]; len(preToolHooks) > 0 {
 		th.pre = hooks.NewRunner(preToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
 	}

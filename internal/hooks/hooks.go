@@ -99,6 +99,11 @@ const (
 	DecisionAllow
 	// DecisionDeny means the hook blocked the action.
 	DecisionDeny
+	// DecisionAsk means the hook wants the user to confirm the tool call
+	// (PreToolUse's permissionDecision "ask"), even one that would run
+	// without asking otherwise. It counts as no opinion for any other
+	// event.
+	DecisionAsk
 )
 
 func (d Decision) String() string {
@@ -107,6 +112,8 @@ func (d Decision) String() string {
 		return "allow"
 	case DecisionDeny:
 		return "deny"
+	case DecisionAsk:
+		return "ask"
 	default:
 		return "none"
 	}
@@ -156,6 +163,7 @@ type AggregateResult struct {
 	HookCount    int        // Number of hooks that ran.
 	Hooks        []HookInfo // Info about each hook that ran (config order).
 	Reason       string     // Concatenated deny/halt reasons (newline-separated).
+	AskReason    string     // Concatenated reasons of the hooks that asked (newline-separated).
 	Context      string     // Concatenated context from all hooks.
 	UpdatedInput string     // Merged tool_input JSON (empty if no patches).
 
@@ -168,7 +176,8 @@ type AggregateResult struct {
 
 // aggregate merges multiple HookResults into a single AggregateResult.
 // Results are processed in config order (the order of the slice). Deny
-// wins over allow, allow wins over none. Halt is sticky. Reasons and
+// wins over ask, ask over allow, and allow over none, as in Claude Code,
+// so one hook's ask is not overruled by another's allow. Halt is sticky. Reasons and
 // context concatenate in order. updated_input patches shallow-merge in
 // order against the original tool input; later patches override earlier
 // ones on colliding keys.
@@ -178,6 +187,7 @@ func aggregate(results []HookResult, origToolInput string) AggregateResult {
 		halt     bool
 		objected bool
 		reasons  []string
+		asks     []string
 		contexts []string
 		merged   = origToolInput
 		anyPatch = false
@@ -189,8 +199,15 @@ func aggregate(results []HookResult, origToolInput string) AggregateResult {
 			if r.Reason != "" {
 				reasons = append(reasons, r.Reason)
 			}
-		case DecisionAllow:
+		case DecisionAsk:
 			if decision != DecisionDeny {
+				decision = DecisionAsk
+			}
+			if r.Reason != "" {
+				asks = append(asks, r.Reason)
+			}
+		case DecisionAllow:
+			if decision == DecisionNone {
 				decision = DecisionAllow
 			}
 		case DecisionNone:
@@ -236,6 +253,9 @@ func aggregate(results []HookResult, origToolInput string) AggregateResult {
 	}
 	if len(reasons) > 0 {
 		agg.Reason = strings.Join(reasons, "\n")
+	}
+	if len(asks) > 0 {
+		agg.AskReason = strings.Join(asks, "\n")
 	}
 	if len(contexts) > 0 {
 		agg.Context = strings.Join(contexts, "\n")

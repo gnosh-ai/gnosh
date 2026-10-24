@@ -36,6 +36,35 @@ func hookApproved(ctx context.Context, toolCallID string) bool {
 	return v == toolCallID
 }
 
+// HookAskAction is the action of the request a PreToolUse hook that
+// answered "ask" puts to the user about a tool call: see WithHookAsk.
+const HookAskAction = "hook_ask"
+
+// hookAskKey is the unexported context key used to mark a permission
+// request as one a PreToolUse hook asked for. The value is the tool call
+// ID, as for hookApprovalKey.
+type hookAskKey struct{}
+
+// WithHookAsk returns a context that marks the request for the given tool
+// call ID as asked for by a hook, as Claude Code's "ask" is: it goes to
+// the user even when yolo, --allowedTools, an added directory or an
+// earlier "allow for this session" would grant it unasked, and a session
+// that grants all its requests unasked, where no one is there to answer
+// (klash run), is refused it.
+func WithHookAsk(ctx context.Context, toolCallID string) context.Context {
+	return context.WithValue(ctx, hookAskKey{}, toolCallID)
+}
+
+// hookAsked reports whether the context marks the request for the given
+// tool call ID as asked for by a hook.
+func hookAsked(ctx context.Context, toolCallID string) bool {
+	if toolCallID == "" {
+		return false
+	}
+	v, _ := ctx.Value(hookAskKey{}).(string)
+	return v == toolCallID
+}
+
 type CreatePermissionRequest struct {
 	SessionID   string `json:"session_id"`
 	ToolCallID  string `json:"tool_call_id"`
@@ -194,6 +223,9 @@ func (s *permissionService) Deny(permission PermissionRequest) bool {
 }
 
 func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRequest) (bool, error) {
+	if hookAsked(ctx, opts.ToolCallID) {
+		return s.ask(ctx, opts)
+	}
 	if s.skip.Load() {
 		return true, nil
 	}
@@ -256,16 +288,7 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 	if dir == "." {
 		dir = s.workingDir
 	}
-	permission := PermissionRequest{
-		ID:          uuid.New().String(),
-		Path:        dir,
-		SessionID:   opts.SessionID,
-		ToolCallID:  opts.ToolCallID,
-		ToolName:    opts.ToolName,
-		Description: opts.Description,
-		Action:      opts.Action,
-		Params:      opts.Params,
-	}
+	permission := s.newRequest(opts, dir)
 
 	if _, ok := s.sessionPermissions.Get(PermissionKey{
 		SessionID: permission.SessionID,
@@ -281,6 +304,41 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 		return true, nil
 	}
 
+	return s.wait(ctx, permission)
+}
+
+// ask puts a request a hook asked for (WithHookAsk) to the user, whatever
+// would grant it unasked, or refuses it in a session no one answers for.
+func (s *permissionService) ask(ctx context.Context, opts CreatePermissionRequest) (bool, error) {
+	if s.IsSessionAutoApproved(opts.SessionID) {
+		return false, nil
+	}
+	s.requestMu.Lock()
+	defer s.requestMu.Unlock()
+	s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{
+		SessionID:  opts.SessionID,
+		ToolCallID: opts.ToolCallID,
+	})
+	return s.wait(ctx, s.newRequest(opts, opts.Path))
+}
+
+// newRequest is the request opts make, about dir.
+func (s *permissionService) newRequest(opts CreatePermissionRequest, dir string) PermissionRequest {
+	return PermissionRequest{
+		ID:          uuid.New().String(),
+		Path:        dir,
+		SessionID:   opts.SessionID,
+		ToolCallID:  opts.ToolCallID,
+		ToolName:    opts.ToolName,
+		Description: opts.Description,
+		Action:      opts.Action,
+		Params:      opts.Params,
+	}
+}
+
+// wait publishes permission for the user to answer and waits for the
+// answer. The caller holds requestMu, so one request is asked at a time.
+func (s *permissionService) wait(ctx context.Context, permission PermissionRequest) (bool, error) {
 	s.activeRequestMu.Lock()
 	s.activeRequest = &permission
 	s.activeRequestMu.Unlock()

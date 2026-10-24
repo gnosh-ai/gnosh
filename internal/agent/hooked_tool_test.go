@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"testing"
+	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
@@ -191,5 +192,81 @@ func TestWrapToolsWithHooks(t *testing.T) {
 	t.Run("no runners skip the wrap", func(t *testing.T) {
 		t.Parallel()
 		require.Equal(t, inputs, wrapToolsWithHooks(inputs, toolHooks{}))
+	})
+}
+
+// A PreToolUse hook that answers "ask" puts the call to the user, as in
+// Claude Code, even where it would run unasked (yolo here), and the tool
+// runs only once they allow it, then needing no other approval. Where no
+// one can answer, as in klash run, the call is refused with the reason.
+func TestHookedTool_AskPutsTheCallToTheUser(t *testing.T) {
+	t.Parallel()
+
+	const ask = `echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"deploys need a second look"}}'`
+	call := fantasy.ToolCall{ID: "call-1", Name: "bash", Input: `{"command":"deploy"}`}
+	run := func(t *testing.T, perms permission.Service, answer func(permission.PermissionRequest) bool) (*fakeTool, fantasy.ToolResponse, permission.PermissionRequest) {
+		t.Helper()
+		inner := &fakeTool{name: "bash", resp: fantasy.NewTextResponse("ran")}
+		tool := newHookedTool(inner, toolHooks{pre: newRunner(t, ask), permissions: perms})
+		asked := make(chan permission.PermissionRequest, 1)
+		if answer != nil {
+			events := perms.Subscribe(t.Context())
+			go func() {
+				event := <-events
+				asked <- event.Payload
+				answer(event.Payload)
+			}()
+		}
+		resp, err := tool.Run(sessionCtx(t), call)
+		require.NoError(t, err)
+		var req permission.PermissionRequest
+		if answer != nil {
+			select {
+			case req = <-asked:
+			case <-time.After(5 * time.Second):
+				t.Fatal("the call was not put to the user")
+			}
+		}
+		return inner, resp, req
+	}
+
+	t.Run("allowed", func(t *testing.T) {
+		t.Parallel()
+		perms := permission.NewPermissionService(t.TempDir(), true, nil)
+		inner, resp, req := run(t, perms, perms.Grant)
+		require.True(t, inner.called)
+		require.Equal(t, "ran", resp.Content)
+		require.Equal(t, permission.HookAskAction, req.Action)
+		require.Equal(t, "bash", req.ToolName)
+		require.Contains(t, req.Description, "deploys need a second look")
+		require.Equal(t, call.Input, req.Params)
+
+		// The tool's own request needs no other approval.
+		perms.SetSkipRequests(false)
+		ctx, cancel := context.WithTimeout(inner.gotCtx, 5*time.Second)
+		defer cancel()
+		granted, err := perms.Request(ctx, permission.CreatePermissionRequest{SessionID: "s1", ToolCallID: "call-1", ToolName: "bash", Action: "execute", Path: t.TempDir()})
+		require.NoError(t, err)
+		require.True(t, granted)
+	})
+
+	t.Run("denied", func(t *testing.T) {
+		t.Parallel()
+		perms := permission.NewPermissionService(t.TempDir(), true, nil)
+		inner, resp, _ := run(t, perms, perms.Deny)
+		require.False(t, inner.called)
+		require.True(t, resp.IsError)
+		require.Contains(t, resp.Content, "User denied permission")
+	})
+
+	t.Run("no one to answer", func(t *testing.T) {
+		t.Parallel()
+		perms := permission.NewPermissionService(t.TempDir(), true, nil)
+		perms.AutoApproveSession("s1")
+		inner, resp, _ := run(t, perms, nil)
+		require.False(t, inner.called)
+		require.True(t, resp.IsError)
+		require.Contains(t, resp.Content, "no one is here to answer")
+		require.Contains(t, resp.Content, "deploys need a second look")
 	})
 }

@@ -1125,7 +1125,13 @@ Both decision vocabularies are understood. Klash's own top-level `decision`
 is `"allow"` or `"deny"`; Claude Code's is `"approve"` or `"block"`, which is
 how a Claude Code `Stop` hook keeps the agent working. Claude Code's
 `hookSpecificOutput.permissionDecision` of `"allow"`, `"deny"` or `"ask"` is
-read too, where `"ask"` falls through to the normal permission prompt.
+read too. `"ask"` puts the tool call to you, as in Claude Code, even a call
+that would run without asking (yolo, `--allowedTools`, `acceptEdits`, a tool
+that never asks), with the hook's `permissionDecisionReason` in the prompt;
+when you allow it, it runs without another prompt. Where no one can answer,
+in `klash run`, the call is refused and the agent reads the reason, as in a
+Claude Code `-p` run. Between hooks, `deny` beats `ask` and `ask` beats
+`allow`.
 
 Claude Code's other envelope fields are read too. `"continue": false` stops
 everything, as a Klash `halt` does, with `stopReason` as the reason.
