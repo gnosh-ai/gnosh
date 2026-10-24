@@ -1152,7 +1152,7 @@ ID:
 - errors, your OS and CPU architecture, terminal, shell and Klash's version.
 
 Prompts, replies and code are never sent. The events go to Klash's own
-collector, `https://klash.gno.run`, or to a `metrics-url` you set instead;
+collector, `https://metrics.klash.pro`, or to a `metrics-url` you set instead;
 Charm's analytics is not a destination. The collector is a small open service
 (a small Go service, klash-metrics); run your own and point `metrics-url` at it to keep the
 data yourself. The events are defined in [internal/event](internal/event) and

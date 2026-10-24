@@ -603,7 +603,7 @@
         },
         "metrics_url": {
           "type": "string",
-          "description": "Where opted-in usage metrics go: a PostHog-compatible endpoint such as https://klash.gno.run. Empty sends nowhere; Charm is never a default."
+          "description": "Where opted-in usage metrics go: a PostHog-compatible endpoint such as https://metrics.klash.pro. Empty sends nowhere; Charm is never a default."
         },
         "metrics_key": {
           "type": "string",

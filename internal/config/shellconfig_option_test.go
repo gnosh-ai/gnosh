@@ -172,7 +172,7 @@ func TestShellConfigKlashEndpoints(t *testing.T) {
 	// MetricsSink is read only once the gate is on; with no custom url it is
 	// klash's own analytics, never Charm.
 	url, key := bare.MetricsSink()
-	require.Equal(t, "https://klash.gno.run", url)
+	require.Equal(t, "https://metrics.klash.pro", url)
 	require.Equal(t, "klash", key)
 
 	set := loadCrushSh(t, `option metrics-url https://my.collector

@@ -49,7 +49,7 @@ func SetContinueLastSession(continueLastSession bool) {
 }
 
 // Init starts the metrics client that send() enqueues to. endpoint is a
-// PostHog-compatible collector (the fork's own, e.g. https://klash.gno.run);
+// PostHog-compatible collector (the fork's own, e.g. https://metrics.klash.pro);
 // an empty endpoint leaves the client nil, so metrics go nowhere and, in
 // particular, never to Charm. Only shouldEnableMetrics decides whether this
 // is called at all.

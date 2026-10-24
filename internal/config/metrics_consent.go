@@ -10,7 +10,7 @@ import (
 // DefaultMetricsURL is where opted-in usage metrics go when metrics_url is not
 // set: klash's own analytics, never Charm's. A custom collector overrides it
 // with metrics_url.
-const DefaultMetricsURL = "https://klash.gno.run"
+const DefaultMetricsURL = "https://metrics.klash.pro"
 
 // metricsConsentFile holds this machine's answer to the first-run analytics
 // question, in the global data directory, so it is asked once per machine and
