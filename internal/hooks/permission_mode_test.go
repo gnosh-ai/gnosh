@@ -49,7 +49,7 @@ func TestPermissionModeOnTheEventsClaudeCodeGivesItTo(t *testing.T) {
 			return err
 		},
 		EventPreCompact: func(ctx context.Context, r *Runner) error {
-			_, err := r.RunPreCompact(ctx, "s1", PreCompactTriggerManual)
+			_, err := r.RunPreCompact(ctx, "s1", PreCompactTriggerManual, "")
 			return err
 		},
 	}

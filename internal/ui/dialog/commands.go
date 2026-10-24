@@ -215,6 +215,21 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 			if ref, ok := session.ParseResumeCommand(c.input.Value()); ok && ref != "" {
 				return ActionResumeSession{Ref: ref}
 			}
+			// And "compact" and what the summary should keep; "compact"
+			// alone is the Summarize Session item.
+			if instructions, ok := session.ParseCompactCommand(c.input.Value()); ok && instructions != "" && c.hasSession {
+				return ActionSummarize{SessionID: c.sessionID, Instructions: instructions}
+			}
+			// And "export" and the file to write; "export" alone is the
+			// Export Conversation item.
+			if filename, ok := session.ParseExportCommand(c.input.Value()); ok && filename != "" && c.hasSession {
+				return ActionExportConversation{Filename: filename}
+			}
+			// "context" with anything after it (Claude Code's takes "all")
+			// is still the report.
+			if session.ParseContextCommand(c.input.Value()) {
+				return ActionContextUsage{}
+			}
 			if selectedItem := c.list.SelectedItem(); selectedItem != nil {
 				if item, ok := selectedItem.(*CommandItem); ok && item != nil {
 					return item.Action()
@@ -498,12 +513,28 @@ func (c *Commands) defaultCommands() []*CommandItem {
 			WithDescription("Stop looping after the current turn"),
 	)
 
+	commands = append(commands, NewCommandItem(c.com.Styles, "context_usage", "Context Usage", "", ActionContextUsage{}).
+		WithAliases("context").
+		WithDescription("What fills the context window, as Claude Code's /context shows it"))
+	commands = append(commands, NewCommandItem(c.com.Styles, "hooks_report", "Hooks", "", ActionHooksReport{}).
+		WithAliases("hooks").
+		WithDescription("The hooks that run, by event, as Claude Code's /hooks lists them"))
+	commands = append(commands, NewCommandItem(c.com.Styles, "permissions_report", "Permissions", "", ActionPermissionsReport{}).
+		WithAliases("permissions", "allowed-tools").
+		WithDescription("What runs without asking: the mode and the allow and deny rules, as Claude Code's /permissions shows them"))
+	commands = append(commands, NewCommandItem(c.com.Styles, "status_report", "Status", "", ActionStatusReport{}).
+		WithAliases("status").
+		WithDescription("Version, session, models, context, and the MCP and LSP servers, as Claude Code's /status shows them"))
+
 	// Only show compact command if there's an active session
 	if c.hasSession {
 		commands = append(commands, NewCommandItem(c.com.Styles, "summarize", "Summarize Session", "", ActionSummarize{SessionID: c.sessionID}).WithAliases("compact"))
 		commands = append(commands, NewCommandItem(c.com.Styles, "rename_session", "Rename Session", "", ActionRenameSession{SessionID: c.sessionID}).
 			WithAliases("rename", "name").
 			WithDescription("Type rename and a name, or rename alone for one made from the conversation"))
+		commands = append(commands, NewCommandItem(c.com.Styles, "export_conversation", "Export Conversation", "", ActionExportConversation{}).
+			WithAliases("export").
+			WithDescription("Copy the conversation, or save it to a file; type export and a file name to save it there"))
 	}
 
 	// Add reasoning toggle for models that support it

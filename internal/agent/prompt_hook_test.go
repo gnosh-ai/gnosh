@@ -491,7 +491,7 @@ func TestSummarizeIsNotBlockedByAPromptInItsHooks(t *testing.T) {
 	}()
 	require.Eventually(t, func() bool { return r.agent.isSubmitting(r.sessionID) }, 3*time.Second, 10*time.Millisecond)
 
-	err := r.agent.Summarize(t.Context(), r.sessionID, nil, nil, preCompactTriggerAuto)
+	err := r.agent.Summarize(t.Context(), r.sessionID, "", nil, nil, preCompactTriggerAuto)
 	require.NotErrorIs(t, err, ErrSessionBusy)
 
 	r.agent.Cancel(r.sessionID)

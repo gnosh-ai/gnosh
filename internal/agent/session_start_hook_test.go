@@ -191,7 +191,7 @@ func TestRun_SessionStartAfterSummaryCompact(t *testing.T) {
 	subModel := &subSummarizeModel{}
 	sumModel := Model{Model: subModel, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000}, ModelCfg: config.SelectedModel{Model: "test-model", Provider: "test"}}
 	r.agent.SetModels(sumModel, sumModel)
-	require.NoError(t, r.agent.Summarize(t.Context(), r.sessionID, nil, nil, preCompactTriggerManual))
+	require.NoError(t, r.agent.Summarize(t.Context(), r.sessionID, "", nil, nil, preCompactTriggerManual))
 
 	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "after summary"})
 	require.NoError(t, err)

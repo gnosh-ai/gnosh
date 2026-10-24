@@ -599,9 +599,11 @@ func (c *Client) GetAgentSessionInfo(ctx context.Context, id string, sessionID s
 	return &info, nil
 }
 
-// AgentSummarizeSession requests a session summarization.
-func (c *Client) AgentSummarizeSession(ctx context.Context, id string, sessionID string) error {
-	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/agent/sessions/%s/summarize", id, sessionID), nil, nil, nil)
+// AgentSummarizeSession requests a session summarization, with
+// instructions the text given after /compact ("" for none).
+func (c *Client) AgentSummarizeSession(ctx context.Context, id string, sessionID, instructions string) error {
+	body := jsonBody(proto.SummarizeRequest{Instructions: instructions})
+	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/agent/sessions/%s/summarize", id, sessionID), nil, body, http.Header{"Content-Type": []string{"application/json"}})
 	if err != nil {
 		return fmt.Errorf("failed to summarize session: %w", err)
 	}
@@ -610,6 +612,48 @@ func (c *Client) AgentSummarizeSession(ctx context.Context, id string, sessionID
 		return fmt.Errorf("failed to summarize session: status code %d", rsp.StatusCode)
 	}
 	return nil
+}
+
+// PermissionsReport is what the workspace's agent may do without asking,
+// the Markdown Claude Code's /permissions shows.
+func (c *Client) PermissionsReport(ctx context.Context, id string) (string, error) {
+	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/permissions/report", id), nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get permissions: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		if msg := decodeErrorMessage(rsp.Body); msg != "" {
+			return "", errors.New(msg)
+		}
+		return "", fmt.Errorf("failed to get permissions: status code %d", rsp.StatusCode)
+	}
+	var report proto.PermissionsReport
+	if err := json.NewDecoder(rsp.Body).Decode(&report); err != nil {
+		return "", fmt.Errorf("failed to decode permissions: %w", err)
+	}
+	return report.Markdown, nil
+}
+
+// AgentContextReport is what fills a session's context window ("" for a
+// new session), the Markdown Claude Code's /context prints.
+func (c *Client) AgentContextReport(ctx context.Context, id, sessionID string) (string, error) {
+	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/agent/context", id), url.Values{"session_id": []string{sessionID}}, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get context usage: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		if msg := decodeErrorMessage(rsp.Body); msg != "" {
+			return "", errors.New(msg)
+		}
+		return "", fmt.Errorf("failed to get context usage: status code %d", rsp.StatusCode)
+	}
+	var report proto.ContextReport
+	if err := json.NewDecoder(rsp.Body).Decode(&report); err != nil {
+		return "", fmt.Errorf("failed to decode context usage: %w", err)
+	}
+	return report.Markdown, nil
 }
 
 // AgentGenerateSessionName names a session from the end of its

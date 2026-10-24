@@ -123,6 +123,12 @@ type Workspace interface {
 	SaveSession(ctx context.Context, sess session.Session) (session.Session, error)
 	// RenameSession gives the session a new title, and nothing else.
 	RenameSession(ctx context.Context, sessionID, title string) error
+	// PermissionsReport is what the agent may do without asking, the
+	// Markdown Claude Code's /permissions shows.
+	PermissionsReport(ctx context.Context) (string, error)
+	// ContextReport is what fills the session's context window ("" for a
+	// new session), the Markdown Claude Code's /context prints.
+	ContextReport(ctx context.Context, sessionID string) (string, error)
 	// GenerateSessionName names the session from the end of its
 	// conversation, as Claude Code's /rename does with no name, and
 	// returns the name.
@@ -177,7 +183,9 @@ type Workspace interface {
 	AgentPopQueuedPrompts(sessionID string) []message.PoppedPrompt
 	AgentClearQueue(sessionID string)
 	AgentSetMain(agentID string) error
-	AgentSummarize(ctx context.Context, sessionID string) error
+	// AgentSummarize summarizes the session, with instructions the text
+	// given after /compact ("" for none).
+	AgentSummarize(ctx context.Context, sessionID, instructions string) error
 	UpdateAgentModel(ctx context.Context) error
 	InitCoderAgent(ctx context.Context) error
 	InitCoderAgentNonInteractive(ctx context.Context) error

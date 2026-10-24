@@ -30,20 +30,26 @@ func TestPaletteFindsClaudeCodeSlashNames(t *testing.T) {
 		Styles:    &sty,
 	}
 	for typed, want := range map[string]string{
-		"resume":   "Sessions",
-		"continue": "Sessions",
-		"compact":  "Summarize Session",
-		"rename":   "Rename Session",
-		"name":     "Rename Session",
-		"clear":    "New Session",
-		"new":      "New Session",
-		"reset":    "New Session",
-		"model":    "Switch Model",
-		"init":     "Initialize Project",
-		"help":     "Toggle Help",
-		"theme":    "Themes",
-		"exit":     "Quit",
-		"quit":     "Quit",
+		"resume":        "Sessions",
+		"continue":      "Sessions",
+		"compact":       "Summarize Session",
+		"context":       "Context Usage",
+		"hooks":         "Hooks",
+		"permissions":   "Permissions",
+		"allowed-tools": "Permissions",
+		"status":        "Status",
+		"export":        "Export Conversation",
+		"rename":        "Rename Session",
+		"name":          "Rename Session",
+		"clear":         "New Session",
+		"new":           "New Session",
+		"reset":         "New Session",
+		"model":         "Switch Model",
+		"init":          "Initialize Project",
+		"help":          "Toggle Help",
+		"theme":         "Themes",
+		"exit":          "Quit",
+		"quit":          "Quit",
 	} {
 		c, err := NewCommands(com, "s1", true, false, false, nil, nil)
 		require.NoError(t, err)
@@ -114,4 +120,93 @@ func TestPaletteResumeTakesTheSession(t *testing.T) {
 	require.Equal(t, ActionResumeSession{Ref: "fix-login-bug"}, enter("resume fix-login-bug"))
 	require.Equal(t, ActionResumeSession{Ref: "the auth work"}, enter("continue the auth work"))
 	require.Equal(t, ActionOpenDialog{DialogID: SessionsID}, enter("resume"))
+}
+
+// Claude Code's /compact takes what the summary should keep: typed into
+// the palette with it, Enter summarizes with those instructions; alone,
+// it is the Summarize Session item. With no session there is nothing to
+// summarize.
+func TestPaletteCompactTakesInstructions(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	enter := func(sessionID, typed string) Action {
+		c, err := NewCommands(com, sessionID, sessionID != "", false, false, nil, nil)
+		require.NoError(t, err)
+		for _, r := range typed {
+			c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+		return c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	}
+	require.Equal(t, ActionSummarize{SessionID: "s1", Instructions: "keep the API decisions"}, enter("s1", "compact keep the API decisions"))
+	require.Equal(t, ActionSummarize{SessionID: "s1"}, enter("s1", "compact"))
+	_, summarized := enter("", "compact keep it").(ActionSummarize)
+	require.False(t, summarized)
+}
+
+// Claude Code's /context, with or without its "all", opens the report;
+// what follows it is not used, even text that matches no command.
+func TestPaletteContextOpensTheReport(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	for _, typed := range []string{"context", "context all", "context qz"} {
+		c, err := NewCommands(com, "", false, false, false, nil, nil)
+		require.NoError(t, err)
+		for _, r := range typed {
+			c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+		require.Equal(t, ActionContextUsage{}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}), "typed %q", typed)
+	}
+}
+
+// Claude Code's /hooks lists the hooks.
+func TestPaletteHooksOpensTheReport(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	c, err := NewCommands(com, "", false, false, false, nil, nil)
+	require.NoError(t, err)
+	for _, r := range "hooks" {
+		c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	require.Equal(t, ActionHooksReport{}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
+}
+
+// Claude Code's /export takes the file to write: typed into the palette
+// with it, Enter saves the conversation there; alone, it is the Export
+// Conversation item, which asks how. With no session there is nothing to
+// export.
+func TestPaletteExportTakesTheFile(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	enter := func(sessionID, typed string) Action {
+		c, err := NewCommands(com, sessionID, sessionID != "", false, false, nil, nil)
+		require.NoError(t, err)
+		for _, r := range typed {
+			c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+		return c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	}
+	require.Equal(t, ActionExportConversation{Filename: "notes.md"}, enter("s1", "export notes.md"))
+	require.Equal(t, ActionExportConversation{}, enter("s1", "export"))
+	_, exported := enter("", "export notes.md").(ActionExportConversation)
+	require.False(t, exported)
 }

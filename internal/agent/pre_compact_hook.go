@@ -24,10 +24,10 @@ const (
 
 // runPreCompactHooks runs the PreCompact hooks for a summary of the
 // given session just before it is summarized, with trigger naming what
-// set it going. As in Claude Code a hook cannot stop the summary: a
+// set it going and instructions the text given after /compact. As in Claude Code a hook cannot stop the summary: a
 // block, a halt or a failure is shown to the user as a hook warning, and
 // the summary goes ahead.
-func (a *sessionAgent) runPreCompactHooks(ctx context.Context, sessionID string, trigger preCompactTrigger) {
+func (a *sessionAgent) runPreCompactHooks(ctx context.Context, sessionID string, trigger preCompactTrigger, instructions string) {
 	// A sub-agent's summary runs no PreCompact hooks: they are the main
 	// agent's, as SessionStart's are. cfg is nil in tests and wherever
 	// config-backed features are disabled.
@@ -56,7 +56,7 @@ func (a *sessionAgent) runPreCompactHooks(ctx context.Context, sessionID string,
 	}
 
 	runner := hooks.NewRunner(hookCfgs, workingDir, workingDir)
-	result, err := runner.RunPreCompact(ctx, sessionID, string(trigger))
+	result, err := runner.RunPreCompact(ctx, sessionID, string(trigger), instructions)
 	a.warnFailedPreCompactHooks(sessionID, result.Hooks)
 	a.warnHookMessages(sessionID, hooks.EventPreCompact, result.Hooks)
 	if err != nil {

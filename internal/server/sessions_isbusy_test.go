@@ -45,7 +45,7 @@ func (s *stubCoordinator) IsSessionBusy(id string) bool {
 	return s.busy[id]
 }
 
-func (s *stubCoordinator) Summarize(context.Context, string) error {
+func (s *stubCoordinator) Summarize(context.Context, string, string) error {
 	return nil
 }
 

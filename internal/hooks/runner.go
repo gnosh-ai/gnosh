@@ -260,16 +260,17 @@ func (r *Runner) RunSessionStart(ctx context.Context, sessionID, model, source, 
 // summary's trigger, just before a session's conversation is
 // summarized. Trigger is the PreCompactTriggerManual or
 // PreCompactTriggerAuto name of what set the summary going; hooks with
-// no matcher match both, as in Claude Code.
+// no matcher match both, as in Claude Code. customInstructions is the
+// text given after /compact, as the payload's custom_instructions.
 //
 // A PreCompact hook cannot stop the summary, as in Claude Code: the
 // caller runs the summary whatever the aggregated result says, and
 // tells the user about any hook that did not run to a verdict.
 // UpdatedInput is meaningless without a tool call and is always
 // cleared.
-func (r *Runner) RunPreCompact(ctx context.Context, sessionID, trigger string) (AggregateResult, error) {
+func (r *Runner) RunPreCompact(ctx context.Context, sessionID, trigger, customInstructions string) (AggregateResult, error) {
 	envVars := append(BuildEnv(EventPreCompact, "", sessionID, r.cwd, r.projectDir, ""), hookVar("PRE_COMPACT_TRIGGER", trigger)...)
-	payload := BuildPreCompactPayload(sessionID, r.cwd, trigger)
+	payload := BuildPreCompactPayload(sessionID, r.cwd, trigger, customInstructions)
 	agg, err := r.run(ctx, r.matchingHooks(trigger), EventPreCompact, "", "", envVars, payload)
 	agg.UpdatedInput = ""
 	return agg, err

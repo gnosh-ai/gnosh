@@ -55,7 +55,7 @@ func TestSummarizeKeepsANameGivenMeanwhile(t *testing.T) {
 	var renameErr error
 	llm.rename = func() { renameErr = env.sessions.Rename(context.Background(), sess.ID, "named meanwhile") }
 
-	require.NoError(t, a.Summarize(t.Context(), sess.ID, fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
+	require.NoError(t, a.Summarize(t.Context(), sess.ID, "", fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
 	require.NoError(t, renameErr)
 
 	got, err := env.sessions.Get(t.Context(), sess.ID)

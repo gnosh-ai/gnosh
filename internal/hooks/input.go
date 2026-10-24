@@ -70,7 +70,7 @@ type Payload struct {
 	// Trigger and CustomInstructions are set on an EventPreCompact
 	// payload, as Claude Code's PreCompact input carries them: whether
 	// the user asked for the summary or the context filled up, and the
-	// instructions to fold into it, which Klash has none of.
+	// instructions to fold into it, the text given after /compact.
 	Trigger string `json:"trigger,omitempty"`
 	// It is a pointer so that it is left out of every other event's
 	// payload, while a PreCompact payload has it even when empty.
@@ -410,9 +410,9 @@ const (
 // BuildPreCompactPayload constructs the JSON stdin payload for an
 // EventPreCompact hook. There is no tool in play, so tool_name is empty
 // and tool_input is an empty object. Trigger names who asked for the
-// summary; CustomInstructions is Klash's counterpart to Claude Code's,
-// which Klash has none of, so it is always the empty string.
-func BuildPreCompactPayload(sessionID, cwd, trigger string) []byte {
+// summary, and customInstructions is the text given after /compact, as in
+// Claude Code: empty for an automatic summary.
+func BuildPreCompactPayload(sessionID, cwd, trigger, customInstructions string) []byte {
 	return marshalPayload(Payload{
 		Event:              EventPreCompact,
 		HookEventName:      EventPreCompact,
@@ -420,7 +420,7 @@ func BuildPreCompactPayload(sessionID, cwd, trigger string) []byte {
 		CWD:                cwd,
 		ToolInput:          json.RawMessage("{}"),
 		Trigger:            trigger,
-		CustomInstructions: new(string),
+		CustomInstructions: &customInstructions,
 	})
 }
 

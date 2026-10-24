@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"image/color"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -43,12 +44,13 @@ import (
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/exitbanner"
+	"github.com/charmbracelet/crush/internal/ui/logo"
 	ui "github.com/charmbracelet/crush/internal/ui/model"
+	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/crush/internal/workspace"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/exp/charmtone"
 	xstrings "github.com/charmbracelet/x/exp/strings"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
@@ -90,8 +92,8 @@ func init() {
 
 var rootCmd = &cobra.Command{
 	Use:   version.Command,
-	Short: "A terminal-first AI assistant for software development",
-	Long:  "A glamorous, terminal-first AI assistant for software development and adjacent tasks",
+	Short: "A security-first harness for coding agents, in your terminal",
+	Long:  "A security-first harness for coding agents, in your terminal.",
 	Example: `
 # Run in interactive mode
 klash
@@ -182,19 +184,46 @@ klash --continue
 	},
 }
 
-var heartbit = lipgloss.NewStyle().Foreground(charmtone.Dolly).SetString(`
-    ▄▄▄▄▄▄▄▄    ▄▄▄▄▄▄▄▄
-  ███████████  ███████████
-████████████████████████████
-████████████████████████████
-██████████▀██████▀██████████
-██████████ ██████ ██████████
-▀▀██████▄████▄▄████▄██████▀▀
-  ████████████████████████
-    ████████████████████
-       ▀▀██████████▀▀
-           ▀▀▀▀▀▀
-`)
+// versionArt is the compact KLASH wordmark printed above `klash --version`,
+// in the default theme's colors.
+func versionArt() string {
+	t := styles.KlashCosmos()
+	return logo.Render(t.Logo.GradCanvas, "", true, logo.Opts{
+		FieldColor:   t.Logo.FieldColor,
+		TitleColorA:  t.Logo.TitleColorA,
+		TitleColorB:  t.Logo.TitleColorB,
+		CharmColor:   t.Logo.CharmColor,
+		VersionColor: t.Logo.VersionColor,
+	})
+}
+
+// colorScheme draws fang's help and error output in Klash's colors. On a
+// light terminal the greens and golds are deeper, so they stay readable.
+func colorScheme(c lipgloss.LightDarkFunc) fang.ColorScheme {
+	var (
+		pine  = lipgloss.Color("#0A7F52")
+		ochre = lipgloss.Color("#8A6400")
+		teal  = lipgloss.Color("#0B7A63")
+		rust  = lipgloss.Color("#A84A06")
+		gray  = lipgloss.Color("#6B756F")
+		paper = lipgloss.Color("#EDF2EC")
+	)
+	return fang.ColorScheme{
+		Base:           c(styles.KlashShade, styles.KlashMoon),
+		Title:          c(pine, styles.KlashAurora),
+		Codeblock:      c(paper, styles.KlashDusk),
+		Program:        c(pine, styles.KlashAurora),
+		Command:        c(ochre, styles.KlashGold),
+		DimmedArgument: c(styles.KlashLichen, styles.KlashMoss),
+		Comment:        c(gray, styles.KlashLichen),
+		Flag:           c(teal, styles.KlashMint),
+		FlagDefault:    c(styles.KlashLichen, styles.KlashLichen),
+		Argument:       c(styles.KlashShade, styles.KlashMoon),
+		Description:    c(styles.KlashShade, styles.KlashMoon),
+		QuotedString:   c(rust, styles.KlashAmber),
+		ErrorHeader:    [2]color.Color{styles.KlashInk, styles.KlashCoral},
+	}
+}
 
 // printSessionResume prints the exit banner after the TUI exits, including the
 // session title and the hint to resume it with `crush -s <id>`. The banner
@@ -233,7 +262,7 @@ func Execute() {
 	slog.SetDefault(slog.New(crushlog.Early()))
 
 	// NOTE: very hacky: we create a colorprofile writer with STDOUT, then make
-	// it forward to a bytes.Buffer, write the colored heartbit to it, and then
+	// it forward to a bytes.Buffer, write the colored wordmark to it, and then
 	// finally prepend it in the version template.
 	// Unfortunately cobra doesn't give us a way to set a function to handle
 	// printing the version, and PreRunE runs after the version is already
@@ -243,7 +272,7 @@ func Execute() {
 		var b bytes.Buffer
 		w := colorprofile.NewWriter(os.Stdout, os.Environ())
 		w.Forward = &b
-		_, _ = w.WriteString(heartbit.String())
+		_, _ = w.WriteString(versionArt())
 		rootCmd.SetVersionTemplate(b.String() + "\n" + defaultVersionTemplate)
 	}
 	args := os.Args[1:]
@@ -255,6 +284,7 @@ func Execute() {
 		context.Background(),
 		rootCmd,
 		fang.WithVersion(version.Version),
+		fang.WithColorSchemeFunc(colorScheme),
 		fang.WithNotifySignal(os.Interrupt),
 		fang.WithErrorHandler(errorHandler),
 	); err != nil {

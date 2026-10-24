@@ -65,6 +65,21 @@ func (w *AppWorkspace) RenameSession(ctx context.Context, sessionID, title strin
 	return w.app.Sessions.Rename(ctx, sessionID, title)
 }
 
+func (w *AppWorkspace) PermissionsReport(context.Context) (string, error) {
+	return config.PermissionsReport(w.store.Config(), w.store.Overrides(), w.store.WorkingDir(), w.app.Permissions.SkipRequests()), nil
+}
+
+func (w *AppWorkspace) ContextReport(ctx context.Context, sessionID string) (string, error) {
+	if w.app.AgentCoordinator == nil {
+		return "", errors.New("agent coordinator not initialized")
+	}
+	usage, err := w.app.AgentCoordinator.ContextUsage(ctx, sessionID)
+	if err != nil {
+		return "", err
+	}
+	return usage.Markdown(), nil
+}
+
 func (w *AppWorkspace) GenerateSessionName(ctx context.Context, sessionID string) (string, error) {
 	if w.app.AgentCoordinator == nil {
 		return "", errors.New("agent coordinator not initialized")
@@ -257,11 +272,11 @@ func (w *AppWorkspace) AgentSetMain(agentID string) error {
 	return w.app.AgentCoordinator.SetMainAgent(agentID)
 }
 
-func (w *AppWorkspace) AgentSummarize(ctx context.Context, sessionID string) error {
+func (w *AppWorkspace) AgentSummarize(ctx context.Context, sessionID, instructions string) error {
 	if w.app.AgentCoordinator == nil {
 		return errors.New("agent coordinator not initialized")
 	}
-	return w.app.AgentCoordinator.Summarize(ctx, sessionID)
+	return w.app.AgentCoordinator.Summarize(ctx, sessionID, instructions)
 }
 
 func (w *AppWorkspace) UpdateAgentModel(ctx context.Context) error {

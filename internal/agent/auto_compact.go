@@ -181,7 +181,7 @@ func (a *sessionAgent) compactIdle(sessionID string, opts fantasy.ProviderOption
 		return
 	}
 	slog.Info("Compacting a conversation left idle", "session_id", sessionID, "tokens", tokens)
-	if err := a.summarize(ctx, sessionID, "", opts, nil, preCompactTriggerAuto); err != nil && !errors.Is(err, ErrSessionBusy) {
+	if err := a.summarize(ctx, sessionID, "", "", opts, nil, preCompactTriggerAuto); err != nil && !errors.Is(err, ErrSessionBusy) {
 		slog.Warn("Could not compact a conversation left idle", "session_id", sessionID, "error", err)
 	}
 }

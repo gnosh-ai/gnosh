@@ -181,6 +181,14 @@ func (w *ClientWorkspace) RenameSession(ctx context.Context, sessionID, title st
 	return err
 }
 
+func (w *ClientWorkspace) PermissionsReport(ctx context.Context) (string, error) {
+	return w.client.PermissionsReport(ctx, w.workspaceID())
+}
+
+func (w *ClientWorkspace) ContextReport(ctx context.Context, sessionID string) (string, error) {
+	return w.client.AgentContextReport(ctx, w.workspaceID(), sessionID)
+}
+
 func (w *ClientWorkspace) GenerateSessionName(ctx context.Context, sessionID string) (string, error) {
 	return w.client.AgentGenerateSessionName(ctx, w.workspaceID(), sessionID)
 }
@@ -356,8 +364,8 @@ func (w *ClientWorkspace) AgentSetMain(agentID string) error {
 	return w.client.SetMainAgent(context.Background(), w.workspaceID(), agentID)
 }
 
-func (w *ClientWorkspace) AgentSummarize(ctx context.Context, sessionID string) error {
-	return w.client.AgentSummarizeSession(ctx, w.workspaceID(), sessionID)
+func (w *ClientWorkspace) AgentSummarize(ctx context.Context, sessionID, instructions string) error {
+	return w.client.AgentSummarizeSession(ctx, w.workspaceID(), sessionID, instructions)
 }
 
 func (w *ClientWorkspace) UpdateAgentModel(ctx context.Context) error {

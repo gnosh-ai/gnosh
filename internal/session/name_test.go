@@ -23,50 +23,6 @@ func TestCleanName(t *testing.T) {
 	require.Equal(t, strings.Repeat("a", 199), CleanName(strings.Repeat("a", 199)+"  tail"), "no space left at the cut")
 }
 
-// /rename, or its alias /name, is read with or without its slash, in any
-// case, with the name after it or none.
-func TestParseRenameCommand(t *testing.T) {
-	t.Parallel()
-
-	for line, want := range map[string]string{
-		"/rename fix the login bug": "fix the login bug",
-		"rename  spaced  out ":      "spaced  out",
-		"/Rename X":                 "X",
-		"/rename":                   "",
-		" rename ":                  "",
-		"/name the alias":           "the alias",
-		"NAME":                      "",
-	} {
-		name, ok := ParseRenameCommand(line)
-		require.True(t, ok, line)
-		require.Equal(t, want, name, line)
-	}
-	for _, line := range []string{"/renamed x", "please /rename x", "/re name", "", "/resume", "/names x", "/nam x"} {
-		_, ok := ParseRenameCommand(line)
-		require.False(t, ok, line)
-	}
-}
-
-// /resume, or its alias /continue, is read as /rename is, with the
-// session it names after it or nothing.
-func TestParseResumeCommand(t *testing.T) {
-	t.Parallel()
-
-	for line, want := range map[string]string{
-		"/resume fix-login-bug":     "fix-login-bug",
-		"resume":                    "",
-		"/Continue  the auth work ": "the auth work",
-	} {
-		ref, ok := ParseResumeCommand(line)
-		require.True(t, ok, line)
-		require.Equal(t, want, ref, line)
-	}
-	for _, line := range []string{"/resumed x", "/rename x", "please /resume x", "/continues", ""} {
-		_, ok := ParseResumeCommand(line)
-		require.False(t, ok, line)
-	}
-}
-
 // A name finds the sessions whose title it is, ignoring case and the
 // space around both, the most recently updated first; part of a title is
 // no match.

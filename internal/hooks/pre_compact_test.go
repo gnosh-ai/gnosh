@@ -26,15 +26,15 @@ func preCompactRunner(t *testing.T, matcher string, commands ...string) *Runner 
 }
 
 // As in Claude Code, a PreCompact hook's payload carries who asked for
-// the summary and the instructions to fold into it. Klash has no
-// instructions, so custom_instructions is always the empty string.
+// the summary and the instructions to fold into it: none for an automatic
+// summary, so custom_instructions is the empty string.
 func TestRunPreCompactPayload(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	payloadPath := filepath.Join(dir, "payload.json")
 	r := preCompactRunner(t, "", `cat > `+payloadPath)
-	_, err := r.RunPreCompact(context.Background(), "sess", PreCompactTriggerAuto)
+	_, err := r.RunPreCompact(context.Background(), "sess", PreCompactTriggerAuto, "")
 	require.NoError(t, err)
 
 	data, err := os.ReadFile(payloadPath)
@@ -73,7 +73,7 @@ func TestRunPreCompactMatcherMatchesTheTrigger(t *testing.T) {
 			}}
 			require.NoError(t, cfg.ValidateHooks())
 			runner := NewRunner(cfg.Hooks[EventPreCompact], t.TempDir(), t.TempDir())
-			agg, err := runner.RunPreCompact(context.Background(), "sess", tc.trigger)
+			agg, err := runner.RunPreCompact(context.Background(), "sess", tc.trigger, "")
 			require.NoError(t, err)
 			if tc.matcher == "" {
 				require.Equal(t, 1, agg.HookCount, "a hook without a matcher fires on both triggers")
@@ -94,12 +94,12 @@ func TestRunPreCompactMatcherMatchesTheTrigger(t *testing.T) {
 func TestRunPreCompactBlocks(t *testing.T) {
 	t.Parallel()
 
-	result, err := preCompactRunner(t, "", `echo "not yet" >&2; exit 2`).RunPreCompact(context.Background(), "sess", PreCompactTriggerManual)
+	result, err := preCompactRunner(t, "", `echo "not yet" >&2; exit 2`).RunPreCompact(context.Background(), "sess", PreCompactTriggerManual, "")
 	require.NoError(t, err)
 	require.Equal(t, DecisionDeny, result.Decision)
 	require.Equal(t, "not yet", result.Reason)
 
-	result, err = preCompactRunner(t, "", `echo "stop everything" >&2; exit 49`).RunPreCompact(context.Background(), "sess", PreCompactTriggerAuto)
+	result, err = preCompactRunner(t, "", `echo "stop everything" >&2; exit 49`).RunPreCompact(context.Background(), "sess", PreCompactTriggerAuto, "")
 	require.NoError(t, err)
 	require.True(t, result.Halt)
 }
@@ -112,7 +112,7 @@ func TestRunPreCompactEnvCarriesTheTrigger(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out")
 	r := preCompactRunner(t, "", `echo "$KLASH_PRE_COMPACT_TRIGGER" > `+out)
-	_, err := r.RunPreCompact(context.Background(), "sess", PreCompactTriggerManual)
+	_, err := r.RunPreCompact(context.Background(), "sess", PreCompactTriggerManual, "")
 	require.NoError(t, err)
 	data, err := os.ReadFile(out)
 	require.NoError(t, err)
@@ -129,6 +129,16 @@ func TestCustomInstructionsOnlyInPreCompactPayloads(t *testing.T) {
 	_, has := payload["custom_instructions"]
 	require.False(t, has)
 
-	require.NoError(t, json.Unmarshal(BuildPreCompactPayload("sess", "/p", PreCompactTriggerAuto), &payload))
+	require.NoError(t, json.Unmarshal(BuildPreCompactPayload("sess", "/p", PreCompactTriggerAuto, ""), &payload))
 	require.Equal(t, "", payload["custom_instructions"])
+}
+
+// A manual summary's instructions, the text after /compact, reach the
+// hook as custom_instructions, as in Claude Code.
+func TestPreCompactPayloadCarriesTheInstructions(t *testing.T) {
+	t.Parallel()
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(BuildPreCompactPayload("sess", "/p", PreCompactTriggerManual, "keep the API decisions"), &payload))
+	require.Equal(t, "keep the API decisions", payload["custom_instructions"])
 }

@@ -1035,6 +1035,8 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.openSessionsDialog(msg.search); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case reportMsg:
+		m.dialog.OpenDialog(dialog.NewReport(m.com, msg.title, msg.report))
 	case loadSessionMsg:
 		if m.forceCompactMode {
 			m.isCompact = true
@@ -2359,18 +2361,32 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionResumeSession:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.resumeSession(msg.Ref))
+	case dialog.ActionContextUsage:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.contextReport())
+	case dialog.ActionHooksReport:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		m.openHooksReport()
+	case dialog.ActionPermissionsReport:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.permissionsReport())
+	case dialog.ActionStatusReport:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		m.openStatusReport()
+	case dialog.ActionExportConversation:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		m.dialog.CloseDialog(dialog.ExportID)
+		if msg.Clipboard {
+			cmds = append(cmds, m.copyConversation())
+		} else {
+			cmds = append(cmds, m.exportConversation(msg.Filename))
+		}
 	case dialog.ActionSummarize:
 		if m.isAgentBusy() {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before summarizing session..."))
 			break
 		}
-		cmds = append(cmds, func() tea.Msg {
-			err := m.com.Workspace.AgentSummarize(context.Background(), msg.SessionID)
-			if err != nil {
-				return util.ReportError(err)()
-			}
-			return nil
-		})
+		cmds = append(cmds, m.summarizeSession(msg.SessionID, msg.Instructions))
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionToggleHelp:
 		m.status.ToggleHelp()
@@ -2524,7 +2540,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		activeTheme := common.ThemeNameFromConfig(m.com.Config())
 		isActive := strings.EqualFold(activeTheme, themeName)
 		if activeTheme == "" {
-			isActive = strings.EqualFold(themeName, "charmtone-panther")
+			isActive = strings.EqualFold(themeName, styles.DefaultThemeName)
 		}
 		if isActive {
 			newStyles, err := styles.LoadTheme(themeName)
@@ -2570,14 +2586,14 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionCreateTheme:
 		base := msg.Base
 		if base == "" {
-			base = "charmtone-panther"
+			base = styles.DefaultThemeName
 		}
 		name := msg.Name
 		exported, err := styles.ExportResolvedPalette(base)
 		if err != nil {
 			// Fall back to the default theme when the base theme is no
 			// longer resolvable (e.g. a user theme that was since deleted).
-			base = "charmtone-panther"
+			base = styles.DefaultThemeName
 			exported, err = styles.ExportResolvedPalette(base)
 			if err != nil {
 				cmds = append(cmds, util.ReportError(err))
@@ -2633,11 +2649,11 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		}
 		// If the deleted theme was active, reset to the default theme.
 		if strings.EqualFold(common.ThemeNameFromConfig(m.com.Config()), msg.Name) {
-			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.active_theme", "charmtone-panther"); err != nil {
+			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "options.tui.active_theme", styles.DefaultThemeName); err != nil {
 				cmds = append(cmds, util.ReportError(err))
 				break
 			}
-			newStyles, err := styles.LoadTheme("charmtone-panther")
+			newStyles, err := styles.LoadTheme(styles.DefaultThemeName)
 			if err != nil {
 				cmds = append(cmds, util.ReportError(err))
 				break
@@ -5461,6 +5477,26 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	if ref, ok := session.ParseResumeCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.resumeSession(ref)
 	}
+	if instructions, ok := session.ParseCompactCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.compactFromPrompt(instructions)
+	}
+	if session.ParseContextCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.contextReport()
+	}
+	if session.ParseHooksCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		m.openHooksReport()
+		return nil
+	}
+	if session.ParsePermissionsCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.permissionsReport()
+	}
+	if session.ParseStatusCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		m.openStatusReport()
+		return nil
+	}
+	if filename, ok := session.ParseExportCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.exportConversation(filename)
+	}
 	return m.sendMessageInternal(content, false, attachments...)
 }
 
@@ -5495,6 +5531,76 @@ func (m *UI) renameSession(name string) tea.Cmd {
 		}
 		return util.NewInfoMsg("Session renamed to: " + name)
 	}
+}
+
+// openHooksReport shows the hooks that run, as Claude Code's /hooks lists
+// them.
+func (m *UI) openHooksReport() {
+	var hooks map[string][]config.HookConfig
+	if cfg := m.com.Config(); cfg != nil {
+		hooks = cfg.Hooks
+	}
+	m.dialog.OpenDialog(dialog.NewReport(m.com, "Hooks", config.HooksReport(hooks)))
+}
+
+// reportMsg carries a report to show in the report dialog, titled title.
+type reportMsg struct {
+	title, report string
+}
+
+// permissionsReport works out what the agent may do without asking, as
+// Claude Code's /permissions shows it, off the update loop: in client
+// mode it is asked of the server.
+func (m *UI) permissionsReport() tea.Cmd {
+	return func() tea.Msg {
+		report, err := m.com.Workspace.PermissionsReport(context.Background())
+		if err != nil {
+			return util.ReportError(err)()
+		}
+		return reportMsg{title: "Permissions", report: report}
+	}
+}
+
+// contextReport works out what fills the current session's context
+// window, as Claude Code's /context shows it (a new session's when there
+// is none yet), off the update loop: it builds the prompt and the tools
+// and reads the conversation.
+func (m *UI) contextReport() tea.Cmd {
+	sessionID := ""
+	if m.hasSession() {
+		sessionID = m.session.ID
+	}
+	return func() tea.Msg {
+		report, err := m.com.Workspace.ContextReport(context.Background(), sessionID)
+		if err != nil {
+			return util.ReportError(err)()
+		}
+		return reportMsg{title: "Context Usage", report: report}
+	}
+}
+
+// summarizeSession summarizes the session, with instructions the text
+// given after /compact ("" for none), as Claude Code's /compact takes
+// them.
+func (m *UI) summarizeSession(sessionID, instructions string) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.com.Workspace.AgentSummarize(context.Background(), sessionID, instructions); err != nil {
+			return util.ReportError(err)()
+		}
+		return nil
+	}
+}
+
+// compactFromPrompt is /compact typed in the prompt: the current session
+// summarized, as the palette's Summarize Session does it.
+func (m *UI) compactFromPrompt(instructions string) tea.Cmd {
+	if !m.hasSession() {
+		return util.ReportWarn("There is nothing to summarize yet: send a prompt first")
+	}
+	if m.isAgentBusy() {
+		return util.ReportWarn("Agent is busy, please wait before summarizing session...")
+	}
+	return m.summarizeSession(m.session.ID, instructions)
 }
 
 // resumeSession goes to the session ref names, as Claude Code's /resume

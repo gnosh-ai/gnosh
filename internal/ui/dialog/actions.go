@@ -100,8 +100,30 @@ type (
 		Name string
 	}
 	ActionInitializeProject struct{}
-	ActionSummarize         struct {
-		SessionID string
+	// ActionContextUsage shows what fills the context window, as Claude
+	// Code's /context does.
+	ActionContextUsage struct{}
+	// ActionHooksReport lists the hooks that run, as Claude Code's /hooks
+	// does.
+	ActionHooksReport struct{}
+	// ActionPermissionsReport shows what the agent may do without asking,
+	// as Claude Code's /permissions does.
+	ActionPermissionsReport struct{}
+	// ActionStatusReport shows the session's status, as Claude Code's
+	// /status does.
+	ActionStatusReport struct{}
+	// ActionExportConversation exports the conversation, as Claude Code's
+	// /export does: to the clipboard when Clipboard is set, else to the
+	// file Filename names, else as the export dialog asks.
+	ActionExportConversation struct {
+		Clipboard bool
+		Filename  string
+	}
+	// ActionSummarize summarizes the session, with Instructions the text
+	// given after /compact, as Claude Code's /compact takes them.
+	ActionSummarize struct {
+		SessionID    string
+		Instructions string
 	}
 	// ActionRenameSession names the session, as Claude Code's /rename
 	// does; Name is "" when none was given.

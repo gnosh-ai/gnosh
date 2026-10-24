@@ -151,7 +151,7 @@ func TestSummarize_RequestContinuesTheTurn(t *testing.T) {
 
 	last := summary.Prompt[len(summary.Prompt)-1]
 	require.Equal(t, fantasy.MessageRoleUser, last.Role)
-	require.Equal(t, buildSummaryPrompt(nil), userTexts(summary.Prompt[len(summary.Prompt)-1:])[0])
+	require.Equal(t, buildSummaryPrompt(nil, ""), userTexts(summary.Prompt[len(summary.Prompt)-1:])[0])
 
 	sess, err := a.sessions.Get(t.Context(), sessionID)
 	require.NoError(t, err)
@@ -169,7 +169,7 @@ func TestSummarize_AToolCallDoesNotRun(t *testing.T) {
 	llm := &requestRecordingModel{replies: []string{"call probe"}}
 	a, sessionID, runs := summaryRequestAgent(t, llm)
 
-	err := a.Summarize(t.Context(), sessionID, fantasy.ProviderOptions{}, nil, preCompactTriggerManual)
+	err := a.Summarize(t.Context(), sessionID, "", fantasy.ProviderOptions{}, nil, preCompactTriggerManual)
 	require.ErrorContains(t, err, "no summary")
 	require.Zero(t, runs.Load(), "a tool ran while the conversation was summarized")
 	require.Len(t, llm.requests(), 1)
@@ -209,13 +209,13 @@ func TestSummarize_TooLongWithToolsAsksWithout(t *testing.T) {
 	}
 	a, sessionID, _ := summaryRequestAgent(t, llm)
 
-	require.NoError(t, a.Summarize(t.Context(), sessionID, fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
+	require.NoError(t, a.Summarize(t.Context(), sessionID, "", fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
 	reqs := llm.requests()
 	require.Len(t, reqs, 2, "the refused summary request, then one without tools")
 	require.NotEmpty(t, reqs[0].Tools)
 	require.Empty(t, reqs[1].Tools)
 	require.Equal(t, []string{"prefix"}, systemTexts(reqs[1].Prompt), "the second request still sent the session's system prompt")
-	require.Equal(t, buildSummaryPrompt(nil), userTexts(reqs[1].Prompt[len(reqs[1].Prompt)-1:])[0])
+	require.Equal(t, buildSummaryPrompt(nil, ""), userTexts(reqs[1].Prompt[len(reqs[1].Prompt)-1:])[0])
 
 	sess, err := a.sessions.Get(t.Context(), sessionID)
 	require.NoError(t, err)
@@ -229,4 +229,20 @@ func TestTooLongForContext(t *testing.T) {
 	require.False(t, tooLongForContext(&fantasy.ProviderError{StatusCode: 400, Message: "invalid tool schema"}))
 	require.False(t, tooLongForContext(errors.New("exceeds the available context size")), "not a provider's refusal")
 	require.False(t, tooLongForContext(nil))
+}
+
+// /compact's instructions end the summary request, as Claude Code adds
+// them: after the summary instructions, as "Additional Instructions:".
+func TestSummarize_InstructionsEndTheRequest(t *testing.T) {
+	t.Parallel()
+	llm := &requestRecordingModel{replies: []string{"the summary"}}
+	a, sessionID, _ := summaryRequestAgent(t, llm)
+
+	require.NoError(t, a.Summarize(t.Context(), sessionID, "  keep the API decisions ", fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
+	reqs := llm.requests()
+	require.Len(t, reqs, 1)
+	last := userTexts(reqs[0].Prompt[len(reqs[0].Prompt)-1:])[0]
+	require.Equal(t, buildSummaryPrompt(nil, "keep the API decisions"), last)
+	require.True(t, strings.HasSuffix(last, "\n\nAdditional Instructions:\nkeep the API decisions"), last)
+	require.NotContains(t, buildSummaryPrompt(nil, " "), "Additional Instructions")
 }

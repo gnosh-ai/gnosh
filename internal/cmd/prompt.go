@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -181,9 +182,54 @@ func exportToolDescriptions(cmd *cobra.Command, infos []fantasy.ToolInfo) error 
 	return err
 }
 
+var promptContextCmd = &cobra.Command{
+	Use:   "context",
+	Short: "Print what fills the context window, as Claude Code's /context does",
+	Long: `Estimates, as Claude Code's /context does, what each part of a request takes
+of the model's context window: the system prompt, the tools' definitions (the
+MCP servers' apart), the memory files (AGENTS.md and the like) and skills, and
+the conversation, then the free space and the buffer kept for auto-compaction.
+With --session (an ID, hash or name) or --continue it counts that session's
+conversation since its last summary; without, a new session's, which is empty.
+Tokens are estimated at four characters each.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ws, cleanup, err := setupLocalWorkspace(cmd)
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+		appWs, ok := ws.(*workspace.AppWorkspace)
+		if !ok {
+			return fmt.Errorf("unexpected workspace type %T", ws)
+		}
+		sessions := appWs.App().Sessions
+		var sessionID string
+		if ref, _ := cmd.Flags().GetString("session"); ref != "" {
+			if sessionID, err = localSessionID(cmd.Context(), sessions, ref, true); err != nil {
+				return err
+			}
+		} else if last, _ := cmd.Flags().GetBool("continue"); last {
+			sess, err := sessions.GetLast(cmd.Context())
+			if err != nil {
+				return errors.New("no sessions found")
+			}
+			sessionID = sess.ID
+		}
+		usage, err := appWs.App().AgentCoordinator.ContextUsage(cmd.Context(), sessionID)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprint(cmd.OutOrStdout(), usage.Markdown())
+		return err
+	},
+}
+
 func init() {
 	promptExportCmd.Flags().Bool("force", false, "Overwrite an existing file")
 	promptToolsCmd.Flags().Bool("json", false, "Print the exact JSON objects")
 	promptToolsCmd.Flags().Bool("export", false, "Write each description to ~/.config/crush/tools/<name>.md for editing")
-	promptCmd.AddCommand(promptPathCmd, promptExportCmd, promptShowCmd, promptToolsCmd)
+	promptContextCmd.Flags().StringP("session", "s", "", "The session whose conversation to count, by ID, hash or name")
+	promptContextCmd.Flags().BoolP("continue", "C", false, "Count the most recent session's conversation")
+	promptContextCmd.MarkFlagsMutuallyExclusive("session", "continue")
+	promptCmd.AddCommand(promptPathCmd, promptExportCmd, promptShowCmd, promptToolsCmd, promptContextCmd)
 }

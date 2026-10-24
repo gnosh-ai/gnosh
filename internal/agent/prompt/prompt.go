@@ -45,6 +45,9 @@ type PromptDat struct {
 	ContextFiles       []ContextFile
 	GlobalContextFiles []ContextFile
 	AvailSkillXML      string
+	// Skills are the skills found; AvailSkillXML lists those the model
+	// may invoke.
+	Skills []*skills.Skill
 	// AddedDirs are the directories added with --add-dir.
 	AddedDirs []string
 }
@@ -451,6 +454,12 @@ func within(path, dir string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
+// Data is what Build fills the template with: the context files, the
+// skills and the rest, for a report of what the prompt holds.
+func (p *Prompt) Data(ctx context.Context, provider, model string, store *config.ConfigStore) (PromptDat, error) {
+	return p.promptData(ctx, provider, model, store)
+}
+
 func (p *Prompt) promptData(ctx context.Context, provider, model string, store *config.ConfigStore) (PromptDat, error) {
 	workingDir := cmp.Or(p.workingDir, store.WorkingDir())
 	platform := cmp.Or(p.platform, runtime.GOOS)
@@ -503,6 +512,7 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 		Platform:      platform,
 		Date:          p.now().Format("1/2/2006"),
 		AvailSkillXML: availSkillXML,
+		Skills:        allSkills,
 	}
 	if isGit {
 		var err error

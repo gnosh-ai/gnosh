@@ -81,11 +81,13 @@ klash run --continue "Follow up on your last response"
 			useLast, _         = cmd.Flags().GetBool("continue")
 		)
 
-		// sessionID is read from --session or --resume.
+		// sessionID is read from --session or --resume; --resume also
+		// takes a session's name.
 		sessionID := sessionFlag(cmd)
 		if sessionID == pickSession {
-			return errors.New("a session ID must follow -r in klash run; `klash -r` on its own lists the sessions to pick from")
+			return errors.New("a session ID or name must follow -r in klash run; `klash -r` on its own lists the sessions to pick from")
 		}
+		resume, _ := cmd.Flags().GetString("resume")
 
 		// Cancel on SIGINT or SIGTERM.
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
@@ -141,11 +143,11 @@ klash run --continue "Follow up on your last response"
 			}
 
 			if sessionID != "" {
-				sess, err := resolveSessionByID(ctx, c, ws.ID, sessionID)
+				id, err := clientSessionID(ctx, c, ws.ID, sessionID, resume != "")
 				if err != nil {
 					return err
 				}
-				sessionID = sess.ID
+				sessionID = id
 			}
 
 			if verbose {
@@ -178,11 +180,11 @@ klash run --continue "Follow up on your last response"
 		appWs := ws.(*workspace.AppWorkspace)
 
 		if sessionID != "" {
-			sess, err := resolveSessionID(ctx, appWs.App().Sessions, sessionID)
+			id, err := localSessionID(ctx, appWs.App().Sessions, sessionID, resume != "")
 			if err != nil {
 				return err
 			}
-			sessionID = sess.ID
+			sessionID = id
 		}
 
 		if enabled, ok := config.ParseThinkingCommand(prompt); ok {
@@ -230,7 +232,7 @@ func addRunFlags(cmd *cobra.Command) {
 	cmd.Flags().String("small-model", "", "Small model to use. If not provided, uses the default small model for the provider")
 	cmd.Flags().String("reasoning-effort", "", "Reasoning effort for the model (e.g. low, medium, high). Levels depend on the model; unsupported values are rejected with the accepted values listed")
 	cmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
-	cmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it")
+	cmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it, and also by a session's name")
 	cmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	cmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
 	cmd.Flags().String("output-format", "text", "How the answer is printed: text, as it streams; json, one result object at the end; or stream-json, a JSON line per message and the result at the end (as Claude Code's -p --output-format)")
@@ -952,6 +954,66 @@ func resolveSessionByID(ctx context.Context, c *client.Client, wsID, id string) 
 	default:
 		return nil, fmt.Errorf("session ID %q is ambiguous (%d matches)", id, len(matches))
 	}
+}
+
+// clientSessionID is the ID of the session --session or --resume names in
+// a run through the server: by ID or hash ID, and with byName (--resume)
+// also by name, as namedSession takes one.
+func clientSessionID(ctx context.Context, c *client.Client, wsID, ref string, byName bool) (string, error) {
+	sess, err := resolveSessionByID(ctx, c, wsID, ref)
+	if err == nil {
+		return sess.ID, nil
+	}
+	if !byName {
+		return "", err
+	}
+	listed, listErr := c.ListSessions(ctx, wsID)
+	if listErr != nil {
+		return "", listErr
+	}
+	sessions := make([]session.Session, len(listed))
+	for i, s := range listed {
+		sessions[i] = session.Session{ID: s.ID, Title: s.Title, UpdatedAt: s.UpdatedAt}
+	}
+	named, err := namedSession(sessions, ref, err)
+	return named.ID, err
+}
+
+// localSessionID is clientSessionID for a run in this process.
+func localSessionID(ctx context.Context, svc session.Service, ref string, byName bool) (string, error) {
+	sess, err := resolveSessionID(ctx, svc, ref)
+	if err == nil {
+		return sess.ID, nil
+	}
+	if !byName {
+		return "", err
+	}
+	sessions, listErr := svc.List(ctx)
+	if listErr != nil {
+		return "", listErr
+	}
+	named, err := namedSession(sessions, ref, err)
+	return named.ID, err
+}
+
+// namedSession is the session `klash run -r <name>` names when name is no
+// session's ID (idErr says why), as Claude Code's print mode takes a
+// title: the one session with that name, ignoring case. Several are an
+// error listing their IDs, as Claude Code's is; none is idErr.
+func namedSession(sessions []session.Session, name string, idErr error) (session.Session, error) {
+	named := session.Named(sessions, name)
+	switch len(named) {
+	case 0:
+		return session.Session{}, idErr
+	case 1:
+		return named[0], nil
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "--resume %q matches %d sessions. Pass one of these session IDs to disambiguate:", strings.TrimSpace(name), len(named))
+	for _, s := range named {
+		fmt.Fprintf(&sb, "\n  %s  (updated %s)", s.ID, time.Unix(s.UpdatedAt, 0).UTC().Format(time.RFC3339))
+	}
+	return session.Session{}, errors.New(sb.String())
 }
 
 // setThinking stores a /think or /no_think line as the global switch and says

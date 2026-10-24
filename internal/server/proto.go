@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/charmbracelet/crush/internal/backend"
@@ -632,11 +633,40 @@ func (c *controllerV1) handlePostWorkspaceAgentSessionPromptPop(w http.ResponseW
 func (c *controllerV1) handlePostWorkspaceAgentSessionSummarize(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	sid := r.PathValue("sid")
-	if err := c.backend.SummarizeSession(r.Context(), id, sid); err != nil {
+	// The body is optional: an empty one asks for a plain summary.
+	var req proto.SummarizeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		c.server.logError(r, "Failed to decode request", "error", err)
+		jsonError(w, http.StatusBadRequest, "failed to decode request")
+		return
+	}
+	if err := c.backend.SummarizeSession(r.Context(), id, sid, req.Instructions); err != nil {
 		c.handleError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+// handleGetWorkspacePermissionsReport reports what the agent may do
+// without asking.
+func (c *controllerV1) handleGetWorkspacePermissionsReport(w http.ResponseWriter, r *http.Request) {
+	report, err := c.backend.PermissionsReport(r.PathValue("id"))
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	jsonEncode(w, proto.PermissionsReport{Markdown: report})
+}
+
+// handleGetWorkspaceAgentContext reports what fills a session's context
+// window.
+func (c *controllerV1) handleGetWorkspaceAgentContext(w http.ResponseWriter, r *http.Request) {
+	report, err := c.backend.ContextReport(r.Context(), r.PathValue("id"), r.URL.Query().Get("session_id"))
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	jsonEncode(w, proto.ContextReport{Markdown: report})
 }
 
 // handlePostWorkspaceAgentSessionName names a session from its

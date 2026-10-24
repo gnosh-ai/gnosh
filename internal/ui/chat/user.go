@@ -160,6 +160,11 @@ func (m *UserMessageItem) Render(width int) string {
 	return out
 }
 
+// Text is the message's text as the user wrote it.
+func (m *UserMessageItem) Text() string {
+	return m.message.Content().Text
+}
+
 // ID implements MessageItem.
 func (m *UserMessageItem) ID() string {
 	return m.message.ID

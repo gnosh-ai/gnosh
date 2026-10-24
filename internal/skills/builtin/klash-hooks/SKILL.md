@@ -255,9 +255,10 @@ sub-agent is asked to judge at every 10th consecutive block, exactly as the
 main agent is at `Stop` checkpoints. It fires only for sub-agents; the
 top-level agent's gate is `Stop`, which never fires for sub-agents.
 
-**On `PreCompact`** the input is `{"trigger": "manual"|"auto", "custom_instructions": ""}`
+**On `PreCompact`** the input is `{"trigger": "manual"|"auto", "custom_instructions": "..."}`
 beside the common fields. `trigger` names what set the summary going: the user
-asked (`manual`), or the context filled up (`auto`). A `matcher` on a
+asked (`manual`), or the context filled up (`auto`). `custom_instructions` is the
+text the user gave after `/compact` (empty for none, and always for `auto`). A `matcher` on a
 `PreCompact` hook is tested against `trigger`. As in Claude Code a hook cannot
 stop the summary: exit `2` (or `"decision": "block"`) or `49` is shown to the
 user as a warning and the summary goes ahead. A hook that fails or could not
