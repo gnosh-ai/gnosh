@@ -1,11 +1,16 @@
 package agent
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"charm.land/fantasy"
 )
 
 // compactAt is the running token total at which a session on a model with
@@ -129,4 +134,70 @@ func (a *sessionAgent) compacts(sessionID string, cw, tokens int64) bool {
 		a.compactLevels.Set(sessionID, level)
 	}
 	return level != compactNever && autoSummarize(cw, tokens, a.disableAutoSummarize, level == compactAsAsked)
+}
+
+// idleCompactionAfter is how long a session waits idle before its
+// conversation is compacted, as in Claude Code: about 54 minutes, shortly
+// before an hour-long prompt cache expires.
+const idleCompactionAfter = 54 * time.Minute
+
+// armIdleCompaction starts, when a turn ends in an interactive session,
+// the wait after which a long conversation left idle is summarized, as
+// Claude Code's idle compaction does (see compactIdle), in place of the
+// wait an earlier turn started. A wait that runs out while a turn runs
+// does nothing (compactIdle finds the session busy), and the turn's end
+// starts another. Not for a sub-agent, or with auto-summarize or idle
+// compaction turned off.
+func (a *sessionAgent) armIdleCompaction(sessionID string, opts fantasy.ProviderOptions) {
+	if a.isSubAgent || a.disableAutoSummarize || a.disableIdleCompaction || a.idleCompactAfter <= 0 {
+		return
+	}
+	a.disarmIdleCompaction(sessionID)
+	a.idleCompaction.Set(sessionID, time.AfterFunc(a.idleCompactAfter, func() { a.compactIdle(sessionID, opts) }))
+}
+
+// disarmIdleCompaction stops the session's idle-compaction wait.
+func (a *sessionAgent) disarmIdleCompaction(sessionID string) {
+	if timer, ok := a.idleCompaction.Take(sessionID); ok {
+		timer.Stop()
+	}
+}
+
+// compactIdle summarizes a session left idle when its conversation has
+// reached idleCompactMinTokens, so the next prompt sends a summary rather
+// than the whole conversation. A local model whose cache another
+// conversation took meanwhile reads it all again before it answers; here
+// it does so while no one waits, and while the cache may still hold it. A
+// turn running in the session stops the summary (summarize), and a prompt
+// sent meanwhile waits for it, as it would for a turn.
+func (a *sessionAgent) compactIdle(sessionID string, opts fantasy.ProviderOptions) {
+	ctx := context.Background()
+	sess, err := a.sessions.Get(ctx, sessionID)
+	if err != nil {
+		return
+	}
+	tokens := sess.PromptTokens + sess.CompletionTokens
+	if tokens < idleCompactMinTokens() {
+		return
+	}
+	slog.Info("Compacting a conversation left idle", "session_id", sessionID, "tokens", tokens)
+	if err := a.summarize(ctx, sessionID, "", opts, nil, preCompactTriggerAuto); err != nil && !errors.Is(err, ErrSessionBusy) {
+		slog.Warn("Could not compact a conversation left idle", "session_id", sessionID, "error", err)
+	}
+}
+
+// idleCompactMinTokens is how large a conversation must be for idle
+// compaction: CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS, as in Claude Code, a
+// positive whole number raised to 100000 when under it, else 200000.
+func idleCompactMinTokens() int64 {
+	value := strings.TrimSpace(os.Getenv("CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS"))
+	if value == "" {
+		return 200_000
+	}
+	n, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || n <= 0 {
+		warnCompactVariable("CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS", value, "it is not a positive whole number, so it is ignored")
+		return 200_000
+	}
+	return max(n, 100_000)
 }

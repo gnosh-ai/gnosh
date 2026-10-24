@@ -569,6 +569,10 @@ type Options struct {
 	Debug                bool        `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
 	DebugLSP             bool        `json:"debug_lsp,omitempty" jsonschema:"description=Enable debug logging for LSP servers,default=false"`
 	DisableAutoSummarize bool        `json:"disable_auto_summarize,omitempty" jsonschema:"description=Disable automatic conversation summarization,default=false"`
+	// DisableIdleCompaction turns off Claude Code's idle compaction: a
+	// long conversation left idle for 54 minutes is summarized, so the
+	// next prompt does not send the whole of it.
+	DisableIdleCompaction bool `json:"disable_idle_compaction,omitempty" jsonschema:"description=Do not summarize a long conversation left idle for 54 minutes,default=false"`
 	// DataDirectory is where Crush keeps per-project state such as
 	// the SQLite database and workspace overrides. Relative paths are
 	// resolved against the working directory; absolute paths are used

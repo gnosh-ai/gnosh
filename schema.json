@@ -563,6 +563,11 @@
           "description": "Disable automatic conversation summarization",
           "default": false
         },
+        "disable_idle_compaction": {
+          "type": "boolean",
+          "description": "Do not summarize a long conversation left idle for 54 minutes",
+          "default": false
+        },
         "data_directory": {
           "type": "string",
           "description": "Directory for storing application data. Relative paths are resolved against the working directory; absolute paths are used as-is.",

@@ -1105,6 +1105,13 @@ quicker for a local model to read again when its cache has lost it:
 }
 ```
 
+A long conversation left idle for 54 minutes is summarized then, as Claude
+Code's idle compaction does, so your next prompt sends a summary rather than
+the whole conversation, and a local model reads it while you are away rather
+than while you wait. It applies from 200k tokens
+(`CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS`, at least 100k), and
+`"options": {"disable_idle_compaction": true}` turns it off.
+
 #### Waiting for a local model
 
 Klash waits as long as a model on your machine or local network takes to

@@ -270,10 +270,16 @@ type sessionAgent struct {
 	// turns; sendChannelReply treats nil as "routing disabled".
 	cfg                  *config.ConfigStore
 	disableAutoSummarize bool
-	isYolo               bool
-	permissionModeOf     func(sessionID string) string // see SessionAgentOptions.PermissionMode
-	notify               pubsub.Publisher[notify.Notification]
-	runComplete          pubsub.Publisher[notify.RunComplete]
+	// idleCompaction holds each session's idle-compaction timer, armed
+	// when a turn ends and stopped when the next starts; idleCompactAfter
+	// is how long it waits (see armIdleCompaction).
+	idleCompaction        *csync.Map[string, *time.Timer]
+	idleCompactAfter      time.Duration
+	disableIdleCompaction bool
+	isYolo                bool
+	permissionModeOf      func(sessionID string) string // see SessionAgentOptions.PermissionMode
+	notify                pubsub.Publisher[notify.Notification]
+	runComplete           pubsub.Publisher[notify.RunComplete]
 
 	messageQueue   *csync.Map[string, []SessionAgentCall]
 	activeRequests *csync.Map[string, *activeCancel]
@@ -340,13 +346,16 @@ type SessionAgentOptions struct {
 	SystemPrompt         string
 	IsSubAgent           bool
 	DisableAutoSummarize bool
-	IsYolo               bool
-	Sessions             session.Service
-	Messages             message.Service
-	Cfg                  *config.ConfigStore
-	Tools                []fantasy.AgentTool
-	Notify               pubsub.Publisher[notify.Notification]
-	RunComplete          pubsub.Publisher[notify.RunComplete]
+	// DisableIdleCompaction turns off compacting a long conversation left
+	// idle (see armIdleCompaction).
+	DisableIdleCompaction bool
+	IsYolo                bool
+	Sessions              session.Service
+	Messages              message.Service
+	Cfg                   *config.ConfigStore
+	Tools                 []fantasy.AgentTool
+	Notify                pubsub.Publisher[notify.Notification]
+	RunComplete           pubsub.Publisher[notify.RunComplete]
 
 	// AgentType is the agent's name for hooks, the config ID of the agent
 	// it runs as (a sub-agent's is task): SubagentStop's agent_type.
@@ -379,32 +388,35 @@ func NewSessionAgent(
 		instructionsLoaded = newInstructionsLoadedState()
 	}
 	return &sessionAgent{
-		largeModel:           csync.NewValue(opts.LargeModel),
-		smallModel:           csync.NewValue(opts.SmallModel),
-		systemPromptPrefix:   csync.NewValue(opts.SystemPromptPrefix),
-		systemPrompt:         csync.NewValue(opts.SystemPrompt),
-		isSubAgent:           opts.IsSubAgent,
-		agentType:            opts.AgentType,
-		permissionModeOf:     opts.PermissionMode,
-		sessions:             opts.Sessions,
-		messages:             opts.Messages,
-		cfg:                  opts.Cfg,
-		disableAutoSummarize: opts.DisableAutoSummarize,
-		tools:                csync.NewSliceFrom(opts.Tools),
-		isYolo:               opts.IsYolo,
-		notify:               opts.Notify,
-		runComplete:          opts.RunComplete,
-		messageQueue:         csync.NewMap[string, []SessionAgentCall](),
-		activeRequests:       csync.NewMap[string, *activeCancel](),
-		dispatchMu:           csync.NewMap[string, *sync.Mutex](),
-		submitMu:             csync.NewMap[string, *sync.Mutex](),
-		submitting:           csync.NewMap[string, []*activeCancel](),
-		acceptedRuns:         csync.NewMap[string, int](),
-		cancelMark:           csync.NewMap[string, uint64](),
-		justSummarized:       csync.NewMap[string, bool](),
-		compactLevels:        csync.NewMap[string, int](),
-		sessionStarts:        sessionStarts,
-		instructionsLoaded:   instructionsLoaded,
+		largeModel:            csync.NewValue(opts.LargeModel),
+		smallModel:            csync.NewValue(opts.SmallModel),
+		systemPromptPrefix:    csync.NewValue(opts.SystemPromptPrefix),
+		systemPrompt:          csync.NewValue(opts.SystemPrompt),
+		isSubAgent:            opts.IsSubAgent,
+		agentType:             opts.AgentType,
+		permissionModeOf:      opts.PermissionMode,
+		sessions:              opts.Sessions,
+		messages:              opts.Messages,
+		cfg:                   opts.Cfg,
+		disableAutoSummarize:  opts.DisableAutoSummarize,
+		disableIdleCompaction: opts.DisableIdleCompaction,
+		idleCompactAfter:      idleCompactionAfter,
+		idleCompaction:        csync.NewMap[string, *time.Timer](),
+		tools:                 csync.NewSliceFrom(opts.Tools),
+		isYolo:                opts.IsYolo,
+		notify:                opts.Notify,
+		runComplete:           opts.RunComplete,
+		messageQueue:          csync.NewMap[string, []SessionAgentCall](),
+		activeRequests:        csync.NewMap[string, *activeCancel](),
+		dispatchMu:            csync.NewMap[string, *sync.Mutex](),
+		submitMu:              csync.NewMap[string, *sync.Mutex](),
+		submitting:            csync.NewMap[string, []*activeCancel](),
+		acceptedRuns:          csync.NewMap[string, int](),
+		cancelMark:            csync.NewMap[string, uint64](),
+		justSummarized:        csync.NewMap[string, bool](),
+		compactLevels:         csync.NewMap[string, int](),
+		sessionStarts:         sessionStarts,
+		instructionsLoaded:    instructionsLoaded,
 	}
 }
 
@@ -1493,6 +1505,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			SessionTitle: currentSession.Title,
 			Type:         notify.TypeAgentFinished,
 		})
+	}
+	if !call.NonInteractive && !continued {
+		a.armIdleCompaction(call.SessionID, call.ProviderOptions)
 	}
 
 	// Hand off to the next queued prompt (if any) under dispatchMu so
