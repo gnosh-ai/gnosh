@@ -78,10 +78,10 @@ type promptContextFile struct {
 	global bool
 }
 
-// fireInstructionsLoadedHooks runs the InstructionsLoaded hooks for the
-// given files, once per file, as in Claude Code: the hooks cannot block
-// or change anything, a failing hook is logged, and the caller does not
-// wait for them. loadReason is the reason the files were loaded
+// fireInstructionsLoadedHooks runs cfg's InstructionsLoaded hooks for
+// the given files, once per file, as in Claude Code: the hooks cannot
+// block or change anything, a failing hook is logged, and the caller
+// does not wait for them. loadReason is the reason the files were loaded
 // (session_start, compact, or nested_traversal); a file with a parent
 // gets include regardless. triggerFilePath is the file whose access
 // triggered a nested_traversal load.
@@ -89,20 +89,15 @@ type promptContextFile struct {
 // It runs in a goroutine on a background context: the caller's turn is
 // not held up, and a turn cancellation does not kill the hooks. The
 // hooks are for observability only.
-func (a *sessionAgent) fireInstructionsLoadedHooks(
-	sessionID string,
-	files []promptContextFile,
-	loadReason string,
-	triggerFilePath string,
-) {
-	if a.isSubAgent || a.cfg == nil {
+func fireInstructionsLoadedHooks(cfg *config.ConfigStore, sessionID string, files []promptContextFile, loadReason, triggerFilePath string) {
+	if cfg == nil {
 		return
 	}
-	hookCfgs := a.cfg.Config().Hooks[hooks.EventInstructionsLoaded]
+	hookCfgs := cfg.Config().Hooks[hooks.EventInstructionsLoaded]
 	if len(hookCfgs) == 0 || len(files) == 0 {
 		return
 	}
-	workingDir := a.cfg.WorkingDir()
+	workingDir := cfg.WorkingDir()
 	if workingDir == "" {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -198,12 +193,11 @@ func sessionInstructionsFiles(cfg *config.ConfigStore) []promptContextFile {
 // Run calls for the same session cannot both pass the "not started" check
 // and fire the hooks twice.
 //
-// The hooks run on a background context derived from context.Background(),
-// not the turn's ctx: the hooks are for observability and must not be
-// killed by a turn cancellation (Esc). If the turn is cancelled before
-// the hooks finish, the session still counts as started, and the hooks
-// are not re-fired on the next prompt.
-func (a *sessionAgent) fireInstructionsLoadedForSession(ctx context.Context, sessionID string) {
+// The hooks run on a background context, not the turn's: the hooks are
+// for observability and must not be killed by a turn cancellation (Esc).
+// If the turn is cancelled before the hooks finish, the session still
+// counts as started, and the hooks are not re-fired on the next prompt.
+func (a *sessionAgent) fireInstructionsLoadedForSession(sessionID string) {
 	if a.instructionsLoaded == nil || a.isSubAgent || a.cfg == nil {
 		return
 	}
@@ -218,8 +212,7 @@ func (a *sessionAgent) fireInstructionsLoadedForSession(ctx context.Context, ses
 	if !shouldFire {
 		return
 	}
-	files := sessionInstructionsFiles(a.cfg)
-	a.fireInstructionsLoadedHooks(sessionID, files, loadReason, "")
+	fireInstructionsLoadedHooks(a.cfg, sessionID, sessionInstructionsFiles(a.cfg), loadReason, "")
 }
 
 // markInstructionsLoadedSummarized is called from summarize so the next

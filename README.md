@@ -128,8 +128,7 @@ Claude Code's names work here too.
 - **Hooks** take Claude Code's events and answers: `PreToolUse`,
   `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit`, `SessionStart`,
   `SessionEnd`, `Stop`, `SubagentStart`, `SubagentStop`, `StopFailure`,
-  `PreCompact` and
-  `PostCompact`, with
+  `PreCompact`, `PostCompact` and `InstructionsLoaded`, with
   `tool_use_id`,
   `hook_event_name`, `permission_mode`, `continue: false`, `systemMessage` and
   `hookSpecificOutput`. Matchers know Claude Code's tool names (`Bash`,

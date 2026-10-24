@@ -368,60 +368,12 @@ func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePa
 	// the tool touched. They run asynchronously. Sub-agent sessions do
 	// not fire the hooks, as the session-start path does not.
 	if len(newFiles) > 0 && !isSubAgentSession {
-		c.fireInstructionsLoadedForSubdirectory(sessionID, newFiles, filePath)
+		fireInstructionsLoadedHooks(c.cfg, sessionID, newFiles, hooks.InstructionsLoadedNestedTraversal, filePath)
 	}
 	if b.Len() == 0 {
 		return ""
 	}
 	return "\n<project_context>\nThis file's directory has context files of its own. Follow their instructions for the files there:\n" + b.String() + "</project_context>\n"
-}
-
-// fireInstructionsLoadedForSubdirectory runs the InstructionsLoaded hooks
-// for a subdirectory's context files just given to a session:
-// load_reason "nested_traversal" (or "include" for a file one of them
-// imports), trigger_file_path the file the tool touched. It runs in a
-// goroutine on a background context: the turn does not wait for it, and
-// a turn cancellation does not kill the hooks.
-func (c *coordinator) fireInstructionsLoadedForSubdirectory(sessionID string, files []promptContextFile, triggerFilePath string) {
-	hookCfgs := c.cfg.Config().Hooks[hooks.EventInstructionsLoaded]
-	if len(hookCfgs) == 0 {
-		return
-	}
-	workingDir := c.cfg.WorkingDir()
-	if workingDir == "" {
-		return
-	}
-	// Resolve paths to absolute before the goroutine so it does no file IO.
-	for i := range files {
-		if !filepath.IsAbs(files[i].path) {
-			files[i].path = filepath.Join(workingDir, files[i].path)
-		}
-		if files[i].parent != "" && !filepath.IsAbs(files[i].parent) {
-			files[i].parent = filepath.Join(workingDir, files[i].parent)
-		}
-	}
-	go func() {
-		runner := hooks.NewRunner(hookCfgs, workingDir, workingDir)
-		for _, f := range files {
-			memoryType := memoryTypeFor(f.path, f.global)
-			reason := hooks.InstructionsLoadedNestedTraversal
-			if f.parent != "" {
-				reason = hooks.InstructionsLoadedInclude
-			}
-			_, err := runner.RunInstructionsLoaded(
-				context.Background(), sessionID, f.path, memoryType, reason,
-				triggerFilePath, f.parent,
-			)
-			if err != nil {
-				slog.Warn("InstructionsLoaded hook execution error",
-					"session_id", sessionID,
-					"file", f.path,
-					"reason", reason,
-					"error", err,
-				)
-			}
-		}
-	}()
 }
 
 // onDemandContextFile cuts a context file over the on-demand limit to

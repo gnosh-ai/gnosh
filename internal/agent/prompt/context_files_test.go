@@ -51,7 +51,7 @@ func TestLoadContextFilesStripHTMLComments(t *testing.T) {
 	}, "\n"))
 	store := config.NewTestStore(&config.Config{Options: &config.Options{}})
 
-	files := loadContextFiles([]string{claude}, store, dir)
+	files := LoadContextFiles([]string{claude}, store, dir)
 	require.Equal(t, []string{"CLAUDE.md"}, contextPaths(files), "the commented-out import was followed")
 	require.Equal(t, strings.Join([]string{
 		"# Rules",
@@ -79,7 +79,7 @@ func TestLoadContextFilesSkipAFileOver4MiB(t *testing.T) {
 	require.NoError(t, os.Truncate(exact, maxContextFileSize))
 	store := config.NewTestStore(&config.Config{Options: &config.Options{}})
 
-	require.Equal(t, []string{"AGENTS.md"}, contextPaths(loadContextFiles([]string{big, exact}, store, dir)))
+	require.Equal(t, []string{"AGENTS.md"}, contextPaths(LoadContextFiles([]string{big, exact}, store, dir)))
 }
 
 // Context files come in the order their paths are configured, every time.
@@ -99,7 +99,7 @@ func TestLoadContextFilesKeepsTheConfiguredOrder(t *testing.T) {
 	for range 20 {
 		require.Equal(t,
 			[]string{"CLAUDE.md", "GEMINI.md", "KLASH.md", "CRUSH.md", "AGENTS.md"},
-			contextPaths(loadContextFiles(paths, store, dir)))
+			contextPaths(LoadContextFiles(paths, store, dir)))
 	}
 }
 
@@ -113,12 +113,12 @@ func TestLoadContextFilesReadsALinkedFileOnce(t *testing.T) {
 	require.NoError(t, os.Symlink("AGENTS.md", claude))
 	store := config.NewTestStore(&config.Config{Options: &config.Options{}})
 
-	files := loadContextFiles([]string{claude, agents}, store, dir)
+	files := LoadContextFiles([]string{claude, agents}, store, dir)
 	require.Len(t, files, 1, "CLAUDE.md -> AGENTS.md must not put the rules in the prompt twice")
 	require.Equal(t, "the rules", files[0].Content)
 
 	// The same path listed twice, in another case, is read once too.
-	files = loadContextFiles([]string{agents, filepath.Join(dir, "agents.md")}, store, dir)
+	files = LoadContextFiles([]string{agents, filepath.Join(dir, "agents.md")}, store, dir)
 	require.Len(t, files, 1)
 }
 
@@ -142,7 +142,7 @@ func TestLoadContextFilesFollowsImports(t *testing.T) {
 	writeContextFile(t, dir, "Design Docs/look.md", "plain")
 	store := config.NewTestStore(&config.Config{Options: &config.Options{}})
 
-	files := loadContextFiles([]string{claude, agents}, store, dir)
+	files := LoadContextFiles([]string{claude, agents}, store, dir)
 	require.Equal(t, []string{"AGENTS.md", "naming.md", "style.md", "look.md", "CLAUDE.md"}, contextPaths(files))
 	require.Equal(t, "the rules", files[0].Content)
 }
@@ -158,7 +158,7 @@ func TestLoadContextFilesImportsNothingFromCode(t *testing.T) {
 	}
 	store := config.NewTestStore(&config.Config{Options: &config.Options{}})
 
-	require.Equal(t, []string{"after.md", "CLAUDE.md"}, contextPaths(loadContextFiles([]string{claude}, store, dir)))
+	require.Equal(t, []string{"after.md", "CLAUDE.md"}, contextPaths(LoadContextFiles([]string{claude}, store, dir)))
 }
 
 // Imports are followed four hops deep, as in Claude Code, and a file that
@@ -173,11 +173,11 @@ func TestLoadContextFilesImportDepthAndCycles(t *testing.T) {
 	store := config.NewTestStore(&config.Config{Options: &config.Options{}})
 	require.Equal(t,
 		[]string{"f4.md", "f3.md", "f2.md", "f1.md", "f0.md"},
-		contextPaths(loadContextFiles([]string{filepath.Join(dir, "f0.md")}, store, dir)))
+		contextPaths(LoadContextFiles([]string{filepath.Join(dir, "f0.md")}, store, dir)))
 
 	a := writeContextFile(t, dir, "a.md", "@b.md")
 	writeContextFile(t, dir, "b.md", "@a.md")
-	require.Equal(t, []string{"b.md", "a.md"}, contextPaths(loadContextFiles([]string{a}, store, dir)))
+	require.Equal(t, []string{"b.md", "a.md"}, contextPaths(LoadContextFiles([]string{a}, store, dir)))
 }
 
 // A project's context files import only the project's files: by "..", by
@@ -197,11 +197,11 @@ func TestLoadContextFilesImportsStayInTheProject(t *testing.T) {
 
 	for _, ref := range []string{"../secret.md", secret, "link.md"} {
 		claude := writeContextFile(t, project, "CLAUDE.md", "@"+ref)
-		require.Equal(t, []string{"CLAUDE.md"}, contextPaths(loadContextFiles([]string{claude}, store, project)), ref)
+		require.Equal(t, []string{"CLAUDE.md"}, contextPaths(LoadContextFiles([]string{claude}, store, project)), ref)
 	}
 
 	global := writeContextFile(t, t.TempDir(), "AGENTS.md", "@"+secret)
-	files := loadContextFiles([]string{global}, store, "")
+	files := LoadContextFiles([]string{global}, store, "")
 	require.Equal(t, []string{"secret.md", "AGENTS.md"}, contextPaths(files))
 	require.Equal(t, "the key", files[0].Content)
 }
@@ -238,7 +238,7 @@ func TestProjectContextFilesReadTheDirectoriesAbove(t *testing.T) {
 	writeContextFile(t, work, "CLAUDE.md", "the sub rules")
 	store := config.NewTestStoreIn(&config.Config{Options: &config.Options{}}, work)
 
-	files := projectContextFiles([]string{"CLAUDE.md", "AGENTS.md"}, store)
+	files := ProjectContextFiles([]string{"CLAUDE.md", "AGENTS.md"}, store)
 	require.Equal(t, []string{"CLAUDE.md", "repo/docs/style.md", "repo/AGENTS.md", "repo/sub/CLAUDE.md"}, filesUnder(files, base))
 }
 
@@ -260,7 +260,7 @@ func TestProjectContextFilesTrustOnlyTheUserOrRootAbove(t *testing.T) {
 	require.NoError(t, os.Chown(own, 4242, 4242))
 	store := config.NewTestStoreIn(&config.Config{Options: &config.Options{}}, work)
 
-	require.Equal(t, []string{"work/AGENTS.md"}, filesUnder(projectContextFiles([]string{"AGENTS.md"}, store), base))
+	require.Equal(t, []string{"work/AGENTS.md"}, filesUnder(ProjectContextFiles([]string{"AGENTS.md"}, store), base))
 }
 
 // A file in a subdirectory of the working directory brings the context

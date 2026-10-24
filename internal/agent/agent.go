@@ -820,7 +820,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// Fire the InstructionsLoaded hooks for the context files in the
 	// system prompt, once per session start (or again after a summary).
 	// They run asynchronously: the turn does not wait for them.
-	a.fireInstructionsLoadedForSession(ctx, call.SessionID)
+	a.fireInstructionsLoadedForSession(call.SessionID)
 	// What the SessionStart hooks printed for an earlier prompt that a
 	// UserPromptSubmit hook refused goes out with this one, hidden or not.
 	if hookCtx == nil || hookCtx.Err() == nil {

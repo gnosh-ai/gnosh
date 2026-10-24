@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -160,103 +161,120 @@ func TestInstructionsLoadedFiresOnSessionStart(t *testing.T) {
 	require.False(t, hasGlobs, "no globs in the payload")
 }
 
-// TestInstructionsLoadedCompactReason checks that after a summary the
-// load_reason is "compact".
+// TestInstructionsLoadedCompactReason checks the real path: the first
+// prompt fires the hooks with "session_start", the second none, and the
+// first after a summary "compact".
 func TestInstructionsLoadedCompactReason(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	payloadPath := filepath.Join(dir, "payload.json")
-	a, wd := instructionsLoadedAgent(t,
-		instructionsLoadedHooks("", `cat > `+payloadPath)...)
-
-	// Simulate: the session was started (first claim), then summarized.
-	firstReason, firstFire := a.instructionsLoaded.claim("sess-2")
-	require.True(t, firstFire, "the first claim fires")
-	require.Equal(t, hooks.InstructionsLoadedSessionStart, firstReason)
-	a.instructionsLoaded.markSummarized("sess-2")
-
-	files := sessionInstructionsFiles(a.cfg)
-	require.NotEmpty(t, files)
-
-	// The next claim should fire with "compact".
-	reason, shouldFire := a.instructionsLoaded.claim("sess-2")
-	require.True(t, shouldFire, "the claim after a summary fires")
-	require.Equal(t, hooks.InstructionsLoadedCompact, reason,
-		"after a summary the load reason is compact")
-
-	runner := hooks.NewRunner(a.cfg.Config().Hooks[hooks.EventInstructionsLoaded], wd, wd)
-	agg, err := runner.RunInstructionsLoaded(t.Context(), "sess-2", files[0].path,
-		memoryTypeFor(files[0].path, files[0].global), reason, "", "")
-	require.NoError(t, err)
-	require.Equal(t, 1, agg.HookCount)
-
-	data, err := os.ReadFile(payloadPath)
-	require.NoError(t, err)
-	var payload map[string]any
-	require.NoError(t, json.Unmarshal(data, &payload))
-	require.Equal(t, hooks.InstructionsLoadedCompact, payload["load_reason"],
-		"after a summary the load reason is compact")
-}
-
-// TestInstructionsLoadedIncludeReason checks that a file imported by
-// another context file gets load_reason "include" and parent_file_path
-// set to the importing file.
-func TestInstructionsLoadedIncludeReason(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	payloadPath := filepath.Join(dir, "payload.json")
+	out := filepath.Join(t.TempDir(), "reasons")
 	env := testEnv(t)
 	wd := env.workingDir
-
-	// Write a parent AGENTS.md that imports a child file.
-	require.NoError(t, os.WriteFile(filepath.Join(wd, "AGENTS.md"), []byte("@extra.md\nparent"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(wd, "extra.md"), []byte("imported rules"), 0o644))
-
+	require.NoError(t, os.WriteFile(filepath.Join(wd, "AGENTS.md"), []byte("project rules"), 0o644))
 	cfg := &config.Config{
-		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", `cat > `+payloadPath)},
+		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", `echo "$KLASH_INSTRUCTIONS_LOAD_REASON" >> `+out)},
 		Options: &config.Options{ContextPaths: []string{"AGENTS.md"}},
 	}
 	require.NoError(t, cfg.ValidateHooks())
-	a := NewSessionAgent(SessionAgentOptions{
-		LargeModel:   Model{},
-		SmallModel:   Model{},
-		SystemPrompt: "test",
-		IsYolo:       true,
-		Sessions:     env.sessions,
-		Messages:     env.messages,
-		Cfg:          config.NewTestStoreIn(cfg, wd),
-	}).(*sessionAgent)
-
-	files := sessionInstructionsFiles(a.cfg)
-	require.NotEmpty(t, files)
-
-	// Find the imported file (the one with a parent).
-	var imported *promptContextFile
-	for i, f := range files {
-		if f.parent != "" {
-			imported = &files[i]
-			break
-		}
+	model := Model{
+		Model:      &promptRecordingModel{},
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000},
+		ModelCfg:   config.SelectedModel{Model: "test-model", Provider: "test"},
 	}
-	require.NotNil(t, imported, "the @imported file must be in the list with its parent")
-	require.Equal(t, filepath.Join(wd, "extra.md"), imported.path)
-	require.Equal(t, filepath.Join(wd, "AGENTS.md"), imported.parent)
-
-	runner := hooks.NewRunner(a.cfg.Config().Hooks[hooks.EventInstructionsLoaded], wd, wd)
-	agg, err := runner.RunInstructionsLoaded(t.Context(), "sess-3", imported.path,
-		memoryTypeFor(imported.path, imported.global), hooks.InstructionsLoadedInclude, "", imported.parent)
+	a := NewSessionAgent(SessionAgentOptions{
+		LargeModel:           model,
+		SmallModel:           model,
+		SystemPrompt:         "test",
+		IsYolo:               true,
+		DisableAutoSummarize: true,
+		Sessions:             env.sessions,
+		Messages:             env.messages,
+		Cfg:                  config.NewTestStoreIn(cfg, wd),
+	}).(*sessionAgent)
+	sess, err := env.sessions.Create(t.Context(), "compact")
 	require.NoError(t, err)
-	require.Equal(t, 1, agg.HookCount)
+	reasons := func() string {
+		data, _ := os.ReadFile(out)
+		return string(data)
+	}
 
-	data, err := os.ReadFile(payloadPath)
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "first"})
 	require.NoError(t, err)
-	var payload map[string]any
-	require.NoError(t, json.Unmarshal(data, &payload))
-	require.Equal(t, hooks.InstructionsLoadedInclude, payload["load_reason"])
-	require.Equal(t, filepath.Join(wd, "AGENTS.md"), payload["parent_file_path"],
-		"parent_file_path must name the importing file")
+	require.Eventually(t, func() bool { return reasons() == "session_start\n" }, 3*time.Second, 20*time.Millisecond, "after the first prompt")
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "second"})
+	require.NoError(t, err)
+
+	sumModel := Model{Model: &subSummarizeModel{}, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000}, ModelCfg: config.SelectedModel{Model: "test-model", Provider: "test"}}
+	a.SetModels(sumModel, sumModel)
+	require.NoError(t, a.Summarize(t.Context(), sess.ID, nil, nil, preCompactTriggerManual))
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "after summary"})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return reasons() == "session_start\ncompact\n" }, 3*time.Second, 20*time.Millisecond,
+		"once at the start, not on the second prompt, and again after the summary")
+}
+
+// TestInstructionsLoadedIncludeReason checks that a file imported by
+// another context file fires with load_reason "include" and
+// parent_file_path set to the importing file, through Run.
+func TestInstructionsLoadedIncludeReason(t *testing.T) {
+	t.Parallel()
+
+	out := filepath.Join(t.TempDir(), "payloads")
+	env := testEnv(t)
+	wd := env.workingDir
+	require.NoError(t, os.WriteFile(filepath.Join(wd, "AGENTS.md"), []byte("@extra.md\nparent"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(wd, "extra.md"), []byte("imported rules"), 0o644))
+	cfg := &config.Config{
+		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", `cat >> `+out+`; echo >> `+out)},
+		Options: &config.Options{ContextPaths: []string{"AGENTS.md"}},
+	}
+	require.NoError(t, cfg.ValidateHooks())
+	model := Model{
+		Model:      &promptRecordingModel{},
+		CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000},
+		ModelCfg:   config.SelectedModel{Model: "test-model", Provider: "test"},
+	}
+	a := NewSessionAgent(SessionAgentOptions{
+		LargeModel:           model,
+		SmallModel:           model,
+		SystemPrompt:         "test",
+		IsYolo:               true,
+		DisableAutoSummarize: true,
+		Sessions:             env.sessions,
+		Messages:             env.messages,
+		Cfg:                  config.NewTestStoreIn(cfg, wd),
+	}).(*sessionAgent)
+	sess, err := env.sessions.Create(t.Context(), "include")
+	require.NoError(t, err)
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "hello"})
+	require.NoError(t, err)
+
+	// One payload per file: the import and the file that imports it.
+	var payloads []map[string]any
+	require.Eventually(t, func() bool {
+		data, _ := os.ReadFile(out)
+		payloads = nil
+		for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
+			var p map[string]any
+			if json.Unmarshal([]byte(line), &p) == nil {
+				payloads = append(payloads, p)
+			}
+		}
+		return len(payloads) == 2
+	}, 3*time.Second, 20*time.Millisecond, "a payload for each of the two files")
+	byFile := map[string]map[string]any{}
+	for _, p := range payloads {
+		byFile[p["file_path"].(string)] = p
+	}
+	imported := byFile[filepath.Join(wd, "extra.md")]
+	require.NotNil(t, imported, "the imported file fired")
+	require.Equal(t, hooks.InstructionsLoadedInclude, imported["load_reason"])
+	require.Equal(t, filepath.Join(wd, "AGENTS.md"), imported["parent_file_path"], "parent_file_path names the importing file")
+	parent := byFile[filepath.Join(wd, "AGENTS.md")]
+	require.NotNil(t, parent, "the importing file fired")
+	require.Equal(t, hooks.InstructionsLoadedSessionStart, parent["load_reason"])
+	_, hasParent := parent["parent_file_path"]
+	require.False(t, hasParent)
 }
 
 // TestInstructionsLoadedNestedTraversal checks that a subdirectory
@@ -281,19 +299,18 @@ func TestInstructionsLoadedNestedTraversal(t *testing.T) {
 	}
 	require.NoError(t, cfg.ValidateHooks())
 
-	// Build a coordinator with the config and fire the hooks via
-	// fireInstructionsLoadedForSubdirectory.
+	// A tool touching sub/a.go gives the session sub/AGENTS.md, which
+	// fires the hooks.
 	c := &coordinator{
 		cfg:               config.NewTestStoreIn(cfg, wd),
 		sessions:          env.sessions,
 		subdirectoryGiven: map[string]bool{},
 	}
+	sess, err := env.sessions.Create(t.Context(), "nested")
+	require.NoError(t, err)
 
 	triggerFile := filepath.Join(sub, "a.go")
-	c.fireInstructionsLoadedForSubdirectory("sess-4",
-		[]promptContextFile{{path: filepath.Join(sub, "AGENTS.md"), parent: ""}},
-		triggerFile,
-	)
+	require.Contains(t, c.subdirectoryContext(t.Context(), sess.ID, triggerFile), "sub rules")
 
 	// Wait for the goroutine to finish (poll for the file).
 	require.Eventually(t, func() bool {
@@ -306,6 +323,7 @@ func TestInstructionsLoadedNestedTraversal(t *testing.T) {
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal(data, &payload))
 	require.Equal(t, hooks.InstructionsLoadedNestedTraversal, payload["load_reason"])
+	require.Equal(t, filepath.Join(sub, "AGENTS.md"), payload["file_path"])
 	require.Equal(t, triggerFile, payload["trigger_file_path"],
 		"trigger_file_path must name the file the tool touched")
 	require.Equal(t, hooks.MemoryTypeProject, payload["memory_type"])
@@ -649,35 +667,6 @@ func TestInstructionsLoadedGlobalLocalFile(t *testing.T) {
 		"a global .local.md file must be memory_type User, not Local")
 }
 
-// TestInstructionsLoadedSurvivesCtxCancellation checks that the hooks
-// complete even when the turn's context is cancelled (Esc) before the
-// hook command finishes. The hooks run on a background context, so a
-// turn cancellation does not kill them.
-func TestInstructionsLoadedSurvivesCtxCancellation(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	payloadPath := filepath.Join(dir, "payload.json")
-	a, _ := instructionsLoadedAgent(t,
-		// A hook that sleeps 200 ms, long enough for the test to cancel
-		// the turn's ctx before the hook finishes.
-		instructionsLoadedHooks("", `sleep 0.2; cat > `+payloadPath)...)
-
-	// Use a cancelled context, simulating the user pressing Esc before
-	// the hook finishes. fireInstructionsLoadedForSession must use a
-	// background context so the hooks survive.
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	a.fireInstructionsLoadedForSession(ctx, "sess-cancel")
-
-	// Wait for the hook to write the payload (it sleeps 200 ms).
-	require.Eventually(t, func() bool {
-		d, err := os.ReadFile(payloadPath)
-		return err == nil && len(d) > 0
-	}, 2*time.Second, 20*time.Millisecond, "the hooks must survive the ctx cancellation")
-}
-
 // TestInstructionsLoadedSubdirectoryLocalFile checks that a .local.md
 // file in a subdirectory gets memory_type "Local", not "Project".
 func TestInstructionsLoadedSubdirectoryLocalFile(t *testing.T) {
@@ -705,10 +694,9 @@ func TestInstructionsLoadedSubdirectoryLocalFile(t *testing.T) {
 		subdirectoryGiven: map[string]bool{},
 	}
 
-	c.fireInstructionsLoadedForSubdirectory("sess-sub-local",
-		[]promptContextFile{{path: filepath.Join(sub, "CLAUDE.local.md"), parent: "", global: false}},
-		filepath.Join(sub, "a.go"),
-	)
+	sess, err := env.sessions.Create(t.Context(), "sub local")
+	require.NoError(t, err)
+	require.Contains(t, c.subdirectoryContext(t.Context(), sess.ID, filepath.Join(sub, "a.go")), "sub local rules")
 
 	require.Eventually(t, func() bool {
 		d, err := os.ReadFile(payloadPath)
@@ -777,7 +765,14 @@ func TestInstructionsLoadedSubAgentSessionDoesNotFire(t *testing.T) {
 func TestInstructionsLoadedSubAgentClaimDoesNotPollute(t *testing.T) {
 	t.Parallel()
 
-	a, _ := instructionsLoadedAgent(t)
+	// A hook is configured, so only the sub-agent check stands between
+	// the call and the claim.
+	a, _ := instructionsLoadedAgent(t, instructionsLoadedHooks("", "true")...)
+
+	// The main agent's call claims its session: the control.
+	a.fireInstructionsLoadedForSession("main-sess")
+	_, fire := a.instructionsLoaded.claim("main-sess")
+	require.False(t, fire, "the main agent's call claimed its session")
 
 	// Simulate a sub-agent: isSubAgent is true, so
 	// fireInstructionsLoadedForSession should return before claiming.
@@ -786,7 +781,7 @@ func TestInstructionsLoadedSubAgentClaimDoesNotPollute(t *testing.T) {
 		instructionsLoaded: a.instructionsLoaded,
 		cfg:                a.cfg,
 	}
-	sub.fireInstructionsLoadedForSession(context.Background(), "sub-agent-sess")
+	sub.fireInstructionsLoadedForSession("sub-agent-sess")
 
 	// The shared state should not have the sub-agent's session claimed:
 	// a subsequent claim for the same ID should still fire.

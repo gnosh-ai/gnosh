@@ -253,10 +253,6 @@ func LoadContextFiles(paths []string, store *config.ConfigStore, importRoot stri
 	return l.files
 }
 
-// loadContextFiles is the unexported alias used by tests in this
-// package.
-var loadContextFiles = LoadContextFiles
-
 // ProjectContextFiles loads the project's context files at paths: those
 // in each directory above the working directory, the outermost first,
 // then the working directory's own, as Claude Code reads CLAUDE.md files,
@@ -284,10 +280,6 @@ func ProjectContextFiles(paths []string, store *config.ConfigStore) []ContextFil
 	l.load(paths, cmp.Or(workingDir, "."), nil)
 	return l.files
 }
-
-// projectContextFiles is the unexported alias used by tests in this
-// package.
-var projectContextFiles = ProjectContextFiles
 
 // SubdirectoryContextFiles returns the context files at paths in the
 // directories from the working directory down to file's, not counting
@@ -343,7 +335,7 @@ func ownedByUserOrRoot(path string) bool {
 }
 
 // contextLoader loads context files for the prompt, each once however
-// it is reached (see loadContextFiles).
+// it is reached (see LoadContextFiles).
 type contextLoader struct {
 	store     *config.ConfigStore
 	files     []ContextFile
