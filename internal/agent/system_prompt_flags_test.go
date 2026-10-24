@@ -42,7 +42,7 @@ func TestNewCoordinatorUsesTheSystemPromptFlags(t *testing.T) {
 			Messages:    env.messages,
 			Permissions: env.permissions,
 			History:     env.history,
-			FileTracker: *env.filetracker,
+			FileTracker: env.filetracker,
 		})
 		require.NoError(t, err)
 		coord := c.(*coordinator)
@@ -96,7 +96,7 @@ func TestNewCoordinatorStartsWithThePlanAgent(t *testing.T) {
 			Messages:    env.messages,
 			Permissions: env.permissions,
 			History:     env.history,
-			FileTracker: *env.filetracker,
+			FileTracker: env.filetracker,
 		})
 		require.NoError(t, err)
 		coord := c.(*coordinator)

@@ -66,7 +66,7 @@ func TestSubdirectoryContextOnWriteAndEdit(t *testing.T) {
 	require.NoError(t, err)
 
 	sess := env.permissions
-	tracker := *env.filetracker
+	tracker := env.filetracker
 	hist := env.history
 
 	writeTool := tools.NewWriteTool(nil, sess, hist, tracker, c.subdirectoryContext, env.workingDir)
@@ -152,7 +152,7 @@ func TestSubdirectoryContextFromEachTool(t *testing.T) {
 			sess, err := env.sessions.Create(t.Context(), name)
 			require.NoError(t, err)
 			ctx := context.WithValue(t.Context(), tools.SessionIDContextKey, sess.ID)
-			tracker := *env.filetracker
+			tracker := env.filetracker
 			file := filepath.Join(sub, "a.go")
 			if name != tools.WriteToolName {
 				require.NoError(t, os.WriteFile(file, []byte("package sub\n"), 0o644))

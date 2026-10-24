@@ -39,7 +39,7 @@ type fakeEnv struct {
 	messages    message.Service
 	permissions permission.Service
 	history     history.Service
-	filetracker *filetracker.Service
+	filetracker filetracker.Service
 	lspClients  *csync.Map[string, *lsp.Client]
 }
 
@@ -148,7 +148,7 @@ func newTestEnv(t *testing.T, workingDir string) fakeEnv {
 		messages,
 		permissions,
 		history,
-		&filetrackerService,
+		filetrackerService,
 		lspClients,
 	}
 }
@@ -226,15 +226,15 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 	allTools := []fantasy.AgentTool{
 		tools.NewBashTool(env.permissions, env.workingDir, cfg.Config().Options.DataDirectory, cfg.Config().Options.Attribution, modelName, cfg.Config().Options.GetMaxBackgroundJobs()),
 		tools.NewDownloadTool(env.permissions, env.workingDir, r.GetDefaultClient()),
-		tools.NewEditTool(nil, env.permissions, env.history, *env.filetracker, nil, env.workingDir),
-		tools.NewMultiEditTool(nil, env.permissions, env.history, *env.filetracker, nil, env.workingDir),
+		tools.NewEditTool(nil, env.permissions, env.history, env.filetracker, nil, env.workingDir),
+		tools.NewMultiEditTool(nil, env.permissions, env.history, env.filetracker, nil, env.workingDir),
 		tools.NewFetchTool(env.permissions, env.workingDir, r.GetDefaultClient()),
 		tools.NewGlobTool(env.workingDir, cfg.Config().Tools.Glob),
 		tools.NewGrepTool(env.workingDir, cfg.Config().Tools.Grep),
 		tools.NewLsTool(env.permissions, env.workingDir, cfg.Config().Tools.Ls),
 		tools.NewSourcegraphTool(r.GetDefaultClient()),
-		tools.NewViewTool(nil, env.permissions, *env.filetracker, nil, nil, env.workingDir),
-		tools.NewWriteTool(nil, env.permissions, env.history, *env.filetracker, nil, env.workingDir),
+		tools.NewViewTool(nil, env.permissions, env.filetracker, nil, nil, env.workingDir),
+		tools.NewWriteTool(nil, env.permissions, env.history, env.filetracker, nil, env.workingDir),
 	}
 
 	return testSessionAgent(env, large, small, systemPrompt, allTools...), nil

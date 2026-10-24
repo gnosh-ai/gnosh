@@ -42,7 +42,7 @@ func newGateTestCoordinator(t *testing.T, interactive bool) *coordinator {
 		messages:    env.messages,
 		permissions: env.permissions,
 		history:     env.history,
-		filetracker: *env.filetracker,
+		filetracker: env.filetracker,
 		agents:      make(map[string]SessionAgent),
 		interactive: interactive,
 	}

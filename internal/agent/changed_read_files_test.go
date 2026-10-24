@@ -37,7 +37,7 @@ func newChangedFilesTest(t *testing.T) *changedFilesTest {
 	return &changedFilesTest{
 		workingDir: env.workingDir,
 		sessionID:  sess.ID,
-		files:      *env.filetracker,
+		files:      env.filetracker,
 		ctx:        context.WithValue(t.Context(), tools.SessionIDContextKey, sess.ID),
 	}
 }
@@ -274,14 +274,14 @@ func TestChangedReadFilesCoversSubAgentSessions(t *testing.T) {
 	subEnv := testEnv(t)
 	subSess, err := subEnv.sessions.Create(t.Context(), "sub-agent")
 	require.NoError(t, err)
-	(*subEnv.filetracker).RecordRead(t.Context(), subSess.ID, file)
+	subEnv.filetracker.RecordRead(t.Context(), subSess.ID, file)
 	writeFile(t, file, "package a\n// changed\n")
 
 	other := &funcTool{name: "other", run: func(context.Context, fantasy.ToolCall) (fantasy.ToolResponse, error) {
 		return fantasy.NewTextResponse("done"), nil
 	}}
 	subCtx := context.WithValue(t.Context(), tools.SessionIDContextKey, subSess.ID)
-	tool := &changedReadFiles{AgentTool: other, files: *subEnv.filetracker, workingDir: subEnv.workingDir, named: newNamedChanges()}
+	tool := &changedReadFiles{AgentTool: other, files: subEnv.filetracker, workingDir: subEnv.workingDir, named: newNamedChanges()}
 	resp, err := tool.Run(subCtx, fantasy.ToolCall{ID: "call", Name: other.Info().Name, Input: "{}"})
 	require.NoError(t, err)
 	require.Contains(t, resp.Content, "a.go")

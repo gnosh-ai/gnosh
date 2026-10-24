@@ -60,7 +60,7 @@ func TestBuildAgentReadinessSurvivesCallerCancellation(t *testing.T) {
 		messages:    env.messages,
 		permissions: env.permissions,
 		history:     env.history,
-		filetracker: *env.filetracker,
+		filetracker: env.filetracker,
 	}
 
 	// Arm the MCP init gate. We never complete init; the readiness goroutines
