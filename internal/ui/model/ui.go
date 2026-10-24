@@ -227,8 +227,9 @@ type UI struct {
 	// continueLastSession is set to continue the most recent session on startup.
 	continueLastSession bool
 	// pickSessionAtStart opens the sessions list on startup, for a bare
-	// `klash -r` (see PickSessionAtStart).
+	// `klash -r` (see PickSessionAtStart), filtered by pickSessionSearch.
 	pickSessionAtStart bool
+	pickSessionSearch  string
 
 	lastUserMessageTime int64
 
@@ -726,19 +727,25 @@ func (m *UI) StartInPlanMode() {
 
 // PickSessionAtStart makes the UI open the list of sessions to pick from
 // as it starts, for a bare `klash -r`, as Claude Code's `claude -r` opens
-// its picker. Like a session named on the command line, it goes before
-// the question whether to initialize the project (see startState).
-func (m *UI) PickSessionAtStart() {
+// its picker, and for `klash -r <name>` with a name that is not one
+// session's, the list filtered by search. Like a session named on the
+// command line, it goes before the question whether to initialize the
+// project (see startState).
+func (m *UI) PickSessionAtStart(search string) {
 	m.pickSessionAtStart = true
+	m.pickSessionSearch = search
 	if m.state == uiInitialize {
 		m.setState(uiLanding, uiFocusEditor)
 	}
 }
 
-// pickSessionMsg opens the sessions list. It is its own message because
-// dialog.ActionOpenDialog is acted on only when an open dialog returns it,
-// so sent at startup, with no dialog open, it did nothing.
-type pickSessionMsg struct{}
+// pickSessionMsg opens the sessions list, filtered by search. It is its
+// own message because dialog.ActionOpenDialog is acted on only when an
+// open dialog returns it, so sent at startup, with no dialog open, it did
+// nothing.
+type pickSessionMsg struct {
+	search string
+}
 
 // startupSessionPicker opens the sessions list at startup when
 // PickSessionAtStart asked for it, or says there is no session to pick
@@ -756,7 +763,7 @@ func (m *UI) startupSessionPicker() tea.Cmd {
 		if len(sessions) == 0 {
 			return util.NewInfoMsg("No sessions to resume here yet")
 		}
-		return pickSessionMsg{}
+		return pickSessionMsg{search: m.pickSessionSearch}
 	}
 }
 
@@ -1025,7 +1032,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case pickSessionMsg:
-		if cmd := m.openSessionsDialog(); cmd != nil {
+		if cmd := m.openSessionsDialog(msg.search); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case loadSessionMsg:
@@ -2349,6 +2356,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionRenameSession:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.renameSession(msg.Name))
+	case dialog.ActionResumeSession:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.resumeSession(msg.Ref))
 	case dialog.ActionSummarize:
 		if m.isAgentBusy() {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before summarizing session..."))
@@ -3222,7 +3232,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			}
 			return true
 		case key.Matches(msg, m.keyMap.Sessions):
-			if cmd := m.openSessionsDialog(); cmd != nil {
+			if cmd := m.openSessionsDialog(""); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 			return true
@@ -5448,6 +5458,9 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	if name, ok := session.ParseRenameCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.renameSession(name)
 	}
+	if ref, ok := session.ParseResumeCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.resumeSession(ref)
+	}
 	return m.sendMessageInternal(content, false, attachments...)
 }
 
@@ -5482,6 +5495,31 @@ func (m *UI) renameSession(name string) tea.Cmd {
 		}
 		return util.NewInfoMsg("Session renamed to: " + name)
 	}
+}
+
+// resumeSession goes to the session ref names, as Claude Code's /resume
+// does: by its ID (or hash ID), or else by its name, the one session whose
+// title it is, ignoring case. With no ref the sessions list opens, and
+// with a name no session or several have, the list filtered by it, since
+// the palette cannot suggest names as you type as Claude Code's prompt
+// does.
+func (m *UI) resumeSession(ref string) tea.Cmd {
+	if ref == "" {
+		return m.openSessionsDialog("")
+	}
+	sessions, err := m.com.Workspace.ListSessions(context.Background())
+	if err != nil {
+		return util.ReportError(err)
+	}
+	for _, s := range sessions {
+		if s.ID == ref || session.HashID(s.ID) == ref {
+			return m.loadSession(s.ID)
+		}
+	}
+	if named := session.Named(sessions, ref); len(named) == 1 {
+		return m.loadSession(named[0].ID)
+	}
+	return m.openSessionsDialog(ref)
 }
 
 // setThinking stores a typed /think or /no_think as the global switch and
@@ -5812,7 +5850,7 @@ func (m *UI) openDialog(id string) tea.Cmd {
 	var cmds []tea.Cmd
 	switch id {
 	case dialog.SessionsID:
-		if cmd := m.openSessionsDialog(); cmd != nil {
+		if cmd := m.openSessionsDialog(""); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case dialog.ModelsID:
@@ -5944,8 +5982,8 @@ func (m *UI) openNotificationsDialog() tea.Cmd {
 
 // openSessionsDialog opens the sessions dialog. If the dialog is already open,
 // it brings it to the front. Otherwise, it will list all the sessions and open
-// the dialog.
-func (m *UI) openSessionsDialog() tea.Cmd {
+// the dialog, its list filtered by search when there is one.
+func (m *UI) openSessionsDialog(search string) tea.Cmd {
 	if m.dialog.ContainsDialog(dialog.SessionsID) {
 		// Bring to front
 		m.dialog.BringToFront(dialog.SessionsID)
@@ -5960,6 +5998,9 @@ func (m *UI) openSessionsDialog() tea.Cmd {
 	dialog, err := dialog.NewSessions(m.com, selectedSessionID)
 	if err != nil {
 		return util.ReportError(err)
+	}
+	if search != "" {
+		dialog.Search(search)
 	}
 
 	m.dialog.OpenDialog(dialog)

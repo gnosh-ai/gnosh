@@ -436,6 +436,16 @@ func (s *Session) confirmRenameSession() Action {
 	return ActionCmd{s.renameSessionCmd(renamed.ID, newTitle)}
 }
 
+// Search filters the list by term as if it were typed into the dialog,
+// for Claude Code's /resume and --resume with a name that is not one
+// session's.
+func (s *Session) Search(term string) {
+	s.input.SetValue(term)
+	s.list.SetFilter(term)
+	s.list.ScrollToTop()
+	s.list.SetSelected(0)
+}
+
 func (s *Session) updateSession(session session.Session) {
 	for existingID, sess := range s.sessions {
 		if sess.ID == session.ID {

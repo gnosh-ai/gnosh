@@ -1,6 +1,8 @@
 package session
 
 import (
+	"cmp"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -30,11 +32,41 @@ func CleanName(name string) string {
 // command or its alias /name, with or without the slash, as typed in the
 // prompt or the command palette, and the name it gives ("" when none).
 func ParseRenameCommand(line string) (name string, ok bool) {
-	line = strings.TrimSpace(line)
-	word, rest, _ := strings.Cut(line, " ")
+	return parseCommand(line, "rename", "name")
+}
+
+// ParseResumeCommand reports whether line is Claude Code's /resume
+// command or its alias /continue, with or without the slash, and the
+// session it names, by ID or name ("" when none).
+func ParseResumeCommand(line string) (ref string, ok bool) {
+	return parseCommand(line, "resume", "continue")
+}
+
+// parseCommand reports whether line is one of the commands names, in any
+// case and with or without its slash, and the text after it.
+func parseCommand(line string, names ...string) (string, bool) {
+	word, rest, _ := strings.Cut(strings.TrimSpace(line), " ")
 	word = strings.TrimPrefix(word, "/")
-	if !strings.EqualFold(word, "rename") && !strings.EqualFold(word, "name") {
+	if !slices.ContainsFunc(names, func(name string) bool { return strings.EqualFold(word, name) }) {
 		return "", false
 	}
 	return strings.TrimSpace(rest), true
+}
+
+// Named is the sessions called name, as Claude Code's /resume and
+// --resume find one by name: the title equal to it, ignoring case and
+// the space around both, the most recently updated first.
+func Named(sessions []Session, name string) []Session {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+	var named []Session
+	for _, s := range sessions {
+		if strings.EqualFold(strings.TrimSpace(s.Title), name) {
+			named = append(named, s)
+		}
+	}
+	slices.SortStableFunc(named, func(a, b Session) int { return cmp.Compare(b.UpdatedAt, a.UpdatedAt) })
+	return named
 }

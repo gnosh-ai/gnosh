@@ -46,3 +46,48 @@ func TestParseRenameCommand(t *testing.T) {
 		require.False(t, ok, line)
 	}
 }
+
+// /resume, or its alias /continue, is read as /rename is, with the
+// session it names after it or nothing.
+func TestParseResumeCommand(t *testing.T) {
+	t.Parallel()
+
+	for line, want := range map[string]string{
+		"/resume fix-login-bug":     "fix-login-bug",
+		"resume":                    "",
+		"/Continue  the auth work ": "the auth work",
+	} {
+		ref, ok := ParseResumeCommand(line)
+		require.True(t, ok, line)
+		require.Equal(t, want, ref, line)
+	}
+	for _, line := range []string{"/resumed x", "/rename x", "please /resume x", "/continues", ""} {
+		_, ok := ParseResumeCommand(line)
+		require.False(t, ok, line)
+	}
+}
+
+// A name finds the sessions whose title it is, ignoring case and the
+// space around both, the most recently updated first; part of a title is
+// no match.
+func TestNamed(t *testing.T) {
+	t.Parallel()
+
+	sessions := []Session{
+		{ID: "a", Title: "fix-login-bug", UpdatedAt: 10},
+		{ID: "b", Title: "add-auth", UpdatedAt: 30},
+		{ID: "c", Title: " Fix-Login-Bug ", UpdatedAt: 20},
+		{ID: "d", Title: "fix-login-bug-again", UpdatedAt: 40},
+	}
+	ids := func(found []Session) []string {
+		var out []string
+		for _, s := range found {
+			out = append(out, s.ID)
+		}
+		return out
+	}
+	require.Equal(t, []string{"c", "a"}, ids(Named(sessions, "FIX-login-bug ")))
+	require.Equal(t, []string{"b"}, ids(Named(sessions, "add-auth")))
+	require.Empty(t, Named(sessions, "fix-login"))
+	require.Empty(t, Named(sessions, "  "))
+}

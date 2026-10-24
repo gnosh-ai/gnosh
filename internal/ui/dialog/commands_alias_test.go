@@ -30,19 +30,20 @@ func TestPaletteFindsClaudeCodeSlashNames(t *testing.T) {
 		Styles:    &sty,
 	}
 	for typed, want := range map[string]string{
-		"resume":  "Sessions",
-		"compact": "Summarize Session",
-		"rename":  "Rename Session",
-		"name":    "Rename Session",
-		"clear":   "New Session",
-		"new":     "New Session",
-		"reset":   "New Session",
-		"model":   "Switch Model",
-		"init":    "Initialize Project",
-		"help":    "Toggle Help",
-		"theme":   "Themes",
-		"exit":    "Quit",
-		"quit":    "Quit",
+		"resume":   "Sessions",
+		"continue": "Sessions",
+		"compact":  "Summarize Session",
+		"rename":   "Rename Session",
+		"name":     "Rename Session",
+		"clear":    "New Session",
+		"new":      "New Session",
+		"reset":    "New Session",
+		"model":    "Switch Model",
+		"init":     "Initialize Project",
+		"help":     "Toggle Help",
+		"theme":    "Themes",
+		"exit":     "Quit",
+		"quit":     "Quit",
 	} {
 		c, err := NewCommands(com, "s1", true, false, false, nil, nil)
 		require.NoError(t, err)
@@ -89,4 +90,28 @@ func TestPaletteRenameTakesTheName(t *testing.T) {
 	}
 	_, renamed := c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}).(ActionRenameSession)
 	require.False(t, renamed)
+}
+
+// Claude Code's /resume (or /continue) takes the session to go to, by ID
+// or name: typed into the palette with it, Enter asks for that session;
+// alone, it is the Sessions item.
+func TestPaletteResumeTakesTheSession(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	enter := func(typed string) Action {
+		c, err := NewCommands(com, "s1", true, false, false, nil, nil)
+		require.NoError(t, err)
+		for _, r := range typed {
+			c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+		return c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	}
+	require.Equal(t, ActionResumeSession{Ref: "fix-login-bug"}, enter("resume fix-login-bug"))
+	require.Equal(t, ActionResumeSession{Ref: "the auth work"}, enter("continue the auth work"))
+	require.Equal(t, ActionOpenDialog{DialogID: SessionsID}, enter("resume"))
 }
