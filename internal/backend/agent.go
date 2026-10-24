@@ -220,6 +220,19 @@ func (b *Backend) SummarizeSession(ctx context.Context, workspaceID, sessionID, 
 	return ws.AgentCoordinator.Summarize(ctx, sessionID, instructions)
 }
 
+// PermissionsReport is what the workspace's agent may do without asking,
+// the Markdown Claude Code's /permissions shows.
+func (b *Backend) PermissionsReport(workspaceID string) (string, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return "", err
+	}
+	if ws.App == nil || ws.Permissions == nil || ws.Cfg == nil {
+		return "", ErrAgentNotInitialized
+	}
+	return config.PermissionsReport(ws.Cfg.Config(), ws.Cfg.Overrides(), ws.Cfg.WorkingDir(), ws.Permissions.SkipRequests()), nil
+}
+
 // ContextReport is what fills a session's context window ("" for a new
 // session), the Markdown Claude Code's /context prints.
 func (b *Backend) ContextReport(ctx context.Context, workspaceID, sessionID string) (string, error) {

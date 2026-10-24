@@ -44,6 +44,14 @@ func ParseHooksCommand(line string) bool {
 	return ok
 }
 
+// ParsePermissionsCommand reports whether line is Claude Code's
+// /permissions command or its alias /allowed-tools, with or without the
+// slash. What follows it is not used.
+func ParsePermissionsCommand(line string) bool {
+	_, ok := parseCommand(line, "permissions", "allowed-tools")
+	return ok
+}
+
 // ParseCompactCommand reports whether line is Claude Code's /compact
 // command, with or without the slash, and the instructions after it for
 // the summary ("" when none).

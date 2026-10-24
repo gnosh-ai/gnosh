@@ -65,6 +65,10 @@ func (w *AppWorkspace) RenameSession(ctx context.Context, sessionID, title strin
 	return w.app.Sessions.Rename(ctx, sessionID, title)
 }
 
+func (w *AppWorkspace) PermissionsReport(context.Context) (string, error) {
+	return config.PermissionsReport(w.store.Config(), w.store.Overrides(), w.store.WorkingDir(), w.app.Permissions.SkipRequests()), nil
+}
+
 func (w *AppWorkspace) ContextReport(ctx context.Context, sessionID string) (string, error) {
 	if w.app.AgentCoordinator == nil {
 		return "", errors.New("agent coordinator not initialized")

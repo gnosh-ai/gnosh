@@ -172,6 +172,12 @@ type ContextReport struct {
 	Markdown string `json:"markdown"`
 }
 
+// PermissionsReport is what the agent may do without asking, the
+// Markdown Claude Code's /permissions shows.
+type PermissionsReport struct {
+	Markdown string `json:"markdown"`
+}
+
 // SummarizeRequest is the optional body of a summary request:
 // Instructions is the text given after /compact.
 type SummarizeRequest struct {

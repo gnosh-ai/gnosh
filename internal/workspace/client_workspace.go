@@ -181,6 +181,10 @@ func (w *ClientWorkspace) RenameSession(ctx context.Context, sessionID, title st
 	return err
 }
 
+func (w *ClientWorkspace) PermissionsReport(ctx context.Context) (string, error) {
+	return w.client.PermissionsReport(ctx, w.workspaceID())
+}
+
 func (w *ClientWorkspace) ContextReport(ctx context.Context, sessionID string) (string, error) {
 	return w.client.AgentContextReport(ctx, w.workspaceID(), sessionID)
 }

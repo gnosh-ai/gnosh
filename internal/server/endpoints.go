@@ -402,6 +402,15 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Handle(c.handlePostWorkspaceAgentSessionSummarize),
 
+		apigen.Get("/v1/workspaces/{id}/permissions/report").
+			Summary("Permissions report").
+			Description("What the agent may do without asking, as the Markdown Claude Code's /permissions shows: the mode, the allow and deny rules and where each comes from, and the session's directories.").
+			Tags("permissions").
+			PathParam("id", "Workspace ID").
+			Responds(proto.PermissionsReport{}).
+			Fails(400, 404, 500).
+			Handle(c.handleGetWorkspacePermissionsReport),
+
 		apigen.Get("/v1/workspaces/{id}/agent/context").
 			Summary("Context usage").
 			Description("What fills a session's context window, as the Markdown Claude Code's /context prints; session_id names the session, none a new one.").

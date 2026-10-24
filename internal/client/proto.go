@@ -614,6 +614,27 @@ func (c *Client) AgentSummarizeSession(ctx context.Context, id string, sessionID
 	return nil
 }
 
+// PermissionsReport is what the workspace's agent may do without asking,
+// the Markdown Claude Code's /permissions shows.
+func (c *Client) PermissionsReport(ctx context.Context, id string) (string, error) {
+	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/permissions/report", id), nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get permissions: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		if msg := decodeErrorMessage(rsp.Body); msg != "" {
+			return "", errors.New(msg)
+		}
+		return "", fmt.Errorf("failed to get permissions: status code %d", rsp.StatusCode)
+	}
+	var report proto.PermissionsReport
+	if err := json.NewDecoder(rsp.Body).Decode(&report); err != nil {
+		return "", fmt.Errorf("failed to decode permissions: %w", err)
+	}
+	return report.Markdown, nil
+}
+
 // AgentContextReport is what fills a session's context window ("" for a
 // new session), the Markdown Claude Code's /context prints.
 func (c *Client) AgentContextReport(ctx context.Context, id, sessionID string) (string, error) {

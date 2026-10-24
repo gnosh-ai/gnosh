@@ -1035,8 +1035,8 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.openSessionsDialog(msg.search); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	case contextReportMsg:
-		m.dialog.OpenDialog(dialog.NewReport(m.com, "Context Usage", msg.report))
+	case reportMsg:
+		m.dialog.OpenDialog(dialog.NewReport(m.com, msg.title, msg.report))
 	case loadSessionMsg:
 		if m.forceCompactMode {
 			m.isCompact = true
@@ -2367,6 +2367,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionHooksReport:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		m.openHooksReport()
+	case dialog.ActionPermissionsReport:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.permissionsReport())
 	case dialog.ActionSummarize:
 		if m.isAgentBusy() {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before summarizing session..."))
@@ -5473,6 +5476,9 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 		m.openHooksReport()
 		return nil
 	}
+	if session.ParsePermissionsCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.permissionsReport()
+	}
 	return m.sendMessageInternal(content, false, attachments...)
 }
 
@@ -5519,9 +5525,22 @@ func (m *UI) openHooksReport() {
 	m.dialog.OpenDialog(dialog.NewReport(m.com, "Hooks", config.HooksReport(hooks)))
 }
 
-// contextReportMsg carries the report /context shows.
-type contextReportMsg struct {
-	report string
+// reportMsg carries a report to show in the report dialog, titled title.
+type reportMsg struct {
+	title, report string
+}
+
+// permissionsReport works out what the agent may do without asking, as
+// Claude Code's /permissions shows it, off the update loop: in client
+// mode it is asked of the server.
+func (m *UI) permissionsReport() tea.Cmd {
+	return func() tea.Msg {
+		report, err := m.com.Workspace.PermissionsReport(context.Background())
+		if err != nil {
+			return util.ReportError(err)()
+		}
+		return reportMsg{title: "Permissions", report: report}
+	}
 }
 
 // contextReport works out what fills the current session's context
@@ -5538,7 +5557,7 @@ func (m *UI) contextReport() tea.Cmd {
 		if err != nil {
 			return util.ReportError(err)()
 		}
-		return contextReportMsg{report: report}
+		return reportMsg{title: "Context Usage", report: report}
 	}
 }
 

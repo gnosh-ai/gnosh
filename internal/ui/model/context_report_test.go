@@ -38,7 +38,7 @@ func TestContextReportOpensTheDialog(t *testing.T) {
 	u.com.Workspace = ws
 
 	msg := u.contextReport()()
-	require.Equal(t, contextReportMsg{report: "## Context Usage"}, msg)
+	require.Equal(t, reportMsg{title: "Context Usage", report: "## Context Usage"}, msg)
 	u.session = &session.Session{ID: "s1"}
 	u.contextReport()()
 	require.Equal(t, []string{"", "s1"}, ws.asked)
@@ -72,4 +72,36 @@ func TestOpenHooksReport(t *testing.T) {
 	}}}
 	u.openHooksReport()
 	require.True(t, u.dialog.ContainsDialog(dialog.ReportID))
+}
+
+// permissionsWorkspace answers PermissionsReport with report or err.
+type permissionsWorkspace struct {
+	workspace.Workspace
+	report string
+	err    error
+}
+
+func (w *permissionsWorkspace) PermissionsReport(context.Context) (string, error) {
+	return w.report, w.err
+}
+
+// /permissions asks the workspace for its report and shows it, titled; a
+// failure is reported.
+func TestPermissionsReportOpensTheDialog(t *testing.T) {
+	t.Parallel()
+
+	u := newTestUI()
+	u.dialog = dialog.NewOverlay()
+	ws := &permissionsWorkspace{report: "## Permissions"}
+	u.com.Workspace = ws
+
+	msg := u.permissionsReport()()
+	require.Equal(t, reportMsg{title: "Permissions", report: "## Permissions"}, msg)
+	_, _ = u.Update(msg)
+	require.True(t, u.dialog.ContainsDialog(dialog.ReportID))
+
+	ws.err = errors.New("agent coordinator not initialized")
+	info, ok := u.permissionsReport()().(util.InfoMsg)
+	require.True(t, ok)
+	require.Equal(t, util.InfoTypeError, info.Type)
 }

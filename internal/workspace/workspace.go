@@ -123,6 +123,9 @@ type Workspace interface {
 	SaveSession(ctx context.Context, sess session.Session) (session.Session, error)
 	// RenameSession gives the session a new title, and nothing else.
 	RenameSession(ctx context.Context, sessionID, title string) error
+	// PermissionsReport is what the agent may do without asking, the
+	// Markdown Claude Code's /permissions shows.
+	PermissionsReport(ctx context.Context) (string, error)
 	// ContextReport is what fills the session's context window ("" for a
 	// new session), the Markdown Claude Code's /context prints.
 	ContextReport(ctx context.Context, sessionID string) (string, error)

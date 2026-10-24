@@ -93,3 +93,16 @@ func TestParseHooksCommand(t *testing.T) {
 		require.False(t, ParseHooksCommand(line), line)
 	}
 }
+
+// /permissions, or its alias /allowed-tools, is read as the other commands
+// are; what follows it is not used.
+func TestParsePermissionsCommand(t *testing.T) {
+	t.Parallel()
+
+	for _, line := range []string{"/permissions", "permissions", " /Allowed-Tools ", "/permissions list"} {
+		require.True(t, ParsePermissionsCommand(line), line)
+	}
+	for _, line := range []string{"/permission", "/allowed", "my permissions", ""} {
+		require.False(t, ParsePermissionsCommand(line), line)
+	}
+}

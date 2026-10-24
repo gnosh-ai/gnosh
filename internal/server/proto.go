@@ -647,6 +647,17 @@ func (c *controllerV1) handlePostWorkspaceAgentSessionSummarize(w http.ResponseW
 	w.WriteHeader(http.StatusOK)
 }
 
+// handleGetWorkspacePermissionsReport reports what the agent may do
+// without asking.
+func (c *controllerV1) handleGetWorkspacePermissionsReport(w http.ResponseWriter, r *http.Request) {
+	report, err := c.backend.PermissionsReport(r.PathValue("id"))
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	jsonEncode(w, proto.PermissionsReport{Markdown: report})
+}
+
 // handleGetWorkspaceAgentContext reports what fills a session's context
 // window.
 func (c *controllerV1) handleGetWorkspaceAgentContext(w http.ResponseWriter, r *http.Request) {

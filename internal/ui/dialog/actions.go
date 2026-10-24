@@ -106,6 +106,9 @@ type (
 	// ActionHooksReport lists the hooks that run, as Claude Code's /hooks
 	// does.
 	ActionHooksReport struct{}
+	// ActionPermissionsReport shows what the agent may do without asking,
+	// as Claude Code's /permissions does.
+	ActionPermissionsReport struct{}
 	// ActionSummarize summarizes the session, with Instructions the text
 	// given after /compact, as Claude Code's /compact takes them.
 	ActionSummarize struct {
