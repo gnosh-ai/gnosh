@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -281,7 +282,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				startTime := time.Now()
 				bgManager := shell.GetBackgroundShellManager()
 				// Use background context so it continues after tool returns
-				bgShell, err := bgManager.Start(context.Background(), execWorkingDir, blockFuncs(), params.Command, params.Description, maxBackgroundJobs)
+				bgShell, err := bgManager.StartAfter(context.Background(), execWorkingDir, blockFuncs(), sessionEnvSetup(ctx), params.Command, params.Description, maxBackgroundJobs)
 				if err != nil {
 					return fantasy.ToolResponse{}, fmt.Errorf("error starting background shell: %w", err)
 				}
@@ -336,7 +337,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 
 			// Start with detached context so it can survive if moved to background
 			bgManager := shell.GetBackgroundShellManager()
-			bgShell, err := bgManager.Start(context.Background(), execWorkingDir, blockFuncs(), params.Command, params.Description, maxBackgroundJobs)
+			bgShell, err := bgManager.StartAfter(context.Background(), execWorkingDir, blockFuncs(), sessionEnvSetup(ctx), params.Command, params.Description, maxBackgroundJobs)
 			if err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("error starting shell: %w", err)
 			}
@@ -415,6 +416,22 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil
 		},
 	)
+}
+
+// sessionEnvSetup is the shell code a bash command runs first: the env
+// file of its session (WithSessionEnvFile), which the SessionStart hooks
+// write export lines to (Claude Code's CLAUDE_ENV_FILE), when it holds
+// anything, as Claude Code runs it before each Bash command. "" when
+// there is none.
+func sessionEnvSetup(ctx context.Context) string {
+	path := SessionEnvFileFromContext(ctx)
+	if path == "" {
+		return ""
+	}
+	if info, err := os.Stat(path); err != nil || info.Size() == 0 {
+		return ""
+	}
+	return ". '" + strings.ReplaceAll(path, "'", `'\''`) + "'"
 }
 
 // formatOutput formats the output of a completed command with error handling

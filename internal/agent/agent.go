@@ -748,6 +748,10 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// The turn's hooks are told the session's permission mode, as Claude
 	// Code tells them; a sub-agent's turn keeps its parent's.
 	ctx = hooks.WithPermissionMode(ctx, func() string { return a.permissionMode(call.SessionID) })
+	// The turn's bash commands run what the session's SessionStart hooks
+	// wrote to its env file, as Claude Code's do; a sub-agent's run its
+	// parent session's.
+	ctx = tools.WithSessionEnvFile(ctx, config.SessionEnvFile(call.SessionID))
 
 	if call.Channel != "" && call.channelMeta == nil {
 		call.channelMeta, _ = parseChannelMeta(call.Prompt)

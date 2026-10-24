@@ -243,8 +243,13 @@ func (r *Runner) RunUserPromptSubmit(ctx context.Context, sessionID, prompt stri
 // prompt, as for UserPromptSubmit: a hook's plain-text stdout counts as
 // context too. UpdatedInput is meaningless without a tool call and is
 // always cleared.
-func (r *Runner) RunSessionStart(ctx context.Context, sessionID, model, source string) (AggregateResult, error) {
+func (r *Runner) RunSessionStart(ctx context.Context, sessionID, model, source, envFile string) (AggregateResult, error) {
 	envVars := append(BuildEnv(EventSessionStart, "", sessionID, r.cwd, r.projectDir, ""), hookVar("SESSION_START_SOURCE", source)...)
+	// The file the hooks write export lines to for the session's bash
+	// commands, by Claude Code's name too, as Claude Code hands it to them.
+	if envFile != "" {
+		envVars = append(append(envVars, hookVar("ENV_FILE", envFile)...), "CLAUDE_ENV_FILE="+envFile)
+	}
 	payload := BuildSessionStartPayload(sessionID, r.cwd, model, source)
 	agg, err := r.run(ctx, r.matchingHooks(source), EventSessionStart, "", "", envVars, payload)
 	agg.UpdatedInput = ""

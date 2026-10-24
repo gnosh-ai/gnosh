@@ -136,7 +136,8 @@ Claude Code's names work here too.
   `~/.claude/settings.json` can be pasted into `klash.json`; an entry Klash
   cannot run the same way stops it with an error that says so. A
   UserPromptSubmit hook can add context to every prompt or block one, a
-  SessionStart hook can add context when a session starts, and a Stop hook can
+  SessionStart hook can add context when a session starts and set the
+  environment of the agent's commands (`CLAUDE_ENV_FILE`), and a Stop hook can
   keep the agent working until your tests pass. One difference: a hook that
   could not check blocks here, where Claude Code lets it pass. See
   [docs/hooks](docs/hooks/README.md).

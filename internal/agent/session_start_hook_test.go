@@ -165,7 +165,7 @@ func TestRun_SessionStartMatcherOnTheSource(t *testing.T) {
 			}}
 			require.NoError(t, cfg.ValidateHooks())
 			runner := hooks.NewRunner(cfg.Hooks[hooks.EventSessionStart], t.TempDir(), t.TempDir())
-			agg, err := runner.RunSessionStart(t.Context(), "s", "m", tc.source)
+			agg, err := runner.RunSessionStart(t.Context(), "s", "m", tc.source, "")
 			require.NoError(t, err)
 			require.Equal(t, tc.want, agg.HookCount,
 				"the hook fires (or not) based on whether the source matches")

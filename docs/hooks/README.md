@@ -416,6 +416,19 @@ Claude Code's `hookSpecificOutput.additionalContext`. The context is kept
 with the prompt, so the agent reads it again when the conversation is
 rebuilt on later turns.
 
+**Environment**: as in Claude Code, a `SessionStart` hook is handed a file
+in `CLAUDE_ENV_FILE` (and `KLASH_ENV_FILE`) to add `export` lines to, and
+each `bash` command of the session, and of its helper agents, runs that file
+before itself. So `echo 'export NODE_ENV=development' >> "$CLAUDE_ENV_FILE"`
+sets the variable for every later command, and a line such as
+`export PATH="$PATH:./node_modules/.bin"` is evaluated each time. Append with
+`>>`, so other hooks' lines stay. The file is the session's own, in Klash's
+data directory (`~/.local/share/klash/session-env/`), never in the project,
+and lasts as long as the session: a resumed or summarized session keeps what
+its hooks wrote at startup, and a hook that runs again adds its lines again.
+Permission prompts and `PreToolUse` hooks see the command alone, not what
+the file runs before it.
+
 **Blocking**: exit code `2` (or `"decision": "block"`) means the hook
 objects, but the prompt goes ahead anyway, as in Claude Code: you get the
 hook's reason as a warning. Exit `49` (or `"continue": false`) does the
@@ -816,6 +829,7 @@ The available environment variables are:
 | `KLASH_AGENT_TYPE`           | `SubagentStop`, and the tool hooks of a sub-agent's call: the sub-agent's type, as `agent_type` in the payload (`task`, or `agentic_fetch`). |
 | `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, the same as the `trigger` field in the payload. |
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, the same as the `source` field in the payload. |
+| `KLASH_ENV_FILE`             | `SessionStart` only: the session's env file, also as `CLAUDE_ENV_FILE`, Claude Code's name. `export` lines added to it run before each of the session's `bash` commands. |
 | `KLASH_SESSION_END_REASON`   | `SessionEnd` only: `clear`, `other` or `prompt_input_exit`, the same as the `reason` field in the payload. |
 
 Klash was called Crush, so every `KLASH_` variable above is also set under its

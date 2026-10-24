@@ -98,9 +98,10 @@ the input/output contract is identical regardless of language.
 | `KLASH_POST_COMPACT_TRIGGER` | `PostCompact` only: `manual` or `auto`, as in the payload's `trigger` field |
 | `KLASH_STOP_FAILURE_ERROR`   | `StopFailure` only: the error's kind, as in the payload's `error` field |
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, as in the payload's `source` field |
+| `KLASH_ENV_FILE`             | `SessionStart` only: the session's env file, also as `CLAUDE_ENV_FILE`; `export` lines added there (`>>`) run before each of the session's bash commands |
 | `KLASH_SESSION_END_REASON`   | `SessionEnd` only: `clear`, `other` or `prompt_input_exit`, as in the payload's `reason` field |
 
-Each is also set under its `KLASH_` name (`KLASH_EVENT`, ...), the name after
+Each is also set under its `CRUSH_` name (`CRUSH_EVENT`, ...), the name before
 the rename; either works.
 
 **JSON on stdin:**

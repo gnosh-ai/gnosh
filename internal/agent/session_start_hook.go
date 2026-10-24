@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/charmbracelet/crush/internal/agent/notify"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/pubsub"
 )
@@ -184,7 +186,9 @@ func (a *sessionAgent) runSessionStartHooks(ctx context.Context, call *SessionAg
 
 	runner := hooks.NewRunner(hookCfgs, workingDir, workingDir)
 	model := a.largeModel.Get()
-	result, err := runner.RunSessionStart(ctx, call.SessionID, model.ModelCfg.Model, string(source))
+	envFile := sessionEnvFile(call.SessionID)
+	result, err := runner.RunSessionStart(ctx, call.SessionID, model.ModelCfg.Model, string(source), envFile)
+	dropIfEmpty(envFile)
 	a.warnFailedSessionStartHooks(call.SessionID, result.Hooks)
 	a.warnHookMessages(call.SessionID, hooks.EventSessionStart, result.Hooks)
 	if err != nil {
@@ -228,6 +232,37 @@ func joinHookContext(earlier, more string) string {
 		return earlier
 	default:
 		return earlier + "\n\n" + more
+	}
+}
+
+// sessionEnvFile makes the session's env file (config.SessionEnvFile)
+// ready for its SessionStart hooks to add export lines to, Claude Code's
+// CLAUDE_ENV_FILE, and returns its path. The session's bash commands run
+// it first. What earlier hooks wrote stays: a session resumed or
+// summarized keeps the environment its hooks set at startup, whether or
+// not they run again. "" when it cannot be made: the hooks run without
+// it.
+func sessionEnvFile(sessionID string) string {
+	path := config.SessionEnvFile(sessionID)
+	err := os.MkdirAll(filepath.Dir(path), 0o700)
+	if err == nil {
+		var f *os.File
+		if f, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
+			err = f.Close()
+		}
+	}
+	if err != nil {
+		slog.Warn("Could not make the session's env file for its SessionStart hooks", "session_id", sessionID, "error", err)
+		return ""
+	}
+	return path
+}
+
+// dropIfEmpty removes the file at path if it is empty, as a session's env
+// file is when its hooks wrote nothing, so sessions leave no empty files.
+func dropIfEmpty(path string) {
+	if info, err := os.Stat(path); err == nil && info.Size() == 0 {
+		_ = os.Remove(path)
 	}
 }
 

@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -359,4 +361,54 @@ func TestBashTool_TimeoutIsClaudeCodes(t *testing.T) {
 		"a one second timeout moves a three second command to the background")
 	require.True(t, background(BashParams{Description: "both", Command: "sleep 1.5 && echo done", AutoBackgroundAfter: 1, Timeout: 600000}),
 		"auto_background_after wins")
+}
+
+// A bash command runs its session's env file first, where the
+// SessionStart hooks write export lines (Claude Code's CLAUDE_ENV_FILE),
+// in the foreground and in the background, whatever its path holds; a
+// command with no env file, or an empty one, runs as it is. A background
+// job shows its command alone.
+func TestBashTool_RunsTheSessionEnvFile(t *testing.T) {
+	workingDir := t.TempDir()
+	tool := newBashToolForTest(workingDir)
+	envFile := filepath.Join(t.TempDir(), "it's; a $file.sh")
+	require.NoError(t, os.WriteFile(envFile, []byte("export KLASH_TEST_GREETING=hello\n"), 0o600))
+	const command = `echo "greeting=[$KLASH_TEST_GREETING]"`
+	session := context.WithValue(context.Background(), SessionIDContextKey, "s1")
+	withEnv := WithSessionEnvFile(session, envFile)
+
+	run := func(ctx context.Context) string {
+		t.Helper()
+		resp := runBashTool(t, tool, ctx, BashParams{Description: "greet", Command: command})
+		require.False(t, resp.IsError, resp.Content)
+		return resp.Content
+	}
+	require.Contains(t, run(withEnv), "greeting=[hello]")
+	require.Contains(t, run(session), "greeting=[]")
+
+	// Long enough to still be running when bash stops waiting for it.
+	const slow = "sleep 1.5; " + command
+	resp := runBashTool(t, tool, withEnv, BashParams{Description: "greet", Command: slow, RunInBackground: true})
+	require.False(t, resp.IsError, resp.Content)
+	var meta BashResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+	job, ok := shell.GetBackgroundShellManager().Get(meta.ShellID)
+	require.True(t, ok)
+	job.Wait()
+	stdout, _, _, _ := job.GetOutput()
+	require.Contains(t, stdout, "greeting=[hello]")
+	require.Equal(t, slow, job.Command, "the job is the command alone")
+
+	require.NoError(t, os.WriteFile(envFile, nil, 0o600))
+	require.Contains(t, run(withEnv), "greeting=[]", "an empty file is not run")
+}
+
+// A context that names an env file keeps it: a helper agent's turn,
+// started from its parent's, runs its parent session's file.
+func TestWithSessionEnvFileKeepsTheParents(t *testing.T) {
+	t.Parallel()
+
+	parent := WithSessionEnvFile(context.Background(), "/data/session-env/parent.sh")
+	require.Equal(t, "/data/session-env/parent.sh", SessionEnvFileFromContext(WithSessionEnvFile(parent, "/data/session-env/child.sh")))
+	require.Empty(t, SessionEnvFileFromContext(context.Background()))
 }

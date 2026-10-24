@@ -45,7 +45,7 @@ func TestPermissionModeOnTheEventsClaudeCodeGivesItTo(t *testing.T) {
 			return err
 		},
 		EventSessionStart: func(ctx context.Context, r *Runner) error {
-			_, err := r.RunSessionStart(ctx, "s1", "qwen", SessionStartSourceStartup)
+			_, err := r.RunSessionStart(ctx, "s1", "qwen", SessionStartSourceStartup, "")
 			return err
 		},
 		EventPreCompact: func(ctx context.Context, r *Runner) error {

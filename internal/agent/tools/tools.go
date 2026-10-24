@@ -17,6 +17,7 @@ type (
 	supportsImagesKey   string
 	modelNameKey        string
 	channelContextKey   string
+	sessionEnvFileKey   struct{}
 )
 
 const (
@@ -68,6 +69,21 @@ func GetSupportsImagesFromContext(ctx context.Context) bool {
 // GetModelNameFromContext retrieves the model name from the context.
 func GetModelNameFromContext(ctx context.Context) string {
 	return getContextValue(ctx, ModelNameContextKey, "")
+}
+
+// WithSessionEnvFile names the env file (config.SessionEnvFile) the bash
+// commands of a turn run first. A context that names one already keeps
+// it, so a helper agent's commands run its parent session's.
+func WithSessionEnvFile(ctx context.Context, path string) context.Context {
+	if SessionEnvFileFromContext(ctx) != "" {
+		return ctx
+	}
+	return context.WithValue(ctx, sessionEnvFileKey{}, path)
+}
+
+// SessionEnvFileFromContext is the env file WithSessionEnvFile named, or "".
+func SessionEnvFileFromContext(ctx context.Context) string {
+	return getContextValue(ctx, sessionEnvFileKey{}, "")
 }
 
 // UnsupportedMediaResponse tells the model it cannot receive a tool's media.

@@ -89,6 +89,13 @@ func GetBackgroundShellManager() *BackgroundShellManager {
 // Start creates and starts a new background shell with the given command,
 // unless maxJobs jobs are already running.
 func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, blockFuncs []BlockFunc, command, description string, maxJobs int) (*BackgroundShell, error) {
+	return m.StartAfter(ctx, workingDir, blockFuncs, "", command, description, maxJobs)
+}
+
+// StartAfter is Start with setup, shell code the new shell runs just
+// before command, such as a session's env file. The job is command alone:
+// its Command does not show setup.
+func (m *BackgroundShellManager) StartAfter(ctx context.Context, workingDir string, blockFuncs []BlockFunc, setup, command, description string, maxJobs int) (*BackgroundShell, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -120,10 +127,14 @@ func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, b
 
 	m.shells[id] = bgShell
 
+	script := command
+	if setup != "" {
+		script = setup + "\n" + command
+	}
 	go func() {
 		defer close(bgShell.done)
 
-		err := shell.ExecStream(shellCtx, command, bgShell.stdout, bgShell.stderr)
+		err := shell.ExecStream(shellCtx, script, bgShell.stdout, bgShell.stderr)
 
 		bgShell.exitErr = err
 		bgShell.completedAt.Store(time.Now().Unix())
