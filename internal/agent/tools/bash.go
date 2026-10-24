@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,24 +30,58 @@ type BashParams struct {
 	WorkingDir          string `json:"working_dir,omitempty" description:"The working directory to execute the command in (defaults to current directory)"`
 	RunInBackground     bool   `json:"run_in_background,omitempty" description:"Set to true (boolean) to run this command in the background. Use job_output to read the output later."`
 	AutoBackgroundAfter int    `json:"auto_background_after,omitempty" description:"Seconds to wait before automatically moving the command to a background job (default: 60)"`
-	Timeout             int    `json:"timeout,omitempty" description:"Milliseconds to wait for the command before it moves to a background job, at most 600000; auto_background_after wins if both are set"`
+	Timeout             int    `json:"timeout,omitempty" description:"Milliseconds to wait for the command before it moves to a background job, at most the most the tool description gives; auto_background_after wins if both are set"`
 }
 
-// maxBashTimeoutSeconds bounds a bash call's timeout, Claude Code's
-// 600000 ms.
+// maxBashTimeoutSeconds bounds a bash call's timeout unless
+// BASH_MAX_TIMEOUT_MS says otherwise: Claude Code's 600000 ms.
 const maxBashTimeoutSeconds = 600
 
 // timeoutSeconds is a timeout in milliseconds, Claude Code's bash
 // parameter, as the whole seconds to wait before a command moves to the
-// background: rounded up, at most maxBashTimeoutSeconds, 0 for none. A
-// model used to Claude Code's Bash gives a long test run timeout 600000,
-// and Klash dropped it: the run moved to the background after a minute,
-// to be read with job_output, a model round trip each time.
+// background: rounded up, at most maxWaitSeconds, 0 for none. A model
+// used to Claude Code's Bash gives a long test run timeout 600000, and
+// Klash dropped it: the run moved to the background after a minute, to be
+// read with job_output, a model round trip each time.
 func timeoutSeconds(ms int) int {
 	if ms <= 0 {
 		return 0
 	}
-	return min((ms+999)/1000, maxBashTimeoutSeconds)
+	return min((ms+999)/1000, maxWaitSeconds())
+}
+
+// bashEnvInt is the positive whole number the environment variable name
+// holds, or def: Claude Code's BASH_* limits, which a klash.json's env
+// can set too.
+func bashEnvInt(name string, def int) int {
+	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name))); err == nil && n > 0 {
+		return n
+	}
+	return def
+}
+
+// defaultWaitSeconds is how long a command runs before it moves to the
+// background when its call gives no timeout: BASH_DEFAULT_TIMEOUT_MS, as
+// in Claude Code, rounded up to whole seconds, or
+// DefaultAutoBackgroundAfter. A long job (a test suite, a render) that
+// finishes within it costs the model no job_output round trips, each of
+// which on a local model means a step over the whole conversation.
+func defaultWaitSeconds() int {
+	return (bashEnvInt("BASH_DEFAULT_TIMEOUT_MS", DefaultAutoBackgroundAfter*1000) + 999) / 1000
+}
+
+// maxWaitSeconds is the longest a call's timeout can ask for:
+// BASH_MAX_TIMEOUT_MS, as in Claude Code (maxBashTimeoutSeconds by
+// default), or the default wait when that is longer.
+func maxWaitSeconds() int {
+	return max((bashEnvInt("BASH_MAX_TIMEOUT_MS", maxBashTimeoutSeconds*1000)+999)/1000, defaultWaitSeconds())
+}
+
+// maxOutputLength is how many characters of a command's output the model
+// reads before the middle is cut: BASH_MAX_OUTPUT_LENGTH, as in Claude
+// Code, at most 150000, or MaxOutputLength.
+func maxOutputLength() int {
+	return min(bashEnvInt("BASH_MAX_OUTPUT_LENGTH", MaxOutputLength), 150_000)
 }
 
 type BashPermissionsParams struct {
@@ -92,6 +127,8 @@ type bashDescriptionData struct {
 	BannedCommands  string
 	DenyRules       string
 	MaxOutputLength int
+	DefaultWait     int
+	MaxTimeoutMs    int
 	Attribution     config.Attribution
 	ModelID         string
 	RgAvailable     bool
@@ -177,7 +214,9 @@ func bashDescription(attribution *config.Attribution, modelID string, denyRules 
 	if err := bashDescriptionTpl.Execute(&out, bashDescriptionData{
 		BannedCommands:  bannedCommandsStr,
 		DenyRules:       strings.Join(denyRules, ", "),
-		MaxOutputLength: MaxOutputLength,
+		MaxOutputLength: maxOutputLength(),
+		DefaultWait:     defaultWaitSeconds(),
+		MaxTimeoutMs:    maxWaitSeconds() * 1000,
 		Attribution:     *attribution,
 		ModelID:         modelID,
 		RgAvailable:     getRg() != "",
@@ -348,7 +387,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 			ticker := time.NewTicker(100 * time.Millisecond)
 			defer ticker.Stop()
 
-			autoBackgroundAfter := cmp.Or(params.AutoBackgroundAfter, timeoutSeconds(params.Timeout), DefaultAutoBackgroundAfter)
+			autoBackgroundAfter := cmp.Or(params.AutoBackgroundAfter, timeoutSeconds(params.Timeout), defaultWaitSeconds())
 			autoBackgroundThreshold := time.Duration(autoBackgroundAfter) * time.Second
 			timeout := time.After(autoBackgroundThreshold)
 
@@ -478,14 +517,15 @@ func formatOutput(stdout, stderr string, execErr error, spillDir string) string 
 // dropped middle is written in full to a file under spillDir so the agent
 // can read it back rather than losing it for good.
 func TruncateOutput(content, spillDir string) string {
+	limit := maxOutputLength()
 	runeCount := len([]rune(content))
-	if ansi.StringWidth(content) <= MaxOutputLength && runeCount <= MaxOutputLength {
+	if ansi.StringWidth(content) <= limit && runeCount <= limit {
 		return content
 	}
 
-	halfLength := MaxOutputLength / 2
+	halfLength := limit / 2
 	var start, end string
-	if ansi.StringWidth(content) > MaxOutputLength {
+	if ansi.StringWidth(content) > limit {
 		start = ansi.Truncate(content, halfLength, "")
 		end = ansi.TruncateLeft(content, ansi.StringWidth(content)-halfLength, "")
 	} else {
