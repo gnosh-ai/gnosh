@@ -220,6 +220,21 @@ func (b *Backend) SummarizeSession(ctx context.Context, workspaceID, sessionID s
 	return ws.AgentCoordinator.Summarize(ctx, sessionID)
 }
 
+// GenerateSessionName names a session from the end of its conversation,
+// as Claude Code's /rename does with no name, and returns the name.
+func (b *Backend) GenerateSessionName(ctx context.Context, workspaceID, sessionID string) (string, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return "", err
+	}
+
+	if ws.AgentCoordinator == nil {
+		return "", ErrAgentNotInitialized
+	}
+
+	return ws.AgentCoordinator.GenerateSessionName(ctx, sessionID)
+}
+
 // QueuedPrompts returns the number of queued prompts for the session.
 func (b *Backend) QueuedPrompts(workspaceID, sessionID string) (int, error) {
 	ws, err := b.GetWorkspace(workspaceID)

@@ -23,8 +23,8 @@ func TestCleanName(t *testing.T) {
 	require.Equal(t, strings.Repeat("a", 199), CleanName(strings.Repeat("a", 199)+"  tail"), "no space left at the cut")
 }
 
-// /rename is read with or without its slash, in any case, with the name
-// after it or none.
+// /rename, or its alias /name, is read with or without its slash, in any
+// case, with the name after it or none.
 func TestParseRenameCommand(t *testing.T) {
 	t.Parallel()
 
@@ -34,12 +34,14 @@ func TestParseRenameCommand(t *testing.T) {
 		"/Rename X":                 "X",
 		"/rename":                   "",
 		" rename ":                  "",
+		"/name the alias":           "the alias",
+		"NAME":                      "",
 	} {
 		name, ok := ParseRenameCommand(line)
 		require.True(t, ok, line)
 		require.Equal(t, want, name, line)
 	}
-	for _, line := range []string{"/renamed x", "please /rename x", "/re name", "", "/resume"} {
+	for _, line := range []string{"/renamed x", "please /rename x", "/re name", "", "/resume", "/names x", "/nam x"} {
 		_, ok := ParseRenameCommand(line)
 		require.False(t, ok, line)
 	}

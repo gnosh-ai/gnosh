@@ -123,6 +123,10 @@ type Workspace interface {
 	SaveSession(ctx context.Context, sess session.Session) (session.Session, error)
 	// RenameSession gives the session a new title, and nothing else.
 	RenameSession(ctx context.Context, sessionID, title string) error
+	// GenerateSessionName names the session from the end of its
+	// conversation, as Claude Code's /rename does with no name, and
+	// returns the name.
+	GenerateSessionName(ctx context.Context, sessionID string) (string, error)
 	DeleteSession(ctx context.Context, sessionID string) error
 	CreateAgentToolSessionID(messageID, toolCallID string) string
 	ParseAgentToolSessionID(sessionID string) (messageID string, toolCallID string, ok bool)

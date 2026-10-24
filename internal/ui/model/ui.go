@@ -5441,25 +5441,34 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 
 // renameSession names the current session, as Claude Code's /rename does,
 // typed in the prompt or chosen in the command palette. The name is kept
-// as Claude Code keeps one (session.CleanName); with none, the usage is
-// shown.
+// as Claude Code keeps one (session.CleanName); with none, one is made
+// from the conversation.
 func (m *UI) renameSession(name string) tea.Cmd {
 	if !m.hasSession() {
 		return util.ReportWarn("There is no session to rename yet: send a prompt first")
 	}
+	sessionID := m.session.ID
 	if strings.TrimSpace(name) == "" {
-		return util.ReportWarn("Usage: /rename <name>")
+		return tea.Batch(
+			util.ReportInfo("Naming the session from its conversation…"),
+			func() tea.Msg {
+				name, err := m.com.Workspace.GenerateSessionName(context.Background(), sessionID)
+				if err != nil {
+					return util.ReportWarn("Could not generate a name: " + err.Error() + ". Usage: /rename <name>")()
+				}
+				return util.NewInfoMsg("Session renamed to: " + name)
+			},
+		)
 	}
 	name = session.CleanName(name)
 	if name == "" {
 		return util.ReportWarn("That name is empty once invisible characters are removed. Usage: /rename <name>")
 	}
-	sessionID := m.session.ID
 	return func() tea.Msg {
 		if err := m.com.Workspace.RenameSession(context.Background(), sessionID, name); err != nil {
 			return util.ReportError(err)()
 		}
-		return util.NewInfoMsg("Session renamed to " + name)
+		return util.NewInfoMsg("Session renamed to: " + name)
 	}
 }
 

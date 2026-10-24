@@ -612,6 +612,27 @@ func (c *Client) AgentSummarizeSession(ctx context.Context, id string, sessionID
 	return nil
 }
 
+// AgentGenerateSessionName names a session from the end of its
+// conversation and returns the name.
+func (c *Client) AgentGenerateSessionName(ctx context.Context, id string, sessionID string) (string, error) {
+	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/agent/sessions/%s/name", id, sessionID), nil, nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to name session: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		if msg := decodeErrorMessage(rsp.Body); msg != "" {
+			return "", errors.New(msg)
+		}
+		return "", fmt.Errorf("failed to name session: status code %d", rsp.StatusCode)
+	}
+	var named proto.SessionNameResponse
+	if err := json.NewDecoder(rsp.Body).Decode(&named); err != nil {
+		return "", fmt.Errorf("failed to decode session name: %w", err)
+	}
+	return named.Name, nil
+}
+
 // InitiateAgentProcessing triggers agent initialization on the server.
 func (c *Client) InitiateAgentProcessing(ctx context.Context, id string, interactive bool) error {
 	body := jsonBody(proto.AgentInitRequest{Interactive: interactive})

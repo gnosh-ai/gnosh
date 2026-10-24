@@ -236,6 +236,7 @@ type SessionAgent interface {
 	Summarize(context.Context, string, fantasy.ProviderOptions, func(context.Context, *fantasy.ProviderError) error, preCompactTrigger) error
 	Model() Model
 	GenerateTitle(ctx context.Context, sessionID, userPrompt string)
+	GenerateSessionName(ctx context.Context, sessionID string) (string, error)
 }
 
 type Model struct {
@@ -2262,71 +2263,10 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 		}
 	}()
 
-	smallModel := a.smallModel.Get()
-	largeModel := a.largeModel.Get()
-	systemPromptPrefix := a.systemPromptPrefix.Get()
-
-	newAgent := func(m fantasy.LanguageModel, p []byte, tok int64) fantasy.Agent {
-		return fantasy.NewAgent(
-			m,
-			fantasy.WithSystemPrompt(string(p)+"\n /no_think"),
-			fantasy.WithMaxOutputTokens(tok),
-			fantasy.WithUserAgent(userAgent),
-		)
-	}
-
-	streamCall := fantasy.AgentStreamCall{
-		Prompt:  fmt.Sprintf("Generate a concise title for the following content:\n\n%s\n <think>\n\n</think>", userPrompt),
-		Headers: sessionHeaders(sessionID),
-		PrepareStep: func(callCtx context.Context, opts fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
-			prepared.Messages = opts.Messages
-			if systemPromptPrefix != "" {
-				prepared.Messages = append([]fantasy.Message{
-					fantasy.NewSystemMessage(systemPromptPrefix),
-				}, prepared.Messages...)
-			}
-			return callCtx, prepared, nil
-		},
-	}
-
-	type modelAttempt struct {
-		name  string
-		model Model
-	}
-	attempts := []modelAttempt{
-		{"small", smallModel},
-		{"large", largeModel},
-	}
-
-	var resp *fantasy.AgentResult
-	var err error
-	var model Model
-	var success bool
-	for _, attempt := range attempts {
-		tok := int64(40)
-		if attempt.model.CatwalkCfg.CanReason {
-			tok = attempt.model.CatwalkCfg.DefaultMaxTokens
-		}
-		agent := newAgent(attempt.model.Model, titlePrompt, tok)
-		call := streamCall
-		call.ProviderOptions = a.titleProviderOptions(attempt.model)
-		resp, err = agent.Stream(ctx, call)
-		if err == nil && resp.Response.FinishReason != fantasy.FinishReasonLength {
-			model = attempt.model
-			slog.Debug("Generated title with " + attempt.name + " model")
-			success = true
-			break
-		}
-		// Warnings, not errors: the next model, and failing that the start
-		// of the prompt, still give the session a title.
-		if err != nil {
-			slog.Warn("Error generating title with "+attempt.name+" model; trying next", "err", err)
-		} else {
-			slog.Warn("Title generation hit token limit with " + attempt.name + " model; trying next")
-		}
-	}
-	if !success {
-		// The deferred fallback will save the default session name.
+	prompt := fmt.Sprintf("Generate a concise title for the following content:\n\n%s\n <think>\n\n</think>", userPrompt)
+	resp, model, err := a.askForName(ctx, sessionID, "title", titlePrompt, prompt, 40)
+	if err != nil {
+		// The deferred fallback names the session after the prompt.
 		return
 	}
 
@@ -2344,7 +2284,82 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 		title = titleFromPrompt(userPrompt)
 	}
 
-	// Calculate usage and cost.
+	cost := a.answerCost(model, resp)
+	promptTokens := contextTokens(resp.TotalUsage)
+	completionTokens := resp.TotalUsage.OutputTokens
+
+	if name, renamed := a.renamedFrom(ctx, sessionID, untitled); renamed {
+		title = name
+	}
+
+	// Atomically update only title and usage fields to avoid overriding other
+	// concurrent session updates.
+	saveErr := a.sessions.UpdateTitleAndUsage(ctx, sessionID, title, promptTokens, completionTokens, cost)
+	if saveErr != nil {
+		slog.Error("Failed to save session title and usage", "error", saveErr)
+		return
+	}
+	titleSaved = true
+}
+
+// askForName asks for a title or a name: the small model first, then the
+// large one if that fails or is cut off, with no tools, thinking off where
+// the provider has a switch, and maxTokens for the answer (a reasoning
+// model's whole default instead, as it may think anyway). what names it
+// in the log.
+func (a *sessionAgent) askForName(ctx context.Context, sessionID, what string, systemPrompt []byte, prompt string, maxTokens int64) (*fantasy.AgentResult, Model, error) {
+	systemPromptPrefix := a.systemPromptPrefix.Get()
+	call := fantasy.AgentStreamCall{
+		Prompt:  prompt,
+		Headers: sessionHeaders(sessionID),
+		PrepareStep: func(callCtx context.Context, opts fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
+			prepared.Messages = opts.Messages
+			if systemPromptPrefix != "" {
+				prepared.Messages = append([]fantasy.Message{
+					fantasy.NewSystemMessage(systemPromptPrefix),
+				}, prepared.Messages...)
+			}
+			return callCtx, prepared, nil
+		},
+	}
+	var lastErr error
+	for _, attempt := range []struct {
+		name  string
+		model Model
+	}{
+		{"small", a.smallModel.Get()},
+		{"large", a.largeModel.Get()},
+	} {
+		tok := maxTokens
+		if attempt.model.CatwalkCfg.CanReason {
+			tok = attempt.model.CatwalkCfg.DefaultMaxTokens
+		}
+		agent := fantasy.NewAgent(
+			attempt.model.Model,
+			fantasy.WithSystemPrompt(string(systemPrompt)+"\n /no_think"),
+			fantasy.WithMaxOutputTokens(tok),
+			fantasy.WithUserAgent(userAgent),
+		)
+		call.ProviderOptions = a.titleProviderOptions(attempt.model)
+		resp, err := agent.Stream(ctx, call)
+		if err == nil && resp.Response.FinishReason != fantasy.FinishReasonLength {
+			slog.Debug("Generated " + what + " with " + attempt.name + " model")
+			return resp, attempt.model, nil
+		}
+		if err == nil {
+			err = errors.New("the answer was cut off at its token limit")
+		}
+		// A warning, not an error: the next model may answer, and the
+		// caller has a way on without one.
+		slog.Warn("Could not generate a "+what+" with the "+attempt.name+" model; trying the next", "err", err)
+		lastErr = err
+	}
+	return nil, Model{}, lastErr
+}
+
+// answerCost is what resp cost on model: its provider's figure when it
+// gives one (OpenRouter), nothing on a flat rate.
+func (a *sessionAgent) answerCost(model Model, resp *fantasy.AgentResult) float64 {
 	var openrouterCost *float64
 	for _, step := range resp.Steps {
 		stepCost := a.openrouterCost(step.ProviderMetadata)
@@ -2372,22 +2387,7 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 	if model.FlatRate {
 		cost = 0
 	}
-
-	promptTokens := contextTokens(resp.TotalUsage)
-	completionTokens := resp.TotalUsage.OutputTokens
-
-	if name, renamed := a.renamedFrom(ctx, sessionID, untitled); renamed {
-		title = name
-	}
-
-	// Atomically update only title and usage fields to avoid overriding other
-	// concurrent session updates.
-	saveErr := a.sessions.UpdateTitleAndUsage(ctx, sessionID, title, promptTokens, completionTokens, cost)
-	if saveErr != nil {
-		slog.Error("Failed to save session title and usage", "error", saveErr)
-		return
-	}
-	titleSaved = true
+	return cost
 }
 
 // renamedFrom reports the title sessionID has now when it is no longer

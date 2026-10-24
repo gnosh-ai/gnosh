@@ -154,6 +154,10 @@ type Coordinator interface {
 	// the coder's or, in plan mode, the plan agent's, MCP tools included.
 	ToolNames() []string
 	GenerateTitle(ctx context.Context, sessionID, prompt string)
+	// GenerateSessionName names a session from the end of its
+	// conversation, as Claude Code's /rename does with no name, and
+	// returns the name.
+	GenerateSessionName(ctx context.Context, sessionID string) (string, error)
 }
 
 type coordinator struct {
@@ -1714,6 +1718,16 @@ func (c *coordinator) GenerateTitle(ctx context.Context, sessionID, prompt strin
 		return
 	}
 	agent.GenerateTitle(ctx, sessionID, prompt)
+}
+
+// GenerateSessionName names a session from its conversation using the
+// current agent.
+func (c *coordinator) GenerateSessionName(ctx context.Context, sessionID string) (string, error) {
+	agent := c.currentAgent()
+	if agent == nil {
+		return "", errors.New("the agent is not ready")
+	}
+	return agent.GenerateSessionName(ctx, sessionID)
 }
 
 // refreshTokenIfExpired proactively refreshes the OAuth token if it has expired.

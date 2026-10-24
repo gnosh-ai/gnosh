@@ -33,6 +33,7 @@ func TestPaletteFindsClaudeCodeSlashNames(t *testing.T) {
 		"resume":  "Sessions",
 		"compact": "Summarize Session",
 		"rename":  "Rename Session",
+		"name":    "Rename Session",
 		"clear":   "New Session",
 		"new":     "New Session",
 		"reset":   "New Session",
@@ -54,8 +55,9 @@ func TestPaletteFindsClaudeCodeSlashNames(t *testing.T) {
 	}
 }
 
-// Claude Code's /rename takes the name after it: typed into the palette
-// with it, Enter names the session, and with none it asks for the name.
+// Claude Code's /rename (or /name) takes the name after it: typed into
+// the palette with it, Enter names the session; with none, the UI has one
+// made from the conversation.
 func TestPaletteRenameTakesTheName(t *testing.T) {
 	t.Parallel()
 
@@ -67,6 +69,7 @@ func TestPaletteRenameTakesTheName(t *testing.T) {
 	for typed, want := range map[string]string{
 		"rename fix the login bug": "fix the login bug",
 		"rename":                   "",
+		"name the alias":           "the alias",
 	} {
 		c, err := NewCommands(com, "s1", true, false, false, nil, nil)
 		require.NoError(t, err)

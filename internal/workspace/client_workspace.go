@@ -181,6 +181,10 @@ func (w *ClientWorkspace) RenameSession(ctx context.Context, sessionID, title st
 	return err
 }
 
+func (w *ClientWorkspace) GenerateSessionName(ctx context.Context, sessionID string) (string, error) {
+	return w.client.AgentGenerateSessionName(ctx, w.workspaceID(), sessionID)
+}
+
 func (w *ClientWorkspace) DeleteSession(ctx context.Context, sessionID string) error {
 	return w.client.DeleteSession(ctx, w.workspaceID(), sessionID)
 }

@@ -55,6 +55,10 @@ func (*NopCoordinator) Model() agent.Model                             { return 
 func (*NopCoordinator) UpdateModels(context.Context) error             { return nil }
 func (*NopCoordinator) GenerateTitle(context.Context, string, string)  {}
 
+func (*NopCoordinator) GenerateSessionName(context.Context, string) (string, error) {
+	return "", nil
+}
+
 func (*NopCoordinator) ToolInfos(context.Context) ([]fantasy.ToolInfo, error) {
 	return nil, nil
 }

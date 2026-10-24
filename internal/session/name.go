@@ -27,12 +27,13 @@ func CleanName(name string) string {
 }
 
 // ParseRenameCommand reports whether line is Claude Code's /rename
-// command, with or without the slash, as typed in the prompt or the
-// command palette, and the name it gives ("" when none).
+// command or its alias /name, with or without the slash, as typed in the
+// prompt or the command palette, and the name it gives ("" when none).
 func ParseRenameCommand(line string) (name string, ok bool) {
 	line = strings.TrimSpace(line)
 	word, rest, _ := strings.Cut(line, " ")
-	if !strings.EqualFold(strings.TrimPrefix(word, "/"), "rename") {
+	word = strings.TrimPrefix(word, "/")
+	if !strings.EqualFold(word, "rename") && !strings.EqualFold(word, "name") {
 		return "", false
 	}
 	return strings.TrimSpace(rest), true
