@@ -30,6 +30,12 @@ first prompt.
 or automatic, and `PostCompact` once it has been, with the summary. `SessionEnd` fires when a session ends: when the user starts a
 new one (`clear`), switches to another (`other`), or the process exits with
 the session open (`prompt_input_exit` for the TUI, `other` for `klash run`).
+`InstructionsLoaded` fires when a context file is loaded into the system
+prompt or given on demand: at session start for the files already in the
+prompt, again after a summary, for a subdirectory's files when a tool touches
+a file there, or for a file a context file imports with `@path`. As in Claude
+Code, it has no decision control: its output is ignored, its exit code is
+ignored, and the turn does not wait for it.
 
 Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
 `PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Klash refuses
@@ -38,14 +44,17 @@ would look configured and silently never run.
 
 A `matcher` only makes sense for `PreToolUse`, `PostToolUse`,
 `PostToolUseFailure`, `PreCompact`, `PostCompact`, `StopFailure`,
-`SubagentStart`, `SessionStart` and `SessionEnd`. The first three match against the tool name;
+`SubagentStart`, `SessionStart`, `SessionEnd` and `InstructionsLoaded`. The
+first three match against the tool name;
 `PreCompact` and `PostCompact` match against their trigger; `StopFailure`
 against the error's kind (`rate_limit`, `overloaded`, `authentication_failed`,
 `billing_error`, `model_not_found`, `invalid_request`, `server_error`, or
 `unknown`); `SubagentStart` against the agent type (`task` for the `agent`
 tool's sub-agent, `agentic_fetch` for that tool's) (`manual` or `auto`); `SessionStart` matches against its source
 (`startup`, `resume`, `clear` or `compact`); `SessionEnd` matches against
-its reason (`clear`, `other` or `prompt_input_exit`). There is nothing to
+its reason (`clear`, `other` or `prompt_input_exit`); `InstructionsLoaded`
+matches against the load reason (`session_start`, `nested_traversal`,
+`include` or `compact`). There is nothing to
 match when a prompt is sent or a turn ends, so a `matcher` on a
 `UserPromptSubmit`, `Stop` or `SubagentStop` hook is a config error too,
 and every configured hook for those events runs.
@@ -285,6 +294,21 @@ not held up for long. It fires only for the top-level agent, not sub-agents,
 and a session ends once: switching away and then exiting does not end it
 again, and a session that was never open does not end at all.
 
+**On `InstructionsLoaded`** the input is `{"file_path": "...", "memory_type":
+"User"|"Project"|"Local", "load_reason": "session_start"|"compact"|"nested_traversal"|"include",
+"trigger_file_path": "...", "parent_file_path": "..."}` beside the common
+fields: the context file loaded, its kind, and what loaded it. `file_path` is
+the absolute path; `memory_type` is `"User"` for the user's global context
+files, `"Local"` for a `.local.md` file, `"Project"` for the rest, never
+`"Managed"`; `trigger_file_path` is set for a `nested_traversal` load, the
+file whose access brought the context file in; `parent_file_path` is set for
+an `include` load, the file that imported the one loaded. `globs` is never
+sent, as Klash has no `.claude/rules` files. A `matcher` is tested against
+`load_reason`. As in Claude Code the hook has no decision control: its output
+is ignored, its exit code is ignored, and the turn does not wait for it. A
+hook that fails is logged. It fires only for the top-level agent, not
+sub-agents. `KLASH_INSTRUCTIONS_LOAD_REASON` holds the load reason.
+
 ## Aggregation (Multiple Hooks)
 
 Composed in **config order**:
@@ -419,8 +443,10 @@ value cannot be read, so the hook could not evaluate: it blocks.
    right matcher), `hooks.Stop` (no matcher), `hooks.SubagentStop` (no
    matcher; sub-agents only), `hooks.PreCompact` or `hooks.PostCompact`
    (matcher against `manual`/`auto`), `hooks.SessionStart` (matcher against
-   `startup`/`resume`/`clear`/`compact`), or `hooks.SessionEnd` (matcher
-   against `clear`/`other`/`prompt_input_exit`) in `klash.json`. Spell the
+   `startup`/`resume`/`clear`/`compact`), `hooks.SessionEnd` (matcher
+   against `clear`/`other`/`prompt_input_exit`), or `hooks.InstructionsLoaded`
+   (matcher against `session_start`/`nested_traversal`/`include`/`compact`)
+   in `klash.json`. Spell the
    event name exactly; anything else is a startup error.
 4. Decide intent: inject context (omit `decision`), auto-approve (`"allow"`),
    block (`exit 2`), or halt (`exit 49`). On `Stop` and `SubagentStop`,

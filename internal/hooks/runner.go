@@ -318,6 +318,28 @@ func (r *Runner) RunSessionEnd(ctx context.Context, sessionID, reason string) (A
 	return agg, err
 }
 
+// RunInstructionsLoaded executes the InstructionsLoaded hooks whose matcher
+// matches loadReason, when a context file is loaded into the system prompt or
+// given on demand. loadReason is the
+// InstructionsLoadedSessionStart, InstructionsLoadedNestedTraversal,
+// InstructionsLoadedInclude or InstructionsLoadedCompact name of what
+// loaded the file; hooks with no matcher match every reason, as in
+// Claude Code.
+//
+// As in Claude Code an InstructionsLoaded hook has no decision control:
+// its output is ignored, its exit code is ignored, and it runs
+// asynchronously for observability. The caller does not wait for it; a
+// hook that fails is logged by runOne. A context that is cancelled while
+// the hooks run does not surface as an error: the load has already
+// happened, and the hooks are there to observe it.
+func (r *Runner) RunInstructionsLoaded(ctx context.Context, sessionID, filePath, memoryType, loadReason, triggerFilePath, parentFilePath string) (AggregateResult, error) {
+	envVars := append(BuildEnv(EventInstructionsLoaded, "", sessionID, r.cwd, r.projectDir, ""), hookVar("INSTRUCTIONS_LOAD_REASON", loadReason)...)
+	payload := BuildInstructionsLoadedPayload(sessionID, r.cwd, filePath, memoryType, loadReason, triggerFilePath, parentFilePath)
+	agg, err := r.run(ctx, r.matchingHooks(loadReason), EventInstructionsLoaded, "", "", envVars, payload)
+	agg.UpdatedInput = ""
+	return agg, err
+}
+
 // run executes the given hooks concurrently and aggregates their
 // results. Callers choose which hooks apply and build the stdin payload
 // and environment for the event.

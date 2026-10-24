@@ -49,9 +49,16 @@ type PromptDat struct {
 	AddedDirs []string
 }
 
+// ContextFile is a context file and what it was loaded as: its path and
+// the model's text of it, and, for a file a context file imported with
+// @path, the parent that imported it, which the InstructionsLoaded hook
+// reports.
 type ContextFile struct {
 	Path    string
 	Content string
+	// Parent is the path of the context file that imported this one, set
+	// for an @path import only.
+	Parent string
 }
 
 type Option func(*Prompt)
@@ -223,7 +230,7 @@ func expandPath(path string, store *config.ConfigStore) string {
 	return path
 }
 
-// loadContextFiles loads the context files at paths, in the order the
+// LoadContextFiles loads the context files at paths, in the order the
 // paths are given, each file once. A path listed again in another case
 // (KLASH.md, klash.md) is skipped, and so is a file already loaded under
 // another name: a symlink such as CLAUDE.md -> AGENTS.md, or CRUSH.md ->
@@ -240,13 +247,17 @@ func expandPath(path string, store *config.ConfigStore) string {
 // files may import only the project's files, or a repository could have
 // its AGENTS.md put ~/.ssh/id_ed25519 in the prompt, and so in front of
 // the model's provider. The user's global context files import anything.
-func loadContextFiles(paths []string, store *config.ConfigStore, importRoot string) []ContextFile {
+func LoadContextFiles(paths []string, store *config.ConfigStore, importRoot string) []ContextFile {
 	l := newContextLoader(store)
 	l.load(paths, importRoot, nil)
 	return l.files
 }
 
-// projectContextFiles loads the project's context files at paths: those
+// loadContextFiles is the unexported alias used by tests in this
+// package.
+var loadContextFiles = LoadContextFiles
+
+// ProjectContextFiles loads the project's context files at paths: those
 // in each directory above the working directory, the outermost first,
 // then the working directory's own, as Claude Code reads CLAUDE.md files,
 // so the instructions closest to where klash started come last. Started
@@ -254,7 +265,7 @@ func loadContextFiles(paths []string, store *config.ConfigStore, importRoot stri
 // repository's. A directory above gives only files the user or root
 // owns, so a shared one such as /tmp cannot slip instructions into a
 // session, and their imports stay inside that directory.
-func projectContextFiles(paths []string, store *config.ConfigStore) []ContextFile {
+func ProjectContextFiles(paths []string, store *config.ConfigStore) []ContextFile {
 	l := newContextLoader(store)
 	workingDir := store.WorkingDir()
 	if workingDir != "" {
@@ -273,6 +284,10 @@ func projectContextFiles(paths []string, store *config.ConfigStore) []ContextFil
 	l.load(paths, cmp.Or(workingDir, "."), nil)
 	return l.files
 }
+
+// projectContextFiles is the unexported alias used by tests in this
+// package.
+var projectContextFiles = ProjectContextFiles
 
 // SubdirectoryContextFiles returns the context files at paths in the
 // directories from the working directory down to file's, not counting
@@ -342,7 +357,8 @@ func newContextLoader(store *config.ConfigStore) *contextLoader {
 
 // load adds the context files at paths and the files they import, which
 // must stay inside importRoot unless it is "". When trusted is not nil,
-// a file it refuses is not read.
+// a file it refuses is not read. An imported file records the file that
+// imported it, in Parent.
 func (l *contextLoader) load(paths []string, importRoot string, trusted func(path string) bool) {
 	// add loads the files file imports, then file, each once, depth hops
 	// from a configured path.
@@ -375,6 +391,7 @@ func (l *contextLoader) load(paths []string, importRoot string, trusted func(pat
 				continue
 			}
 			if imported := processFile(target); imported != nil {
+				imported.Parent = file.Path
 				add(*imported, depth+1)
 			}
 		}
@@ -447,8 +464,8 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 	platform := cmp.Or(p.platform, runtime.GOOS)
 
 	cfg := store.Config()
-	contextFiles := projectContextFiles(cfg.Options.ContextPaths, store)
-	globalContextFiles := loadContextFiles(cfg.Options.GlobalContextPaths, store, "")
+	contextFiles := ProjectContextFiles(cfg.Options.ContextPaths, store)
+	globalContextFiles := LoadContextFiles(cfg.Options.GlobalContextPaths, store, "")
 
 	// Discover and load skills metadata.
 	var availSkillXML string

@@ -87,11 +87,20 @@ const (
 	// logged. Its Matcher is tested against the reason, as a
 	// SessionStart's is tested against the source.
 	EventSessionEnd = "SessionEnd"
+	// EventInstructionsLoaded fires when a context file is loaded into the
+	// system prompt or given on demand: at session start for the files
+	// already in the prompt, and again for a subdirectory's files when a
+	// tool touches a file there, or for a file a context file imports.
+	// As in Claude Code the hooks have no decision control: they cannot
+	// block or modify the load, their output is ignored, and the load
+	// does not wait for them. Its Matcher is tested against the load
+	// reason.
+	EventInstructionsLoaded = "InstructionsLoaded"
 )
 
 // knownHookEvents lists every recognised event name, in the order they
 // are reported to the user.
-var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStart, EventSubagentStop, EventStopFailure, EventPreCompact, EventPostCompact, EventSessionEnd}
+var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStart, EventSubagentStop, EventStopFailure, EventPreCompact, EventPostCompact, EventSessionEnd, EventInstructionsLoaded}
 
 // KnownHookEvents returns the recognised hook event names.
 func KnownHookEvents() []string {
@@ -106,10 +115,10 @@ func IsKnownHookEvent(name string) bool {
 // HookEventSupportsMatcher reports whether hooks for the given event may
 // carry a Matcher. Tool events match against the tool name; PreCompact
 // and PostCompact against their trigger; StopFailure against the error's kind;
-// SubagentStart against the agent type; SessionStart against its source; SessionEnd
-// against its reason.
+// SubagentStart against the agent type; SessionStart against its source;
+// SessionEnd against its reason; InstructionsLoaded against the load reason.
 func HookEventSupportsMatcher(event string) bool {
-	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventPostCompact || event == EventStopFailure || event == EventSubagentStart || event == EventSessionStart || event == EventSessionEnd
+	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventPostCompact || event == EventStopFailure || event == EventSubagentStart || event == EventSessionStart || event == EventSessionEnd || event == EventInstructionsLoaded
 }
 
 // HookMatcher is a hook's matcher read as Claude Code reads one: "*" (or

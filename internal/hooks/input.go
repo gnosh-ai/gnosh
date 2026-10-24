@@ -92,6 +92,28 @@ type Payload struct {
 	// SessionEnd hook is tested against it.
 	Reason string `json:"reason,omitempty"`
 
+	// FilePath is set on an EventInstructionsLoaded payload: the absolute
+	// path of the context file loaded, as Claude Code's InstructionsLoaded
+	// input carries it.
+	FilePath string `json:"file_path,omitempty"`
+	// MemoryType is set on an EventInstructionsLoaded payload: the kind of
+	// the file, Claude Code's "User", "Project" or "Local". Klash has no
+	// managed rules, so it is never "Managed".
+	MemoryType string `json:"memory_type,omitempty"`
+	// LoadReason is set on an EventInstructionsLoaded payload: what
+	// loaded the file, Claude Code's "session_start", "nested_traversal",
+	// "path_glob_match", "include" or "compact". A matcher on an
+	// InstructionsLoaded hook is tested against it.
+	LoadReason string `json:"load_reason,omitempty"`
+	// TriggerFilePath is set on an EventInstructionsLoaded payload for a
+	// nested_traversal load: the file whose access brought the context
+	// file in, as Claude Code's input carries it.
+	TriggerFilePath string `json:"trigger_file_path,omitempty"`
+	// ParentFilePath is set on an EventInstructionsLoaded payload for an
+	// include load: the context file that imported the one loaded, as
+	// Claude Code's input carries it.
+	ParentFilePath string `json:"parent_file_path,omitempty"`
+
 	// AgentID and AgentType are set when a hook fires for a sub-agent (a
 	// SubagentStop hook, or one around a sub-agent's tool call), as
 	// Claude Code's agent_id and agent_type are: the sub-agent's own
@@ -438,6 +460,48 @@ func BuildSessionEndPayload(sessionID, cwd, reason string) []byte {
 		CWD:           cwd,
 		ToolInput:     json.RawMessage("{}"),
 		Reason:        reason,
+	})
+}
+
+// InstructionsLoaded reasons, as in Claude Code: the files were in the
+// system prompt when the session started (or were re-loaded after a
+// summary), a tool's access to a subdirectory brought them in, or a
+// context file imported them.
+const (
+	InstructionsLoadedSessionStart    = "session_start"
+	InstructionsLoadedNestedTraversal = "nested_traversal"
+	InstructionsLoadedInclude         = "include"
+	InstructionsLoadedCompact         = "compact"
+)
+
+// Memory types, as in Claude Code's memory_type: the user's global
+// context files, a CLAUDE.local.md, or the rest. Klash has no managed
+// rules, so "Managed" is never used.
+const (
+	MemoryTypeUser    = "User"
+	MemoryTypeProject = "Project"
+	MemoryTypeLocal   = "Local"
+)
+
+// BuildInstructionsLoadedPayload constructs the JSON stdin payload for an
+// EventInstructionsLoaded hook: the file loaded, its memory type, and the
+// load reason, as Claude Code's InstructionsLoaded input carries it.
+// triggerFilePath and parentFilePath are set for a nested_traversal and
+// an include load respectively; Klash has no globbed rules, so globs is
+// never sent. There is no tool in play, so tool_name is empty and
+// tool_input is an empty object.
+func BuildInstructionsLoadedPayload(sessionID, cwd, filePath, memoryType, loadReason, triggerFilePath, parentFilePath string) []byte {
+	return marshalPayload(Payload{
+		Event:           EventInstructionsLoaded,
+		HookEventName:   EventInstructionsLoaded,
+		SessionID:       sessionID,
+		CWD:             cwd,
+		ToolInput:       json.RawMessage("{}"),
+		FilePath:        filePath,
+		MemoryType:      memoryType,
+		LoadReason:      loadReason,
+		TriggerFilePath: triggerFilePath,
+		ParentFilePath:  parentFilePath,
 	})
 }
 

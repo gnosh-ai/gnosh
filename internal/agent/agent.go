@@ -335,6 +335,8 @@ type sessionAgent struct {
 	acceptSeqGen uint64
 	// sessionStarts, see SessionAgentOptions.SessionStarts.
 	sessionStarts *sessionStartState
+	// instructionsLoaded, see SessionAgentOptions.InstructionsLoaded.
+	instructionsLoaded *instructionsLoadedState
 }
 
 type SessionAgentOptions struct {
@@ -364,6 +366,11 @@ type SessionAgentOptions struct {
 	// one, so a session started in code mode counts as started in plan
 	// mode; nil gives the agent its own.
 	SessionStarts *sessionStartState
+	// InstructionsLoaded is what the agent's InstructionsLoaded hooks
+	// know of the sessions the process has loaded context files for. A
+	// coordinator's main agents share one, as SessionStarts; nil gives
+	// the agent its own.
+	InstructionsLoaded *instructionsLoadedState
 }
 
 func NewSessionAgent(
@@ -372,6 +379,10 @@ func NewSessionAgent(
 	sessionStarts := opts.SessionStarts
 	if sessionStarts == nil {
 		sessionStarts = newSessionStartState()
+	}
+	instructionsLoaded := opts.InstructionsLoaded
+	if instructionsLoaded == nil {
+		instructionsLoaded = newInstructionsLoadedState()
 	}
 	return &sessionAgent{
 		largeModel:           csync.NewValue(opts.LargeModel),
@@ -397,6 +408,7 @@ func NewSessionAgent(
 		acceptedRuns:         csync.NewMap[string, int](),
 		cancelMark:           csync.NewMap[string, uint64](),
 		sessionStarts:        sessionStarts,
+		instructionsLoaded:   instructionsLoaded,
 	}
 }
 
@@ -805,6 +817,10 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	if sessionStart && a.runSessionStartHooks(hookCtx, &call) && hookCtx.Err() == nil {
 		a.sessionStarts.markStarted(call.SessionID)
 	}
+	// Fire the InstructionsLoaded hooks for the context files in the
+	// system prompt, once per session start (or again after a summary).
+	// They run asynchronously: the turn does not wait for them.
+	a.fireInstructionsLoadedForSession(ctx, call.SessionID)
 	// What the SessionStart hooks printed for an earlier prompt that a
 	// UserPromptSubmit hook refused goes out with this one, hidden or not.
 	if hookCtx == nil || hookCtx.Err() == nil {
@@ -1777,6 +1793,10 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel string,
 	// The next prompt to this session runs its SessionStart hooks again,
 	// with source "compact", as in Claude Code.
 	a.sessionStarts.markSummarized(sessionID)
+
+	// The next prompt to this session re-fires its InstructionsLoaded
+	// hooks, with load_reason "compact".
+	a.markInstructionsLoadedSummarized(sessionID)
 
 	// The user's PostCompact hooks get the summary, now that it is saved
 	// and before any prompt queued meanwhile runs on it.

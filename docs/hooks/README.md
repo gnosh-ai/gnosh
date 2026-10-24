@@ -17,7 +17,7 @@ forward.
 - Hooks are Claude Code-compatible
 - Klash ships with a builtin `klash-hook` skill write, edit, and configure
   hooks; just tell Klash how to configure Klash
-- Klash supports twelve hooks: `PreToolUse`, which fires before a tool call,
+- Klash supports thirteen hooks: `PreToolUse`, which fires before a tool call,
   `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
   fails, `UserPromptSubmit`, which fires when you send a prompt and can add
   context to it or block it, `SessionStart`, which fires before the first
@@ -28,7 +28,9 @@ forward.
   finish and can refuse to let it end, `StopFailure`, which fires instead of `Stop` when a
   turn ends on an error from the model's API, `PreCompact`, which fires just before the session
   is summarized and can object to it, `PostCompact`, which fires once it has
-  been, with the summary, and `SessionEnd`, which fires when a session ends; plans are to support the full
+  been, with the summary, `SessionEnd`, which fires when a session ends, and
+  `InstructionsLoaded`, which fires when a context file is loaded into
+  context, for observability only; plans are to support the full
   gamut, so please let us know which hooks you'd like to see next
 - Hooks run in parallel for speed, but their results compose in config order
   for determinism
@@ -778,6 +780,45 @@ evaluate, is shown to you as a warning.
 Hooks are keyed by event name. Only `command` is required, and you can omit
 `matcher` to match all tools.
 
+### InstructionsLoaded
+
+This hook fires when a context file is loaded into the system prompt or given
+on demand: at session start for the files already in the prompt, again after a
+summary, for a subdirectory's files when a tool touches a file there, or for a
+file a context file imports with `@path`. As in Claude Code, the hooks have no
+decision control: they cannot block or modify the load, their output is
+ignored, and the turn does not wait for them. They run asynchronously, for
+observability.
+
+**Matched against**: the load reason, one of `"session_start"`,
+`"nested_traversal"`, `"include"` or `"compact"`.
+
+**Input**: the common fields, `file_path`, the absolute path of the file
+loaded; `memory_type`, `"User"` for the user's global context files, `"Local"`
+for a `.local.md` file, `"Project"` for the rest; `load_reason`, the reason
+the file was loaded; `trigger_file_path`, for a `nested_traversal` load, the
+file whose access brought the context file in; and `parent_file_path`, for an
+`include` load, the file that imported the one loaded.
+`KLASH_INSTRUCTIONS_LOAD_REASON` holds the load reason.
+
+**Blocking**: none. The load has already happened; a hook that fails is
+logged.
+
+**Scope**: only the **top-level agent**'s context files.
+
+```jsonc
+{
+  "hooks": {
+    "InstructionsLoaded": [
+      { "command": "jq -r .file_path >> ~/.local/share/klash/loaded-files.log" }
+    ]
+  }
+}
+```
+
+Hooks are keyed by event name. Only `command` is required, and you can omit
+`matcher` to match every load reason.
+
 ## Building Hooks
 
 When a hook fires, Klash:
@@ -831,6 +872,7 @@ The available environment variables are:
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, the same as the `source` field in the payload. |
 | `KLASH_ENV_FILE`             | `SessionStart` only: the session's env file, also as `CLAUDE_ENV_FILE`, Claude Code's name. `export` lines added to it run before each of the session's `bash` commands. |
 | `KLASH_SESSION_END_REASON`   | `SessionEnd` only: `clear`, `other` or `prompt_input_exit`, the same as the `reason` field in the payload. |
+| `KLASH_INSTRUCTIONS_LOAD_REASON` | `InstructionsLoaded` only: `session_start`, `nested_traversal`, `include` or `compact`, the same as the `load_reason` field in the payload. |
 
 Klash was called Crush, so every `KLASH_` variable above is also set under its
 `CRUSH_` name (`CRUSH_EVENT`, `CRUSH_TOOL_NAME`, and so on), and `CRUSH=1`
@@ -1476,6 +1518,38 @@ Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
   // string. The instructions to fold into the summary, as in Claude Code.
   // Klash has none of its own, so this is always the empty string.
   "custom_instructions": "",
+}
+```
+
+### Stdin payload — InstructionsLoaded
+
+Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
+
+```jsonc
+{
+  // ...common fields...
+
+  // string. The absolute path of the context file loaded.
+  "file_path": "/home/user/project/AGENTS.md",
+
+  // string. "User" for the user's global context files, "Local" for a
+  // .local.md file, "Project" for the rest. Never "Managed".
+  "memory_type": "Project",
+
+  // string. "session_start" for the files in the system prompt at session
+  // start, "compact" for the re-load after a summary, "nested_traversal"
+  // for a subdirectory's files brought in by a tool call, "include" for a
+  // file a context file imported with @path. A matcher on an
+  // InstructionsLoaded hook is tested against this.
+  "load_reason": "session_start",
+
+  // string, for a nested_traversal load only. The file whose access
+  // brought the context file in.
+  "trigger_file_path": "/home/user/project/sub/main.go",
+
+  // string, for an include load only. The file that imported the one
+  // loaded.
+  "parent_file_path": "/home/user/project/AGENTS.md",
 }
 ```
 

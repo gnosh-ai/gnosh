@@ -47,6 +47,11 @@ const (
 	// EventSessionEnd fires when a session ends; its matcher is tested
 	// against the reason.
 	EventSessionEnd = config.EventSessionEnd
+	// EventInstructionsLoaded fires when a context file is loaded into the
+	// system prompt or given on demand; its matcher is tested against the
+	// load reason. It has no decision control: its output is ignored and
+	// the load does not wait for it.
+	EventInstructionsLoaded = config.EventInstructionsLoaded
 )
 
 // HaltExitCode is the exit code that halts the whole turn. 2 blocks the

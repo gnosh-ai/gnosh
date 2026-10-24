@@ -189,6 +189,11 @@ type coordinator struct {
 	// hooks, so sharing it with them changes nothing.
 	sessionStarts *sessionStartState
 
+	// instructionsLoaded is what the InstructionsLoaded hooks of the
+	// agents the coordinator builds know of the sessions the process has
+	// sent context files to: one for all of them, as sessionStarts is.
+	instructionsLoaded *instructionsLoadedState
+
 	// subdirectoryGiven records the subdirectories' context files each
 	// session has been given since its last summary; see
 	// subdirectoryContext. Nil, nothing is given.
@@ -236,23 +241,24 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 	skillTracker := skills.NewTracker(activeSkills)
 
 	c := &coordinator{
-		cfg:           opts.Config,
-		sessions:      opts.Sessions,
-		messages:      opts.Messages,
-		permissions:   opts.Permissions,
-		questions:     opts.Questions,
-		history:       opts.History,
-		filetracker:   opts.FileTracker,
-		lspManager:    opts.LSPManager,
-		notify:        opts.Notify,
-		runComplete:   opts.RunComplete,
-		agents:        make(map[string]SessionAgent),
-		sessionStarts: newSessionStartState(),
-		allSkills:     allSkills,
-		activeSkills:  activeSkills,
-		skillTracker:  skillTracker,
-		interactive:   opts.Interactive,
-		named:         newNamedChanges(),
+		cfg:                opts.Config,
+		sessions:           opts.Sessions,
+		messages:           opts.Messages,
+		permissions:        opts.Permissions,
+		questions:          opts.Questions,
+		history:            opts.History,
+		filetracker:        opts.FileTracker,
+		lspManager:         opts.LSPManager,
+		notify:             opts.Notify,
+		runComplete:        opts.RunComplete,
+		agents:             make(map[string]SessionAgent),
+		sessionStarts:      newSessionStartState(),
+		instructionsLoaded: newInstructionsLoadedState(),
+		allSkills:          allSkills,
+		activeSkills:       activeSkills,
+		skillTracker:       skillTracker,
+		interactive:        opts.Interactive,
+		named:              newNamedChanges(),
 
 		subdirectoryGiven: map[string]bool{},
 	}
@@ -339,10 +345,13 @@ func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePa
 	}
 	// A summary leaves behind what the session was given before it.
 	var summary string
+	isSubAgentSession := false
 	if sess, err := c.sessions.Get(ctx, sessionID); err == nil {
 		summary = sess.SummaryMessageID
+		isSubAgentSession = sess.ParentSessionID != ""
 	}
 	var b strings.Builder
+	var newFiles []promptContextFile
 	c.subdirectoryMu.Lock()
 	for _, f := range files {
 		key := sessionID + "\x00" + summary + "\x00" + f.Path
@@ -350,13 +359,69 @@ func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePa
 			continue
 		}
 		c.subdirectoryGiven[key] = true
+		newFiles = append(newFiles, promptContextFile{path: f.Path, parent: f.Parent})
 		fmt.Fprintf(&b, "<file path=\"%s\">\n%s\n</file>\n", f.Path, onDemandContextFile(f))
 	}
 	c.subdirectoryMu.Unlock()
+	// Fire the InstructionsLoaded hooks for the new files, as in Claude
+	// Code: load_reason "nested_traversal", trigger_file_path the file
+	// the tool touched. They run asynchronously. Sub-agent sessions do
+	// not fire the hooks, as the session-start path does not.
+	if len(newFiles) > 0 && !isSubAgentSession {
+		c.fireInstructionsLoadedForSubdirectory(sessionID, newFiles, filePath)
+	}
 	if b.Len() == 0 {
 		return ""
 	}
 	return "\n<project_context>\nThis file's directory has context files of its own. Follow their instructions for the files there:\n" + b.String() + "</project_context>\n"
+}
+
+// fireInstructionsLoadedForSubdirectory runs the InstructionsLoaded hooks
+// for a subdirectory's context files just given to a session:
+// load_reason "nested_traversal" (or "include" for a file one of them
+// imports), trigger_file_path the file the tool touched. It runs in a
+// goroutine on a background context: the turn does not wait for it, and
+// a turn cancellation does not kill the hooks.
+func (c *coordinator) fireInstructionsLoadedForSubdirectory(sessionID string, files []promptContextFile, triggerFilePath string) {
+	hookCfgs := c.cfg.Config().Hooks[hooks.EventInstructionsLoaded]
+	if len(hookCfgs) == 0 {
+		return
+	}
+	workingDir := c.cfg.WorkingDir()
+	if workingDir == "" {
+		return
+	}
+	// Resolve paths to absolute before the goroutine so it does no file IO.
+	for i := range files {
+		if !filepath.IsAbs(files[i].path) {
+			files[i].path = filepath.Join(workingDir, files[i].path)
+		}
+		if files[i].parent != "" && !filepath.IsAbs(files[i].parent) {
+			files[i].parent = filepath.Join(workingDir, files[i].parent)
+		}
+	}
+	go func() {
+		runner := hooks.NewRunner(hookCfgs, workingDir, workingDir)
+		for _, f := range files {
+			memoryType := memoryTypeFor(f.path, f.global)
+			reason := hooks.InstructionsLoadedNestedTraversal
+			if f.parent != "" {
+				reason = hooks.InstructionsLoadedInclude
+			}
+			_, err := runner.RunInstructionsLoaded(
+				context.Background(), sessionID, f.path, memoryType, reason,
+				triggerFilePath, f.parent,
+			)
+			if err != nil {
+				slog.Warn("InstructionsLoaded hook execution error",
+					"session_id", sessionID,
+					"file", f.path,
+					"reason", reason,
+					"error", err,
+				)
+			}
+		}
+	}()
 }
 
 // onDemandContextFile cuts a context file over the on-demand limit to
@@ -936,6 +1001,7 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		AgentType:            agent.ID,
 		PermissionMode:       c.permissionMode,
 		SessionStarts:        c.sessionStarts,
+		InstructionsLoaded:   c.instructionsLoaded,
 		DisableAutoSummarize: c.cfg.Config().Options.DisableAutoSummarize,
 		IsYolo:               c.permissions.SkipRequests(),
 		Sessions:             c.sessions,
