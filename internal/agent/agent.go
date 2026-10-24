@@ -1792,6 +1792,12 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel string,
 		}
 	}
 
+	// The summary took a while: read the session again, so that a name it
+	// was given meanwhile (/rename, the sessions dialog) is not put back.
+	currentSession, err = a.sessions.Get(genCtx, sessionID)
+	if err != nil {
+		return err
+	}
 	a.updateSessionUsage(largeModel, &currentSession, resp.TotalUsage, openrouterCost, false)
 
 	// Just in case, get just the last usage info.
@@ -2231,6 +2237,15 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 		return
 	}
 
+	// The title the session has now. A name it is given while this runs
+	// (/rename, the sessions dialog) is kept instead of the one made here.
+	sess, getErr := a.sessions.Get(context.WithoutCancel(ctx), sessionID)
+	if getErr != nil {
+		slog.Error("Failed to read the session to title", "error", getErr)
+		return
+	}
+	untitled := sess.Title
+
 	// Ensure the session always gets a title even if every path below
 	// fails or the context is cancelled before we finish.
 	var titleSaved bool
@@ -2238,6 +2253,9 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 		if !titleSaved {
 			fallbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
+			if _, renamed := a.renamedFrom(fallbackCtx, sessionID, untitled); renamed {
+				return
+			}
 			if err := a.sessions.Rename(fallbackCtx, sessionID, titleFromPrompt(userPrompt)); err != nil {
 				slog.Error("Failed to save fallback session title", "error", err)
 			}
@@ -2358,6 +2376,10 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 	promptTokens := contextTokens(resp.TotalUsage)
 	completionTokens := resp.TotalUsage.OutputTokens
 
+	if name, renamed := a.renamedFrom(ctx, sessionID, untitled); renamed {
+		title = name
+	}
+
 	// Atomically update only title and usage fields to avoid overriding other
 	// concurrent session updates.
 	saveErr := a.sessions.UpdateTitleAndUsage(ctx, sessionID, title, promptTokens, completionTokens, cost)
@@ -2366,6 +2388,16 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 		return
 	}
 	titleSaved = true
+}
+
+// renamedFrom reports the title sessionID has now when it is no longer
+// title: the session was named while its title was being made.
+func (a *sessionAgent) renamedFrom(ctx context.Context, sessionID, title string) (string, bool) {
+	sess, err := a.sessions.Get(ctx, sessionID)
+	if err != nil || sess.Title == title {
+		return "", false
+	}
+	return sess.Title, true
 }
 
 func (a *sessionAgent) openrouterCost(metadata fantasy.ProviderMetadata) *float64 {
