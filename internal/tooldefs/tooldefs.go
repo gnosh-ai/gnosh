@@ -21,6 +21,7 @@ const MCPPrefix = "mcp_"
 // value from Names so a caller cannot reach in and change it.
 var names = []string{
 	"agent",
+	"artifact",
 	"bash",
 	"gnokey",
 	"klash_info",
