@@ -497,8 +497,8 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	if c.hasSession {
 		commands = append(commands, NewCommandItem(c.com.Styles, "summarize", "Summarize Session", "", ActionSummarize{SessionID: c.sessionID}).WithAliases("compact"))
 		commands = append(commands, NewCommandItem(c.com.Styles, "rename_session", "Rename Session", "", ActionRenameSession{SessionID: c.sessionID}).
-			WithAliases("rename").
-			WithDescription("Name this session: type rename and the name"))
+			WithAliases("rename", "name").
+			WithDescription("Type rename and a name, or rename alone for one made from the conversation"))
 	}
 
 	// Add reasoning toggle for models that support it

@@ -166,6 +166,12 @@ type ShellCommandResponse struct {
 	ExitCode int    `json:"exit_code"`
 }
 
+// SessionNameResponse is the name a session was given from its
+// conversation.
+type SessionNameResponse struct {
+	Name string `json:"name"`
+}
+
 // AgentSession represents a session with its busy status.
 type AgentSession struct {
 	Session

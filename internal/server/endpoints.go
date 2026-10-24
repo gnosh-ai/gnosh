@@ -400,6 +400,16 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Fails(404, 500).
 			Handle(c.handlePostWorkspaceAgentSessionSummarize),
 
+		apigen.Post("/v1/workspaces/{id}/agent/sessions/{sid}/name").
+			Summary("Name session from its conversation").
+			Description("Names the session from the end of its conversation, as Claude Code's /rename does with no name, and returns the name.").
+			Tags("agent").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Responds(proto.SessionNameResponse{}).
+			Fails(404, 500).
+			Handle(c.handlePostWorkspaceAgentSessionName),
+
 		apigen.Post("/v1/workspaces/{id}/agent/sessions/{sid}/shell").
 			Summary("Run shell command").
 			Description("Runs a shell command in the workspace on behalf of the session.").

@@ -65,6 +65,13 @@ func (w *AppWorkspace) RenameSession(ctx context.Context, sessionID, title strin
 	return w.app.Sessions.Rename(ctx, sessionID, title)
 }
 
+func (w *AppWorkspace) GenerateSessionName(ctx context.Context, sessionID string) (string, error) {
+	if w.app.AgentCoordinator == nil {
+		return "", errors.New("agent coordinator not initialized")
+	}
+	return w.app.AgentCoordinator.GenerateSessionName(ctx, sessionID)
+}
+
 func (w *AppWorkspace) DeleteSession(ctx context.Context, sessionID string) error {
 	return w.app.Sessions.Delete(ctx, sessionID)
 }
