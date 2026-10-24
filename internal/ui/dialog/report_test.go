@@ -14,10 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The /context dialog shows the report rendered as the chat renders
-// Markdown, scrolls a line or a page at a time, never past its end, and
-// closes on Escape.
-func TestContextUsageDialog(t *testing.T) {
+// The report dialog, which /context and /hooks open, shows its report
+// rendered as the chat renders Markdown, scrolls a line or a page at a
+// time, never past its end, and closes on Escape.
+func TestReportDialog(t *testing.T) {
 	t.Parallel()
 
 	sty := styles.CharmtonePantera()
@@ -26,7 +26,7 @@ func TestContextUsageDialog(t *testing.T) {
 	for i := range 60 {
 		fmt.Fprintf(&report, "line %d\n\n", i)
 	}
-	d := NewContextUsage(&common.Common{Styles: &sty}, report.String())
+	d := NewReport(&common.Common{Styles: &sty}, "Context Usage", report.String())
 	rendered := ansi.Strip(d.rendered(80))
 	require.Contains(t, rendered, "Free space")
 	require.NotContains(t, rendered, "|----------|", "the table is drawn, not shown as Markdown")

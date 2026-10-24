@@ -511,6 +511,9 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	commands = append(commands, NewCommandItem(c.com.Styles, "context_usage", "Context Usage", "", ActionContextUsage{}).
 		WithAliases("context").
 		WithDescription("What fills the context window, as Claude Code's /context shows it"))
+	commands = append(commands, NewCommandItem(c.com.Styles, "hooks_report", "Hooks", "", ActionHooksReport{}).
+		WithAliases("hooks").
+		WithDescription("The hooks that run, by event, as Claude Code's /hooks lists them"))
 
 	// Only show compact command if there's an active session
 	if c.hasSession {

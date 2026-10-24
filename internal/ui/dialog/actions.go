@@ -103,6 +103,9 @@ type (
 	// ActionContextUsage shows what fills the context window, as Claude
 	// Code's /context does.
 	ActionContextUsage struct{}
+	// ActionHooksReport lists the hooks that run, as Claude Code's /hooks
+	// does.
+	ActionHooksReport struct{}
 	// ActionSummarize summarizes the session, with Instructions the text
 	// given after /compact, as Claude Code's /compact takes them.
 	ActionSummarize struct {

@@ -1036,7 +1036,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case contextReportMsg:
-		m.dialog.OpenDialog(dialog.NewContextUsage(m.com, msg.report))
+		m.dialog.OpenDialog(dialog.NewReport(m.com, "Context Usage", msg.report))
 	case loadSessionMsg:
 		if m.forceCompactMode {
 			m.isCompact = true
@@ -2364,6 +2364,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionContextUsage:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.contextReport())
+	case dialog.ActionHooksReport:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		m.openHooksReport()
 	case dialog.ActionSummarize:
 		if m.isAgentBusy() {
 			cmds = append(cmds, util.ReportWarn("Agent is busy, please wait before summarizing session..."))
@@ -5466,6 +5469,10 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	if session.ParseContextCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.contextReport()
 	}
+	if session.ParseHooksCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		m.openHooksReport()
+		return nil
+	}
 	return m.sendMessageInternal(content, false, attachments...)
 }
 
@@ -5500,6 +5507,16 @@ func (m *UI) renameSession(name string) tea.Cmd {
 		}
 		return util.NewInfoMsg("Session renamed to: " + name)
 	}
+}
+
+// openHooksReport shows the hooks that run, as Claude Code's /hooks lists
+// them.
+func (m *UI) openHooksReport() {
+	var hooks map[string][]config.HookConfig
+	if cfg := m.com.Config(); cfg != nil {
+		hooks = cfg.Hooks
+	}
+	m.dialog.OpenDialog(dialog.NewReport(m.com, "Hooks", config.HooksReport(hooks)))
 }
 
 // contextReportMsg carries the report /context shows.

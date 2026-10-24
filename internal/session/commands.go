@@ -37,6 +37,13 @@ func ParseContextCommand(line string) bool {
 	return ok
 }
 
+// ParseHooksCommand reports whether line is Claude Code's /hooks command,
+// with or without the slash. What follows it is not used.
+func ParseHooksCommand(line string) bool {
+	_, ok := parseCommand(line, "hooks")
+	return ok
+}
+
 // ParseCompactCommand reports whether line is Claude Code's /compact
 // command, with or without the slash, and the instructions after it for
 // the summary ("" when none).

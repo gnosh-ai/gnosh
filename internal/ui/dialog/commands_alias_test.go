@@ -34,6 +34,7 @@ func TestPaletteFindsClaudeCodeSlashNames(t *testing.T) {
 		"continue": "Sessions",
 		"compact":  "Summarize Session",
 		"context":  "Context Usage",
+		"hooks":    "Hooks",
 		"rename":   "Rename Session",
 		"name":     "Rename Session",
 		"clear":    "New Session",
@@ -161,4 +162,21 @@ func TestPaletteContextOpensTheReport(t *testing.T) {
 		}
 		require.Equal(t, ActionContextUsage{}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}), "typed %q", typed)
 	}
+}
+
+// Claude Code's /hooks lists the hooks.
+func TestPaletteHooksOpensTheReport(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	c, err := NewCommands(com, "", false, false, false, nil, nil)
+	require.NoError(t, err)
+	for _, r := range "hooks" {
+		c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	require.Equal(t, ActionHooksReport{}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
 }

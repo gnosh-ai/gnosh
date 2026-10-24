@@ -10,18 +10,19 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// ContextUsageID is the identifier for the context usage dialog.
-const ContextUsageID = "context"
+// ReportID is the identifier for the report dialog.
+const ReportID = "report"
 
-// contextUsageMaxWidth is the widest the dialog draws: the report's
-// tables read well at it, and wider only spreads them out.
-const contextUsageMaxWidth = 90
+// reportMaxWidth is the widest the dialog draws: a report's tables read
+// well at it, and wider only spreads them out.
+const reportMaxWidth = 90
 
-// ContextUsage shows what fills the context window, as Claude Code's
-// /context does: the report rendered as Markdown, scrolled with the arrow
-// and page keys or the mouse wheel.
-type ContextUsage struct {
+// Report shows a report in Markdown, as Claude Code shows what /context
+// and /hooks find: rendered as the chat renders Markdown, scrolled with
+// the arrow and page keys or the mouse wheel.
+type Report struct {
 	com    *common.Common
+	title  string
 	report string
 	help   help.Model
 	// offset is the first line shown, and lines how many the last Draw
@@ -32,12 +33,11 @@ type ContextUsage struct {
 	}
 }
 
-var _ Dialog = (*ContextUsage)(nil)
+var _ Dialog = (*Report)(nil)
 
-// NewContextUsage creates a dialog showing report, Markdown as
-// agent.ContextUsage writes it.
-func NewContextUsage(com *common.Common, report string) *ContextUsage {
-	d := &ContextUsage{com: com, report: report}
+// NewReport creates a dialog titled title showing report, Markdown.
+func NewReport(com *common.Common, title, report string) *Report {
+	d := &Report{com: com, title: title, report: report}
 	d.help = help.New()
 	d.help.Styles = com.Styles.DialogHelpStyles()
 	d.keyMap.Up = key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up"))
@@ -49,12 +49,12 @@ func NewContextUsage(com *common.Common, report string) *ContextUsage {
 }
 
 // ID implements [Dialog].
-func (*ContextUsage) ID() string {
-	return ContextUsageID
+func (*Report) ID() string {
+	return ReportID
 }
 
 // HandleMsg implements [Dialog].
-func (d *ContextUsage) HandleMsg(msg tea.Msg) Action {
+func (d *Report) HandleMsg(msg tea.Msg) Action {
 	switch msg := msg.(type) {
 	case common.CoalescedWheelMsg:
 		d.scroll(int(msg.DeltaY))
@@ -76,16 +76,16 @@ func (d *ContextUsage) HandleMsg(msg tea.Msg) Action {
 }
 
 // scroll moves the first line shown by n; Draw keeps it in range.
-func (d *ContextUsage) scroll(n int) {
+func (d *Report) scroll(n int) {
 	d.offset = max(0, d.offset+n)
 }
 
 // Draw implements [Dialog].
-func (d *ContextUsage) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
+func (d *Report) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	sty := d.com.Styles
-	width := max(20, min(area.Dx(), contextUsageMaxWidth))
+	width := max(20, min(area.Dx(), reportMaxWidth))
 	rc := NewRenderContext(sty, width)
-	rc.Title = "Context Usage"
+	rc.Title = d.title
 	innerWidth := width - sty.Dialog.View.GetHorizontalFrameSize() - 1 // the scrollbar
 	rc.Help = renderDialogHelp(sty, &d.help, d, innerWidth)
 
@@ -103,7 +103,7 @@ func (d *ContextUsage) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 // rendered is the report as the chat renders Markdown, at width; the
 // Markdown as written when the renderer fails.
-func (d *ContextUsage) rendered(width int) string {
+func (d *Report) rendered(width int) string {
 	r := common.MarkdownRenderer(d.com.Styles, width)
 	mu := common.LockMarkdownRenderer(r)
 	mu.Lock()
@@ -116,11 +116,11 @@ func (d *ContextUsage) rendered(width int) string {
 }
 
 // ShortHelp implements [help.KeyMap].
-func (d *ContextUsage) ShortHelp() []key.Binding {
+func (d *Report) ShortHelp() []key.Binding {
 	return []key.Binding{d.keyMap.Up, d.keyMap.Down, d.keyMap.PageDown, d.keyMap.Close}
 }
 
 // FullHelp implements [help.KeyMap].
-func (d *ContextUsage) FullHelp() [][]key.Binding {
+func (d *Report) FullHelp() [][]key.Binding {
 	return [][]key.Binding{{d.keyMap.Up, d.keyMap.Down, d.keyMap.PageUp, d.keyMap.PageDown, d.keyMap.Close}}
 }

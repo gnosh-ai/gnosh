@@ -81,3 +81,15 @@ func TestParseContextCommand(t *testing.T) {
 		require.False(t, ParseContextCommand(line), line)
 	}
 }
+
+// /hooks is read as the other commands are; what follows it is not used.
+func TestParseHooksCommand(t *testing.T) {
+	t.Parallel()
+
+	for _, line := range []string{"/hooks", "hooks", " /Hooks list "} {
+		require.True(t, ParseHooksCommand(line), line)
+	}
+	for _, line := range []string{"/hook", "/hooksy", "show the hooks", ""} {
+		require.False(t, ParseHooksCommand(line), line)
+	}
+}

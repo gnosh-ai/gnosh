@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
@@ -43,11 +44,32 @@ func TestContextReportOpensTheDialog(t *testing.T) {
 	require.Equal(t, []string{"", "s1"}, ws.asked)
 
 	_, _ = u.Update(msg)
-	require.True(t, u.dialog.ContainsDialog(dialog.ContextUsageID))
+	require.True(t, u.dialog.ContainsDialog(dialog.ReportID))
 
 	ws.err = errors.New("no model configured")
 	info, ok := u.contextReport()().(util.InfoMsg)
 	require.True(t, ok)
 	require.Equal(t, util.InfoTypeError, info.Type)
 	require.Contains(t, info.Msg, "no model configured")
+}
+
+// hooksWorkspace has a config with hooks.
+type hooksWorkspace struct {
+	workspace.Workspace
+	cfg *config.Config
+}
+
+func (w *hooksWorkspace) Config() *config.Config { return w.cfg }
+
+// /hooks opens the report dialog on the configured hooks.
+func TestOpenHooksReport(t *testing.T) {
+	t.Parallel()
+
+	u := newTestUI()
+	u.dialog = dialog.NewOverlay()
+	u.com.Workspace = &hooksWorkspace{cfg: &config.Config{Hooks: map[string][]config.HookConfig{
+		config.EventStop: {{Command: "stop-check.sh"}},
+	}}}
+	u.openHooksReport()
+	require.True(t, u.dialog.ContainsDialog(dialog.ReportID))
 }
