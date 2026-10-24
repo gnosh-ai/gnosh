@@ -9,7 +9,7 @@ logo in the terminal the same shape.
     python3 scripts/brand.py
 
 writes banner.svg, divider-dark.svg, divider-light.svg, signoff.svg,
-avatar.svg and og.html. The PNGs are screenshots of the last two in
+avatar.svg, favicon.svg and og.html. The PNGs are screenshots of the last two in
 headless Chromium:
 
     chromium --headless --hide-scrollbars --window-size=1280,640 \\
@@ -388,6 +388,18 @@ def avatar(S=512, p=60):
     return "\n".join(o)
 
 
+def favicon(S=64, p=10):
+    """The tab icon: the K on a dark rounded square, readable on light tabs too."""
+    on = pixels(letter_rows("K"))
+    x0, y0 = (S - 4 * p) / 2, (S - 5 * p) / 2
+    o = [svg_open(S, S, "Klash")]
+    o.append("<defs>" + word_defs(x0, y0, 4 * p, 5 * p) + "</defs>")
+    o.append(f'<rect width="{S}" height="{S}" rx="{S * 0.22:g}" fill="{NIGHT}"/>')
+    o.append(f'<path d="{runs_path(on, x0, y0, p)}" fill="url(#word)"/>')
+    o.append("</svg>")
+    return "".join(o)
+
+
 OG_HTML = Template("""<!doctype html>
 <html><head><meta charset="utf-8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -460,6 +472,7 @@ def main():
         "divider-light.svg": divider(light=True),
         "signoff.svg": signoff(),
         "avatar.svg": avatar(),
+        "favicon.svg": favicon(),
         "og.html": og_html(),
     }
     for name, body in files.items():
