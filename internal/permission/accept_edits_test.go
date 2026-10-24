@@ -194,3 +194,33 @@ func TestGrantsCoverFilesWhereTheyReallyAre(t *testing.T) {
 	require.True(t, rename(filepath.Join(project, "a.go"), filepath.Join(project, "b.go")))
 	require.False(t, rename(filepath.Join(project, "a.go"), filepath.Join(project, ".git", "config")), "a rename that reaches a protected file")
 }
+
+// The request put to the user says whether a grant for the session would
+// cover it: not for a protected file, a link out of the project, or a
+// hook's question, which are asked about every time.
+func TestRequestsSayWhetherASessionGrantCoversThem(t *testing.T) {
+	t.Parallel()
+
+	project, outside := t.TempDir(), t.TempDir()
+	link := filepath.Join(project, "notes.txt")
+	require.NoError(t, os.Symlink(filepath.Join(outside, "notes.txt"), link))
+	s := New(Options{WorkingDir: project})
+	events := s.Subscribe(t.Context())
+
+	alwaysAsks := func(ctx context.Context, path string) bool {
+		t.Helper()
+		cancelled, cancel := context.WithCancel(ctx)
+		go func() {
+			_, _ = s.Request(cancelled, CreatePermissionRequest{
+				SessionID: "s1", ToolCallID: "call-1", ToolName: "write", Action: "write", Path: project, FilePath: path,
+			})
+		}()
+		req := (<-events).Payload
+		cancel()
+		return req.AlwaysAsks
+	}
+	require.False(t, alwaysAsks(t.Context(), filepath.Join(project, "a.go")))
+	require.True(t, alwaysAsks(t.Context(), filepath.Join(project, ".git", "config")))
+	require.True(t, alwaysAsks(t.Context(), link))
+	require.True(t, alwaysAsks(WithHookAsk(t.Context(), "call-1"), filepath.Join(project, "a.go")))
+}

@@ -181,6 +181,9 @@ func NewPermissions(com *common.Common, perm permission.PermissionRequest, opts 
 	h.Styles = com.Styles.DialogHelpStyles()
 
 	km := defaultPermissionsKeyMap()
+	// A grant for the session would not cover this request, so it is not
+	// offered: the next such request is asked about again.
+	km.AllowSession.SetEnabled(!perm.AlwaysAsks)
 
 	// Configure viewport with matching keybindings.
 	vp := viewport.New()
@@ -239,10 +242,9 @@ func (p *Permissions) HandleMsg(msg tea.Msg) Action {
 			// Escape denies the permission request.
 			return p.respond(PermissionDeny)
 		case key.Matches(msg, p.keyMap.Right), key.Matches(msg, p.keyMap.Tab):
-			p.selectedOption = (p.selectedOption + 1) % 3
+			p.move(1)
 		case key.Matches(msg, p.keyMap.Left):
-			// Add 2 instead of subtracting 1 to avoid negative modulo.
-			p.selectedOption = (p.selectedOption + 2) % 3
+			p.move(-1)
 		case key.Matches(msg, p.keyMap.Select):
 			return p.selectCurrentOption()
 		case key.Matches(msg, p.keyMap.Allow):
@@ -299,6 +301,16 @@ func (p *Permissions) HandleMsg(msg tea.Msg) Action {
 	}
 
 	return nil
+}
+
+// move selects the option step places along, wrapping around, past
+// "Allow for Session" when it is not offered.
+func (p *Permissions) move(step int) {
+	// Add 3 to keep the modulo of a step back positive.
+	p.selectedOption = (p.selectedOption + step + 3) % 3
+	if p.selectedOption == 1 && !p.keyMap.AllowSession.Enabled() {
+		p.selectedOption = (p.selectedOption + step + 3) % 3
+	}
 }
 
 func (p *Permissions) selectCurrentOption() tea.Msg {
@@ -794,11 +806,11 @@ func (p *Permissions) renderContentPanel(content string, width int) string {
 }
 
 func (p *Permissions) renderButtons(contentWidth int, fullscreen bool) string {
-	buttons := []common.ButtonOpts{
-		{Text: "Allow", UnderlineIndex: 0, Selected: p.selectedOption == 0},
-		{Text: "Allow for Session", UnderlineIndex: 10, Selected: p.selectedOption == 1},
-		{Text: "Deny", UnderlineIndex: 0, Selected: p.selectedOption == 2},
+	buttons := []common.ButtonOpts{{Text: "Allow", UnderlineIndex: 0, Selected: p.selectedOption == 0}}
+	if p.keyMap.AllowSession.Enabled() {
+		buttons = append(buttons, common.ButtonOpts{Text: "Allow for Session", UnderlineIndex: 10, Selected: p.selectedOption == 1})
 	}
+	buttons = append(buttons, common.ButtonOpts{Text: "Deny", UnderlineIndex: 0, Selected: p.selectedOption == 2})
 
 	content := common.ButtonGroup(p.com.Styles, buttons, "  ")
 

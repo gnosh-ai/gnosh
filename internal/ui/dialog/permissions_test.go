@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -95,4 +96,25 @@ func TestPermissions_EscapeDenies(t *testing.T) {
 	resp, ok := action.(ActionPermissionResponse)
 	require.True(t, ok)
 	require.Equal(t, PermissionDeny, resp.Action)
+}
+
+// A request a grant for the session would not cover, which is asked about
+// every time, gets no "Allow for Session": not as a button, not by its
+// key, and not on the way from Allow to Deny.
+func TestPermissions_NoSessionGrantForARequestAskedEveryTime(t *testing.T) {
+	t.Parallel()
+
+	s := styles.CharmtonePantera()
+	p := NewPermissions(&common.Common{Styles: &s}, permission.PermissionRequest{
+		ID: "perm-test", ToolCallID: "tool-call-test", ToolName: "write", AlwaysAsks: true,
+	})
+	require.NotContains(t, ansi.Strip(p.renderButtons(120, false)), "Allow for Session")
+	require.Nil(t, p.HandleMsg(keyMsg('s')), "s grants nothing")
+
+	p.HandleMsg(tea.KeyPressMsg{Code: tea.KeyTab})
+	require.Equal(t, 2, p.selectedOption, "from Allow straight to Deny")
+	p.HandleMsg(keyMsg('h'))
+	require.Equal(t, 0, p.selectedOption, "and back")
+
+	require.Contains(t, ansi.Strip(newTestPermissions(t).renderButtons(120, false)), "Allow for Session", "offered otherwise")
 }

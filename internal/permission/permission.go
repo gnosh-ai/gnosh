@@ -108,6 +108,11 @@ type PermissionRequest struct {
 	Action      string `json:"action"`
 	Params      any    `json:"params"`
 	Path        string `json:"path"`
+	// AlwaysAsks is set for a request a grant for the session would not
+	// cover (a protected file, or a link out of the granted directory),
+	// which is asked about every time: the dialog offers no "Allow for
+	// Session" for it.
+	AlwaysAsks bool `json:"always_asks,omitempty"`
 }
 
 type Service interface {
@@ -328,13 +333,15 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 
 	// A grant for the session covers a file only where it really is: a
 	// link in the project to a file outside is not in the project.
+	coverable := !protected && fileIn(opts.FilePath, permission.Path) &&
+		!slices.ContainsFunc(opts.FilePaths, func(f string) bool { return !fileIn(f, permission.Path) })
+	permission.AlwaysAsks = !coverable
 	if _, ok := s.sessionPermissions.Get(PermissionKey{
 		SessionID: permission.SessionID,
 		ToolName:  permission.ToolName,
 		Action:    permission.Action,
 		Path:      permission.Path,
-	}); ok && !protected && fileIn(opts.FilePath, permission.Path) &&
-		!slices.ContainsFunc(opts.FilePaths, func(f string) bool { return !fileIn(f, permission.Path) }) {
+	}); ok && coverable {
 		s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{
 			SessionID:  opts.SessionID,
 			ToolCallID: opts.ToolCallID,
@@ -355,7 +362,10 @@ func (s *permissionService) ask(ctx context.Context, opts CreatePermissionReques
 		SessionID:  opts.SessionID,
 		ToolCallID: opts.ToolCallID,
 	})
-	return s.wait(ctx, s.newRequest(opts, opts.Path))
+	// A hook's question comes every time, whatever was granted before.
+	req := s.newRequest(opts, opts.Path)
+	req.AlwaysAsks = true
+	return s.wait(ctx, req)
 }
 
 // newRequest is the request opts make, about dir.
