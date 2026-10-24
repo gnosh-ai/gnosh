@@ -67,6 +67,7 @@ func init() {
 	addSystemPromptFlags(rootCmd)
 	addPermissionModeFlag(rootCmd)
 	addAddDirFlag(rootCmd)
+	addMCPConfigFlags(rootCmd)
 	rootCmd.PersistentFlags().StringSlice("channels", nil, "MCP servers to enable as channels (repeatable), e.g. --channels server:webhook")
 	_ = rootCmd.PersistentFlags().MarkHidden("channels")
 	addSessionFlags(rootCmd)
@@ -422,6 +423,10 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	if err != nil {
 		return nil, nil, err
 	}
+	mcpServers, strictMCP, err := mcpConfigFlags(cmd)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	store, err := config.Init(cwd, dataDir, debug)
 	if err != nil {
@@ -435,9 +440,11 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	store.Overrides().AppendSystemPrompt = appendSystemPrompt
 	applyPermissionMode(store.Overrides(), permissionMode)
 	store.Overrides().AddedDirs = addedDirs
-	if len(allowedTools) > 0 || len(disallowedTools) > 0 {
+	if len(allowedTools) > 0 || len(disallowedTools) > 0 || len(mcpServers) > 0 || strictMCP {
 		store.Overrides().AllowedTools = allowedTools
 		store.Overrides().DisabledTools = disallowedTools
+		store.Overrides().MCP = mcpServers
+		store.Overrides().StrictMCP = strictMCP
 		store.SetupAgents()
 	}
 
@@ -550,6 +557,11 @@ func connectToServer(cmd *cobra.Command) (*client.Client, *proto.Workspace, func
 		return nil, nil, nil, err
 	} else if len(dirs) > 0 {
 		return nil, nil, nil, fmt.Errorf("--add-dir cannot reach the server's permissions with %s=1 yet", "KLASH_CLIENT_SERVER")
+	}
+	if servers, strict, err := mcpConfigFlags(cmd); err != nil {
+		return nil, nil, nil, err
+	} else if len(servers) > 0 || strict {
+		return nil, nil, nil, fmt.Errorf("--mcp-config cannot reach the server's MCP clients with %s=1 yet", "KLASH_CLIENT_SERVER")
 	}
 	if mode, err := permissionModeFlag(cmd); err != nil {
 		return nil, nil, nil, err

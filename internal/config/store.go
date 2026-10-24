@@ -86,13 +86,19 @@ type RuntimeOverrides struct {
 	// MainAgent is the agent the session starts with: AgentPlan for
 	// Claude Code's --permission-mode plan, "" for the coder.
 	MainAgent string
-	// AcceptEdits is set by Claude Code's --permission-mode acceptEdits,
-	// which puts the edit tools in AllowedTools; hooks are told the mode.
+	// AcceptEdits is set by Claude Code's --permission-mode acceptEdits:
+	// the permission service lets edits of files in the project run
+	// without asking, and hooks are told the mode.
 	AcceptEdits bool
 	// AddedDirs are the directories added with --add-dir, as absolute
 	// paths: read without asking, as the working directory, and named in
 	// the system prompt's environment.
 	AddedDirs []string
+	// MCP are the MCP servers loaded with Claude Code's --mcp-config, added
+	// to the config's own, each in place of a configured server of the
+	// same name, or, with --strict-mcp-config (StrictMCP), the only ones.
+	MCP       MCPs
+	StrictMCP bool
 }
 
 // ConfigStore is the single entry point for all config access. It owns the
@@ -267,7 +273,8 @@ func (s *ConfigStore) RefetchHyperProvider(ctx context.Context) error {
 }
 
 // SetupAgents configures the coder and task agents on the config, with
-// the tools given on the command line added to the config's own lists.
+// the tools and MCP servers given on the command line added to the
+// config's own.
 func (s *ConfigStore) SetupAgents() {
 	cfg := s.Config()
 	applyToolOverrides(cfg, s.overrides)
@@ -275,10 +282,19 @@ func (s *ConfigStore) SetupAgents() {
 }
 
 // applyToolOverrides adds the tools named on the command line to cfg's
-// options.disabled_tools and permissions.allowed_tools. They go into the
-// lists themselves, so whatever reads cfg afterwards (the permission
-// service when the app starts, a later SetupAgents on cfg) sees them too.
+// options.disabled_tools and permissions.allowed_tools, and the MCP
+// servers loaded with --mcp-config to cfg.MCP. They go into the config
+// itself, so whatever reads cfg afterwards (the permission service and
+// the MCP clients when the app starts, a later SetupAgents on cfg) sees
+// them too.
 func applyToolOverrides(cfg *Config, o RuntimeOverrides) {
+	if o.StrictMCP {
+		cfg.MCP = MCPs{}
+	}
+	if len(o.MCP) > 0 && cfg.MCP == nil {
+		cfg.MCP = MCPs{}
+	}
+	maps.Copy(cfg.MCP, o.MCP)
 	if len(o.DisabledTools) > 0 {
 		if cfg.Options == nil {
 			cfg.Options = &Options{}
