@@ -49,6 +49,15 @@ const (
 	// agent_id and agent_type name the sub-agent. There is no tool in
 	// play, so hooks for it may not carry a Matcher.
 	EventSubagentStop = "SubagentStop"
+	// EventStopFailure fires instead of EventStop when the main agent's
+	// turn ends on an error from the model's API: a rate limit, a
+	// refused key, a server error, a model server that never came back.
+	// As in Claude Code it changes nothing (what the hook prints and how
+	// it exits are ignored); it is there to log or raise an alert. Its
+	// Matcher is tested against the error's kind, Claude Code's names:
+	// rate_limit, overloaded, authentication_failed, billing_error,
+	// invalid_request, model_not_found, server_error or unknown.
+	EventStopFailure = "StopFailure"
 	// EventPreCompact fires just before a session's conversation is
 	// summarized: when the user asks for the summary, or automatically
 	// when the context is nearly full. As in Claude Code, a hook cannot
@@ -76,7 +85,7 @@ const (
 
 // knownHookEvents lists every recognised event name, in the order they
 // are reported to the user.
-var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStop, EventPreCompact, EventPostCompact, EventSessionEnd}
+var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStop, EventStopFailure, EventPreCompact, EventPostCompact, EventSessionEnd}
 
 // KnownHookEvents returns the recognised hook event names.
 func KnownHookEvents() []string {
@@ -90,10 +99,10 @@ func IsKnownHookEvent(name string) bool {
 
 // HookEventSupportsMatcher reports whether hooks for the given event may
 // carry a Matcher. Tool events match against the tool name; PreCompact
-// and PostCompact against their trigger; SessionStart against its source; SessionEnd
+// and PostCompact against their trigger; StopFailure against the error's kind; SessionStart against its source; SessionEnd
 // against its reason.
 func HookEventSupportsMatcher(event string) bool {
-	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventPostCompact || event == EventSessionStart || event == EventSessionEnd
+	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventPostCompact || event == EventStopFailure || event == EventSessionStart || event == EventSessionEnd
 }
 
 // HookMatcher is a hook's matcher read as Claude Code reads one: "*" (or

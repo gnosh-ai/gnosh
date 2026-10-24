@@ -258,6 +258,18 @@ func (r *Runner) RunPreCompact(ctx context.Context, sessionID, trigger string) (
 	return agg, err
 }
 
+// RunStopFailure executes the StopFailure hooks whose matcher matches
+// kind, the kind of API error a turn ended on, as Claude Code runs them
+// in place of Stop. What they answer changes nothing; the result is for
+// the caller to log.
+func (r *Runner) RunStopFailure(ctx context.Context, sessionID, kind, details, lastAssistantMessage string) (AggregateResult, error) {
+	envVars := append(BuildEnv(EventStopFailure, "", sessionID, r.cwd, r.projectDir, ""), hookVar("STOP_FAILURE_ERROR", kind)...)
+	payload := BuildStopFailurePayload(sessionID, r.cwd, kind, details, lastAssistantMessage)
+	agg, err := r.run(ctx, r.matchingHooks(kind), EventStopFailure, "", "", envVars, payload)
+	agg.UpdatedInput = ""
+	return agg, err
+}
+
 // RunPostCompact executes the PostCompact hooks whose matcher matches the
 // summary's trigger, once a session's conversation has been summarized
 // to summary. As in Claude Code a PostCompact hook has no say: the caller

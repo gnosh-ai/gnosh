@@ -50,9 +50,14 @@ type Payload struct {
 	ToolResponse *ToolResponse `json:"tool_response,omitempty"`
 	// Error is set on an EventPostToolUseFailure payload: the error the
 	// tool call returned, as the agent reads it. IsInterrupt says the call
-	// failed because the turn was cancelled.
+	// failed because the turn was cancelled. On an EventStopFailure
+	// payload Error is the kind of API error the turn ended on.
 	Error       string `json:"error,omitempty"`
 	IsInterrupt bool   `json:"is_interrupt,omitempty"`
+
+	// ErrorDetails is set on an EventStopFailure payload: what the
+	// model's API said, as Claude Code's StopFailure input carries it.
+	ErrorDetails string `json:"error_details,omitempty"`
 	// DurationMS is how long a tool call that has run took, on
 	// PostToolUse and PostToolUseFailure payloads.
 	DurationMS int64 `json:"duration_ms,omitempty"`
@@ -262,6 +267,24 @@ func stopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActive boo
 		StopHookActive:       stopHookActive,
 		LastAssistantMessage: lastAssistantMessage,
 	}
+}
+
+// BuildStopFailurePayload constructs the JSON stdin payload for an
+// EventStopFailure hook: error is the kind of error the turn ended on (a
+// matcher is tested against it), details what the API said, and
+// lastAssistantMessage the error as the conversation shows it, as in
+// Claude Code's StopFailure input.
+func BuildStopFailurePayload(sessionID, cwd, kind, details, lastAssistantMessage string) []byte {
+	return marshalPayload(Payload{
+		Event:                EventStopFailure,
+		HookEventName:        EventStopFailure,
+		SessionID:            sessionID,
+		CWD:                  cwd,
+		ToolInput:            json.RawMessage("{}"),
+		Error:                kind,
+		ErrorDetails:         details,
+		LastAssistantMessage: lastAssistantMessage,
+	})
 }
 
 // BuildSubagentStopPayload constructs the JSON stdin payload for an

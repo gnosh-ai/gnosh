@@ -49,13 +49,13 @@ func handleHook(ctx context.Context, args []string, stdin io.Reader, stdout, std
 // crushrc that Crush then refuses to start with — a startup failure
 // caused by a command Crush itself offers. Better to fail on the line
 // that is wrong.
-var knownHookEvents = []string{"PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "SessionStart", "Stop", "SubagentStop", "PreCompact", "PostCompact", "SessionEnd"}
+var knownHookEvents = []string{"PreToolUse", "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "SessionStart", "Stop", "SubagentStop", "StopFailure", "PreCompact", "PostCompact", "SessionEnd"}
 
 // eventsSupportingMatcher are the events whose hooks fire against a
 // named thing: a tool name, the PreCompact or PostCompact trigger, the SessionStart
 // source, or the SessionEnd reason. A matcher on any other event matches
 // nothing, so the loader rejects it; reject it here too.
-var eventsSupportingMatcher = []string{"PreToolUse", "PostToolUse", "PostToolUseFailure", "PreCompact", "PostCompact", "SessionStart", "SessionEnd"}
+var eventsSupportingMatcher = []string{"PreToolUse", "PostToolUse", "PostToolUseFailure", "PreCompact", "PostCompact", "StopFailure", "SessionStart", "SessionEnd"}
 
 // hookAddFlags is the declarative flag surface for `hook add`.
 var hookAddFlags = []flagSpec{

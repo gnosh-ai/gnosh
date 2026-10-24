@@ -31,6 +31,10 @@ const (
 	// EventSubagentStop fires when a sub-agent is about to finish, and
 	// works as EventStop does for the main agent.
 	EventSubagentStop = config.EventSubagentStop
+	// EventStopFailure fires instead of EventStop when a turn ends on an
+	// error from the model's API; its matcher is tested against the
+	// error's kind.
+	EventStopFailure = config.EventStopFailure
 	// EventPreCompact fires just before a session's conversation is
 	// summarized, manual or automatic.
 	EventPreCompact = config.EventPreCompact

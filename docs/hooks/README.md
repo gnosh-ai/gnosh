@@ -17,14 +17,15 @@ forward.
 - Hooks are Claude Code-compatible
 - Klash ships with a builtin `klash-hook` skill write, edit, and configure
   hooks; just tell Klash how to configure Klash
-- Klash supports ten hooks: `PreToolUse`, which fires before a tool call,
+- Klash supports eleven hooks: `PreToolUse`, which fires before a tool call,
   `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
   fails, `UserPromptSubmit`, which fires when you send a prompt and can add
   context to it or block it, `SessionStart`, which fires before the first
   prompt to a session and can add context to it, `Stop`, which fires when
   the agent is about to finish its turn and can refuse to let it end,
   `SubagentStop`, which fires when a sub-agent is about to finish and can
-  refuse to let it end, `PreCompact`, which fires just before the session
+  refuse to let it end, `StopFailure`, which fires instead of `Stop` when a
+  turn ends on an error from the model's API, `PreCompact`, which fires just before the session
   is summarized and can object to it, `PostCompact`, which fires once it has
   been, with the summary, and `SessionEnd`, which fires when a session ends; plans are to support the full
   gamut, so please let us know which hooks you'd like to see next
@@ -670,6 +671,37 @@ trigger=$(echo "$input" | jq -r '.trigger')
 [[ "$trigger" == "manual" ]] || exit 0
 echo "The user asked for a summary; make sure the important context is captured." >&2
 exit 2
+```
+
+### StopFailure
+
+This hook fires instead of `Stop` when a turn ends on an error from the
+model's API, as in Claude Code: to log it, or to raise an alert when your model
+server goes down.
+
+**Matched against**: the error's kind, in Claude Code's names: `rate_limit`,
+`overloaded`, `authentication_failed`, `billing_error`, `model_not_found`,
+`invalid_request`, `server_error` or `unknown`. A model server that refused the
+connection, never answered or timed out is `server_error`. (Klash first waits
+out a model server that is restarting; the hook fires once it gives up.)
+
+**Input**: the common fields, `error` (the kind), `error_details` (what the API
+said) and `last_assistant_message` (the error as the conversation shows it).
+`KLASH_STOP_FAILURE_ERROR` holds the kind.
+
+**Blocking**: none. What the hook prints and how it exits are ignored; one that
+fails is logged.
+
+**Scope**: the **top-level agent** only, as for `Stop`.
+
+```jsonc
+{
+  "hooks": {
+    "StopFailure": [
+      { "matcher": "server_error", "command": "notify-send 'klash: the model server is down'" }
+    ]
+  }
+}
 ```
 
 ### PostCompact

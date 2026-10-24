@@ -22,6 +22,8 @@ fires when the user sends a prompt, before the agent sees it. `SessionStart`
 fires before the first prompt a process sends to a session. `Stop` fires when
 the agent is about to finish its turn. `SubagentStop` fires when a sub-agent
 is about to finish, and works exactly like `Stop` but for sub-agents.
+`StopFailure` fires instead of `Stop` when a turn ends on an error from the
+model's API, to log it or raise an alert.
 `PreCompact` fires just before a session's conversation is summarized, manual
 or automatic, and `PostCompact` once it has been, with the summary. `SessionEnd` fires when a session ends: when the user starts a
 new one (`clear`), switches to another (`other`), or the process exits with
@@ -33,9 +35,12 @@ to start on an event name it doesn't fire, rather than accepting a hook that
 would look configured and silently never run.
 
 A `matcher` only makes sense for `PreToolUse`, `PostToolUse`,
-`PostToolUseFailure`, `PreCompact`, `PostCompact`, `SessionStart` and
-`SessionEnd`. The first three match against the tool name; `PreCompact` and
-`PostCompact` match against their trigger (`manual` or `auto`); `SessionStart` matches against its source
+`PostToolUseFailure`, `PreCompact`, `PostCompact`, `StopFailure`,
+`SessionStart` and `SessionEnd`. The first three match against the tool name;
+`PreCompact` and `PostCompact` match against their trigger; `StopFailure`
+against the error's kind (`rate_limit`, `overloaded`, `authentication_failed`,
+`billing_error`, `model_not_found`, `invalid_request`, `server_error`, or
+`unknown`) (`manual` or `auto`); `SessionStart` matches against its source
 (`startup`, `resume`, `clear` or `compact`); `SessionEnd` matches against
 its reason (`clear`, `other` or `prompt_input_exit`). There is nothing to
 match when a prompt is sent or a turn ends, so a `matcher` on a
@@ -88,6 +93,7 @@ the input/output contract is identical regardless of language.
 | `KLASH_AGENT_TYPE`           | `SubagentStop`, and a sub-agent's tool calls: its type (`agent_type`), `task` or `agentic_fetch` |
 | `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, as in the payload's `trigger` field |
 | `KLASH_POST_COMPACT_TRIGGER` | `PostCompact` only: `manual` or `auto`, as in the payload's `trigger` field |
+| `KLASH_STOP_FAILURE_ERROR`   | `StopFailure` only: the error's kind, as in the payload's `error` field |
 | `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, as in the payload's `source` field |
 | `KLASH_SESSION_END_REASON`   | `SessionEnd` only: `clear`, `other` or `prompt_input_exit`, as in the payload's `reason` field |
 
@@ -240,6 +246,13 @@ asked (`manual`), or the context filled up (`auto`). A `matcher` on a
 stop the summary: exit `2` (or `"decision": "block"`) or `49` is shown to the
 user as a warning and the summary goes ahead. A hook that fails or could not
 evaluate is also shown as a warning. It fires only for the top-level agent, not sub-agents.
+
+**On `StopFailure`** the input is `{"error": "<kind>", "error_details": "...",
+"last_assistant_message": "..."}` beside the common fields, as in Claude Code:
+the kind of API error the turn ended on, what the API said, and the error as
+the conversation shows it. A model server that refused the connection or never
+answered is `server_error`. It changes nothing: what the hook prints and how it
+exits are ignored, and one that fails is logged. Top-level agent only.
 
 **On `PostCompact`** the input is `{"trigger": "manual"|"auto", "compact_summary": "..."}`
 beside the common fields: the summary the conversation was compacted to, once

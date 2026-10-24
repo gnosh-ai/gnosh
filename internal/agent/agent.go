@@ -1393,6 +1393,11 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		if updateErr != nil {
 			return nil, updateErr
 		}
+		// A turn that ended on an error from the model's API runs the
+		// StopFailure hooks in place of the Stop hooks, as in Claude Code.
+		if !isCancelErr {
+			a.runStopFailureHooks(context.WithoutCancel(ctx), call.SessionID, err, shownError(currentAssistant))
+		}
 		// A channel-originated turn has no caller watching the error, so
 		// tell the channel side something went wrong instead of leaving
 		// the sender hanging. sendChannelReply detaches from the run
