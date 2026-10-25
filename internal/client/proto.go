@@ -817,6 +817,27 @@ func (c *Client) CreateSession(ctx context.Context, id string, title string) (*p
 	return &sess, nil
 }
 
+// BranchSession copies a session's conversation into a new session, titled
+// title or after the session, and returns the new one.
+func (c *Client) BranchSession(ctx context.Context, id, sessionID, title string) (*proto.Session, error) {
+	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/sessions/%s/branch", id, sessionID), nil, jsonBody(proto.BranchRequest{Title: title}), http.Header{"Content-Type": []string{"application/json"}})
+	if err != nil {
+		return nil, fmt.Errorf("failed to branch session: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		if msg := decodeErrorMessage(rsp.Body); msg != "" {
+			return nil, errors.New(msg)
+		}
+		return nil, fmt.Errorf("failed to branch session: status code %d", rsp.StatusCode)
+	}
+	var sess proto.Session
+	if err := json.NewDecoder(rsp.Body).Decode(&sess); err != nil {
+		return nil, fmt.Errorf("failed to decode session: %w", err)
+	}
+	return &sess, nil
+}
+
 // ListSessions lists all sessions in a workspace as proto types.
 func (c *Client) ListSessions(ctx context.Context, id string) ([]proto.Session, error) {
 	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/sessions", id), nil, nil)

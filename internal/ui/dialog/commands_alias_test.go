@@ -43,6 +43,7 @@ func TestPaletteFindsClaudeCodeSlashNames(t *testing.T) {
 		"copy":          "Copy Last Response",
 		"diff":          "Diff",
 		"tasks":         "Background Tasks",
+		"branch":        "Branch Conversation",
 		"bashes":        "Background Tasks",
 		"checkup":       "Doctor",
 		"rename":        "Rename Session",
@@ -240,4 +241,34 @@ func TestPaletteCopyTakesN(t *testing.T) {
 	require.Equal(t, ActionCopyResponse{}, enter("s1", "copy"))
 	_, copied := enter("", "copy 2").(ActionCopyResponse)
 	require.False(t, copied)
+}
+
+// Claude Code's /branch takes the branch's name: typed into the palette
+// with it, Enter branches with that name; alone, it is the Branch
+// Conversation item. With no session there is nothing to branch. A slip
+// in the name is told what was meant.
+func TestPaletteBranchTakesTheName(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	enter := func(sessionID, typed string) Action {
+		c, err := NewCommands(com, sessionID, sessionID != "", false, false, nil, nil)
+		require.NoError(t, err)
+		for _, r := range typed {
+			c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+		return c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	}
+	require.Equal(t, ActionBranchSession{SessionID: "s1", Name: "try-the-cache"}, enter("s1", "branch try-the-cache"))
+	require.Equal(t, ActionBranchSession{SessionID: "s1"}, enter("s1", "branch"))
+	_, branched := enter("", "branch try-the-cache").(ActionBranchSession)
+	require.False(t, branched)
+
+	c, err := NewCommands(com, "s1", true, false, false, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, "branch", c.Suggest("brnch"))
 }

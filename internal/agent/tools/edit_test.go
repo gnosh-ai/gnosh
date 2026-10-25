@@ -36,6 +36,10 @@ func (m *mockEditFileTracker) ListReadFiles(ctx context.Context, sessionID strin
 	return m.reads, nil
 }
 
+func (m *mockEditFileTracker) CopyReads(ctx context.Context, from, to string) error {
+	return nil
+}
+
 func TestReplaceContentPreservesCRLFAndMetadata(t *testing.T) {
 	t.Parallel()
 

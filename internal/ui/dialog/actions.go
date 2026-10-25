@@ -149,6 +149,13 @@ type (
 		SessionID    string
 		Instructions string
 	}
+	// ActionBranchSession copies the session's conversation into a new
+	// session and goes on there, as Claude Code's /branch does; Name is
+	// the branch's name, "" for one after the session.
+	ActionBranchSession struct {
+		SessionID string
+		Name      string
+	}
 	// ActionRenameSession names the session, as Claude Code's /rename
 	// does; Name is "" when none was given.
 	ActionRenameSession struct {

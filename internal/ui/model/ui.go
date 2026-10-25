@@ -1037,6 +1037,8 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case reportMsg:
 		m.dialog.OpenDialog(dialog.NewReport(m.com, msg.title, msg.report))
+	case branchedMsg:
+		cmds = append(cmds, m.loadSession(msg.branch.ID), util.ReportInfo(msg.said()))
 	case tasksMsg:
 		if cmd := m.showTasks(msg); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -2368,6 +2370,9 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionRenameSession:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.renameSession(msg.Name))
+	case dialog.ActionBranchSession:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.branchSession(msg.Name))
 	case dialog.ActionResumeSession:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.resumeSession(msg.Ref))
@@ -5533,6 +5538,9 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	if session.ParseDiffCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		m.openDiffReport()
 		return nil
+	}
+	if name, ok := session.ParseBranchCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.branchSession(name)
 	}
 	if n, ok := session.ParseCopyCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.copyResponse(n)

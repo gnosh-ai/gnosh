@@ -63,6 +63,10 @@ func (w *AppWorkspace) SaveSession(ctx context.Context, sess session.Session) (s
 	return w.app.Sessions.Save(ctx, sess)
 }
 
+func (w *AppWorkspace) BranchSession(ctx context.Context, sessionID, title string) (session.Session, error) {
+	return w.app.BranchSession(ctx, sessionID, title)
+}
+
 func (w *AppWorkspace) RenameSession(ctx context.Context, sessionID, title string) error {
 	return w.app.Sessions.Rename(ctx, sessionID, title)
 }

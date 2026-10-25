@@ -44,6 +44,8 @@ func (r *readRecorder) ListReadFiles(context.Context, string) ([]string, error) 
 	return r.reads, nil
 }
 
+func (r *readRecorder) CopyReads(context.Context, string, string) error { return nil }
+
 // newPostRunner builds a hooks.Runner for one PostToolUse hook, through
 // the config validation a real one passes.
 func newPostRunner(t *testing.T, cmd string) *hooks.Runner {

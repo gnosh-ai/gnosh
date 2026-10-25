@@ -152,6 +152,17 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Handle(c.handlePutWorkspaceSession),
 
+		apigen.Post("/v1/workspaces/{id}/sessions/{sid}/branch").
+			Summary("Branch session").
+			Description("Copies the session's conversation into a new session, titled as asked or after the session, as Claude Code's /branch does, and answers the new session.").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Accepts(proto.BranchRequest{}).
+			Responds(proto.Session{}).
+			Fails(400, 404, 500).
+			Handle(c.handlePostWorkspaceSessionBranch),
+
 		apigen.Delete("/v1/workspaces/{id}/sessions/{sid}").
 			Summary("Delete session").
 			Tags("sessions").

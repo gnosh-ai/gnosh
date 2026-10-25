@@ -24,6 +24,15 @@ func New(db DBTX) *Queries {
 func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	q := Queries{db: db}
 	var err error
+	if q.copyFileStmt, err = db.PrepareContext(ctx, copyFile); err != nil {
+		return nil, fmt.Errorf("error preparing query CopyFile: %w", err)
+	}
+	if q.copyMessageStmt, err = db.PrepareContext(ctx, copyMessage); err != nil {
+		return nil, fmt.Errorf("error preparing query CopyMessage: %w", err)
+	}
+	if q.copySessionReadFilesStmt, err = db.PrepareContext(ctx, copySessionReadFiles); err != nil {
+		return nil, fmt.Errorf("error preparing query CopySessionReadFiles: %w", err)
+	}
 	if q.createFileStmt, err = db.PrepareContext(ctx, createFile); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateFile: %w", err)
 	}
@@ -167,6 +176,21 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 
 func (q *Queries) Close() error {
 	var err error
+	if q.copyFileStmt != nil {
+		if cerr := q.copyFileStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing copyFileStmt: %w", cerr)
+		}
+	}
+	if q.copyMessageStmt != nil {
+		if cerr := q.copyMessageStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing copyMessageStmt: %w", cerr)
+		}
+	}
+	if q.copySessionReadFilesStmt != nil {
+		if cerr := q.copySessionReadFilesStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing copySessionReadFilesStmt: %w", cerr)
+		}
+	}
 	if q.createFileStmt != nil {
 		if cerr := q.createFileStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing createFileStmt: %w", cerr)
@@ -436,6 +460,9 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 type Queries struct {
 	db                                   DBTX
 	tx                                   *sql.Tx
+	copyFileStmt                         *sql.Stmt
+	copyMessageStmt                      *sql.Stmt
+	copySessionReadFilesStmt             *sql.Stmt
 	createFileStmt                       *sql.Stmt
 	createMessageStmt                    *sql.Stmt
 	createSessionStmt                    *sql.Stmt
@@ -488,6 +515,9 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
 		db:                                   tx,
 		tx:                                   tx,
+		copyFileStmt:                         q.copyFileStmt,
+		copyMessageStmt:                      q.copyMessageStmt,
+		copySessionReadFilesStmt:             q.copySessionReadFilesStmt,
 		createFileStmt:                       q.createFileStmt,
 		createMessageStmt:                    q.createMessageStmt,
 		createSessionStmt:                    q.createSessionStmt,

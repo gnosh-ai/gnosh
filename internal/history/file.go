@@ -39,6 +39,12 @@ type Service interface {
 	ListLatestSessionFiles(ctx context.Context, sessionID string) ([]File, error)
 	Delete(ctx context.Context, id string) error
 	DeleteSessionFiles(ctx context.Context, sessionID string) error
+
+	// CopySessionFiles records the versions of the files session from
+	// changed as versions of session to's, at the same times, as /branch
+	// copies a conversation: the branch shows what its conversation
+	// changed. Like a copied message, a copy is not published.
+	CopySessionFiles(ctx context.Context, from, to string) error
 }
 
 type service struct {
@@ -199,6 +205,27 @@ func (s *service) DeleteSessionFiles(ctx context.Context, sessionID string) erro
 		err = s.Delete(ctx, file.ID)
 		if err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func (s *service) CopySessionFiles(ctx context.Context, from, to string) error {
+	files, err := s.q.ListFilesBySession(ctx, from)
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		if err := s.q.CopyFile(ctx, db.CopyFileParams{
+			ID:        uuid.New().String(),
+			SessionID: to,
+			Path:      f.Path,
+			Content:   f.Content,
+			Version:   f.Version,
+			CreatedAt: f.CreatedAt,
+			UpdatedAt: f.UpdatedAt,
+		}); err != nil {
+			return fmt.Errorf("copying the history of %s: %w", f.Path, err)
 		}
 	}
 	return nil

@@ -9,6 +9,16 @@ import (
 )
 
 type Querier interface {
+	// A copy of a version of a file into another session, as /branch makes:
+	// its version and times as they were, so the latest stays the latest.
+	CopyFile(ctx context.Context, arg CopyFileParams) error
+	// A copy of a message into another session, as /branch makes: its times,
+	// finish and model as they were, so the copies keep their order and the
+	// time each answer took.
+	CopyMessage(ctx context.Context, arg CopyMessageParams) (Message, error)
+	// The files read in one session, recorded as read at the same times in
+	// another, as /branch copies a conversation.
+	CopySessionReadFiles(ctx context.Context, arg CopySessionReadFilesParams) error
 	CreateFile(ctx context.Context, arg CreateFileParams) (File, error)
 	CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)

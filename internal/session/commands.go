@@ -59,6 +59,13 @@ func ParseStatusCommand(line string) bool {
 	return ok
 }
 
+// ParseBranchCommand reports whether line is Claude Code's /branch
+// command, with or without the slash, and the name it gives the branch
+// ("" when none).
+func ParseBranchCommand(line string) (name string, ok bool) {
+	return parseCommand(line, "branch")
+}
+
 // ParseCopyCommand reports whether line is Claude Code's /copy command,
 // with or without the slash, and the N after it that picks the
 // Nth-latest response ("" for the latest).

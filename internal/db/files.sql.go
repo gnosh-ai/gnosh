@@ -9,6 +9,45 @@ import (
 	"context"
 )
 
+const copyFile = `-- name: CopyFile :exec
+INSERT INTO files (
+    id,
+    session_id,
+    path,
+    content,
+    version,
+    created_at,
+    updated_at
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?
+)
+`
+
+type CopyFileParams struct {
+	ID        string `json:"id"`
+	SessionID string `json:"session_id"`
+	Path      string `json:"path"`
+	Content   string `json:"content"`
+	Version   int64  `json:"version"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
+}
+
+// A copy of a version of a file into another session, as /branch makes:
+// its version and times as they were, so the latest stays the latest.
+func (q *Queries) CopyFile(ctx context.Context, arg CopyFileParams) error {
+	_, err := q.exec(ctx, q.copyFileStmt, copyFile,
+		arg.ID,
+		arg.SessionID,
+		arg.Path,
+		arg.Content,
+		arg.Version,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const createFile = `-- name: CreateFile :one
 INSERT INTO files (
     id,

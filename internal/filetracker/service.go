@@ -31,6 +31,12 @@ type Service interface {
 
 	// ListReadFiles returns the paths of all files read in a session.
 	ListReadFiles(ctx context.Context, sessionID string) ([]string, error)
+
+	// CopyReads records the reads of session from as reads of session to,
+	// at the same times and of the same content, as /branch copies a
+	// conversation: the branch has read what its conversation says it
+	// read, and can edit those files without reading them again.
+	CopyReads(ctx context.Context, from, to string) error
 }
 
 type service struct {
@@ -129,6 +135,22 @@ func relpath(path string) string {
 		return path
 	}
 	return relpath
+}
+
+// CopyReads records the reads of session from as reads of session to.
+func (s *service) CopyReads(ctx context.Context, from, to string) error {
+	if err := s.q.CopySessionReadFiles(ctx, db.CopySessionReadFilesParams{
+		ToSessionID:   to,
+		FromSessionID: from,
+	}); err != nil {
+		return fmt.Errorf("copying file reads: %w", err)
+	}
+	for key, sum := range s.sums.Seq2() {
+		if key.sessionID == from {
+			s.sums.Set(readKey{to, key.path}, sum)
+		}
+	}
+	return nil
 }
 
 // ListReadFiles returns the paths of all files read in a session.

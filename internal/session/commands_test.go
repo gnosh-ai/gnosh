@@ -195,3 +195,22 @@ func TestParseTasksCommand(t *testing.T) {
 		require.False(t, ParseTasksCommand(line), line)
 	}
 }
+
+// /branch is read as /rename is, with the branch's name after it or none.
+func TestParseBranchCommand(t *testing.T) {
+	t.Parallel()
+
+	for line, want := range map[string]string{
+		"/branch":               "",
+		"branch try-the-cache":  "try-the-cache",
+		" /Branch  a new idea ": "a new idea",
+	} {
+		name, ok := ParseBranchCommand(line)
+		require.True(t, ok, line)
+		require.Equal(t, want, name, line)
+	}
+	for _, line := range []string{"/branches", "/bran x", "git branch x", ""} {
+		_, ok := ParseBranchCommand(line)
+		require.False(t, ok, line)
+	}
+}

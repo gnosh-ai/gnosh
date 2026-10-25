@@ -20,6 +20,19 @@ func (b *Backend) CreateSession(ctx context.Context, workspaceID, title string) 
 	return ws.Sessions.Create(ctx, title)
 }
 
+// BranchSession copies a session's conversation into a new session, as
+// Claude Code's /branch does, titled title or after the session.
+func (b *Backend) BranchSession(ctx context.Context, workspaceID, sessionID, title string) (session.Session, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return session.Session{}, err
+	}
+	if ws.App == nil {
+		return session.Session{}, ErrAgentNotInitialized
+	}
+	return ws.App.BranchSession(ctx, sessionID, title)
+}
+
 // GetSession retrieves a session by workspace and session ID.
 func (b *Backend) GetSession(ctx context.Context, workspaceID, sessionID string) (session.Session, error) {
 	ws, err := b.GetWorkspace(workspaceID)

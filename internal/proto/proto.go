@@ -192,6 +192,12 @@ type BackgroundJob struct {
 	Output      string    `json:"output,omitempty"`
 }
 
+// BranchRequest asks for a branch of a session, titled Title, or after
+// the session when Title is "".
+type BranchRequest struct {
+	Title string `json:"title,omitempty"`
+}
+
 // DoctorReport is the check of the workspace's setup that klash doctor
 // prints, as the Markdown /doctor shows.
 type DoctorReport struct {

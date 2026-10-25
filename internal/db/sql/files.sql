@@ -36,6 +36,21 @@ INSERT INTO files (
 )
 RETURNING *;
 
+-- name: CopyFile :exec
+-- A copy of a version of a file into another session, as /branch makes:
+-- its version and times as they were, so the latest stays the latest.
+INSERT INTO files (
+    id,
+    session_id,
+    path,
+    content,
+    version,
+    created_at,
+    updated_at
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?
+);
+
 -- name: DeleteFile :exec
 DELETE FROM files
 WHERE id = ?;

@@ -10,6 +10,85 @@ import (
 	"database/sql"
 )
 
+const copyMessage = `-- name: CopyMessage :one
+INSERT INTO messages (
+    id,
+    session_id,
+    role,
+    parts,
+    model,
+    provider,
+    is_summary_message,
+    created_at,
+    updated_at,
+    finished_at,
+    prism_model_id,
+    prism_model_name,
+    prism_hypercredit_savings,
+    prism_dollar_savings
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+RETURNING id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings
+`
+
+type CopyMessageParams struct {
+	ID                      string          `json:"id"`
+	SessionID               string          `json:"session_id"`
+	Role                    string          `json:"role"`
+	Parts                   string          `json:"parts"`
+	Model                   sql.NullString  `json:"model"`
+	Provider                sql.NullString  `json:"provider"`
+	IsSummaryMessage        int64           `json:"is_summary_message"`
+	CreatedAt               int64           `json:"created_at"`
+	UpdatedAt               int64           `json:"updated_at"`
+	FinishedAt              sql.NullInt64   `json:"finished_at"`
+	PrismModelID            sql.NullString  `json:"prism_model_id"`
+	PrismModelName          sql.NullString  `json:"prism_model_name"`
+	PrismHypercreditSavings sql.NullFloat64 `json:"prism_hypercredit_savings"`
+	PrismDollarSavings      sql.NullFloat64 `json:"prism_dollar_savings"`
+}
+
+// A copy of a message into another session, as /branch makes: its times,
+// finish and model as they were, so the copies keep their order and the
+// time each answer took.
+func (q *Queries) CopyMessage(ctx context.Context, arg CopyMessageParams) (Message, error) {
+	row := q.queryRow(ctx, q.copyMessageStmt, copyMessage,
+		arg.ID,
+		arg.SessionID,
+		arg.Role,
+		arg.Parts,
+		arg.Model,
+		arg.Provider,
+		arg.IsSummaryMessage,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+		arg.FinishedAt,
+		arg.PrismModelID,
+		arg.PrismModelName,
+		arg.PrismHypercreditSavings,
+		arg.PrismDollarSavings,
+	)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.SessionID,
+		&i.Role,
+		&i.Parts,
+		&i.Model,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.FinishedAt,
+		&i.Provider,
+		&i.IsSummaryMessage,
+		&i.PrismModelID,
+		&i.PrismModelName,
+		&i.PrismHypercreditSavings,
+		&i.PrismDollarSavings,
+	)
+	return i, err
+}
+
 const createMessage = `-- name: CreateMessage :one
 INSERT INTO messages (
     id,

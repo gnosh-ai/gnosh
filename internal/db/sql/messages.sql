@@ -35,6 +35,30 @@ INSERT INTO messages (
 )
 RETURNING *;
 
+-- name: CopyMessage :one
+-- A copy of a message into another session, as /branch makes: its times,
+-- finish and model as they were, so the copies keep their order and the
+-- time each answer took.
+INSERT INTO messages (
+    id,
+    session_id,
+    role,
+    parts,
+    model,
+    provider,
+    is_summary_message,
+    created_at,
+    updated_at,
+    finished_at,
+    prism_model_id,
+    prism_model_name,
+    prism_hypercredit_savings,
+    prism_dollar_savings
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+RETURNING *;
+
 -- name: UpdateMessage :exec
 UPDATE messages
 SET

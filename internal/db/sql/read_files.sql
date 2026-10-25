@@ -18,3 +18,11 @@ WHERE session_id = ? AND path = ? LIMIT 1;
 SELECT * FROM read_files
 WHERE session_id = ?
 ORDER BY read_at DESC;
+
+-- name: CopySessionReadFiles :exec
+-- The files read in one session, recorded as read at the same times in
+-- another, as /branch copies a conversation.
+INSERT INTO read_files (session_id, path, read_at)
+SELECT CAST(sqlc.arg(to_session_id) AS TEXT), r.path, r.read_at
+FROM read_files AS r
+WHERE r.session_id = sqlc.arg(from_session_id);

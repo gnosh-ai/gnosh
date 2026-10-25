@@ -122,6 +122,9 @@ type Workspace interface {
 	GetSession(ctx context.Context, sessionID string) (session.Session, error)
 	ListSessions(ctx context.Context) ([]session.Session, error)
 	SaveSession(ctx context.Context, sess session.Session) (session.Session, error)
+	// BranchSession copies the session's conversation into a new session,
+	// titled title or after the session, as Claude Code's /branch does.
+	BranchSession(ctx context.Context, sessionID, title string) (session.Session, error)
 	// RenameSession gives the session a new title, and nothing else.
 	RenameSession(ctx context.Context, sessionID, title string) error
 	// PermissionsReport is what the agent may do without asking, the

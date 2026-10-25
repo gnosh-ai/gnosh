@@ -46,6 +46,13 @@ type CreateMessageParams struct {
 type Service interface {
 	pubsub.Subscriber[Message]
 	Create(ctx context.Context, sessionID string, params CreateMessageParams) (Message, error)
+	// Copy writes a copy of msg into session sessionID, with an ID of its
+	// own but msg's parts, times and model as they were, as /branch copies
+	// a conversation, and returns the copy. A copy is history, not
+	// activity: it is not published as a new message (the UI would take a
+	// sub-agent's copied steps for the original's, whose tool call IDs
+	// they share), and whoever opens the session reads it.
+	Copy(ctx context.Context, sessionID string, msg Message) (Message, error)
 	Update(ctx context.Context, message Message) error
 	Get(ctx context.Context, id string) (Message, error)
 	List(ctx context.Context, sessionID string) ([]Message, error)
@@ -222,6 +229,41 @@ func (s *service) Create(ctx context.Context, sessionID string, params CreateMes
 	// concurrent modifications to the Parts slice.
 	s.Publish(pubsub.CreatedEvent, message.Clone())
 	return message, nil
+}
+
+func (s *service) Copy(ctx context.Context, sessionID string, msg Message) (Message, error) {
+	parts, err := marshalParts(msg.Parts)
+	if err != nil {
+		return Message{}, err
+	}
+	finishedAt := sql.NullInt64{}
+	if f := msg.FinishPart(); f != nil {
+		finishedAt = sql.NullInt64{Int64: f.Time, Valid: true}
+	}
+	isSummary := int64(0)
+	if msg.IsSummaryMessage {
+		isSummary = 1
+	}
+	item, err := s.q.CopyMessage(ctx, db.CopyMessageParams{
+		ID:                      uuid.New().String(),
+		SessionID:               sessionID,
+		Role:                    string(msg.Role),
+		Parts:                   string(parts),
+		Model:                   sql.NullString{String: msg.Model, Valid: true},
+		Provider:                sql.NullString{String: msg.Provider, Valid: msg.Provider != ""},
+		IsSummaryMessage:        isSummary,
+		CreatedAt:               msg.CreatedAt,
+		UpdatedAt:               msg.UpdatedAt,
+		FinishedAt:              finishedAt,
+		PrismModelID:            sql.NullString{String: msg.PrismModelID, Valid: msg.PrismModelID != ""},
+		PrismModelName:          sql.NullString{String: msg.PrismModelName, Valid: msg.PrismModelName != ""},
+		PrismHypercreditSavings: nullableFloat(msg.PrismHypercreditSavings),
+		PrismDollarSavings:      nullableFloat(msg.PrismDollarSavings),
+	})
+	if err != nil {
+		return Message{}, err
+	}
+	return s.fromDBItem(item)
 }
 
 func (s *service) DeleteSessionMessages(ctx context.Context, sessionID string) error {

@@ -198,3 +198,31 @@ func TestService_UnchangedSinceReadInALaterRun(t *testing.T) {
 	require.NoError(t, os.Remove(untouched))
 	require.False(t, resumed.UnchangedSinceRead(env.ctx, "s", untouched), "removed")
 }
+
+// /branch copies a session's reads to the branch: each at its time and of
+// what was read, so a file written back as it was still counts as
+// unchanged there; the reads of other sessions stay theirs.
+func TestService_CopyReads(t *testing.T) {
+	env := setupTest(t)
+	for _, id := range []string{"s", "other", "branch"} {
+		env.createSession(t, id)
+	}
+	dir := t.TempDir()
+	path, elsewhere := filepath.Join(dir, "a.go"), filepath.Join(dir, "b.go")
+	for _, p := range []string{path, elsewhere} {
+		require.NoError(t, os.WriteFile(p, []byte("package a\n"), 0o644))
+	}
+	env.svc.RecordRead(env.ctx, "s", path)
+	env.svc.RecordRead(env.ctx, "other", elsewhere)
+
+	require.NoError(t, env.svc.CopyReads(env.ctx, "s", "branch"))
+	require.Equal(t, env.svc.LastReadTime(env.ctx, "s", path), env.svc.LastReadTime(env.ctx, "branch", path))
+	reads, err := env.svc.ListReadFiles(env.ctx, "branch")
+	require.NoError(t, err)
+	require.Len(t, reads, 1, "only the session's own reads")
+
+	later := time.Now().Add(time.Minute)
+	require.NoError(t, os.Chtimes(path, later, later))
+	require.True(t, env.svc.UnchangedSinceRead(env.ctx, "branch", path), "what was read, not only when")
+	require.False(t, env.svc.UnchangedSinceRead(env.ctx, "branch", elsewhere), "never read in the branch")
+}

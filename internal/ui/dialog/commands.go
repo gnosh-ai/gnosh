@@ -221,6 +221,11 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 			if instructions, ok := session.ParseCompactCommand(c.input.Value()); ok && instructions != "" && c.hasSession {
 				return ActionSummarize{SessionID: c.sessionID, Instructions: instructions}
 			}
+			// And "branch" and the branch's name; "branch" alone is the
+			// Branch Conversation item.
+			if name, ok := session.ParseBranchCommand(c.input.Value()); ok && name != "" && c.hasSession {
+				return ActionBranchSession{SessionID: c.sessionID, Name: name}
+			}
 			// And "copy" and which response; "copy" alone is the Copy Last
 			// Response item.
 			if n, ok := session.ParseCopyCommand(c.input.Value()); ok && n != "" && c.hasSession {
@@ -539,6 +544,9 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "rename_session", "Rename Session", "", ActionRenameSession{SessionID: c.sessionID}).
 			WithAliases("rename", "name").
 			WithDescription("Type rename and a name, or rename alone for one made from the conversation"))
+		commands = append(commands, NewCommandItem(c.com.Styles, "branch_session", "Branch Conversation", "", ActionBranchSession{SessionID: c.sessionID}).
+			WithAliases("branch").
+			WithDescription("Copy the conversation into a new session and go on there; type branch and a name to name it"))
 		commands = append(commands, NewCommandItem(c.com.Styles, "diff_report", "Diff", "", ActionDiffReport{}).
 			WithAliases("diff").
 			WithDescription("What the session changed, file by file"))

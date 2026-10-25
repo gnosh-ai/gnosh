@@ -373,6 +373,30 @@ func (c *controllerV1) handlePutWorkspaceSession(w http.ResponseWriter, r *http.
 	jsonEncode(w, out)
 }
 
+// handlePostWorkspaceSessionBranch copies a session's conversation into a
+// new session.
+func (c *controllerV1) handlePostWorkspaceSessionBranch(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req proto.BranchRequest
+	if r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			c.server.logError(r, "Failed to decode request", "error", err)
+			jsonError(w, http.StatusBadRequest, "failed to decode request")
+			return
+		}
+	}
+	branch, err := c.backend.BranchSession(r.Context(), id, r.PathValue("sid"), req.Title)
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	ws, _ := c.backend.GetWorkspace(id)
+	out := sessionToProto(branch)
+	out.IsBusy = isSessionBusy(ws, branch.ID)
+	out.AttachedClients = attachedClients(ws, branch.ID)
+	jsonEncode(w, out)
+}
+
 // handleDeleteWorkspaceSession deletes a session.
 func (c *controllerV1) handleDeleteWorkspaceSession(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

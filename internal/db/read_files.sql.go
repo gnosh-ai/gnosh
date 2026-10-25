@@ -9,6 +9,25 @@ import (
 	"context"
 )
 
+const copySessionReadFiles = `-- name: CopySessionReadFiles :exec
+INSERT INTO read_files (session_id, path, read_at)
+SELECT CAST(?1 AS TEXT), r.path, r.read_at
+FROM read_files AS r
+WHERE r.session_id = ?2
+`
+
+type CopySessionReadFilesParams struct {
+	ToSessionID   string `json:"to_session_id"`
+	FromSessionID string `json:"from_session_id"`
+}
+
+// The files read in one session, recorded as read at the same times in
+// another, as /branch copies a conversation.
+func (q *Queries) CopySessionReadFiles(ctx context.Context, arg CopySessionReadFilesParams) error {
+	_, err := q.exec(ctx, q.copySessionReadFilesStmt, copySessionReadFiles, arg.ToSessionID, arg.FromSessionID)
+	return err
+}
+
 const getFileRead = `-- name: GetFileRead :one
 SELECT session_id, path, read_at FROM read_files
 WHERE session_id = ? AND path = ? LIMIT 1

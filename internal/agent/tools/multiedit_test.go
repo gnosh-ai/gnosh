@@ -85,6 +85,10 @@ func (m *mockHistoryService) DeleteSessionFiles(ctx context.Context, sessionID s
 	return nil
 }
 
+func (m *mockHistoryService) CopySessionFiles(ctx context.Context, from, to string) error {
+	return nil
+}
+
 func TestApplyEditToContentPartialSuccess(t *testing.T) {
 	t.Parallel()
 
