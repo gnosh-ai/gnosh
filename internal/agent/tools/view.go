@@ -215,6 +215,14 @@ func NewViewTool(
 
 			// Check if file exists
 			fileInfo, err := os.Stat(filePath)
+			if os.IsNotExist(err) {
+				// A screenshot's name has another space before AM or PM.
+				if other := otherScreenshotSpace(filePath); other != "" {
+					if otherInfo, otherErr := os.Stat(other); otherErr == nil {
+						filePath, absFilePath, fileInfo, err = other, otherScreenshotSpace(absFilePath), otherInfo, nil
+					}
+				}
+			}
 			if err != nil {
 				if os.IsNotExist(err) {
 					return fantasy.NewTextErrorResponse(missingFile(absFilePath, absWorkingDir)), nil
