@@ -1,13 +1,18 @@
 package tools
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"image"
 	"image/jpeg"
 	"image/png"
 	"io"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -201,22 +206,31 @@ func TestViewToolOffsetIsALineNumber(t *testing.T) {
 	}
 }
 
+// An image that cannot be scaled down to fit, as one klash cannot
+// decode, is refused when it is over what goes to the model; a file too
+// big to be read at all is refused unread.
 func TestViewToolBlocksOversizedImages(t *testing.T) {
 	t.Parallel()
 
 	workingDir := t.TempDir()
 	filePath := filepath.Join(workingDir, "large.png")
-	require.NoError(t, os.WriteFile(filePath, []byte(strings.Repeat("a", MaxViewSize+1)), 0o644))
+	require.NoError(t, os.WriteFile(filePath, []byte(strings.Repeat("a", maxImageBytes+1)), 0o644))
+	huge := filepath.Join(workingDir, "huge.png")
+	f, err := os.Create(huge)
+	require.NoError(t, err)
+	require.NoError(t, f.Truncate(maxImageFileBytes+1))
+	require.NoError(t, f.Close())
 
 	tool := newViewToolForTest(workingDir)
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
 	ctx = context.WithValue(ctx, SupportsImagesContextKey, true)
-	resp := runViewTool(t, tool, ctx, ViewParams{
-		FilePath: filePath,
-	})
-
+	resp := runViewTool(t, tool, ctx, ViewParams{FilePath: filePath})
 	require.True(t, resp.IsError)
-	require.Contains(t, resp.Content, "Image file is too large")
+	require.Equal(t, fmt.Sprintf("Image file is too large (%d bytes) and could not be scaled down to 2000 pixels a side and %d bytes", maxImageBytes+1, maxImageBytes), resp.Content)
+
+	resp = runViewTool(t, tool, ctx, ViewParams{FilePath: huge})
+	require.True(t, resp.IsError)
+	require.Equal(t, fmt.Sprintf("Image file is too large (%d bytes). Maximum size is %d bytes", maxImageFileBytes+1, maxImageFileBytes), resp.Content)
 }
 
 func TestReadTextFileEnforcesMaxContentSize(t *testing.T) {
@@ -519,4 +533,119 @@ func TestViewTellsAModelThatCannotSeeImagesWhatAnImageIs(t *testing.T) {
 		require.Equal(t, "This model (qwen3.8-27b) cannot see images. "+path+" is "+what+", "+humanize.Bytes(uint64(info.Size()))+
 			". To check what it shows, analyze its pixels in code (with Python's PIL or numpy, say) or ask a model that sees images.", resp.Content)
 	}
+}
+
+// noise is a w by h image of random pixels, which compresses badly.
+func noise(w, h int) *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	rng := rand.New(rand.NewPCG(1, 2))
+	for i := range img.Pix {
+		img.Pix[i] = byte(rng.Uint32())
+	}
+	return img
+}
+
+// An image goes to a model that sees images as Claude Code sends it: as
+// it is when it is at most 2000 pixels a side and 3.75 MB, where klash
+// refused everything over 200 KB, most screenshots; scaled down to fit
+// when it is larger, kept a PNG when that fits, else made a JPEG.
+func TestViewFitsImagesAsClaudeCodeDoes(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	write := func(name string, img image.Image, encode func(io.Writer, image.Image) error) string {
+		path := filepath.Join(workingDir, name)
+		f, err := os.Create(path)
+		require.NoError(t, err)
+		require.NoError(t, encode(f, img))
+		require.NoError(t, f.Close())
+		return path
+	}
+	jpg := func(w io.Writer, m image.Image) error { return jpeg.Encode(w, m, &jpeg.Options{Quality: 95}) }
+	screenshot := write("screenshot.png", noise(300, 200), png.Encode)
+	wide := write("wide.png", image.NewRGBA(image.Rect(0, 0, 3000, 1000)), png.Encode)
+	photo := write("photo.jpg", noise(2600, 2600), jpg)
+	grainy := write("grainy.png", noise(1200, 1200), png.Encode)
+
+	tool := newViewToolForTest(workingDir)
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+	ctx = context.WithValue(ctx, SupportsImagesContextKey, true)
+	view := func(path string) (image.Config, string, fantasy.ToolResponse) {
+		resp := runViewTool(t, tool, ctx, ViewParams{FilePath: path})
+		require.False(t, resp.IsError, resp.Content)
+		require.Equal(t, "image", resp.Type)
+		require.LessOrEqual(t, len(resp.Data), maxImageBytes)
+		config, format, err := image.DecodeConfig(bytes.NewReader(resp.Data))
+		require.NoError(t, err)
+		return config, format, resp
+	}
+
+	data, err := os.ReadFile(screenshot)
+	require.NoError(t, err)
+	require.Greater(t, len(data), MaxViewSize, "over the 200 KB that was refused")
+	_, _, resp := view(screenshot)
+	require.Equal(t, data, resp.Data, "sent as it is")
+	require.Equal(t, "image/png", resp.MediaType)
+
+	config, format, resp := view(wide)
+	require.Equal(t, [2]int{2000, 666}, [2]int{config.Width, config.Height})
+	require.Equal(t, "png", format)
+	require.Equal(t, "image/png", resp.MediaType)
+
+	config, format, resp = view(photo)
+	require.Equal(t, [2]int{2000, 2000}, [2]int{config.Width, config.Height})
+	require.Equal(t, "jpeg", format)
+	require.Equal(t, "image/jpeg", resp.MediaType)
+
+	config, format, resp = view(grainy)
+	require.Equal(t, [2]int{1200, 1200}, [2]int{config.Width, config.Height}, "small enough, too many bytes")
+	require.Equal(t, "jpeg", format)
+	require.Equal(t, "image/jpeg", resp.MediaType)
+}
+
+// vastPNG is a valid w by h grayscale PNG of zeros, small to store and
+// large to decode.
+func vastPNG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	var idat bytes.Buffer
+	zw := zlib.NewWriter(&idat)
+	row := make([]byte, 1+w) // filter byte, then w gray pixels
+	for range h {
+		_, err := zw.Write(row)
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
+	chunk := func(kind string, data []byte) []byte {
+		out := binary.BigEndian.AppendUint32(nil, uint32(len(data)))
+		out = append(out, kind...)
+		out = append(out, data...)
+		return binary.BigEndian.AppendUint32(out, crc32.ChecksumIEEE(append([]byte(kind), data...)))
+	}
+	ihdr := binary.BigEndian.AppendUint32(nil, uint32(w))
+	ihdr = binary.BigEndian.AppendUint32(ihdr, uint32(h))
+	ihdr = append(ihdr, 8, 0, 0, 0, 0) // 8-bit gray
+	out := []byte("\x89PNG\r\n\x1a\n")
+	out = append(out, chunk("IHDR", ihdr)...)
+	out = append(out, chunk("IDAT", idat.Bytes())...)
+	return append(out, chunk("IEND", nil)...)
+}
+
+// An image of more pixels than klash decodes to scale is refused from its
+// header, undecoded; one klash cannot decode goes as it is when it is
+// small enough.
+func TestFitImageRefusesWhatItCannotScale(t *testing.T) {
+	t.Parallel()
+
+	vast := vastPNG(t, 8000, 8000)
+	config, err := png.DecodeConfig(bytes.NewReader(vast))
+	require.NoError(t, err)
+	require.Greater(t, config.Width*config.Height, maxImagePixels)
+	_, _, err = fitImage(vast, "image/png")
+	require.ErrorIs(t, err, errImageTooLarge)
+
+	webp := append([]byte("RIFF\x00\x00\x00\x00WEBPVP8 "), make([]byte, 1000)...)
+	data, mimeType, err := fitImage(webp, "image/webp")
+	require.NoError(t, err)
+	require.Equal(t, webp, data)
+	require.Equal(t, "image/webp", mimeType)
 }

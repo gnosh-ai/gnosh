@@ -234,9 +234,9 @@ func NewViewTool(
 				if !GetSupportsImagesFromContext(ctx) {
 					return fantasy.NewTextErrorResponse(unseenImage(filePath, fileInfo.Size(), GetModelNameFromContext(ctx))), nil
 				}
-				if fileInfo.Size() > MaxViewSize {
+				if fileInfo.Size() > maxImageFileBytes {
 					return fantasy.NewTextErrorResponse(fmt.Sprintf("Image file is too large (%d bytes). Maximum size is %d bytes",
-						fileInfo.Size(), MaxViewSize)), nil
+						fileInfo.Size(), maxImageFileBytes)), nil
 				}
 
 				imageData, readErr := os.ReadFile(filePath)
@@ -252,6 +252,14 @@ func NewViewTool(
 				// it identifies a supported image format.
 				mimeType = sniffImageMimeType(imageData, mimeType)
 
+				imageData, mimeType, err = fitImage(imageData, mimeType)
+				if errors.Is(err, errImageTooLarge) {
+					return fantasy.NewTextErrorResponse(fmt.Sprintf("Image file is too large (%d bytes) and could not be scaled down "+
+						"to %d pixels a side and %d bytes", fileInfo.Size(), maxImageSide, maxImageBytes)), nil
+				}
+				if err != nil {
+					return fantasy.ToolResponse{}, fmt.Errorf("error scaling image: %w", err)
+				}
 				return fantasy.NewImageResponse(imageData, mimeType), nil
 			}
 
