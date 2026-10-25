@@ -119,12 +119,16 @@ klash --session {session-id}
 klash --continue
   `,
 	RunE: stopsOnSignal(func(ctx context.Context, cmd *cobra.Command, args []string) error {
+		if err := forkAlone(cmd); err != nil {
+			return err
+		}
 		// Ask once per machine, before anything sets up metrics or the TUI
 		// takes the terminal.
 		maybeAskMetricsConsent()
 
 		sessionID := sessionFlag(cmd)
 		continueLast, _ := cmd.Flags().GetBool("continue")
+		fork, _ := cmd.Flags().GetBool("fork-session")
 		pick := sessionID == pickSession
 		if pick {
 			sessionID = ""
@@ -154,6 +158,9 @@ klash --continue
 		model := ui.New(com, sessionID, continueLast)
 		if pick || search != "" {
 			model.PickSessionAtStart(search)
+		}
+		if fork {
+			model.ForkSessionAtStart()
 		}
 		if mode, _ := permissionModeFlag(cmd); mode == config.PermissionModePlan {
 			model.StartInPlanMode()
@@ -382,12 +389,31 @@ func workspaceYolo(cmd *cobra.Command) bool {
 }
 
 // addSessionFlags adds --session, Claude Code's name for it (-r/--resume),
-// and --continue; read the session with sessionFlag.
+// --continue and --fork-session; read the session with sessionFlag.
 func addSessionFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
 	cmd.Flags().StringP("resume", "r", "", "Same as --session, by Claude Code's name for it, and also by a session's name; with no ID, or a name no session or several have, pick a session from a list")
 	cmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	cmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
+	cmd.Flags().Bool("fork-session", false, forkSessionUsage)
+}
+
+// forkSessionUsage is the help of Claude Code's --fork-session, in klash
+// and klash run.
+const forkSessionUsage = "When resuming, go on in a copy of the session, as /branch makes one, and leave the session as it was (with --continue, --resume or --session)"
+
+// errForkAlone is --fork-session with no session to go back to.
+var errForkAlone = errors.New("--fork-session goes on in a copy of the session you resume, so it needs --continue, --resume or --session")
+
+// forkAlone is errForkAlone when cmd has --fork-session but no session to
+// resume: none named or to be picked, and no --continue.
+func forkAlone(cmd *cobra.Command) error {
+	fork, _ := cmd.Flags().GetBool("fork-session")
+	last, _ := cmd.Flags().GetBool("continue")
+	if fork && sessionFlag(cmd) == "" && !last {
+		return errForkAlone
+	}
+	return nil
 }
 
 // pickSession is the --resume value that asks for the list of sessions to

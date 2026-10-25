@@ -477,8 +477,10 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 // RunNonInteractive runs the application in non-interactive mode with the
 // given prompt, printing to stdout.
 // RunNonInteractive runs one prompt without the TUI, writing the answer to
-// output. onSession, when set, is told the session the run uses.
-func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner, traceTools bool, continueSessionID string, useLast bool, onSession func(sessionID string), onMessage func(message.Message)) error {
+// output. onSession, when set, is told the session the run uses. With
+// fork, for Claude Code's --fork-session, the run goes on in a copy of the
+// session it continues, which is left as it was.
+func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner, traceTools bool, continueSessionID string, useLast, fork bool, onSession func(sessionID string), onMessage func(message.Message)) error {
 	slog.Info("Running in non-interactive mode")
 
 	// Re-initialize the coder agent without interactive-only tools. The
@@ -562,6 +564,13 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	sess, err := app.resolveSession(ctx, continueSessionID, useLast)
 	if err != nil {
 		return fmt.Errorf("failed to create session for non-interactive mode: %w", err)
+	}
+	// After InitCoderAgentNonInteractive, so the coordinator that runs the
+	// prompt is the one told the copy is a fork.
+	if fork {
+		if sess, err = app.BranchSession(ctx, sess.ID, ""); err != nil {
+			return fmt.Errorf("failed to fork the session: %w", err)
+		}
 	}
 	if onSession != nil {
 		onSession(sess.ID)

@@ -71,6 +71,8 @@ func (*NopCoordinator) ToolNames() []string { return nil }
 
 func (*NopCoordinator) Rewound(string, []string) {}
 
+func (*NopCoordinator) Branched(string) {}
+
 func (*NopCoordinator) RebuildSystemPrompts(context.Context) error { return nil }
 
 func (*NopCoordinator) SetGoal(string, string) {}

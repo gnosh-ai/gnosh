@@ -396,11 +396,11 @@ can hand the agent context for the session up front: what the branch is, what
 the last failure was, what your notes say about the repo. Use it instead of
 typing the same preamble into every new session.
 
-**Matched against**: the source, `"startup"`, `"resume"`, `"clear"` or
-`"compact"`. A `matcher` on a `SessionStart` hook is tested against that
-source, so a hook matched on `^resume$` only fires when you go back to a
-session that already has messages, and a hook with no matcher fires for
-every source.
+**Matched against**: the source, `"startup"`, `"resume"`, `"clear"`,
+`"compact"` or `"fork"`. A `matcher` on a `SessionStart` hook is tested
+against that source, so a hook matched on `^resume$` only fires when you go
+back to a session that already has messages, and a hook with no matcher fires
+for every source.
 
 - `"startup"` — the session is new and this process has started no session
   of its own yet.
@@ -410,6 +410,9 @@ every source.
   another session: the TUI's New Session command, say.
 - `"compact"` — the first prompt after the session's conversation was
   summarized, as Claude Code fires it after a compaction.
+- `"fork"` — the session is a copy of another to go on in, made by `/branch`
+  or by `--fork-session` with `--continue`, `--resume` or `--session`, as
+  Claude Code fires it for both.
 
 **Context**: whatever the hook prints on stdout, as plain text, is what the
 agent reads with the first prompt, inside a `<user-prompt-submit-hook>` tag,
@@ -1539,8 +1542,9 @@ Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
 
   // string. "startup" for a new session in a process that has started no
   // session of its own, "resume" for a session that already has messages,
-  // "clear" for a fresh session in a running process, and "compact" for
-  // the first prompt after a summary. A matcher on a SessionStart hook is
+  // "clear" for a fresh session in a running process, "compact" for the
+  // first prompt after a summary, and "fork" for a copy of a session made
+  // by /branch or --fork-session. A matcher on a SessionStart hook is
   // tested against this.
   "source": "startup",
 }

@@ -17,7 +17,9 @@ import (
 // message in order, with its times and the steps of the sub-agents it ran,
 // the files it read and changed, the summary the session was compacted to,
 // its todos and how full its context is. The new session is titled title,
-// or by branchTitle after the source. The source is left as it was.
+// or by branchTitle after the source. The source is left as it was. The
+// first prompt to the new session runs the SessionStart hooks with source
+// "fork", as Claude Code's do after /branch and --fork-session.
 func (a *App) BranchSession(ctx context.Context, sourceID, title string) (session.Session, error) {
 	if err := a.Messages.FlushAll(ctx); err != nil {
 		return session.Session{}, err
@@ -40,7 +42,14 @@ func (a *App) BranchSession(ctx context.Context, sourceID, title string) (sessio
 		}
 		title = branchTitle(cmp.Or(source.Title, "Branched conversation"), "Branch", titles)
 	}
-	return a.copySession(ctx, source, messages, title)
+	branch, err := a.copySession(ctx, source, messages, title)
+	if err != nil {
+		return branch, err
+	}
+	if a.AgentCoordinator != nil {
+		a.AgentCoordinator.Branched(branch.ID)
+	}
+	return branch, nil
 }
 
 // copySession copies source's conversation, messages, into a new session

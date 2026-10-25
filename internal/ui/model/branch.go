@@ -42,13 +42,29 @@ func (m *UI) branchSession(name string) tea.Cmd {
 	if m.isAgentBusy() {
 		return util.ReportWarn("Agent is busy, please wait before branching the conversation...")
 	}
-	from := *m.session
-	title := session.CleanName(name)
+	return m.branch(*m.session, session.CleanName(name))
+}
+
+// branch copies the conversation of session from into a new session to go
+// on in, titled title, or after from with no title.
+func (m *UI) branch(from session.Session, title string) tea.Cmd {
 	return func() tea.Msg {
 		branch, err := m.com.Workspace.BranchSession(context.Background(), from.ID, title)
 		if err != nil {
 			return util.ReportError(fmt.Errorf("failed to branch conversation: %w", err))()
 		}
 		return branchedMsg{branch: branch, from: from, named: title != ""}
+	}
+}
+
+// forkSession goes on in a copy of session id, for --fork-session with
+// the session named on the command line.
+func (m *UI) forkSession(id string) tea.Cmd {
+	return func() tea.Msg {
+		from, err := m.com.Workspace.GetSession(context.Background(), id)
+		if err != nil {
+			return util.ReportError(err)()
+		}
+		return m.branch(from, "")()
 	}
 }

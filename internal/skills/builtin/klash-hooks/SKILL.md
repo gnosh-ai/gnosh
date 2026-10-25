@@ -226,12 +226,13 @@ files, as the agent will read it. It runs once per prompt the user sends, also
 for one queued behind a running turn, and never for the agent's own
 continuations or for channel messages; Esc while it runs cancels the prompt.
 
-**On `SessionStart`** the input is `{"model": "…", "source": "startup"|"resume"|"clear"|"compact"}`
+**On `SessionStart`** the input is `{"model": "…", "source": "startup"|"resume"|"clear"|"compact"|"fork"}`
 beside the common fields. `model` is the ID of the model answering; `source`
 names what started the session: a new one in a process that has started none
 (`startup`), one that already has messages (`resume`), a fresh one in a running
-process, the TUI's New Session, say (`clear`), or the first prompt after a
-summary (`compact`, as Claude Code fires it after a compaction). A `matcher` on a `SessionStart` hook
+process, the TUI's New Session, say (`clear`), the first prompt after a
+summary (`compact`, as Claude Code fires it after a compaction), or a copy of
+a session made by `/branch` or `--fork-session` (`fork`). A `matcher` on a `SessionStart` hook
 is tested against `source`. It fires once per start, before the process's
 first prompt to the session, whether that prompt is visible or a hidden
 continuation. However many prompts are sent at once, the hooks run once:

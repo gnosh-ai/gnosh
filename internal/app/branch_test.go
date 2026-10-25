@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/agent/agenttest"
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/history"
@@ -21,8 +22,9 @@ import (
 // it read and changed, the summary the session was compacted to, its
 // todos and how full its context is; the source stays as it was. Without
 // a title the branch is named after the source, "(Branch)" and then
-// "(Branch 2)"; with one, by it. A session with no messages has nothing to
-// branch, and a branch that cannot be finished is not kept.
+// "(Branch 2)"; with one, by it. The agent is told each branch made is a
+// fork, for its SessionStart hooks. A session with no messages has nothing
+// to branch, and a branch that cannot be finished is not kept.
 func TestBranchSession(t *testing.T) {
 	t.Parallel()
 
@@ -136,12 +138,15 @@ func TestBranchSession(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, before, after, "the source stays as it was")
 
+	coordinator := &branchedCoordinator{}
+	a.AgentCoordinator = coordinator
 	second, err := a.BranchSession(ctx, src.ID, "")
 	require.NoError(t, err)
 	require.Equal(t, "fix-login-bug (Branch 2)", second.Title)
 	named, err := a.BranchSession(ctx, src.ID, "try-the-cache")
 	require.NoError(t, err)
 	require.Equal(t, "try-the-cache", named.Title)
+	require.Equal(t, []string{second.ID, named.ID}, coordinator.branched, "the first prompt to each is a fork's")
 
 	empty, err := sessions.Create(ctx, "empty")
 	require.NoError(t, err)
@@ -156,6 +161,18 @@ func TestBranchSession(t *testing.T) {
 	for _, s := range all {
 		require.NotEqual(t, "doomed", s.Title, "half a branch is no branch")
 	}
+	require.Equal(t, []string{second.ID, named.ID}, coordinator.branched, "nor a fork")
+}
+
+// branchedCoordinator is an agent that records the sessions it is told
+// were branched.
+type branchedCoordinator struct {
+	agenttest.NopCoordinator
+	branched []string
+}
+
+func (c *branchedCoordinator) Branched(sessionID string) {
+	c.branched = append(c.branched, sessionID)
 }
 
 // failingReads is a file tracker that cannot copy a session's reads.

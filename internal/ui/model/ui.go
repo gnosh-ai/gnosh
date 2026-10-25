@@ -229,6 +229,9 @@ type UI struct {
 	// `klash -r` (see PickSessionAtStart), filtered by pickSessionSearch.
 	pickSessionAtStart bool
 	pickSessionSearch  string
+	// forkAtStart makes the session the UI starts in a copy of the one
+	// asked for (see ForkSessionAtStart).
+	forkAtStart bool
 
 	lastUserMessageTime int64
 
@@ -782,6 +785,14 @@ func (m *UI) PickSessionAtStart(search string) {
 	m.pickSessionSearch = search
 }
 
+// ForkSessionAtStart makes the UI go on in a copy of the session it
+// starts in, as /branch makes one, for Claude Code's --fork-session: the
+// session named on the command line, the most recent one, or the one
+// picked from the list. The session is left as it was.
+func (m *UI) ForkSessionAtStart() {
+	m.forkAtStart = true
+}
+
 // pickSessionMsg opens the sessions list, filtered by search. It is its
 // own message because dialog.ActionOpenDialog is acted on only when an
 // open dialog returns it, so sent at startup, with no dialog open, it did
@@ -810,12 +821,15 @@ func (m *UI) startupSessionPicker() tea.Cmd {
 	}
 }
 
-// loadInitialSession loads the initial session if one was specified on startup.
+// loadInitialSession loads the initial session if one was specified on
+// startup, or with ForkSessionAtStart goes on in a copy of it.
 func (m *UI) loadInitialSession() tea.Cmd {
 	switch {
 	case m.state != uiLanding:
 		// Only load if we're in landing state (i.e., fully configured)
 		return nil
+	case m.initialSessionID != "" && m.forkAtStart:
+		return m.forkSession(m.initialSessionID)
 	case m.initialSessionID != "":
 		return m.loadSession(m.initialSessionID)
 	case m.continueLastSession:
@@ -823,6 +837,9 @@ func (m *UI) loadInitialSession() tea.Cmd {
 			sessions, err := m.com.Workspace.ListSessions(context.Background())
 			if err != nil || len(sessions) == 0 {
 				return nil
+			}
+			if m.forkAtStart {
+				return m.branch(sessions[0], "")()
 			}
 			return m.loadSession(sessions[0].ID)()
 		}
@@ -1077,6 +1094,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pickSessionMsg:
 		if cmd := m.openSessionsDialog(msg.search); cmd != nil {
 			cmds = append(cmds, cmd)
+		}
+		if sessions, ok := m.dialog.Dialog(dialog.SessionsID).(*dialog.Session); ok && m.forkAtStart {
+			sessions.Fork()
 		}
 	case reportMsg:
 		m.dialog.OpenDialog(dialog.NewReport(m.com, msg.title, msg.report))
@@ -2386,7 +2406,11 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	// Session dialog messages.
 	case dialog.ActionSelectSession:
 		m.dialog.CloseDialog(dialog.SessionsID)
-		cmds = append(cmds, m.loadSession(msg.Session.ID))
+		if msg.Fork {
+			cmds = append(cmds, m.branch(msg.Session, ""))
+		} else {
+			cmds = append(cmds, m.loadSession(msg.Session.ID))
+		}
 
 	// Open dialog message.
 	case dialog.ActionOpenDialog:

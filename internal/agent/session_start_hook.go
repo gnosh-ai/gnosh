@@ -34,14 +34,19 @@ const (
 	// conversation was summarized, as Claude Code's SessionStart fires
 	// with "compact" after a /compact or an automatic compaction.
 	sessionStartSourceCompact sessionStartSource = hooks.SessionStartSourceCompact
+	// sessionStartSourceFork is the first prompt to a session made as a
+	// copy of another to go on in, by /branch or --fork-session, as
+	// Claude Code's SessionStart fires with "fork" for both.
+	sessionStartSourceFork sessionStartSource = hooks.SessionStartSourceFork
 )
 
 // sessionStartState is what the SessionStart hooks need to know of the
 // sessions a process sends prompts to: which it started, which were
-// summarized since, and what the hooks printed for a prompt that was then
-// refused. A coordinator's main agents share one, so a session started in
-// code mode counts as started in plan mode, and a summary made in either
-// fires "compact" for the next prompt in either.
+// summarized since, which were made as copies of others, and what the
+// hooks printed for a prompt that was then refused. A coordinator's main
+// agents share one, so a session started in code mode counts as started
+// in plan mode, and a summary made in either fires "compact" for the next
+// prompt in either.
 type sessionStartState struct {
 	mu sync.Mutex
 	// started records the sessions this process has sent a prompt to, so
@@ -53,12 +58,16 @@ type sessionStartState struct {
 	// UserPromptSubmit hook refused, for the next prompt to carry: the
 	// session counts as started, so the hooks do not run again for it.
 	pending map[string]string
+	// forked records the sessions made as copies of others to go on in
+	// (markForked): their first prompt is a fork's.
+	forked map[string]bool
 }
 
 func newSessionStartState() *sessionStartState {
 	return &sessionStartState{
 		started: make(map[string]bool),
 		pending: make(map[string]string),
+		forked:  make(map[string]bool),
 	}
 }
 
@@ -74,6 +83,15 @@ func (s *sessionStartState) markStarted(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.started[sessionID] = true
+}
+
+// markForked records that the session was made as a copy of another to
+// go on in, so the first prompt to it runs the SessionStart hooks with
+// source "fork", as in Claude Code.
+func (s *sessionStartState) markForked(sessionID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.forked[sessionID] = true
 }
 
 // markSummarized records that the session was summarized, so the next
@@ -108,13 +126,17 @@ func (s *sessionStartState) setPending(sessionID, context string) {
 
 // sourceFor reports what started the session when the process sends it
 // its first prompt: compact if it was summarized and this is the prompt
-// that follows, resume if the session already has messages, clear if the
-// process has started another session, startup if not.
+// that follows, fork if it was made as a copy of another to go on in,
+// resume if the session already has messages, clear if the process has
+// started another session, startup if not.
 func (s *sessionStartState) sourceFor(sessionID string, hasMessages bool) sessionStartSource {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if started, ok := s.started[sessionID]; ok && !started {
 		return sessionStartSourceCompact
+	}
+	if s.forked[sessionID] {
+		return sessionStartSourceFork
 	}
 	if hasMessages {
 		return sessionStartSourceResume

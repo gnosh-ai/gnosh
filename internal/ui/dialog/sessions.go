@@ -45,6 +45,8 @@ type Session struct {
 	mouseScrolled bool
 	lastClickTime time.Time
 	lastClickID   string
+	// fork, see Fork.
+	fork bool
 
 	keyMap struct {
 		Select        key.Binding
@@ -210,7 +212,7 @@ func (s *Session) HandleMsg(msg tea.Msg) Action {
 			case key.Matches(msg, s.keyMap.Select):
 				if item := s.list.SelectedItem(); item != nil {
 					sessionItem := item.(*SessionItem)
-					return ActionSelectSession{sessionItem.Session}
+					return ActionSelectSession{Session: sessionItem.Session, Fork: s.fork}
 				}
 			default:
 				prevValue := s.input.Value()
@@ -257,7 +259,7 @@ func (s *Session) handleMouseClick(msg tea.MouseClickMsg) Action {
 	now := time.Now()
 	if s.lastClickID == sessionItem.ID() && now.Sub(s.lastClickTime) <= sessionDoubleClickThreshold {
 		s.resetMouseClick()
-		return ActionSelectSession{sessionItem.Session}
+		return ActionSelectSession{Session: sessionItem.Session, Fork: s.fork}
 	}
 	s.lastClickTime = now
 	s.lastClickID = sessionItem.ID()
@@ -444,6 +446,12 @@ func (s *Session) Search(term string) {
 	s.list.SetFilter(term)
 	s.list.ScrollToTop()
 	s.list.SetSelected(0)
+}
+
+// Fork makes the session picked go on in a copy of it, as /branch makes
+// one, for Claude Code's --resume --fork-session.
+func (s *Session) Fork() {
+	s.fork = true
 }
 
 func (s *Session) updateSession(session session.Session) {

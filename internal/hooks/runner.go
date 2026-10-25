@@ -232,9 +232,9 @@ func (r *Runner) RunUserPromptSubmit(ctx context.Context, sessionID, prompt stri
 // RunSessionStart executes the SessionStart hooks whose matcher matches
 // source, before the first prompt the process sends to the session.
 // Source is the SessionStartSourceClear, SessionStartSourceResume,
-// SessionStartSourceStartup or SessionStartSourceCompact name of what
-// started the session; hooks with no matcher match every source, as in
-// Claude Code.
+// SessionStartSourceStartup, SessionStartSourceCompact or
+// SessionStartSourceFork name of what started the session; hooks with no
+// matcher match every source, as in Claude Code.
 //
 // A SessionStart hook cannot stop the prompt, as in Claude Code: the
 // caller sends the prompt whatever the aggregated result says, and

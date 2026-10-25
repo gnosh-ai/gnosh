@@ -176,6 +176,10 @@ type Coordinator interface {
 	// given there, which it is given again when it next touches a file
 	// in one.
 	Rewound(sessionID string, removed []string)
+	// Branched records that the session was made as a copy of another to
+	// go on in, by /branch or --fork-session, so the first prompt to it
+	// runs the SessionStart hooks with source "fork", as Claude Code's do.
+	Branched(sessionID string)
 	// RebuildSystemPrompts builds the system prompts of the coder and plan
 	// agents and of their task sub-agents again from the config as it now
 	// is, as after /add-dir adds a directory their environments name.
@@ -465,6 +469,12 @@ func (c *coordinator) Rewound(sessionID string, removed []string) {
 			delete(c.subdirectoryGiven, key)
 		}
 	}
+}
+
+// Branched marks the session a fork for the SessionStart hooks of its
+// first prompt.
+func (c *coordinator) Branched(sessionID string) {
+	c.sessionStarts.markForked(sessionID)
 }
 
 // onDemandContextFile cuts a context file over the on-demand limit to

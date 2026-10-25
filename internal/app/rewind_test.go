@@ -157,15 +157,20 @@ type busyCoordinator struct{ agenttest.NopCoordinator }
 func (busyCoordinator) IsSessionBusy(string) bool { return true }
 
 // rewoundCoordinator is an agent that records what it is told a rewind
-// cut.
+// cut, and any session it is told was branched.
 type rewoundCoordinator struct {
 	agenttest.NopCoordinator
 	sessionID string
 	removed   []string
+	branched  []string
 }
 
 func (c *rewoundCoordinator) Rewound(sessionID string, removed []string) {
 	c.sessionID, c.removed = sessionID, removed
+}
+
+func (c *rewoundCoordinator) Branched(sessionID string) {
+	c.branched = append(c.branched, sessionID)
 }
 
 // /rewind, as in Claude Code: a dry run says what restoring the code to
@@ -268,6 +273,7 @@ func TestRewind(t *testing.T) {
 	require.Equal(t, whole[:6], conversation(src.ID))
 	require.Equal(t, src.ID, coordinator.sessionID)
 	require.Equal(t, ids[6:], coordinator.removed, "the agent is told what was cut")
+	require.Empty(t, coordinator.branched, "the copy kept is no fork: the rewind goes on in the session")
 	rewound, err := sessions.Get(ctx, src.ID)
 	require.NoError(t, err)
 	require.Equal(t, []session.Todo{{Content: "change a", Status: session.TodoStatusPending}}, rewound.Todos)

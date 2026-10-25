@@ -157,6 +157,8 @@ func TestRun_SessionStartMatcherOnTheSource(t *testing.T) {
 		{"^startup$", "resume", "earlier", 0},
 		{"", "startup", "", 1},
 		{"", "resume", "earlier", 1},
+		{"^fork$", "fork", "earlier", 1},
+		{"^resume$", "fork", "earlier", 0},
 	} {
 		t.Run(tc.matcher+"_"+tc.source, func(t *testing.T) {
 			t.Parallel()
@@ -198,6 +200,51 @@ func TestRun_SessionStartAfterSummaryCompact(t *testing.T) {
 	data, err = os.ReadFile(out)
 	require.NoError(t, err)
 	require.Equal(t, "compact\n", string(data), "the prompt after a summary is a compact")
+}
+
+// A session made as a copy of another to go on in, by /branch or
+// --fork-session, fires the hooks with source "fork" for its first
+// prompt, as in Claude Code, and not again for the next; after a summary
+// its next prompt is a compact's, and a session not copied that has
+// messages is a resume's.
+func TestRun_SessionStartFork(t *testing.T) {
+	t.Parallel()
+
+	out := filepath.Join(t.TempDir(), "sources")
+	r := sessionStartAgent(t, false, "the conversation copied",
+		sessionStartHooks("", `echo "$KLASH_SESSION_START_SOURCE" >> `+out)...)
+	c := &coordinator{sessionStarts: r.agent.sessionStarts}
+	c.Branched(r.sessionID)
+	sources := func() string {
+		t.Helper()
+		data, err := os.ReadFile(out)
+		require.NoError(t, err)
+		return string(data)
+	}
+
+	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "first in the copy"})
+	require.NoError(t, err)
+	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "second"})
+	require.NoError(t, err)
+	require.Equal(t, "fork\n", sources(), "a copy's first prompt is a fork's, its second runs no hooks")
+
+	sumModel := Model{Model: &subSummarizeModel{}, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000}, ModelCfg: config.SelectedModel{Model: "test-model", Provider: "test"}}
+	r.agent.SetModels(sumModel, sumModel)
+	require.NoError(t, r.agent.Summarize(t.Context(), r.sessionID, "", nil, nil, preCompactTriggerManual))
+	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "after summary"})
+	require.NoError(t, err)
+	require.Equal(t, "fork\ncompact\n", sources(), "the prompt after a summary is a compact's")
+
+	other, err := r.env.sessions.Create(t.Context(), "not a copy")
+	require.NoError(t, err)
+	_, err = r.env.messages.Create(t.Context(), other.ID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: "earlier"}},
+	})
+	require.NoError(t, err)
+	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: other.ID, Prompt: "back to it"})
+	require.NoError(t, err)
+	require.Equal(t, "fork\ncompact\nresume\n", sources(), "only the copy is a fork")
 }
 
 // What a SessionStart hook prints reaches the model with the prompt, in

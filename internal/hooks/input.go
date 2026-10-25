@@ -393,6 +393,10 @@ const (
 	// conversation was summarized, as Claude Code's "compact" follows a
 	// /compact or an automatic compaction.
 	SessionStartSourceCompact = "compact"
+	// SessionStartSourceFork is the first prompt to a session made as a
+	// copy of another to go on in, by /branch or --fork-session, as
+	// Claude Code's "fork".
+	SessionStartSourceFork = "fork"
 )
 
 // BuildSessionStartPayload constructs the JSON stdin payload for an
