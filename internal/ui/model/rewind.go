@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/app"
@@ -116,6 +117,28 @@ func (m *UI) openRewind() tea.Cmd {
 		}
 		return rewindPromptsMsg{sessionID: sess.ID, prompts: prompts}
 	}
+}
+
+// rewindEscWindow is how soon after an Esc on an empty prompt a second
+// one opens /rewind: Claude Code's double press.
+const rewindEscWindow = 800 * time.Millisecond
+
+// escapeToRewind takes an Esc in the editor. On an empty prompt in a
+// session, a second Esc within rewindEscWindow of the first opens
+// /rewind, as in Claude Code; an alt+esc is two Escs that reached klash
+// together. It reports whether it took the key.
+func (m *UI) escapeToRewind(msg tea.KeyPressMsg) (tea.Cmd, bool) {
+	if !m.hasSession() || m.textarea.Value() != "" {
+		m.rewindEscAt = time.Time{}
+		return nil, false
+	}
+	now := time.Now()
+	if !msg.Mod.Contains(tea.ModAlt) && (m.rewindEscAt.IsZero() || now.Sub(m.rewindEscAt) > rewindEscWindow) {
+		m.rewindEscAt = now
+		return nil, false
+	}
+	m.rewindEscAt = time.Time{}
+	return m.openRewind(), true
 }
 
 // previewRewind finds what restoring the code to the point before prompt

@@ -199,6 +199,11 @@ Claude Code's names work here too.
   what the last check found, and `/goal clear` clears it. Every ten checks
   that find it not met, the agent is asked whether there is a real reason to
   stop, as with Stop hooks.
+- **`/rewind`** (or `/checkpoint`, `/undo`, or Esc twice on an empty prompt)
+  goes back to before one of your messages, as in Claude Code: it restores
+  the files the agent's edit and write tools changed since then, the
+  conversation, or both, and keeps the whole conversation as a session of its
+  own. Changes made with `bash` are not undone.
 
 ## What else changed from Crush
 

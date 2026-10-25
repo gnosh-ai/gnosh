@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/app"
@@ -207,4 +208,63 @@ func TestRewound(t *testing.T) {
 	require.Equal(t, "change a.txt", u.textarea.Value())
 	require.Equal(t, []message.Attachment{shot}, u.attachments.List())
 	require.Equal(t, []string{"s1"}, ws.loaded)
+}
+
+// Esc twice on an empty prompt opens /rewind, as in Claude Code: the
+// second press within rewindEscWindow of the first, or both at once as
+// alt+esc. One press, a second one too late, a prompt with text in it and
+// no session do nothing; Esc there goes to the editor as before. The help
+// lists it once there is a session.
+func TestEscEscOpensRewind(t *testing.T) {
+	pinTTLs(t)
+	u := newTestUI()
+	u.keyMap = DefaultKeyMap()
+	u.dialog = dialog.NewOverlay()
+	u.attachments = attachments.New(nil, attachments.Keymap{})
+	u.com.Workspace = &rewindWorkspace{msgs: []message.Message{{ID: "u1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "make a.txt"}}}}}
+	warmCaches(u, false)
+	u.promptHistory.index = -1
+	opened := rewindPromptsMsg{sessionID: "s1", prompts: []dialog.RewindPrompt{{MessageID: "u1", Text: "make a.txt"}}}
+	esc := func(mod tea.KeyMod) tea.Msg {
+		if cmd := u.handleKeyPressMsg(tea.KeyPressMsg{Code: tea.KeyEscape, Mod: mod}); cmd != nil {
+			return cmd()
+		}
+		return nil
+	}
+	helps := func() []string {
+		var keys []string
+		for _, row := range u.FullHelp() {
+			for _, b := range row {
+				keys = append(keys, b.Help().Key)
+			}
+		}
+		return keys
+	}
+
+	require.Nil(t, esc(0))
+	require.Nil(t, esc(0), "no session")
+	require.Nil(t, esc(tea.ModAlt), "no session")
+	require.NotContains(t, helps(), "esc esc")
+
+	u.session = &session.Session{ID: "s1"}
+	require.Contains(t, helps(), "esc esc")
+	require.Nil(t, esc(0))
+	require.Equal(t, opened, esc(0))
+	require.Nil(t, esc(0), "a third press starts over")
+	require.Equal(t, opened, esc(0))
+
+	require.Nil(t, esc(0))
+	u.rewindEscAt = u.rewindEscAt.Add(-rewindEscWindow - time.Millisecond)
+	require.Nil(t, esc(0), "too late")
+	require.Equal(t, opened, esc(0))
+
+	require.Equal(t, opened, esc(tea.ModAlt), "two at once")
+
+	require.Nil(t, esc(0))
+	u.textarea.SetValue("half a thought")
+	require.Nil(t, esc(0), "a prompt with text")
+	require.Equal(t, "half a thought", u.textarea.Value())
+	u.textarea.SetValue("")
+	require.Nil(t, esc(0), "the text started it over")
+	require.Equal(t, opened, esc(0))
 }

@@ -17,6 +17,10 @@ type KeyMap struct {
 		Escape               key.Binding
 		DeleteAllAttachments key.Binding
 
+		// Rewind is Esc twice on an empty prompt, which opens /rewind as
+		// in Claude Code. It is for help only: Escape is the key matched.
+		Rewind key.Binding
+
 		// History navigation
 		HistoryPrev key.Binding
 		HistoryNext key.Binding
@@ -170,6 +174,10 @@ func DefaultKeyMap() KeyMap {
 	km.Editor.Escape = key.NewBinding(
 		key.WithKeys("esc", "alt+esc"),
 		key.WithHelp("esc", "cancel delete mode"),
+	)
+	km.Editor.Rewind = key.NewBinding(
+		key.WithKeys("esc", "alt+esc"),
+		key.WithHelp("esc esc", "rewind"),
 	)
 	km.Editor.DeleteAllAttachments = key.NewBinding(
 		key.WithKeys("r"),

@@ -289,6 +289,10 @@ type UI struct {
 	// isCanceling tracks whether the user has pressed escape once to cancel.
 	isCanceling bool
 
+	// rewindEscAt is when Esc was pressed on an empty prompt, if it was
+	// just now: a second press soon after opens /rewind.
+	rewindEscAt time.Time
+
 	// bangMode tracks whether the editor is in bang (!) shell mode.
 	bangMode     bool
 	bangWasEmpty bool // true when bang prompt became empty on last keystroke
@@ -3622,8 +3626,9 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					cmds = append(cmds, cmd)
 				}
 			case key.Matches(msg, m.keyMap.Editor.Escape):
-				cmd := m.handleHistoryEscape(msg)
-				if cmd != nil {
+				if cmd, ok := m.escapeToRewind(msg); ok {
+					cmds = append(cmds, cmd)
+				} else if cmd := m.handleHistoryEscape(msg); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
 			case key.Matches(msg, m.keyMap.Editor.Commands) && m.textarea.Value() == "":
@@ -4302,6 +4307,9 @@ func (m *UI) FullHelp() [][]key.Binding {
 			}
 			if m.currentModelSupportsImages() {
 				editorBinds = append(editorBinds, k.Editor.AddImage, k.Editor.PasteImage)
+			}
+			if hasSession {
+				editorBinds = append(editorBinds, k.Editor.Rewind)
 			}
 			binds = append(binds, editorBinds)
 			if hasAttachments {
