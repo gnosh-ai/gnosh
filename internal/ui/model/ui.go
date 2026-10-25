@@ -2393,6 +2393,9 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionDiffReport:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		m.openDiffReport()
+	case dialog.ActionCopyText:
+		m.dialog.CloseDialog(dialog.CopyPickerID)
+		cmds = append(cmds, copyText(msg.Text, msg.FileName))
 	case dialog.ActionCopyResponse:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.copyResponse(msg.N))

@@ -112,6 +112,11 @@ type (
 	// ActionStatusReport shows the session's status, as Claude Code's
 	// /status does.
 	ActionStatusReport struct{}
+	// ActionCopyText copies Text, the part of a response chosen in the copy
+	// picker, and writes it to FileName too.
+	ActionCopyText struct {
+		Text, FileName string
+	}
 	// ActionCopyResponse copies a response to the clipboard, as Claude
 	// Code's /copy does: N picks the Nth-latest ("" for the latest).
 	ActionCopyResponse struct {
