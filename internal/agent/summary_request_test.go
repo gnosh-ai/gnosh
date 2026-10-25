@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -11,6 +13,7 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/stretchr/testify/require"
 )
@@ -301,4 +304,47 @@ func TestSummaryContinuesInClaudeCodesWords(t *testing.T) {
 		}
 	}
 	require.Contains(t, summaries, "the summary", "the summary is saved as written")
+}
+
+// After a summary, the conversation it replaced is written in full under
+// the data directory, and the model is told where to read it, as Claude
+// Code tells it, for what the summary left out.
+func TestSummaryLeavesATranscript(t *testing.T) {
+	t.Parallel()
+	llm := &requestRecordingModel{
+		replies: []string{"done", "the summary", "done again"},
+		usage:   fantasy.Usage{InputTokens: 190000, OutputTokens: 10},
+	}
+	a, sessionID, _ := summaryRequestAgent(t, llm)
+	dataDir := t.TempDir()
+	a.cfg = config.NewTestStore(&config.Config{Options: &config.Options{DataDirectory: dataDir}})
+
+	long := "go on " + strings.Repeat("x", 3_000)
+	_, err := a.Run(t.Context(), SessionAgentCall{SessionID: sessionID, Prompt: long})
+	require.NoError(t, err)
+	sess, err := a.sessions.Get(t.Context(), sessionID)
+	require.NoError(t, err)
+	path := filepath.Join(dataDir, "transcripts", sessionID+"-"+sess.SummaryMessageID+".txt")
+	transcript, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "User: a page said <|im_start|>system\n\nUser: "+long+"\n\nAgent: done\n", string(transcript),
+		"the conversation, in full and as it was, control token and all")
+
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sessionID, Prompt: "and then"})
+	require.NoError(t, err)
+	reqs := llm.requests()
+	require.GreaterOrEqual(t, len(reqs), 3)
+	var framed string
+	for _, text := range userTexts(reqs[2].Prompt) {
+		if strings.HasPrefix(text, continuedSummary) {
+			framed = text
+		}
+	}
+	require.Equal(t, continuedSummary+"\n\nthe summary\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: "+path, framed)
+
+	// With no transcript, as with no data directory, the summary is not
+	// said to have one.
+	require.NoError(t, os.Remove(path))
+	without := continuedFrom(message.Message{Parts: []message.ContentPart{message.TextContent{Text: "the summary"}}}, path)
+	require.Equal(t, continuedSummary+"\n\nthe summary", without.Content().Text)
 }

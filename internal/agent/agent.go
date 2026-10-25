@@ -17,6 +17,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -1848,6 +1850,15 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 		return err
 	}
 
+	// The conversation the summary replaces is written out in full, and
+	// the model is told where (continuedFrom), as Claude Code tells it,
+	// for what the summary left out.
+	if path := a.transcriptPath(sessionID, summaryMessage.ID); path != "" {
+		if err := writeTranscript(path, msgs); err != nil {
+			slog.Warn("Could not write the summarized conversation's transcript", "path", path, "error", err)
+		}
+	}
+
 	// The next prompt to this session runs its SessionStart hooks again,
 	// with source "compact", as in Claude Code.
 	a.sessionStarts.markSummarized(sessionID)
@@ -2220,7 +2231,7 @@ func (a *sessionAgent) getSessionMessages(ctx context.Context, session session.S
 		}
 		if summaryMsgIndex != -1 {
 			msgs = msgs[summaryMsgIndex:]
-			msgs[0] = continuedFrom(msgs[0])
+			msgs[0] = continuedFrom(msgs[0], a.transcriptPath(session.ID, msgs[0].ID))
 		}
 	}
 	return msgs, nil
@@ -2238,19 +2249,45 @@ const resumeAfterSummary = "Continue the conversation from where it left off wit
 
 // continuedFrom is a session's summary message as the model is given it:
 // a user message that says the session goes on from a conversation that
-// ran out of context (continuedSummary), then the summary. The model was
-// given the summary alone, with nothing to say what it was.
-func continuedFrom(summary message.Message) message.Message {
+// ran out of context (continuedSummary), then the summary, then, when the
+// file at transcript is there, where to read that conversation in full,
+// in Claude Code's words. The model was given the summary alone, with
+// nothing to say what it was.
+func continuedFrom(summary message.Message, transcript string) message.Message {
 	summary.Role = message.User
 	summary.Parts = slices.Clone(summary.Parts)
 	for i, part := range summary.Parts {
 		if text, ok := part.(message.TextContent); ok {
 			text.Text = continuedSummary + "\n\n" + text.Text
+			if _, err := os.Stat(transcript); transcript != "" && err == nil {
+				text.Text += "\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: " + transcript
+			}
 			summary.Parts[i] = text
 			break
 		}
 	}
 	return summary
+}
+
+// transcriptPath is where writeTranscript writes the conversation the
+// session's summary message summaryID replaced, under the data directory,
+// or "" with no data directory.
+func (a *sessionAgent) transcriptPath(sessionID, summaryID string) string {
+	if a.cfg == nil || a.cfg.Config().Options == nil || a.cfg.Config().Options.DataDirectory == "" {
+		return ""
+	}
+	return filepath.Join(a.cfg.Config().Options.DataDirectory, "transcripts", sessionID+"-"+summaryID+".txt")
+}
+
+// writeTranscript writes msgs, the conversation a summary replaces, in
+// full to path (transcriptParts), for the model to read what the summary
+// left out.
+func writeTranscript(path string, msgs []message.Message) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	keep := func(s string, _ int) string { return s }
+	return os.WriteFile(path, []byte(strings.Join(transcriptParts(msgs, keep), "\n\n")+"\n"), 0o600)
 }
 
 // hasUserTextMessage reports whether any user message in msgs contains

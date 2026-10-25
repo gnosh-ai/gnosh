@@ -150,31 +150,38 @@ func parseGoalCheck(answer string) (met bool, reason string, err error) {
 // at most goalTranscriptLimit characters: the prompts typed, what the
 // agent said and called, and what its tools returned, each cut short.
 func goalTranscript(msgs []message.Message) string {
+	transcript := strings.Join(transcriptParts(msgs, clip), "\n\n")
+	if r := []rune(transcript); len(r) > goalTranscriptLimit {
+		transcript = "…" + string(r[len(r)-goalTranscriptLimit:])
+	}
+	return transcript
+}
+
+// transcriptParts is a conversation as text, a part each: the prompts
+// typed, what the agent said and called, and what its tools returned, each
+// passed through cut with the length the goal check keeps of it.
+func transcriptParts(msgs []message.Message, cut func(s string, n int) string) []string {
 	var parts []string
 	for _, msg := range msgs {
 		switch msg.Role {
 		case message.User:
 			if text := msg.Content(); !text.Hidden && text.Text != "" {
-				parts = append(parts, "User: "+clip(text.Text, 2_000))
+				parts = append(parts, "User: "+cut(text.Text, 2_000))
 			}
 		case message.Assistant:
 			if text := strings.TrimSpace(msg.Content().Text); text != "" {
-				parts = append(parts, "Agent: "+clip(text, 4_000))
+				parts = append(parts, "Agent: "+cut(text, 4_000))
 			}
 			for _, call := range msg.ToolCalls() {
-				parts = append(parts, fmt.Sprintf("Agent called %s: %s", call.Name, clip(call.Input, 500)))
+				parts = append(parts, fmt.Sprintf("Agent called %s: %s", call.Name, cut(call.Input, 500)))
 			}
 		case message.Tool:
 			for _, result := range msg.ToolResults() {
-				parts = append(parts, fmt.Sprintf("%s returned: %s", result.Name, clip(result.Content, 2_000)))
+				parts = append(parts, fmt.Sprintf("%s returned: %s", result.Name, cut(result.Content, 2_000)))
 			}
 		}
 	}
-	transcript := strings.Join(parts, "\n\n")
-	if r := []rune(transcript); len(r) > goalTranscriptLimit {
-		transcript = "…" + string(r[len(r)-goalTranscriptLimit:])
-	}
-	return transcript
+	return parts
 }
 
 // clip cuts s to its first n characters, saying how much it left out.
