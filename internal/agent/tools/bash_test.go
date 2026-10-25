@@ -89,8 +89,14 @@ func TestBashTool_CustomAutoBackgroundThreshold(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
 	require.True(t, meta.Background)
 	require.NotEmpty(t, meta.ShellID)
-	require.Contains(t, resp.Content, "moved to background")
+	require.Contains(t, resp.Content, "Command did not complete within its 1s timeout and was moved to the background (ID: "+meta.ShellID+").")
 	require.Contains(t, resp.Content, "Call the job_output tool with this ID to read its output, or the job_kill tool to stop it.")
+
+	// A timeout in milliseconds is told in whole seconds, rounded up.
+	resp = runBashTool(t, tool, ctx, BashParams{Description: "ms timeout", Command: "sleep 3 && echo done", Timeout: 1500})
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+	require.True(t, meta.Background)
+	require.Contains(t, resp.Content, "Command did not complete within its 2s timeout and was moved to the background (ID: "+meta.ShellID+").")
 
 	bgManager := shell.GetBackgroundShellManager()
 	require.NoError(t, bgManager.Kill(meta.ShellID))
@@ -544,8 +550,7 @@ func TestBashTellsTheWatcherOfBackgroundJobs(t *testing.T) {
 
 	resp = runBashTool(t, tool, ctx, BashParams{Description: "long", Command: "echo start; sleep 60", AutoBackgroundAfter: 1})
 	require.Len(t, got(), 2)
-	require.Contains(t, resp.Content, "moved to background")
-	require.Contains(t, resp.Content, "Background shell ID: "+got()[1])
+	require.Contains(t, resp.Content, "Command did not complete within its 1s timeout and was moved to the background (ID: "+got()[1]+").")
 	require.Contains(t, resp.Content, "You will be told when it ends")
 
 	unwatched := NewBashTool(permissions, workingDir, workingDir, attribution, "test-model", config.DefaultMaxBackgroundJobs, nil, nil, nil)

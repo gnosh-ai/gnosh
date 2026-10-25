@@ -478,7 +478,10 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				Background:       true,
 				ShellID:          bgShell.ID,
 			}
-			response := fmt.Sprintf("Command is taking longer than expected and has been moved to background.\n\nBackground shell ID: %s\n\n%s", bgShell.ID, backgrounded(ctx, bgShell, onBackground))
+			// In Claude Code's words, with how long it waited, so the model
+			// knows what timeout to ask for to keep such a command in the
+			// foreground.
+			response := fmt.Sprintf("Command did not complete within its %ds timeout and was moved to the background (ID: %s). %s", autoBackgroundAfter, bgShell.ID, backgrounded(ctx, bgShell, onBackground))
 			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil
 		},
 	)
