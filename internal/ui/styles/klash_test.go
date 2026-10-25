@@ -35,10 +35,10 @@ func TestKlashCosmos_KeepsCrushsColors(t *testing.T) {
 			t.Errorf("%s is %s, want Charmtone's %s", p.name, p.klash, p.crush)
 		}
 	}
-	if k.Logo.FieldColorB == nil || len(k.Logo.StarColors) == 0 {
-		t.Error("the logo's fields should fade and carry stars")
+	if k.Logo.FieldColorB == nil {
+		t.Error("the logo's fields should fade")
 	}
-	if c.Logo.FieldColorB != nil || len(c.Logo.StarColors) != 0 {
+	if c.Logo.FieldColorB != nil {
 		t.Error("Charmtone's own logo should stay as upstream draws it")
 	}
 }

@@ -13,7 +13,7 @@ const DefaultThemeName = "klash-cosmos"
 
 // Klash keeps Crush's own purple and hot pink, the colors of a nebula, and
 // adds green and gold sparingly: every fade starts green and ends gold with
-// purple and pink between, and there is starlight in the logo. The banner,
+// purple and pink between, and the logo's mark is gold. The banner,
 // social card and avatar in docs/brand are drawn in the same colors
 // (scripts/brand.py).
 var (
@@ -43,7 +43,7 @@ func KlashNebula() (from, to color.Color) {
 }
 
 // klashOverrides applies Charmtone's own tweaks, then Klash's green and
-// gold: in every fade, and as starlight in the logo.
+// gold: in every fade, and in the logo's mark and version.
 func klashOverrides(s Styles) Styles {
 	s = charmtoneOverrides(s)
 
@@ -56,16 +56,11 @@ func klashOverrides(s Styles) Styles {
 	s.Dialog.TitleGradFromColor, s.Dialog.TitleGradToColor = from, to
 	s.WorkingGradFromColor, s.WorkingGradToColor = from, to
 
-	// The logo's fields fade from purple to hot pink instead of lying flat,
-	// with a star here and there.
+	// The logo's fields fade from purple to hot pink instead of lying flat.
 	s.Logo.FieldColorB = KlashPink
-	s.Logo.StarColors = []color.Color{KlashGold, KlashGreen}
 
-	// The mark over the wordmark and the sparkle beside the name are gold,
-	// the version green.
+	// The mark over the wordmark is gold, the version green.
 	s.Logo.CharmColor = KlashGold
 	s.Logo.VersionColor = KlashGreen
-	s.Logo.SmallCharm = s.Logo.SmallCharm.Foreground(KlashGold)
-	s.Header.Charm = s.Header.Charm.Foreground(KlashGold)
 	return s
 }

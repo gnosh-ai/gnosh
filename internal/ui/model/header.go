@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/common"
-	"github.com/charmbracelet/crush/internal/ui/logo"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/version"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -47,16 +46,11 @@ func newHeader(com *common.Common) *header {
 // after the theme changes.
 func (h *header) refresh() {
 	t := h.com.Styles
-	isHyper := h.com.IsHyper()
-	mark := logo.SmallMark
-	if !isHyper {
-		mark = " " + mark
-	}
 	name := strings.ToUpper(version.Name)
-	if isHyper {
+	if h.com.IsHyper() {
 		name = "HYPERCRUSH"
 	}
-	h.compactLogo = t.Header.Charm.Render(mark) + " " +
+	h.compactLogo = " " +
 		styles.ApplyBoldForegroundGrad(t.Header.LogoGradCanvas, name, t.Header.LogoGradFromColor, t.Header.LogoGradToColor) + " "
 	// Force drawHeader to re-render the wide logo on the next frame.
 	h.width = 0

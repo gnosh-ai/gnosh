@@ -4,11 +4,9 @@ package logo
 import (
 	"fmt"
 	"image/color"
-	"math/rand/v2"
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/crush/internal/ui/fade"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/x/ansi"
@@ -18,35 +16,22 @@ import (
 // a given amount via the boolean argument.
 type letterform func(bool) string
 
-const (
-	diag = `╱`
-	star = `✦`
-)
+const diag = `╱`
 
 // Mark is the maker's mark printed above the wordmark, where upstream Crush
-// prints Charm™. SmallMark stands beside the name where there is no room
-// for it.
-const (
-	Mark      = "klash.pro"
-	SmallMark = "✦"
-)
+// prints Charm™.
+const Mark = "klash.pro"
 
 // Opts are the options for rendering the Klash title art.
 type Opts struct {
-	FieldColor   color.Color   // diagonal lines
-	FieldColorB  color.Color   // when set, the diagonal lines fade from FieldColor to it
-	StarColors   []color.Color // when set, a few of the diagonal lines are stars, in these colors
-	TitleColorA  color.Color   // left gradient ramp point
-	TitleColorB  color.Color   // right gradient ramp point
-	CharmColor   color.Color   // maker's mark color
-	VersionColor color.Color   // version text color
-	Width        int           // width of the rendered logo, used for truncation
-	Hyper        bool          // whether it is Crush or Hypercrush
-
-	// When true, stretch a random letterform on each render. Has no effect in
-	// compact mode. Mainly for testing. In production you will want to cache
-	// the stretched letterform to keep the logo from jittering on resize.
-	Unstable bool
+	FieldColor   color.Color // diagonal lines
+	FieldColorB  color.Color // when set, the diagonal lines fade from FieldColor to it
+	TitleColorA  color.Color // left gradient ramp point
+	TitleColorB  color.Color // right gradient ramp point
+	CharmColor   color.Color // maker's mark color
+	VersionColor color.Color // version text color
+	Width        int         // width of the rendered logo, used for truncation
+	Hyper        bool        // whether it is Crush or Hypercrush
 }
 
 // Render renders the Crush logo. Set the argument to true to render the narrow
@@ -87,14 +72,9 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 		titleLetterforms = append(hyperLetterforms, titleLetterforms...)
 	}
 
-	stretchIndex := -1 // -1 means no stretching.
-	if !compact && !o.Unstable {
-		// Always stretch the same letterform, which is picked once at random.
-		stretchIndex = cachedRandN(len(titleLetterforms))
-	} else if !compact && o.Unstable {
-		// Stretch a random letterform on every render.
-		stretchIndex = rand.IntN(len(titleLetterforms))
-	}
+	// No letter is stretched: upstream widened one at random, which made the
+	// word look different from one start to the next, and the GitHub banner.
+	const stretchIndex = -1
 	title := renderWord(spacing, stretchIndex, titleLetterforms...)
 	if o.Hyper && compact {
 		title = renderWord(spacing, stretchIndex, hyperLetterforms...) + "\n" + title
@@ -116,21 +96,18 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 	gap := max(0, titleWidth-lipgloss.Width(charm)-lipgloss.Width(version))
 	metaRow := fg(o.CharmColor, charm) + strings.Repeat(" ", gap) + fg(o.VersionColor, version)
 
-	// Join the meta row and big Crush title.
-	title = strings.TrimSpace(metaRow + "\n" + title)
+	// The meta row goes under the word.
+	title = strings.TrimSuffix(title, "\n") + "\n" + metaRow
 
 	// Narrow version. If this is Hypercrush, this is also a stacked version.
 	// The fields run the other way to the title above it and the same way
 	// below, so the stack shimmers.
 	if compact {
-		// The narrow logo is small enough that stars only clutter it.
-		plain := o
-		plain.StarColors = nil
 		return strings.Join([]string{
-			field(base, plain, 0, 0, titleWidth, true),
-			field(base, plain, 1, 0, titleWidth, false),
+			field(base, o, titleWidth, true),
+			field(base, o, titleWidth, false),
 			title,
-			field(base, plain, 2, 0, titleWidth, true),
+			field(base, o, titleWidth, true),
 			"",
 		}, "\n")
 	}
@@ -140,8 +117,8 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 	// Left field.
 	const leftWidth = 6
 	leftField := new(strings.Builder)
-	for i := range fieldHeight {
-		fmt.Fprintln(leftField, field(base, o, i, 0, leftWidth, false))
+	for range fieldHeight {
+		fmt.Fprintln(leftField, field(base, o, leftWidth, false))
 	}
 
 	// Right field.
@@ -153,7 +130,7 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 		if i >= stepDownAt {
 			width = rightWidth - (i - stepDownAt)
 		}
-		fmt.Fprint(rightField, field(base, o, i, leftWidth+titleWidth+2, width, false), "\n")
+		fmt.Fprint(rightField, field(base, o, width, false), "\n")
 	}
 
 	// Return the wide version.
@@ -170,55 +147,19 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 	return logo
 }
 
-// field draws one row of diagonal lines, width cells long, at column col of
-// row row of the logo. With o.FieldColorB set the row fades from
-// o.FieldColor to it, or the other way when reverse is set. With
-// o.StarColors set, about one cell in starEvery is a star instead of a line,
-// never two side by side; which ones depends only on the cell's place, so the
-// stars stay put from one render to the next.
-func field(base lipgloss.Style, o Opts, row, col, width int, reverse bool) string {
-	if width <= 0 {
-		return ""
+// field draws one row of diagonal lines, width cells long. With
+// o.FieldColorB set the row fades from o.FieldColor to it, or the other way
+// when reverse is set.
+func field(base lipgloss.Style, o Opts, width int, reverse bool) string {
+	lines := strings.Repeat(diag, max(width, 0))
+	if o.FieldColorB == nil {
+		return lipgloss.NewStyle().Foreground(o.FieldColor).Render(lines)
 	}
-	if o.FieldColorB == nil && len(o.StarColors) == 0 {
-		return lipgloss.NewStyle().Foreground(o.FieldColor).Render(strings.Repeat(diag, width))
+	from, to := o.FieldColor, o.FieldColorB
+	if reverse {
+		from, to = to, from
 	}
-	ramp := make([]color.Color, width)
-	for i := range ramp {
-		ramp[i] = o.FieldColor
-	}
-	if o.FieldColorB != nil && width > 1 {
-		from, to := o.FieldColor, o.FieldColorB
-		if reverse {
-			from, to = to, from
-		}
-		ramp = lipgloss.Blend1D(width, fade.Stops(from, to)...)
-	}
-	var b strings.Builder
-	prevStar := false
-	for i, c := range ramp {
-		glyph := diag
-		if n := len(o.StarColors); n > 0 && !prevStar {
-			if h := starHash(row, col+i); h%starEvery == 0 {
-				glyph, c = star, o.StarColors[(h/starEvery)%n]
-			}
-		}
-		prevStar = glyph == star
-		b.WriteString(base.Foreground(c).Render(glyph))
-	}
-	return b.String()
-}
-
-// starEvery is how sparse the stars among the diagonal lines are.
-const starEvery = 29
-
-// starHash scatters the stars over the logo's fields.
-func starHash(row, col int) int {
-	h := uint32(row)*2654435761 ^ uint32(col)*2246822519
-	h ^= h >> 15
-	h *= 2654435761
-	h ^= h >> 13
-	return int(h % 1000003)
+	return styles.ApplyForegroundGrad(base, lines, from, to)
 }
 
 // SmallRender renders a smaller version of the Crush logo, suitable for
@@ -228,8 +169,7 @@ func SmallRender(t *styles.Styles, width int, o Opts) string {
 	if o.Hyper {
 		name = "HYPERCRUSH"
 	}
-	title := t.Logo.SmallCharm.Render(SmallMark)
-	title = fmt.Sprintf("%s %s", title, styles.ApplyBoldForegroundGrad(t.Logo.GradCanvas, name, t.Logo.SmallGradFromColor, t.Logo.SmallGradToColor))
+	title := styles.ApplyBoldForegroundGrad(t.Logo.GradCanvas, name, t.Logo.SmallGradFromColor, t.Logo.SmallGradToColor)
 	remainingWidth := width - lipgloss.Width(title) - 1 // 1 for the space after the name
 	if remainingWidth > 0 {
 		lines := strings.Repeat("╱", remainingWidth)

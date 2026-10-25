@@ -204,7 +204,6 @@ func versionArt() string {
 	return logo.Render(t.Logo.GradCanvas, "", true, logo.Opts{
 		FieldColor:   t.Logo.FieldColor,
 		FieldColorB:  t.Logo.FieldColorB,
-		StarColors:   t.Logo.StarColors,
 		TitleColorA:  t.Logo.TitleColorA,
 		TitleColorB:  t.Logo.TitleColorB,
 		CharmColor:   t.Logo.CharmColor,

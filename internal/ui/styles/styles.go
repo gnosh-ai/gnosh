@@ -223,8 +223,7 @@ type Styles struct {
 	// Logo
 	Logo struct {
 		FieldColor         color.Color
-		FieldColorB        color.Color   // when set, the fields fade from FieldColor to it
-		StarColors         []color.Color // when set, a few stars among the fields
+		FieldColorB        color.Color // when set, the fields fade from FieldColor to it
 		TitleColorA        color.Color
 		TitleColorB        color.Color
 		CharmColor         color.Color
