@@ -28,9 +28,13 @@ const (
 // caller-supplied data directory.
 const spillSubdir = "shell-output"
 
-// spillPattern matches the files SpillOutput creates. Pruning is limited to
-// this shape so a misconfigured directory cannot lose unrelated files.
+// spillPattern is the name of the files SpillOutput creates.
 const spillPattern = "output-*.log"
+
+// spillGlob matches the files SpillOutput and SpillBytes create. Pruning is
+// limited to this shape so a misconfigured directory cannot lose unrelated
+// files.
+const spillGlob = "output-*.*"
 
 // spillRetention is how long a spill file outlives the command that wrote
 // it. Long enough to resume yesterday's session and still read what it
@@ -131,8 +135,9 @@ func headAndTail(output string) (head, tail string) {
 	return head, tail
 }
 
-// SpillOutput writes command output that was too large to keep in context to
-// a file the agent can read back, and returns that file's path.
+// SpillOutput writes output that was too large to keep in context, a
+// command's or an MCP resource's, to a file the agent can read back, and
+// returns that file's path.
 //
 // Files land in a subdirectory of dir, which callers set to the project data
 // directory so the agent's view tool can read them without a
@@ -143,6 +148,19 @@ func headAndTail(output string) (head, tail string) {
 // to read one later in the session. They are swept on a retention window
 // instead; see [pruneSpills].
 func SpillOutput(output, dir string) (string, error) {
+	return spill([]byte(output), dir, spillPattern)
+}
+
+// SpillBytes is SpillOutput for content that is not text, such as an image
+// an MCP server returned. The file's name ends in ext, so the view tool
+// knows it for what it is.
+func SpillBytes(data []byte, dir, ext string) (string, error) {
+	return spill(data, dir, "output-*."+ext)
+}
+
+// spill writes data to a new file named by pattern under dir's spill
+// directory, as SpillOutput describes.
+func spill(data []byte, dir, pattern string) (string, error) {
 	if dir == "" {
 		// No data directory to own: fall back to the system temp
 		// directory and leave pruning to the OS. Sweeping a shared
@@ -157,12 +175,12 @@ func SpillOutput(output, dir string) (string, error) {
 		pruneSpills(dir)
 	}
 
-	f, err := os.CreateTemp(dir, spillPattern)
+	f, err := os.CreateTemp(dir, pattern)
 	if err != nil {
 		return "", err
 	}
 	defer f.Close() //nolint:errcheck
-	if _, err := f.WriteString(output); err != nil {
+	if _, err := f.Write(data); err != nil {
 		return "", err
 	}
 	return f.Name(), nil
@@ -187,7 +205,7 @@ func pruneSpills(dir string) {
 	var kept []fs.FileInfo
 	var keptBytes int64
 	for _, entry := range entries {
-		if match, _ := filepath.Match(spillPattern, entry.Name()); !match {
+		if match, _ := filepath.Match(spillGlob, entry.Name()); !match {
 			continue
 		}
 		info, err := entry.Info()

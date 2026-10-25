@@ -1,1 +1,1 @@
-Read a resource by URI from an MCP server; returns text content.
+Read a resource by URI from an MCP server; returns its text. A binary resource is saved to a file and its path returned, and text over 50,000 characters is saved to a file with its start shown; read either file with view.

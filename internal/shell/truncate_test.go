@@ -129,3 +129,38 @@ func TestSpillOutput_EnforcesDirectoryLimit(t *testing.T) {
 	require.NoFileExists(t, filepath.Join(spillDir, "output-1.log"), "oldest goes first")
 	require.FileExists(t, filepath.Join(spillDir, "output-3.log"), "newest survives")
 }
+
+func TestSpillBytes_KeepsItsExtension(t *testing.T) {
+	dataDir := t.TempDir()
+	data := []byte{0x89, 'P', 'N', 'G', 0, 1, 2}
+
+	path, err := SpillBytes(data, dataDir, "png")
+	require.NoError(t, err)
+
+	require.Equal(t, filepath.Join(dataDir, spillSubdir), filepath.Dir(path))
+	require.Equal(t, ".png", filepath.Ext(path))
+	saved, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, data, saved)
+}
+
+func TestSpillBytes_OldOnesArePrunedToo(t *testing.T) {
+	dataDir := t.TempDir()
+	spillDir := filepath.Join(dataDir, spillSubdir)
+	require.NoError(t, os.MkdirAll(spillDir, 0o700))
+
+	stale := filepath.Join(spillDir, "output-stale.png")
+	keep := filepath.Join(spillDir, "notes.txt")
+	for _, path := range []string{stale, keep} {
+		require.NoError(t, os.WriteFile(path, []byte("x"), 0o600))
+	}
+	old := time.Now().Add(-spillRetention - time.Hour)
+	require.NoError(t, os.Chtimes(stale, old, old))
+	require.NoError(t, os.Chtimes(keep, old, old))
+
+	_, err := SpillOutput("hello", dataDir)
+	require.NoError(t, err)
+
+	require.NoFileExists(t, stale)
+	require.FileExists(t, keep, "pruning must not touch unrelated files")
+}
