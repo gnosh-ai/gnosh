@@ -118,7 +118,15 @@ klash --session {session-id}
 
 # Continue the most recent session
 klash --continue
+
+# Start with a prompt, as Claude Code's claude "query" does, or resume a
+# session with one
+klash "explain this project"
+klash -r auth-refactor "finish this PR"
   `,
+	// A prompt may follow the flags, as in Claude Code; a first word that
+	// names a subcommand is that subcommand.
+	Args: cobra.ArbitraryArgs,
 	RunE: stopsOnSignal(func(ctx context.Context, cmd *cobra.Command, args []string) error {
 		if err := forkAlone(cmd); err != nil {
 			return err
@@ -175,6 +183,9 @@ klash --continue
 		}
 		if name := nameFlag(cmd); name != "" {
 			model.NameSessionAtStart(name)
+		}
+		if prompt := strings.Join(args, " "); strings.TrimSpace(prompt) != "" {
+			model.SendAtStart(prompt)
 		}
 		if mode, _ := permissionModeFlag(cmd); mode == config.PermissionModePlan {
 			model.StartInPlanMode()

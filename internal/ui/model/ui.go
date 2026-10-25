@@ -238,6 +238,9 @@ type UI struct {
 	// keepModel keeps the model chosen with --model when the first
 	// session is loaded (see ModelChosenAtStart).
 	keepModel bool
+	// startPrompt is the prompt given on the command line, sent once the
+	// session it goes in is ready (see SendAtStart).
+	startPrompt string
 
 	lastUserMessageTime int64
 
@@ -682,6 +685,9 @@ func (m *UI) Init() tea.Cmd {
 	if cmd := m.startupSessionPicker(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	if cmd := m.startPromptAtInit(initialSession != nil); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	// loadSessionMsg reloads history for whichever session arrives, so
 	// doing it here too would be discarded — and with no session set yet
 	// it reads every user message in the database, which the pending
@@ -815,6 +821,47 @@ func (m *UI) ModelChosenAtStart() {
 	m.keepModel = true
 }
 
+// SendAtStart sends prompt as the UI starts, as Claude Code's
+// `claude "query"` does: once the session the UI starts in is loaded, or
+// else in a new session, after onboarding if a provider has to be set up
+// first. With the list of sessions to pick from open at the start, the
+// prompt waits in the editor for the session picked.
+func (m *UI) SendAtStart(prompt string) {
+	m.startPrompt = prompt
+}
+
+// startPromptMsg sends the prompt given on the command line, now that
+// nothing is loaded first (see SendAtStart).
+type startPromptMsg struct{}
+
+// startPromptAtInit is what Init does with the prompt given on the
+// command line: send it now, in a new session, when no session is loading
+// (loading says whether one is) and no provider has to be set up first;
+// with the list of sessions to pick from opening, put it in the editor
+// for the session picked. Otherwise the session's load, or the end of
+// onboarding, sends it.
+func (m *UI) startPromptAtInit(loading bool) tea.Cmd {
+	switch {
+	case m.startPrompt == "":
+	case m.pickSessionAtStart:
+		m.textarea.SetValue(m.startPrompt)
+		m.startPrompt = ""
+	case m.state == uiLanding && !loading:
+		return func() tea.Msg { return startPromptMsg{} }
+	}
+	return nil
+}
+
+// sendStartPrompt sends the prompt SendAtStart gave, once.
+func (m *UI) sendStartPrompt() tea.Cmd {
+	prompt := m.startPrompt
+	if prompt == "" {
+		return nil
+	}
+	m.startPrompt = ""
+	return m.sendMessage(prompt)
+}
+
 // takeStartName is the name NameSessionAtStart gave, once.
 func (m *UI) takeStartName() string {
 	name := m.startName
@@ -878,7 +925,9 @@ func (m *UI) loadInitialSession() tea.Cmd {
 		return func() tea.Msg {
 			sessions, err := m.com.Workspace.ListSessions(context.Background())
 			if err != nil || len(sessions) == 0 {
-				return nil
+				// Nothing to continue: a prompt given on the command line
+				// goes in a new session.
+				return startPromptMsg{}
 			}
 			return m.goOnIn(sessions[0], name, m.forkAtStart)()
 		}
@@ -1130,6 +1179,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.dispatchPromptQueueRefresh(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case startPromptMsg:
+		if cmd := m.sendStartPrompt(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case pickSessionMsg:
 		if cmd := m.openSessionsDialog(msg.search); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -1224,6 +1277,11 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reload prompt history for the new session.
 		m.historyReset()
 		cmds = append(cmds, m.loadPromptHistory())
+		// The prompt given on the command line goes in the session the UI
+		// started in, now that it is loaded.
+		if cmd := m.sendStartPrompt(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		m.updateLayoutAndSize()
 
 	case sessionFilesUpdatesMsg:
@@ -3316,6 +3374,10 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 		m.com.Config().SetupAgents()
 		if err := m.com.Workspace.InitCoderAgent(context.TODO()); err != nil {
 			cmds = append(cmds, util.ReportError(err))
+		}
+		// A prompt given on the command line waited for a provider.
+		if m.startPrompt != "" {
+			cmds = append(cmds, func() tea.Msg { return startPromptMsg{} })
 		}
 		// The agent just came up: re-fetch the memoized ready/model state
 		// so the landing view shows the selected model without waiting for

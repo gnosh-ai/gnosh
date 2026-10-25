@@ -132,6 +132,7 @@ Claude Code's names work here too.
 
 | Claude Code                      | Klash                                              | What it does                                                |
 | -------------------------------- | -------------------------------------------------- | ----------------------------------------------------------- |
+| `claude "…"`                     | `klash "…"`; `klash -r <id> "…"` in a session      | Start the TUI with this prompt sent, in a new session or the one resumed |
 | `claude -p "…"`                  | `klash run "…"`, or `klash -p "…"`                 | Answer one prompt without the TUI                           |
 | `-p --output-format json`        | `klash run --output-format json`                   | Print one JSON result at the end                            |
 | `-p --output-format stream-json` | `klash run --output-format stream-json`            | A JSON line per message and tool result, then the result    |
