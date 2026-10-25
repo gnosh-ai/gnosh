@@ -48,6 +48,7 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/charmbracelet/crush/internal/stringext"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/x/ansi"
@@ -1865,15 +1866,20 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 		}
 	}
 
-	// The files read most recently are given again, read from disk now,
-	// as Claude Code gives them after a summary, so the agent goes on
-	// without reading them again.
-	if restored := a.restoredFilesText(genCtx, sessionID); restored != "" {
+	// What the agent was working with is given again, as Claude Code
+	// gives it after a summary: the files read most recently, read from
+	// disk now, and the background jobs still running, so it goes on
+	// without reading them again or starting a job twice.
+	given := a.restoredFilesText(genCtx, sessionID)
+	if jobs := a.runningJobsText(); jobs != "" {
+		given = strings.TrimPrefix(given+"\n\n"+jobs, "\n\n")
+	}
+	if given != "" {
 		if _, err := a.messages.Create(genCtx, sessionID, message.CreateMessageParams{
 			Role:  message.User,
-			Parts: []message.ContentPart{message.TextContent{Text: restored, Hidden: true}},
+			Parts: []message.ContentPart{message.TextContent{Text: given, Hidden: true}},
 		}); err != nil {
-			slog.Warn("Could not give the agent the files it read before the summary", "session_id", sessionID, "error", err)
+			slog.Warn("Could not give the agent what it was working with before the summary", "session_id", sessionID, "error", err)
 		}
 	}
 
@@ -2332,6 +2338,30 @@ func (a *sessionAgent) restoredFilesText(ctx context.Context, sessionID string) 
 		parts = append(parts, fmt.Sprintf("Called the view tool with the following input: %s\n\nResult of calling the view tool:\n%s", input, strings.TrimRight(text, "\n")))
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+// runningJobsText says which background jobs started in the working
+// directory are still running, one a line, in Claude Code's words for its
+// background shells after a summary, so the agent neither loses track of
+// them nor starts one again. "" when none are.
+func (a *sessionAgent) runningJobsText() string {
+	if a.cfg == nil || a.cfg.WorkingDir() == "" {
+		return ""
+	}
+	var lines []string
+	for _, job := range shell.GetBackgroundShellManager().Jobs(a.cfg.WorkingDir()) {
+		if job.Done {
+			continue
+		}
+		command := []rune(strings.Join(strings.Fields(job.Command), " "))
+		if len(command) > 200 {
+			command = append(command[:200], []rune("...")...)
+		}
+		lines = append(lines, fmt.Sprintf("Background shell %s (\"%s\") is still running (command, shown on one line: `%s`). "+
+			"Do not start it again; to restart it, stop it with job_kill first. Call job_output with shell_id %s to read its output.",
+			job.ID, cmp.Or(job.Description, string(command)), string(command), job.ID))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // writeTranscript writes msgs, the conversation a summary replaces, in

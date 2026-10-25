@@ -16,6 +16,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/stretchr/testify/require"
 )
 
@@ -396,4 +397,37 @@ func TestSummaryGivesTheRecentFilesAgain(t *testing.T) {
 		}
 	}
 	require.Equal(t, []bool{true}, given, "given once, out of the chat")
+}
+
+// After a summary, the background jobs still running in the working
+// directory are named, in Claude Code's words, so the agent neither loses
+// track of them nor starts one again; one that ended is not.
+func TestSummaryNamesTheJobsStillRunning(t *testing.T) {
+	llm := &requestRecordingModel{
+		replies: []string{"done", "the summary", "done again"},
+		usage:   fantasy.Usage{InputTokens: 190000, OutputTokens: 10},
+	}
+	a, sessionID, _ := summaryRequestAgent(t, llm)
+	dir := t.TempDir()
+	a.cfg = config.NewTestStoreIn(&config.Config{Options: &config.Options{}}, dir)
+	jobs := shell.GetBackgroundShellManager()
+	running, err := jobs.Start(t.Context(), dir, nil, "sleep 30\n  # and wait", "a long job", 10)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = jobs.Kill(running.ID) })
+	ended, err := jobs.Start(t.Context(), dir, nil, "true", "a short job", 10)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = jobs.Kill(ended.ID) })
+	ended.Wait()
+
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sessionID, Prompt: "go on"})
+	require.NoError(t, err)
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sessionID, Prompt: "and then"})
+	require.NoError(t, err)
+
+	reqs := llm.requests()
+	require.GreaterOrEqual(t, len(reqs), 3)
+	want := "Background shell " + running.ID + " (\"a long job\") is still running (command, shown on one line: `sleep 30 # and wait`). " +
+		"Do not start it again; to restart it, stop it with job_kill first. Call job_output with shell_id " + running.ID + " to read its output."
+	require.Contains(t, userTexts(reqs[2].Prompt), want)
+	require.NotContains(t, strings.Join(userTexts(reqs[2].Prompt), "\n"), "Background shell "+ended.ID+" ", "a job that ended is not named")
 }
