@@ -55,6 +55,8 @@ func logoSection(contentWidth int) string {
 	t := styles.ThemeForProvider("")
 	crushLogo := logo.Render(t.Logo.GradCanvas, version.Version, true, logo.Opts{
 		FieldColor:   t.Logo.FieldColor,
+		FieldColorB:  t.Logo.FieldColorB,
+		StarColors:   t.Logo.StarColors,
 		TitleColorA:  t.Logo.TitleColorA,
 		TitleColorB:  t.Logo.TitleColorB,
 		CharmColor:   t.Logo.CharmColor,
@@ -79,7 +81,7 @@ func sessionResumeLines(sess *session.Session, contentWidth int) string {
 	}
 
 	hash := session.HashID(sess.ID)[:7]
-	label := lipgloss.NewStyle().Foreground(styles.KlashAurora)
+	label := lipgloss.NewStyle().Foreground(styles.KlashPurple)
 	sessionLine := label.Render("Session  ") + title
 	continueLine := label.Render("Continue ") + version.Command + " -s " + hash
 	return sessionLine + "\n" + continueLine

@@ -21,6 +21,8 @@ func main() {
 	s := styles.KlashCosmos()
 	opts := logo.Opts{
 		FieldColor:   s.Logo.FieldColor,
+		FieldColorB:  s.Logo.FieldColorB,
+		StarColors:   s.Logo.StarColors,
 		TitleColorA:  s.Logo.TitleColorA,
 		TitleColorB:  s.Logo.TitleColorB,
 		CharmColor:   s.Logo.CharmColor,

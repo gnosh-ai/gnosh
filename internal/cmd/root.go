@@ -7,7 +7,6 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"image/color"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -190,6 +189,8 @@ func versionArt() string {
 	t := styles.KlashCosmos()
 	return logo.Render(t.Logo.GradCanvas, "", true, logo.Opts{
 		FieldColor:   t.Logo.FieldColor,
+		FieldColorB:  t.Logo.FieldColorB,
+		StarColors:   t.Logo.StarColors,
 		TitleColorA:  t.Logo.TitleColorA,
 		TitleColorB:  t.Logo.TitleColorB,
 		CharmColor:   t.Logo.CharmColor,
@@ -197,32 +198,12 @@ func versionArt() string {
 	})
 }
 
-// colorScheme draws fang's help and error output in Klash's colors. On a
-// light terminal the greens and golds are deeper, so they stay readable.
+// colorScheme is fang's own, Charm's colors, with one of Klash's: the
+// program's name in gold.
 func colorScheme(c lipgloss.LightDarkFunc) fang.ColorScheme {
-	var (
-		pine  = lipgloss.Color("#0A7F52")
-		ochre = lipgloss.Color("#8A6400")
-		teal  = lipgloss.Color("#0B7A63")
-		rust  = lipgloss.Color("#A84A06")
-		gray  = lipgloss.Color("#6B756F")
-		paper = lipgloss.Color("#EDF2EC")
-	)
-	return fang.ColorScheme{
-		Base:           c(styles.KlashShade, styles.KlashMoon),
-		Title:          c(pine, styles.KlashAurora),
-		Codeblock:      c(paper, styles.KlashDusk),
-		Program:        c(pine, styles.KlashAurora),
-		Command:        c(ochre, styles.KlashGold),
-		DimmedArgument: c(styles.KlashLichen, styles.KlashMoss),
-		Comment:        c(gray, styles.KlashLichen),
-		Flag:           c(teal, styles.KlashMint),
-		FlagDefault:    c(styles.KlashLichen, styles.KlashLichen),
-		Argument:       c(styles.KlashShade, styles.KlashMoon),
-		Description:    c(styles.KlashShade, styles.KlashMoon),
-		QuotedString:   c(rust, styles.KlashAmber),
-		ErrorHeader:    [2]color.Color{styles.KlashInk, styles.KlashCoral},
-	}
+	s := fang.DefaultColorScheme(c)
+	s.Program = c(lipgloss.Color("#8A6400"), styles.KlashGold)
+	return s
 }
 
 // printSessionResume prints the exit banner after the TUI exits, including the
