@@ -1,8 +1,6 @@
 package model
 
 import (
-	"cmp"
-	"fmt"
 	"image"
 	"strings"
 
@@ -23,25 +21,15 @@ func (m *UI) modelInfo(width int) string {
 	providerName := ""
 
 	if model != nil {
-		// Get provider name first
-		providerConfig, ok := m.com.Config().Providers.Get(model.ModelCfg.Provider)
-		if ok {
+		if providerConfig, ok := m.com.Config().Providers.Get(model.ModelCfg.Provider); ok {
 			providerName = providerConfig.Name
-
-			// Only check reasoning if model can reason
-			if model.CatwalkCfg.CanReason {
-				if len(model.CatwalkCfg.ReasoningLevels) == 0 {
-					if model.ModelCfg.Think {
-						reasoningInfo = "Thinking On"
-					} else {
-						reasoningInfo = "Thinking Off"
-					}
-				} else {
-					reasoningEffort := cmp.Or(model.ModelCfg.ReasoningEffort, model.CatwalkCfg.DefaultReasoningEffort)
-					reasoningInfo = fmt.Sprintf("Reasoning %s", common.FormatReasoningEffort(reasoningEffort))
-				}
-			}
 		}
+		// How hard the model thinks, read from the same per-model axis the
+		// /model arrows set. It is deliberately not inside the provider
+		// lookup above and not gated on CanReason: a model added by hand in
+		// crushrc has neither a catalog entry nor, necessarily, a named
+		// provider, and both gates used to leave its level invisible.
+		reasoningInfo = common.ReasoningSummary(m.com.Config(), model.ModelCfg, model.CatwalkCfg)
 	}
 
 	var modelContext *common.ModelContextInfo

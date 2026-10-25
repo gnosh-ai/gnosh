@@ -120,6 +120,29 @@ func (c *Config) ReasoningLevelOrDefault(provider string, model catwalk.Model) s
 	return defaultLevel(kind, levels)
 }
 
+// ReasoningLevelForSelected returns the level in force for the model a
+// selection points at, which is what the sidebar reports.
+//
+// It prefers the per-model level the /model arrows store, so the sidebar
+// and the dialog can never disagree. Failing that it takes the effort left
+// on the selection itself, which is what the older reasoning-effort dialog
+// writes and what [ModelItem.SelectedModel] carries over when a model is
+// picked. Only then does it fall back to the model's own default. It
+// returns "" for a model with no reasoning axis.
+func (c *Config) ReasoningLevelForSelected(sel SelectedModel, model catwalk.Model) string {
+	kind, levels := ReasoningAxis(model)
+	if kind == ReasoningNone {
+		return ""
+	}
+	if level, set := c.ReasoningLevel(sel.Provider, model.ID); set && slices.Contains(levels, level) {
+		return level
+	}
+	if slices.Contains(levels, sel.ReasoningEffort) {
+		return sel.ReasoningEffort
+	}
+	return c.ReasoningLevelOrDefault(sel.Provider, model)
+}
+
 // defaultLevel is where a model's axis sits before anything is chosen: the
 // middle of an effort scale (harmony's own default is medium), and thinking
 // on for a think switch, which is the server's default too.
