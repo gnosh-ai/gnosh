@@ -81,12 +81,16 @@ type exitStatus int
 
 func (e exitStatus) Error() string { return fmt.Sprintf("exit status %d", int(e)) }
 
-// stoppedStatus is err, or, when ctx was stopped by SIGTERM, the status
-// a process SIGTERM killed has, 128 plus the signal: 143. A command
-// stopped with SIGINT keeps its error.
+// stoppedStatus is err, or, when a signal stopped ctx, the status a
+// process the signal killed has, 128 plus the signal: 143 for SIGTERM, as
+// Claude Code's, and 130 for SIGINT. A run stopped with SIGINT printed
+// "Context canceled." and exited 1; Claude Code stops quietly too, but
+// with 0, which a script cannot tell from a run that finished.
 func stoppedStatus(ctx context.Context, err error) error {
-	if stopped, ok := errors.AsType[stoppedBySignal](context.Cause(ctx)); ok && stopped.sig == syscall.SIGTERM {
-		return exitStatus(128 + int(syscall.SIGTERM))
+	if stopped, ok := errors.AsType[stoppedBySignal](context.Cause(ctx)); ok {
+		if sig, ok := stopped.sig.(syscall.Signal); ok {
+			return exitStatus(128 + int(sig))
+		}
 	}
 	return err
 }

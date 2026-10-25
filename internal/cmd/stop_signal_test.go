@@ -67,7 +67,7 @@ func (f *fakeSignals) deliver(t *testing.T, ctx context.Context, sig os.Signal) 
 
 // SIGTERM and SIGINT each stop the context with the signal as the cause.
 // A command SIGTERM stopped exits 143, as a process SIGTERM killed would
-// and as Claude Code does; one stopped with SIGINT keeps its error.
+// and as Claude Code does; one stopped with SIGINT exits 130, quietly.
 func TestStopOnSignal(t *testing.T) {
 	f := useFakeSignals(t)
 
@@ -86,8 +86,8 @@ func TestStopOnSignal(t *testing.T) {
 	defer stop()
 	f.deliver(t, ctx, os.Interrupt)
 	require.Equal(t, stoppedBySignal{os.Interrupt}, context.Cause(ctx))
-	require.ErrorIs(t, stoppedStatus(ctx, context.Canceled), context.Canceled)
-	require.Equal(t, 1, exitCode(context.Canceled))
+	require.Equal(t, exitStatus(130), stoppedStatus(ctx, context.Canceled))
+	require.Equal(t, 1, exitCode(context.Canceled), "an error no signal caused exits 1")
 
 	// Not stopped by a signal: the error stands.
 	ctx, stop = stopOnSignal(context.Background())
