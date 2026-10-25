@@ -82,6 +82,11 @@ func (v *ViewToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		content = meta.Content
 	}
 
+	// A read of lines the session already had is a note, not the file.
+	if meta.Unchanged {
+		return joinToolParts(header, toolOutputPlainContent(sty, opts.Result.Content, cappedWidth, opts.ExpandedContent))
+	}
+
 	// Handle skill content.
 	if meta.ResourceType == tools.ViewResourceSkill {
 		body := toolOutputSkillContent(sty, meta.ResourceName, meta.ResourceDescription)

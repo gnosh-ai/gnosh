@@ -211,6 +211,6 @@ func fetchAgentTools(dir string, client *http.Client, lspManager *lsp.Manager, p
 		confine(dir, tools.NewGlobTool(permissions, dir, cfg.Glob)),
 		confine(dir, tools.NewGrepTool(permissions, dir, cfg.Grep)),
 		tools.NewSourcegraphTool(public),
-		confine(dir, tools.NewViewTool(lspManager, permissions, files, nil, nil, dir)),
+		confine(dir, tools.NewViewTool(lspManager, permissions, files, nil, nil, nil, dir)),
 	}
 }

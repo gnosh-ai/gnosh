@@ -70,7 +70,7 @@ func TestSubdirectoryContextOnWriteAndEdit(t *testing.T) {
 	hist := env.history
 
 	writeTool := tools.NewWriteTool(nil, sess, hist, tracker, c.subdirectoryContext, env.workingDir)
-	viewTool := tools.NewViewTool(nil, sess, tracker, nil, c.subdirectoryContext, env.workingDir)
+	viewTool := tools.NewViewTool(nil, sess, tracker, nil, c.subdirectoryContext, nil, env.workingDir)
 	editTool := tools.NewEditTool(nil, sess, hist, tracker, c.subdirectoryContext, env.workingDir)
 
 	ctx := context.WithValue(t.Context(), tools.SessionIDContextKey, one.ID)
@@ -163,7 +163,7 @@ func TestSubdirectoryContextFromEachTool(t *testing.T) {
 			input := `{"file_path":"sub/a.go","old_string":"package sub","new_string":"package sub2"}`
 			switch name {
 			case tools.ViewToolName:
-				tool = tools.NewViewTool(nil, env.permissions, tracker, nil, c.subdirectoryContext, env.workingDir)
+				tool = tools.NewViewTool(nil, env.permissions, tracker, nil, c.subdirectoryContext, nil, env.workingDir)
 				input = `{"file_path":"sub/a.go"}`
 			case tools.WriteToolName:
 				tool = tools.NewWriteTool(nil, env.permissions, env.history, tracker, c.subdirectoryContext, env.workingDir)

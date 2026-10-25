@@ -83,6 +83,9 @@ type ViewResponseMetadata struct {
 	ResourceType        ViewResourceType `json:"resource_type,omitempty"`
 	ResourceName        string           `json:"resource_name,omitempty"`
 	ResourceDescription string           `json:"resource_description,omitempty"`
+	// Unchanged is set when the lines were not given again: the
+	// session's context already holds them (see ViewedFiles).
+	Unchanged bool `json:"unchanged,omitempty"`
 }
 
 const (
@@ -111,14 +114,41 @@ func (e contentTooLargeError) Error() string {
 // summary, or "".
 type SubdirectoryContext func(ctx context.Context, sessionID, filePath string) string
 
+// FileRead is a view of Limit lines of a file after Skipped, and the
+// file's state when it was made.
+type FileRead struct {
+	Path           string
+	Skipped, Limit int
+	ModTime        time.Time
+	Size           int64
+}
+
+// ViewedFiles keeps the reads view gave each session that its context
+// still holds, as Claude Code's Read keeps them, so that a read of the
+// same lines of a file that has not changed since is answered with a
+// note instead of the lines again.
+type ViewedFiles interface {
+	// StillGiven reports whether the session's context holds read: the
+	// same lines of the file, as it is now.
+	StillGiven(ctx context.Context, sessionID string, read FileRead) bool
+	// Give records that view gave the session read.
+	Give(ctx context.Context, sessionID string, read FileRead)
+}
+
+// fileUnchanged is Claude Code's answer to a read of what the agent's
+// context already holds.
+const fileUnchanged = "Wasted call \u2014 file unchanged since your last view of it. Refer to that earlier tool result instead."
+
 // NewViewTool returns the view tool. subdirectoryContext, when not nil,
-// adds what it returns to the file read.
+// adds what it returns to the file read; viewed, when not nil, keeps the
+// reads it gives (see ViewedFiles).
 func NewViewTool(
 	lspManager *lsp.Manager,
 	permissions permission.Service,
 	filetracker filetracker.Service,
 	skillTracker *skills.Tracker,
 	subdirectoryContext SubdirectoryContext,
+	viewed ViewedFiles,
 	workingDir string,
 	skillsPaths ...string,
 ) fantasy.AgentTool {
@@ -246,6 +276,13 @@ func NewViewTool(
 				maxContentSize = 0
 			}
 			skipped := params.Skipped()
+			read := FileRead{Path: absFilePath, Skipped: skipped, Limit: params.Limit, ModTime: fileInfo.ModTime(), Size: fileInfo.Size()}
+			if viewed != nil && viewed.StillGiven(ctx, sessionID, read) {
+				return fantasy.WithResponseMetadata(
+					fantasy.NewTextResponse(fileUnchanged+getDiagnostics(filePath, lspManager)),
+					ViewResponseMetadata{FilePath: filePath, Unchanged: true},
+				), nil
+			}
 			content, hasMore, err := readTextFile(filePath, skipped, params.Limit, maxContentSize)
 			if err != nil {
 				var tooLarge contentTooLargeError
@@ -264,10 +301,12 @@ func NewViewTool(
 			output := "<file>\n"
 			output += addLineNumbers(content, skipped+1)
 
+			cutShort := false
 			if hasMore {
 				last := skipped + len(strings.Split(content, "\n"))
 				if last-skipped < params.Limit {
 					// Cut short at the size limit, not at the line limit.
+					cutShort = true
 					output += fmt.Sprintf("\n\n(Stopped after line %d: one read returns at most %dKB. To read on, use offset %d)",
 						last, maxContentSize/1024, last+1)
 				} else {
@@ -280,6 +319,11 @@ func NewViewTool(
 				output += subdirectoryContext(ctx, sessionID, absFilePath)
 			}
 			filetracker.RecordRead(ctx, sessionID, filePath)
+			// A read cut short is not all the lines asked for, so it is
+			// not taken for them, as Claude Code takes no partial view.
+			if viewed != nil && !cutShort {
+				viewed.Give(ctx, sessionID, read)
+			}
 
 			meta := ViewResponseMetadata{
 				FilePath: filePath,

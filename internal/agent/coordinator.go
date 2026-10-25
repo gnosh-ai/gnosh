@@ -232,6 +232,10 @@ type coordinator struct {
 	subdirectoryMu    sync.Mutex
 	subdirectoryGiven map[string]string
 
+	// viewed keeps the file reads each session's context holds, so that
+	// view gives an unchanged file's lines once; nil keeps none.
+	viewed *viewedFiles
+
 	// Skills discovery results (session-start snapshot).
 	allSkills    []*skills.Skill // Pre-filter: all discovered after dedup.
 	activeSkills []*skills.Skill // Post-filter: active skills only.
@@ -294,6 +298,7 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		named:              newNamedChanges(),
 
 		subdirectoryGiven: map[string]string{},
+		viewed:            newViewedFiles(opts.Sessions),
 	}
 	c.jobs = &jobWatcher{run: func(ctx context.Context, sessionID, prompt string) error {
 		_, err := c.Run(ctx, sessionID, prompt)
@@ -403,6 +408,15 @@ func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePa
 	return "\n<project_context>\nThis file's directory has context files of its own. Follow their instructions for the files there:\n" + b.String() + "</project_context>\n"
 }
 
+// viewedFiles is what keeps the file reads view gives, or nil, never a
+// nil *viewedFiles in the interface.
+func (c *coordinator) viewedFiles() tools.ViewedFiles {
+	if c.viewed == nil {
+		return nil
+	}
+	return c.viewed
+}
+
 // SetGoal sets the session's goal, in place of any it had.
 func (c *coordinator) SetGoal(sessionID, condition string) {
 	c.goals.Set(sessionID, Goal{Condition: condition})
@@ -432,12 +446,14 @@ func (c *coordinator) compactPoint(window int64) int64 {
 
 // Rewound forgets the subdirectories' context files the session was
 // given in the messages a rewind cut, and those given it with no message
-// known: it is given them again when it next touches a file there.
+// known: it is given them again when it next touches a file there. So
+// too the file reads view gave it there.
 func (c *coordinator) Rewound(sessionID string, removed []string) {
 	cut := make(map[string]bool, len(removed))
 	for _, id := range removed {
 		cut[id] = true
 	}
+	c.viewed.forget(sessionID, cut)
 	prefix := sessionID + "\x00"
 	c.subdirectoryMu.Lock()
 	defer c.subdirectoryMu.Unlock()
@@ -1152,7 +1168,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 		wrap(tools.NewLsTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Tools.Ls)),
 		wrap(tools.NewSourcegraphTool(nil)),
 		wrap(tools.NewTodosTool(c.sessions)),
-		wrap(tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, c.skillTracker, c.subdirectoryContext, c.cfg.WorkingDir(), c.cfg.Config().Options.SkillsPaths...)),
+		wrap(tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, c.skillTracker, c.subdirectoryContext, c.viewedFiles(), c.cfg.WorkingDir(), c.cfg.Config().Options.SkillsPaths...)),
 		wrap(tools.NewWriteTool(c.lspManager, c.permissions, c.history, c.filetracker, c.subdirectoryContext, c.cfg.WorkingDir())),
 	)
 

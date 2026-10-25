@@ -69,7 +69,7 @@ func TestToolsSayAPathIsNotThere(t *testing.T) {
 
 	file := filepath.Join(parent, "internal", "x.go")
 	want := "File does not exist. Note: your current working directory is " + project + ". Did you mean " + filepath.Join(project, "internal", "x.go") + "?"
-	require.Equal(t, want, run(NewViewTool(nil, perms, mockFileTracker{}, nil, nil, project), ViewParams{FilePath: file}))
+	require.Equal(t, want, run(NewViewTool(nil, perms, mockFileTracker{}, nil, nil, nil, project), ViewParams{FilePath: file}))
 	require.Equal(t, want, run(NewEditTool(nil, perms, &mockHistoryService{}, mockFileTracker{}, nil, project), EditParams{FilePath: file, OldString: "x", NewString: "y"}))
 	require.Equal(t, want, run(NewMultiEditTool(nil, perms, &mockHistoryService{}, mockFileTracker{}, nil, project), MultiEditParams{FilePath: file, Edits: []MultiEditOperation{{OldString: "x", NewString: "y"}}}))
 

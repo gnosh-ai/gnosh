@@ -339,7 +339,7 @@ func (m mockFileTracker) ForgetReadsSince(ctx context.Context, sessionID string,
 
 func newViewToolForTest(workingDir string) fantasy.AgentTool {
 	permissions := &mockViewPermissionService{Broker: pubsub.NewBroker[permission.PermissionRequest]()}
-	return NewViewTool(nil, permissions, mockFileTracker{}, nil, nil, workingDir)
+	return NewViewTool(nil, permissions, mockFileTracker{}, nil, nil, nil, workingDir)
 }
 
 func runViewTool(t *testing.T, tool fantasy.AgentTool, ctx context.Context, params ViewParams) fantasy.ToolResponse {
@@ -491,7 +491,7 @@ func TestViewToolAddsTheSubdirectoryContext(t *testing.T) {
 	tool := NewViewTool(nil, permissions, mockFileTracker{}, nil, func(_ context.Context, sessionID, filePath string) string {
 		asked = sessionID + " " + filePath
 		return "THE SUB RULES"
-	}, dir)
+	}, nil, dir)
 
 	resp := runViewTool(t, tool, context.WithValue(t.Context(), SessionIDContextKey, "s1"), ViewParams{FilePath: path})
 	require.Contains(t, resp.Content, "package a")

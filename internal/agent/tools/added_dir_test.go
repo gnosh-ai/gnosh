@@ -36,7 +36,7 @@ func TestReadToolsNeedNoPermissionInAnAddedDir(t *testing.T) {
 		require.NoError(t, err)
 		return resp.Content
 	}
-	require.Contains(t, run(NewViewTool(nil, perms, mockFileTracker{}, nil, nil, t.TempDir()), ViewParams{FilePath: filepath.Join(added, "notes.txt")}), "added notes")
+	require.Contains(t, run(NewViewTool(nil, perms, mockFileTracker{}, nil, nil, nil, t.TempDir()), ViewParams{FilePath: filepath.Join(added, "notes.txt")}), "added notes")
 	require.Contains(t, run(NewLsTool(perms, t.TempDir(), config.ToolLs{}), LSParams{Path: added}), "notes.txt")
 	require.Contains(t, run(NewGrepTool(perms, t.TempDir(), config.ToolGrep{}), GrepParams{Pattern: "added", Path: added}), "notes.txt")
 	require.Contains(t, run(NewGlobTool(perms, t.TempDir(), config.ToolGlob{}), GlobParams{Pattern: "*.txt", Path: added}), "notes.txt")
