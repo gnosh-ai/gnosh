@@ -114,6 +114,23 @@ func TestShutdownAfterSIGINTStillEndsTheSession(t *testing.T) {
 	require.Equal(t, "prompt_input_exit\n", string(data))
 }
 
+// A session open when a signal stopped klash ends with reason "other",
+// as Claude Code's does on SIGINT and SIGTERM; prompt_input_exit says the
+// user left from the prompt.
+func TestShutdownAfterASignalEndsWithOther(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$KLASH_SESSION_END_REASON" >> ` + filepath.Join(dir, "reasons")})
+	app.ReportCurrentSession("s1")
+	app.StoppedBySignal()
+	app.Shutdown()
+
+	data, err := os.ReadFile(filepath.Join(dir, "reasons"))
+	require.NoError(t, err)
+	require.Equal(t, "other\n", string(data))
+}
+
 func TestShutdownAfterRunEndsWithOther(t *testing.T) {
 	t.Parallel()
 

@@ -108,6 +108,9 @@ type App struct {
 	// session with reason "other" instead of the TUI's
 	// "prompt_input_exit".
 	nonInteractive bool
+	// stoppedBySignal is set when SIGINT or SIGTERM stopped klash, whose
+	// exit then ends the open session with reason "other" too.
+	stoppedBySignal bool
 }
 
 // permissionOptions is what the workspace's permission service is made
@@ -1188,6 +1191,15 @@ func (app *App) setNonInteractive(nonInteractive bool) {
 	app.sessionEndMu.Unlock()
 }
 
+// StoppedBySignal makes the session open when klash exits end with
+// reason "other", as Claude Code's does when SIGINT or SIGTERM stops it:
+// "prompt_input_exit" says the user left from the prompt.
+func (app *App) StoppedBySignal() {
+	app.sessionEndMu.Lock()
+	app.stoppedBySignal = true
+	app.sessionEndMu.Unlock()
+}
+
 func (app *App) InitCoderAgent(ctx context.Context) error {
 	// The interactive agent is for the TUI, which exits with reason
 	// prompt_input_exit; reset the flag a klash run may have set so a
@@ -1282,7 +1294,7 @@ func (app *App) Shutdown() {
 	// switched away from, say — does not end again.
 	app.sessionEndMu.Lock()
 	reason := sessionEndReasonPromptInputExit
-	if app.nonInteractive {
+	if app.nonInteractive || app.stoppedBySignal {
 		reason = sessionEndReasonOther
 	}
 	app.sessionEndMu.Unlock()

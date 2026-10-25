@@ -172,7 +172,15 @@ klash --continue
 		)
 		go ws.Subscribe(program)
 
-		if _, err := program.Run(); err != nil {
+		_, err = program.Run()
+		// Stopped by SIGINT or SIGTERM: the open session ends with reason
+		// "other", as Claude Code's does, not "prompt_input_exit".
+		if _, ok := errors.AsType[stoppedBySignal](context.Cause(ctx)); ok {
+			if appWs, ok := ws.(*workspace.AppWorkspace); ok {
+				appWs.App().StoppedBySignal()
+			}
+		}
+		if err != nil {
 			if stopped := tuiStopped(ctx, err); stopped != nil {
 				return stopped
 			}
