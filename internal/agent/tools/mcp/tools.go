@@ -61,7 +61,8 @@ func RunTool(ctx context.Context, cfg *config.ConfigStore, name, toolName string
 }
 
 // toolResultFromCall folds the content blocks of an MCP reply into the one
-// result Crush carries, keeping at most one image and one audio payload.
+// result Crush carries, keeping at most one image and one audio payload,
+// and its text cut to what it may bring into the conversation (capOutput).
 func toolResultFromCall(result *mcp.CallToolResult) ToolResult {
 	if len(result.Content) == 0 {
 		return ToolResult{Type: "text", Content: ""}
@@ -81,7 +82,7 @@ func toolResultFromCall(result *mcp.CallToolResult) ToolResult {
 			textParts = append(textParts, fmt.Sprintf("%v", v))
 		}
 	}
-	textContent := strings.Join(textParts, "\n")
+	textContent := capOutput(strings.Join(textParts, "\n"))
 
 	switch {
 	case image.seen && (len(image.data) > 0 || !audio.seen):
