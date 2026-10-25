@@ -85,7 +85,8 @@ func runGlob(t *testing.T, workingDir string, params GlobParams) (string, bool) 
 	t.Helper()
 	input, err := json.Marshal(params)
 	require.NoError(t, err)
-	resp, err := NewGlobTool(workingDir, config.ToolGlob{}).Run(context.Background(), fantasy.ToolCall{ID: "call-1", Name: GlobToolName, Input: string(input)})
+	ctx := context.WithValue(t.Context(), SessionIDContextKey, "s1")
+	resp, err := NewGlobTool(&mockPermissionService{}, workingDir, config.ToolGlob{}).Run(ctx, fantasy.ToolCall{ID: "call-1", Name: GlobToolName, Input: string(input)})
 	require.NoError(t, err)
 	return resp.Content, resp.IsError
 }

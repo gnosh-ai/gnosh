@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/fsext"
+	"github.com/charmbracelet/crush/internal/permission"
 )
 
 const GlobToolName = "glob"
@@ -52,7 +53,7 @@ type GlobResponseMetadata struct {
 	Truncated     bool `json:"truncated"`
 }
 
-func NewGlobTool(workingDir string, cfg config.ToolGlob) fantasy.AgentTool {
+func NewGlobTool(permissions permission.Service, workingDir string, cfg config.ToolGlob) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		GlobToolName,
 		globDescription(),
@@ -63,6 +64,10 @@ func NewGlobTool(workingDir string, cfg config.ToolGlob) fantasy.AgentTool {
 
 			// Relative to the tool's working directory, as for grep.
 			searchPath := filepathext.SmartJoin(workingDir, params.Path)
+			walkRoot, _ := globWalk(params.Pattern, searchPath)
+			if resp, stop, err := askToSearch(ctx, permissions, call, GlobToolName, walkRoot, workingDir, params); stop {
+				return resp, err
+			}
 			if params.Path != "" {
 				if msg := searchDirError(params.Path, searchPath, workingDir); msg != "" {
 					return fantasy.NewTextErrorResponse(msg), nil
@@ -102,28 +107,31 @@ func NewGlobTool(workingDir string, cfg config.ToolGlob) fantasy.AgentTool {
 	)
 }
 
-func globFiles(ctx context.Context, pattern, searchPath string, limit int) ([]string, bool, error) {
-	// Scope the walk to the pattern's literal directory prefix. A pattern
-	// like "internal/agent/*.go" only needs to walk "internal/agent", so we
-	// start there instead of enumerating the entire tree and filtering.
-	// Patterns that begin with a wildcard (e.g. "**/foo.go") have no prefix
-	// and still walk from searchPath.
-	// An absolute pattern names its own directory, whatever the search
-	// path: "/usr/local/bin/k*" walks /usr/local/bin, not a directory of
-	// that name under the search path.
+// globWalk is the directory a glob of pattern under searchPath walks, and
+// the pattern it matches there. The walk is scoped to the pattern's
+// literal directory prefix: "internal/agent/*.go" only needs to walk
+// internal/agent, so it starts there instead of enumerating the entire
+// tree and filtering. Patterns that begin with a wildcard (e.g.
+// "**/foo.go") have no prefix and still walk from searchPath. An
+// absolute pattern names its own directory, whatever the search path:
+// "/usr/local/bin/k*" walks /usr/local/bin, not a directory of that name
+// under the search path.
+func globWalk(pattern, searchPath string) (walkRoot, walkPattern string) {
 	prefix, rest := filepathext.SplitGlobPrefix(pattern)
-	walkRoot := searchPath
-	walkPattern := pattern
 	switch {
 	case filepath.IsAbs(pattern):
-		walkRoot, walkPattern = prefix, rest
-		if walkRoot == filepath.VolumeName(walkRoot) {
-			walkRoot += string(filepath.Separator)
+		if prefix == filepath.VolumeName(prefix) {
+			prefix += string(filepath.Separator)
 		}
+		return prefix, rest
 	case prefix != "":
-		walkRoot = filepath.Join(searchPath, prefix)
-		walkPattern = rest
+		return filepath.Join(searchPath, prefix), rest
 	}
+	return searchPath, pattern
+}
+
+func globFiles(ctx context.Context, pattern, searchPath string, limit int) ([]string, bool, error) {
+	walkRoot, walkPattern := globWalk(pattern, searchPath)
 	// A pattern whose directory is not there matches nothing, as in
 	// Claude Code, rather than failing the search.
 	if _, err := os.Stat(walkRoot); errors.Is(err, fs.ErrNotExist) {

@@ -561,13 +561,13 @@ func (s *permissionService) SkipRequests() bool {
 
 // addedDirTools are the tools whose reads and listings are approved under
 // a directory added with --add-dir, each with the action it asks for:
-// view reading a file, ls listing a directory. Only theirs: the MCP
-// resource tools and gnokey ask with the same action names for a path
-// that names no file on disk (an MCP URI joined to the working
-// directory, a directory the model chose), and still ask. The names are
-// internal/agent/tools', which imports this package; a test there runs
-// the real tools against an added directory.
-var addedDirTools = map[string]string{"view": "read", "ls": "list"}
+// view reading a file, ls listing a directory, grep and glob searching
+// one. Only theirs: the MCP resource tools and gnokey ask with the same
+// action names for a path that names no file on disk (an MCP URI joined
+// to the working directory, a directory the model chose), and still ask.
+// The names are internal/agent/tools', which imports this package; a
+// test there runs the real tools against an added directory.
+var addedDirTools = map[string]string{"view": "read", "ls": "list", "grep": "search", "glob": "search"}
 
 // AddDir implements Service.
 func (s *permissionService) AddDir(dir string) {

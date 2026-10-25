@@ -509,7 +509,7 @@ func TestGrepExplainsRegexOperatorsOnNoMatch(t *testing.T) {
 	dir := t.TempDir()
 	src := "package server\n\nfunc (s *Server) Start() {}\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "server.go"), []byte(src), 0o644))
-	tool := NewGrepTool(dir, config.ToolGrep{})
+	tool := NewGrepTool(&mockPermissionService{}, dir, config.ToolGrep{})
 
 	grep := func(t *testing.T, params GrepParams) string {
 		t.Helper()
@@ -566,7 +566,7 @@ func TestGrepTimeoutStopsAndReports(t *testing.T) {
 	setRipgrepForTest(t, path)
 
 	timeout := 200 * time.Millisecond
-	tool := NewGrepTool(dir, config.ToolGrep{Timeout: &timeout})
+	tool := NewGrepTool(&mockPermissionService{}, dir, config.ToolGrep{Timeout: &timeout})
 	input, err := json.Marshal(GrepParams{Pattern: "hello"})
 	require.NoError(t, err)
 	resp, err := tool.Run(t.Context(), fantasy.ToolCall{ID: "grep-call", Name: GrepToolName, Input: string(input)})
@@ -680,7 +680,7 @@ func TestGrepIgnoreCase(t *testing.T) {
 
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.go"), []byte("// Hello, World\n"), 0o644))
-	tool := NewGrepTool(dir, config.ToolGrep{})
+	tool := NewGrepTool(&mockPermissionService{}, dir, config.ToolGrep{})
 	grep := func(params GrepParams) string {
 		input, err := json.Marshal(params)
 		require.NoError(t, err)
@@ -701,7 +701,7 @@ func TestGrepIgnoreCase(t *testing.T) {
 // Claude Code's parameter names and all.
 func grepRaw(t *testing.T, dir, input string) fantasy.ToolResponse {
 	t.Helper()
-	resp, err := NewGrepTool(dir, config.ToolGrep{}).Run(t.Context(), fantasy.ToolCall{ID: "grep-call", Name: GrepToolName, Input: input})
+	resp, err := NewGrepTool(&mockPermissionService{}, dir, config.ToolGrep{}).Run(t.Context(), fantasy.ToolCall{ID: "grep-call", Name: GrepToolName, Input: input})
 	require.NoError(t, err)
 	return resp
 }
@@ -843,7 +843,7 @@ func TestFirstMatchesKeepsContextWithItsMatch(t *testing.T) {
 func TestGrepSchemaHasClaudeCodesNames(t *testing.T) {
 	t.Parallel()
 
-	params := NewGrepTool(t.TempDir(), config.ToolGrep{}).Info().Parameters
+	params := NewGrepTool(&mockPermissionService{}, t.TempDir(), config.ToolGrep{}).Info().Parameters
 	for _, name := range []string{"-A", "-B", "-C", "-i", "glob", "type", "output_mode", "head_limit", "multiline"} {
 		require.Contains(t, params, name)
 	}

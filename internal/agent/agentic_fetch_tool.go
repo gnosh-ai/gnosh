@@ -208,8 +208,8 @@ func fetchAgentTools(dir string, client *http.Client, lspManager *lsp.Manager, p
 	return []fantasy.AgentTool{
 		tools.NewWebFetchTool(dir, public),
 		tools.NewWebSearchTool(public),
-		confine(dir, tools.NewGlobTool(dir, cfg.Glob)),
-		confine(dir, tools.NewGrepTool(dir, cfg.Grep)),
+		confine(dir, tools.NewGlobTool(permissions, dir, cfg.Glob)),
+		confine(dir, tools.NewGrepTool(permissions, dir, cfg.Grep)),
 		tools.NewSourcegraphTool(public),
 		confine(dir, tools.NewViewTool(lspManager, permissions, files, nil, nil, dir)),
 	}

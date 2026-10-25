@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// view reads and ls lists in a directory added with --add-dir without
-// asking: the permission service approves them there by these tools'
-// names and the actions they ask for, so a renamed tool or action would
-// quietly start asking again.
-func TestViewAndLsNeedNoPermissionInAnAddedDir(t *testing.T) {
+// view reads, ls lists, and grep and glob search in a directory added
+// with --add-dir without asking: the permission service approves them
+// there by these tools' names and the actions they ask for, so a renamed
+// tool or action would quietly start asking again.
+func TestReadToolsNeedNoPermissionInAnAddedDir(t *testing.T) {
 	t.Parallel()
 
 	added := t.TempDir()
@@ -38,6 +38,8 @@ func TestViewAndLsNeedNoPermissionInAnAddedDir(t *testing.T) {
 	}
 	require.Contains(t, run(NewViewTool(nil, perms, mockFileTracker{}, nil, nil, t.TempDir()), ViewParams{FilePath: filepath.Join(added, "notes.txt")}), "added notes")
 	require.Contains(t, run(NewLsTool(perms, t.TempDir(), config.ToolLs{}), LSParams{Path: added}), "notes.txt")
+	require.Contains(t, run(NewGrepTool(perms, t.TempDir(), config.ToolGrep{}), GrepParams{Pattern: "added", Path: added}), "notes.txt")
+	require.Contains(t, run(NewGlobTool(perms, t.TempDir(), config.ToolGlob{}), GlobParams{Pattern: "*.txt", Path: added}), "notes.txt")
 	select {
 	case e := <-asked:
 		t.Fatalf("asked for %s %s on %s", e.Payload.ToolName, e.Payload.Action, e.Payload.Path)

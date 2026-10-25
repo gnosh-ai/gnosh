@@ -25,6 +25,7 @@ import (
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/filepathext"
 	"github.com/charmbracelet/crush/internal/fsext"
+	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -171,7 +172,7 @@ func regexOperatorHint(pattern string) string {
 	return ""
 }
 
-func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
+func NewGrepTool(permissions permission.Service, workingDir string, config config.ToolGrep) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		GrepToolName,
 		grepDescription(),
@@ -215,6 +216,9 @@ func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 			// process's: they differ for the fetch agent, whose tools work
 			// in a temporary directory.
 			searchPath := filepathext.SmartJoin(workingDir, params.Path)
+			if resp, stop, err := askToSearch(ctx, permissions, call, GrepToolName, searchPath, workingDir, params); stop {
+				return resp, err
+			}
 			if msg := missingSearchPath(params.Path, searchPath, workingDir); msg != "" {
 				return fantasy.NewTextErrorResponse(msg), nil
 			}

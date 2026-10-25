@@ -23,7 +23,7 @@ func TestReadsInAddedDirsNeedNoPermission(t *testing.T) {
 	require.False(t, s.inAddedDir(filepath.Join(added, "..", "elsewhere")))
 	require.False(t, NewPermissionService(t.TempDir(), false, nil).(*permissionService).inAddedDir(added))
 
-	for tool, action := range map[string]string{"view": "read", "ls": "list"} {
+	for tool, action := range map[string]string{"view": "read", "ls": "list", "grep": "search", "glob": "search"} {
 		ok, err := s.Request(context.Background(), CreatePermissionRequest{
 			SessionID: "s1",
 			ToolName:  tool,
@@ -35,7 +35,8 @@ func TestReadsInAddedDirsNeedNoPermission(t *testing.T) {
 	}
 }
 
-// Only view's reads and ls's listings are approved in an added directory.
+// Only view's reads, ls's listings, and grep's and glob's searches are
+// approved in an added directory.
 // The MCP resource tools and gnokey ask with the same action names for a
 // path that is no file read from disk (an MCP URI joined to the working
 // directory, a directory the model chose); with the working directory
@@ -51,6 +52,7 @@ func TestOtherReadsInAddedDirsStillAsk(t *testing.T) {
 		{ToolName: "list_mcp_resources", Action: "list", Path: under},
 		{ToolName: "gnokey", Action: "list", Path: added},
 		{ToolName: "view", Action: "list", Path: added},
+		{ToolName: "grep", Action: "read", Path: added},
 		{ToolName: "made_up", Path: added},
 	} {
 		t.Run(req.ToolName+" "+req.Action, func(t *testing.T) {

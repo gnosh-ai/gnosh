@@ -75,9 +75,9 @@ func TestToolsSayAPathIsNotThere(t *testing.T) {
 
 	dir := filepath.Join(parent, "internal")
 	want = "Path does not exist: " + dir + ". Note: your current working directory is " + project + ". Did you mean " + filepath.Join(project, "internal") + "?"
-	require.Equal(t, want, run(NewGrepTool(project, config.ToolGrep{}), GrepParams{Pattern: "x", Path: dir}))
+	require.Equal(t, want, run(NewGrepTool(perms, project, config.ToolGrep{}), GrepParams{Pattern: "x", Path: dir}))
 	require.Equal(t, want, run(NewLsTool(perms, project, config.ToolLs{}), LSParams{Path: dir}))
 	want = "Path does not exist: nope. Note: your current working directory is " + project + "."
-	require.Equal(t, want, run(NewGrepTool(project, config.ToolGrep{}), GrepParams{Pattern: "x", Path: "nope"}))
+	require.Equal(t, want, run(NewGrepTool(perms, project, config.ToolGrep{}), GrepParams{Pattern: "x", Path: "nope"}))
 	require.Equal(t, want, run(NewLsTool(perms, project, config.ToolLs{}), LSParams{Path: "nope"}))
 }
