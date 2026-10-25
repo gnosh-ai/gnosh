@@ -2837,7 +2837,9 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		if msg.Skill != nil {
 			content = msg.Skill.FormatInvocation()
 		}
-		cmds = append(cmds, m.sendMessage(content))
+		// What is attached in the editor goes with the prompt, as Claude
+		// Code sends what was pasted with a custom command.
+		cmds = append(cmds, m.sendMessage(content, m.takeAttachments()...))
 		m.dialog.CloseFrontDialog()
 	case dialog.ActionAttachSkill:
 		m.dialog.CloseFrontDialog()
@@ -5522,62 +5524,94 @@ func (m *UI) ensureSession() (tea.Cmd, error) {
 	return cmd, nil
 }
 
-// sendMessage sends a message with the given content and attachments.
+// sendMessage sends content to the agent with what was attached, unless
+// it is a command, which runs instead and leaves what was attached in the
+// editor (see keepAttachments).
 func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.Cmd {
-	if enabled, ok := config.ParseThinkingCommand(content); ok {
-		return m.setThinking(enabled)
-	}
-	if name, ok := session.ParseRenameCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		return m.renameSession(name)
-	}
-	if ref, ok := session.ParseResumeCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		return m.resumeSession(ref)
-	}
-	if instructions, ok := session.ParseCompactCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		return m.compactFromPrompt(instructions)
-	}
-	if session.ParseContextCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		return m.contextReport()
-	}
-	if session.ParseHooksCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		m.openHooksReport()
-		return nil
-	}
-	if session.ParsePermissionsCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		return m.permissionsReport()
-	}
-	if session.ParseStatusCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		m.openStatusReport()
-		return nil
-	}
-	if session.ParseTasksCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		return m.listTasks()
-	}
-	if session.ParseDiffCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		m.openDiffReport()
-		return nil
-	}
-	if name, ok := session.ParseBranchCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		return m.branchSession(name)
-	}
-	if session.ParseRewindCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		return m.openRewind()
-	}
-	if n, ok := session.ParseCopyCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		return m.copyResponse(n)
-	}
-	if session.ParseDoctorCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		return m.doctorReport()
-	}
-	if filename, ok := session.ParseExportCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
-		return m.exportConversation(filename)
+	if cmd, ok := m.builtinCommand(content); ok {
+		m.keepAttachments(attachments)
+		return cmd
 	}
 	if name, ok := dialog.SlashCommandName(content); ok {
-		if cmd, ok := m.slashCommand(content, name); ok {
+		if cmd, ok := m.slashCommand(content, name, attachments); ok {
 			return cmd
 		}
 	}
 	return m.sendMessageInternal(content, false, attachments...)
+}
+
+// builtinCommand runs content when it is one of klash's own commands, as
+// typed in the editor, and reports whether it was.
+func (m *UI) builtinCommand(content string) (tea.Cmd, bool) {
+	if enabled, ok := config.ParseThinkingCommand(content); ok {
+		return m.setThinking(enabled), true
+	}
+	if name, ok := session.ParseRenameCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.renameSession(name), true
+	}
+	if ref, ok := session.ParseResumeCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.resumeSession(ref), true
+	}
+	if instructions, ok := session.ParseCompactCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.compactFromPrompt(instructions), true
+	}
+	if session.ParseContextCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.contextReport(), true
+	}
+	if session.ParseHooksCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		m.openHooksReport()
+		return nil, true
+	}
+	if session.ParsePermissionsCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.permissionsReport(), true
+	}
+	if session.ParseStatusCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		m.openStatusReport()
+		return nil, true
+	}
+	if session.ParseTasksCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.listTasks(), true
+	}
+	if session.ParseDiffCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		m.openDiffReport()
+		return nil, true
+	}
+	if name, ok := session.ParseBranchCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.branchSession(name), true
+	}
+	if session.ParseRewindCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.openRewind(), true
+	}
+	if n, ok := session.ParseCopyCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.copyResponse(n), true
+	}
+	if session.ParseDoctorCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.doctorReport(), true
+	}
+	if filename, ok := session.ParseExportCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.exportConversation(filename), true
+	}
+	return nil, false
+}
+
+// keepAttachments puts what was attached with a command back in the
+// editor: a command takes nothing attached, so it waits there for the
+// prompt it was meant for. It used to be dropped.
+func (m *UI) keepAttachments(attachments []message.Attachment) {
+	for _, attachment := range attachments {
+		m.attachments.Update(attachment)
+	}
+}
+
+// takeAttachments takes what is attached in the editor, for a prompt sent
+// from elsewhere: a custom command's.
+func (m *UI) takeAttachments() []message.Attachment {
+	if m.attachments == nil {
+		return nil
+	}
+	attachments := m.attachments.List()
+	m.attachments.Reset()
+	return attachments
 }
 
 // renameSession names the current session, as Claude Code's /rename does,
@@ -6159,18 +6193,24 @@ func (m *UI) newCommands() (*dialog.Commands, error) {
 // Claude Code runs one wherever it is typed: the palette's command of
 // that name, as if chosen there. A name no command has is said to be
 // unknown, and the line goes back in the editor to be fixed, unless it is
-// a path ("/tmp is full?"), which goes to the model as a prompt. ok is
-// false when content is to be sent.
-func (m *UI) slashCommand(content, name string) (cmd tea.Cmd, ok bool) {
+// a path ("/tmp is full?"), which goes to the model as a prompt. What was
+// attached goes back in the editor too (see keepAttachments), where the
+// prompt a custom command makes takes it. ok is false when content is to
+// be sent.
+func (m *UI) slashCommand(content, name string, attachments []message.Attachment) (cmd tea.Cmd, ok bool) {
 	commands, err := m.newCommands()
 	if err != nil {
 		return nil, false
 	}
-	if action, found := commands.Lookup(name); found {
-		return m.handleDialogAction(dialog.WithArgs(action, dialog.SlashCommandArgs(content))), true
+	action, found := commands.Lookup(name)
+	if !found {
+		if _, err := os.Stat("/" + name); err == nil {
+			return nil, false
+		}
 	}
-	if _, err := os.Stat("/" + name); err == nil {
-		return nil, false
+	m.keepAttachments(attachments)
+	if found {
+		return m.handleDialogAction(dialog.WithArgs(action, dialog.SlashCommandArgs(content))), true
 	}
 	m.textarea.SetValue(content)
 	return util.ReportWarn(dialog.UnknownCommand(name, commands.Suggest(name))), true

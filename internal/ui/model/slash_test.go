@@ -50,7 +50,7 @@ func TestTypedSlashCommands(t *testing.T) {
 	u.textarea.Reset()
 	require.Equal(t, util.NewWarnMsg("Unknown command: /zqxzqx"), u.sendMessage("/zqxzqx")())
 
-	_, ok := u.slashCommand("/tmp is it full?", "tmp")
+	_, ok := u.slashCommand("/tmp is it full?", "tmp", nil)
 	require.False(t, ok, "a path that is there is a prompt")
 }
 
