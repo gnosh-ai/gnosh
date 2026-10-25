@@ -838,6 +838,41 @@ func (c *Client) BranchSession(ctx context.Context, id, sessionID, title string)
 	return &sess, nil
 }
 
+// SessionGoal is a session's goal, nil when it has none.
+func (c *Client) SessionGoal(ctx context.Context, id, sessionID string) (*proto.Goal, error) {
+	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/sessions/%s/goal", id, sessionID), nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get the session goal: %w", err)
+	}
+	return decodeGoalStatus(rsp)
+}
+
+// SetSessionGoal sets a session's goal, or clears it when condition is
+// "", and returns the goal it had, nil when it had none.
+func (c *Client) SetSessionGoal(ctx context.Context, id, sessionID, condition string) (*proto.Goal, error) {
+	rsp, err := c.put(ctx, fmt.Sprintf("/workspaces/%s/sessions/%s/goal", id, sessionID), nil, jsonBody(proto.GoalRequest{Condition: condition}), http.Header{"Content-Type": []string{"application/json"}})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set the session goal: %w", err)
+	}
+	return decodeGoalStatus(rsp)
+}
+
+// decodeGoalStatus reads a goal answer, or the error the server sent.
+func decodeGoalStatus(rsp *http.Response) (*proto.Goal, error) {
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		if msg := decodeErrorMessage(rsp.Body); msg != "" {
+			return nil, errors.New(msg)
+		}
+		return nil, fmt.Errorf("session goal: status code %d", rsp.StatusCode)
+	}
+	var status proto.GoalStatus
+	if err := json.NewDecoder(rsp.Body).Decode(&status); err != nil {
+		return nil, fmt.Errorf("failed to decode the session goal: %w", err)
+	}
+	return status.Goal, nil
+}
+
 // Rewind restores a session's conversation, its code or both to the point
 // before one of its prompts, or with req.DryRun says what restoring the
 // code would change.

@@ -1048,6 +1048,8 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case rewoundMsg:
 		cmds = append(cmds, m.rewound(msg))
+	case goalSetMsg:
+		cmds = append(cmds, m.goalSet(msg))
 	case tasksMsg:
 		if cmd := m.showTasks(msg); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -2388,6 +2390,9 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionAutocompact:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.autocompact(msg.Window))
+	case dialog.ActionGoal:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.goal(msg.Condition))
 	case dialog.ActionRewindPick:
 		cmds = append(cmds, m.previewRewind(msg.SessionID, msg.Prompt))
 	case dialog.ActionRewindTo:
@@ -5588,6 +5593,9 @@ func (m *UI) builtinCommand(content string) (tea.Cmd, bool) {
 	if window, ok := session.ParseAutocompactCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.autocompact(window), true
 	}
+	if condition, ok := session.ParseGoalCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.goal(condition), true
+	}
 	if n, ok := session.ParseCopyCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.copyResponse(n), true
 	}
@@ -6519,6 +6527,9 @@ func (m *UI) handleAgentNotification(n notify.Notification) tea.Cmd {
 		// Informational only. Returning here, before the busy/queue
 		// refresh below, keeps it from being read as a turn ending.
 		return util.ReportWarn(n.Message)
+	case notify.TypeGoalMet:
+		// Informational too.
+		return util.ReportInfo(n.Message)
 	default:
 		return nil
 	}

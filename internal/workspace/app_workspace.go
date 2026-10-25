@@ -67,6 +67,14 @@ func (w *AppWorkspace) BranchSession(ctx context.Context, sessionID, title strin
 	return w.app.BranchSession(ctx, sessionID, title)
 }
 
+func (w *AppWorkspace) SessionGoal(_ context.Context, sessionID string) (agent.Goal, bool, error) {
+	return w.app.SessionGoal(sessionID)
+}
+
+func (w *AppWorkspace) SetSessionGoal(_ context.Context, sessionID, condition string) (agent.Goal, bool, error) {
+	return w.app.SetSessionGoal(sessionID, condition)
+}
+
 func (w *AppWorkspace) Rewind(ctx context.Context, sessionID, messageID string, opts app.RewindOptions) (app.RewindResult, error) {
 	return w.app.Rewind(ctx, sessionID, messageID, opts)
 }

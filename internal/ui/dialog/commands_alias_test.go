@@ -46,6 +46,7 @@ func TestPaletteFindsClaudeCodeSlashNames(t *testing.T) {
 		"branch":        "Branch Conversation",
 		"rewind":        "Rewind",
 		"autocompact":   "Auto-compact Window",
+		"goal":          "Goal",
 		"checkpoint":    "Rewind",
 		"undo":          "Rewind",
 		"bashes":        "Background Tasks",
@@ -299,4 +300,28 @@ func TestPaletteAutocompactTakesTheWindow(t *testing.T) {
 	require.Equal(t, ActionAutocompact{Window: "150k"}, enter("", "autocompact 150k"))
 	require.Equal(t, ActionAutocompact{Window: "auto"}, enter("s1", "autocompact auto"))
 	require.Equal(t, ActionAutocompact{}, enter("", "autocompact"))
+}
+
+// Claude Code's /goal takes the condition: typed into the palette with
+// it, Enter sets it, with or without a session; alone, it is the Goal
+// item.
+func TestPaletteGoalTakesTheCondition(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	enter := func(sessionID, typed string) Action {
+		c, err := NewCommands(com, sessionID, sessionID != "", false, false, nil, nil)
+		require.NoError(t, err)
+		for _, r := range typed {
+			c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+		return c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	}
+	require.Equal(t, ActionGoal{Condition: "the tests pass"}, enter("", "goal the tests pass"))
+	require.Equal(t, ActionGoal{Condition: "clear"}, enter("s1", "goal clear"))
+	require.Equal(t, ActionGoal{}, enter("s1", "goal"))
 }

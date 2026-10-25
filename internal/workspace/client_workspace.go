@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/app"
@@ -148,6 +149,24 @@ func (w *ClientWorkspace) BranchSession(ctx context.Context, sessionID, title st
 		return session.Session{}, err
 	}
 	return protoToSession(*sess), nil
+}
+
+func (w *ClientWorkspace) SessionGoal(ctx context.Context, sessionID string) (agent.Goal, bool, error) {
+	goal, err := w.client.SessionGoal(ctx, w.workspaceID(), sessionID)
+	return protoToGoal(goal, err)
+}
+
+func (w *ClientWorkspace) SetSessionGoal(ctx context.Context, sessionID, condition string) (agent.Goal, bool, error) {
+	had, err := w.client.SetSessionGoal(ctx, w.workspaceID(), sessionID, condition)
+	return protoToGoal(had, err)
+}
+
+// protoToGoal is a goal from the wire: none when it is nil.
+func protoToGoal(goal *proto.Goal, err error) (agent.Goal, bool, error) {
+	if err != nil || goal == nil {
+		return agent.Goal{}, false, err
+	}
+	return agent.Goal{Condition: goal.Condition, Checks: goal.Checks, LastCheck: goal.LastCheck}, true, nil
 }
 
 func (w *ClientWorkspace) Rewind(ctx context.Context, sessionID, messageID string, opts app.RewindOptions) (app.RewindResult, error) {

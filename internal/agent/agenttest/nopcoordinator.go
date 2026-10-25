@@ -70,3 +70,9 @@ func (*NopCoordinator) ToolInfos(context.Context) ([]fantasy.ToolInfo, error) {
 func (*NopCoordinator) ToolNames() []string { return nil }
 
 func (*NopCoordinator) Rewound(string, []string) {}
+
+func (*NopCoordinator) SetGoal(string, string) {}
+
+func (*NopCoordinator) Goal(string) (agent.Goal, bool) { return agent.Goal{}, false }
+
+func (*NopCoordinator) ClearGoal(string) (agent.Goal, bool) { return agent.Goal{}, false }

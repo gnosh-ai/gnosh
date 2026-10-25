@@ -165,6 +165,12 @@ type SessionAgentCall struct {
 	// reason to stop. Only on such a turn does StopMarker in its reply
 	// end the turn; elsewhere the Stop hook stays in charge.
 	stopHookReflecting bool
+	// goalChecks counts how many checks in a row found the session's goal
+	// not met, riding along on the queued continuation as stopHookDepth
+	// does, and goalReflecting marks a continuation sent at a reflection
+	// checkpoint (see goalContinuation).
+	goalChecks     int
+	goalReflecting bool
 	// OnAuthRefresh, when non-nil, is called by fantasy when a stream
 	// fails with an authentication error (HTTP 401). The callback should
 	// refresh credentials and return nil on success, in which case
@@ -274,6 +280,9 @@ type sessionAgent struct {
 	// turns; sendChannelReply treats nil as "routing disabled".
 	cfg                  *config.ConfigStore
 	disableAutoSummarize bool
+	// goals are the sessions' goals, shared with the coordinator that sets
+	// them; nil, there are none (see goalContinuation).
+	goals *csync.Map[string, Goal]
 	// idleCompaction holds each session's idle-compaction timer, armed
 	// when a turn ends and stopped when the next starts; idleCompactAfter
 	// is how long it waits (see armIdleCompaction).
@@ -378,6 +387,9 @@ type SessionAgentOptions struct {
 	// coordinator's main agents share one, as SessionStarts; nil gives
 	// the agent its own.
 	InstructionsLoaded *instructionsLoadedState
+	// Goals are the sessions' goals (see Goal), shared by a coordinator's
+	// agents, which set them; nil, there are none.
+	Goals *csync.Map[string, Goal]
 }
 
 func NewSessionAgent(
@@ -421,6 +433,7 @@ func NewSessionAgent(
 		compactLevels:         csync.NewMap[string, int](),
 		sessionStarts:         sessionStarts,
 		instructionsLoaded:    instructionsLoaded,
+		goals:                 opts.Goals,
 	}
 }
 
@@ -1475,6 +1488,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				"tool", loopCalls[0].ToolName,
 			)
 			a.queueContinuation(loopContinuation(call, loopCalls))
+			continued = true
+		} else if next, unmet := a.goalContinuation(ctx, call, currentAssistant.Content().String()); unmet {
+			a.queueContinuation(next)
 			continued = true
 		} else if next, blocked := a.stopHookContinuation(ctx, call, currentAssistant.Content().String()); blocked {
 			a.queueContinuation(next)

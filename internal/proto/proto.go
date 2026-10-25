@@ -198,6 +198,25 @@ type BranchRequest struct {
 	Title string `json:"title,omitempty"`
 }
 
+// Goal is a session's goal, as Claude Code's /goal sets one: a condition
+// the agent keeps working toward until a check finds it holds; Checks
+// counts the checks, and LastCheck is what the last one found missing.
+type Goal struct {
+	Condition string `json:"condition"`
+	Checks    int    `json:"checks"`
+	LastCheck string `json:"last_check,omitempty"`
+}
+
+// GoalStatus is a session's goal: Goal is nil when it has none.
+type GoalStatus struct {
+	Goal *Goal `json:"goal,omitempty"`
+}
+
+// GoalRequest sets a session's goal, or clears it when Condition is "".
+type GoalRequest struct {
+	Condition string `json:"condition"`
+}
+
 // RewindRequest asks for a session's conversation, its code or both to be
 // restored to the point before its prompt MessageID; with DryRun, only
 // what restoring the code would change.

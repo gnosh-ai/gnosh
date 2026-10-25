@@ -242,3 +242,19 @@ func TestParseAutocompactCommand(t *testing.T) {
 		require.False(t, ok, line)
 	}
 }
+
+// /goal is read with what follows it: the condition, a word that clears
+// it, or nothing.
+func TestParseGoalCommand(t *testing.T) {
+	t.Parallel()
+
+	for line, want := range map[string]string{"/goal": "", "goal the tests pass": "the tests pass", " /Goal  clear ": "clear"} {
+		condition, ok := ParseGoalCommand(line)
+		require.True(t, ok, line)
+		require.Equal(t, want, condition, line)
+	}
+	for _, line := range []string{"/goals", "/go al", "my goal", ""} {
+		_, ok := ParseGoalCommand(line)
+		require.False(t, ok, line)
+	}
+}

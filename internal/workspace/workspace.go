@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/agent"
 	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/commands"
@@ -126,6 +127,11 @@ type Workspace interface {
 	// BranchSession copies the session's conversation into a new session,
 	// titled title or after the session, as Claude Code's /branch does.
 	BranchSession(ctx context.Context, sessionID, title string) (session.Session, error)
+	// SessionGoal is the session's goal (see agent.Goal), and false when
+	// it has none; SetSessionGoal sets it, or clears it when condition is
+	// "", and returns the goal it had, as Claude Code's /goal does.
+	SessionGoal(ctx context.Context, sessionID string) (agent.Goal, bool, error)
+	SetSessionGoal(ctx context.Context, sessionID, condition string) (agent.Goal, bool, error)
 	// Rewind restores the session's conversation, its code or both to the
 	// point before its prompt messageID, as Claude Code's /rewind does;
 	// with opts.DryRun it only says what restoring the code would change.

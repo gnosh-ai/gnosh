@@ -31,6 +31,10 @@ const (
 	// text. It is informational: it does not mark the end of a turn, so
 	// observers must not treat it as a busy→idle edge.
 	TypeHookWarning Type = "hook_warning"
+	// TypeGoalMet reports that a session's goal was found met, and
+	// cleared (see agent.Goal); Message says so. Informational, like
+	// TypeHookWarning: it does not mark the end of a turn.
+	TypeGoalMet Type = "goal_met"
 )
 
 // Notification represents a domain event published by the agent.

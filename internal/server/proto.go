@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/proto"
@@ -396,6 +397,41 @@ func (c *controllerV1) handlePostWorkspaceSessionBranch(w http.ResponseWriter, r
 	out.IsBusy = isSessionBusy(ws, branch.ID)
 	out.AttachedClients = attachedClients(ws, branch.ID)
 	jsonEncode(w, out)
+}
+
+// handleGetWorkspaceSessionGoal answers a session's goal.
+func (c *controllerV1) handleGetWorkspaceSessionGoal(w http.ResponseWriter, r *http.Request) {
+	goal, ok, err := c.backend.SessionGoal(r.PathValue("id"), r.PathValue("sid"))
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	jsonEncode(w, goalStatus(goal, ok))
+}
+
+// handlePutWorkspaceSessionGoal sets a session's goal, or clears it, and
+// answers the goal it had.
+func (c *controllerV1) handlePutWorkspaceSessionGoal(w http.ResponseWriter, r *http.Request) {
+	var req proto.GoalRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.server.logError(r, "Failed to decode request", "error", err)
+		jsonError(w, http.StatusBadRequest, "failed to decode request")
+		return
+	}
+	had, ok, err := c.backend.SetSessionGoal(r.PathValue("id"), r.PathValue("sid"), req.Condition)
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	jsonEncode(w, goalStatus(had, ok))
+}
+
+// goalStatus is goal on the wire, none when ok is false.
+func goalStatus(goal agent.Goal, ok bool) proto.GoalStatus {
+	if !ok {
+		return proto.GoalStatus{}
+	}
+	return proto.GoalStatus{Goal: &proto.Goal{Condition: goal.Condition, Checks: goal.Checks, LastCheck: goal.LastCheck}}
 }
 
 // handlePostWorkspaceSessionRewind restores a session's conversation, its

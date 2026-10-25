@@ -221,6 +221,10 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 			if instructions, ok := session.ParseCompactCommand(c.input.Value()); ok && instructions != "" && c.hasSession {
 				return ActionSummarize{SessionID: c.sessionID, Instructions: instructions}
 			}
+			// And "goal" and the condition; "goal" alone is the Goal item.
+			if condition, ok := session.ParseGoalCommand(c.input.Value()); ok && condition != "" {
+				return ActionGoal{Condition: condition}
+			}
 			// And "autocompact" and the window; "autocompact" alone is
 			// the Auto-compact Window item.
 			if window, ok := session.ParseAutocompactCommand(c.input.Value()); ok && window != "" {
@@ -527,6 +531,9 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	commands = append(commands, NewCommandItem(c.com.Styles, "context_usage", "Context Usage", "", ActionContextUsage{}).
 		WithAliases("context").
 		WithDescription("What fills the context window, as Claude Code's /context shows it"))
+	commands = append(commands, NewCommandItem(c.com.Styles, "goal", "Goal", "", ActionGoal{}).
+		WithAliases("goal").
+		WithDescription("Set a goal the agent works toward until a check finds it met; type goal and the condition, or goal clear"))
 	commands = append(commands, NewCommandItem(c.com.Styles, "autocompact", "Auto-compact Window", "", ActionAutocompact{}).
 		WithAliases("autocompact").
 		WithDescription("Set how full the context gets before auto-summarizing; type autocompact and auto or a token count"))

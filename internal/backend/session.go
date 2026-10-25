@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/app"
 
 	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
@@ -33,6 +34,31 @@ func (b *Backend) BranchSession(ctx context.Context, workspaceID, sessionID, tit
 		return session.Session{}, ErrAgentNotInitialized
 	}
 	return ws.App.BranchSession(ctx, sessionID, title)
+}
+
+// SessionGoal is a session's goal, and false when it has none.
+func (b *Backend) SessionGoal(workspaceID, sessionID string) (agent.Goal, bool, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return agent.Goal{}, false, err
+	}
+	if ws.App == nil {
+		return agent.Goal{}, false, ErrAgentNotInitialized
+	}
+	return ws.App.SessionGoal(sessionID)
+}
+
+// SetSessionGoal sets a session's goal, as Claude Code's /goal does, or
+// clears it when condition is "", and returns the goal it had.
+func (b *Backend) SetSessionGoal(workspaceID, sessionID, condition string) (agent.Goal, bool, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return agent.Goal{}, false, err
+	}
+	if ws.App == nil {
+		return agent.Goal{}, false, ErrAgentNotInitialized
+	}
+	return ws.App.SetSessionGoal(sessionID, condition)
 }
 
 // Rewind restores a session's conversation, its code or both to the point

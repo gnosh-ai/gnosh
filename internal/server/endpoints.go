@@ -163,6 +163,27 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Handle(c.handlePostWorkspaceSessionBranch),
 
+		apigen.Get("/v1/workspaces/{id}/sessions/{sid}/goal").
+			Summary("Get session goal").
+			Description("The session's goal, as Claude Code's /goal sets one, with how many checks found it not met and what the last one found missing; none when it has none.").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Responds(proto.GoalStatus{}).
+			Fails(400, 404, 500).
+			Handle(c.handleGetWorkspaceSessionGoal),
+
+		apigen.Put("/v1/workspaces/{id}/sessions/{sid}/goal").
+			Summary("Set session goal").
+			Description("Sets the session's goal, as Claude Code's /goal does, or clears it when the condition is empty, and answers the goal it had.").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Accepts(proto.GoalRequest{}).
+			Responds(proto.GoalStatus{}).
+			Fails(400, 404, 500).
+			Handle(c.handlePutWorkspaceSessionGoal),
+
 		apigen.Post("/v1/workspaces/{id}/sessions/{sid}/rewind").
 			Summary("Rewind session").
 			Description("Restores the session's conversation, its code or both to the point before one of its prompts, as Claude Code's /rewind does, keeping the whole conversation in a session of its own; with dry_run, says what restoring the code would change.").

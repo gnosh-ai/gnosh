@@ -74,6 +74,13 @@ func ParseRewindCommand(line string) bool {
 	return ok
 }
 
+// ParseGoalCommand reports whether line is Claude Code's /goal command,
+// with or without the slash, and what follows it: the goal's condition,
+// a word that clears it, or "" to show it.
+func ParseGoalCommand(line string) (arg string, ok bool) {
+	return parseCommand(line, "goal")
+}
+
 // ParseAutocompactCommand reports whether line is Claude Code's
 // /autocompact command, with or without the slash, and the window it
 // gives ("" when none).

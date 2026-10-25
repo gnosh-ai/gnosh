@@ -149,6 +149,12 @@ type (
 		SessionID    string
 		Instructions string
 	}
+	// ActionGoal sets, clears or shows the session's goal, as Claude
+	// Code's /goal does: Condition is the goal, a word that clears it
+	// (clear, off, reset, none, cancel), or "" to show it.
+	ActionGoal struct {
+		Condition string
+	}
 	// ActionAutocompact sets how full the context gets before it is
 	// summarized, as Claude Code's /autocompact does: Window is auto or
 	// a token count, "" to say what is set.
