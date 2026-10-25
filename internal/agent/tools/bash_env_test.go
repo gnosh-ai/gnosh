@@ -26,7 +26,7 @@ func TestBashEnvLimits(t *testing.T) {
 	}
 
 	def, most, output, hour := limits("", "", "")
-	require.Equal(t, []int{60, 600, 30000, 600}, []int{def, most, output, hour}, "Klash's own limits")
+	require.Equal(t, []int{120, 600, 30000, 600}, []int{def, most, output, hour}, "Klash's own limits")
 
 	def, most, output, hour = limits("600000", "1800000", "60000")
 	require.Equal(t, []int{600, 1800, 60000, 1800}, []int{def, most, output, hour})
@@ -39,7 +39,7 @@ func TestBashEnvLimits(t *testing.T) {
 	require.Equal(t, 150000, output, "as in Claude Code, at most 150000")
 
 	def, most, output, _ = limits("0", "-1", "lots")
-	require.Equal(t, []int{60, 600, 30000}, []int{def, most, output}, "a value that is no positive number is ignored")
+	require.Equal(t, []int{120, 600, 30000}, []int{def, most, output}, "a value that is no positive number is ignored")
 
 	require.Equal(t, 2, func() int { t.Setenv("BASH_DEFAULT_TIMEOUT_MS", "1001"); return defaultWaitSeconds() }(), "rounded up to whole seconds")
 }

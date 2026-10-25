@@ -184,8 +184,9 @@ Claude Code's names work here too.
   `timeout` in milliseconds; and `view`'s `offset` is the line number to start
   at. Claude Code's `BASH_DEFAULT_TIMEOUT_MS`, `BASH_MAX_TIMEOUT_MS` and
   `BASH_MAX_OUTPUT_LENGTH` set how long a command runs before it moves to the
-  background (60 seconds unless set), the most a call's `timeout` can ask for,
-  and how much of its output the model reads. Klash used to drop these without a word, so a model asking for context
+  background (2 minutes unless set, as in Claude Code), the most a call's
+  `timeout` can ask for, and how much of its output the model reads. Klash
+  used to drop these without a word, so a model asking for context
   lines, a list of files or a ten-minute test run got none of them, and one
   viewing from line 120 started at line 121. A file the agent looked at in
   bash, with `cat`, `head`, `tail`, `sed -n '10,20p'`, `grep` or `rg` on that

@@ -29,7 +29,7 @@ type BashParams struct {
 	Command             string `json:"command" description:"The command to execute"`
 	WorkingDir          string `json:"working_dir,omitempty" description:"The working directory to execute the command in (defaults to current directory)"`
 	RunInBackground     bool   `json:"run_in_background,omitempty" description:"Set to true (boolean) to run this command in the background. Use job_output to read the output later."`
-	AutoBackgroundAfter int    `json:"auto_background_after,omitempty" description:"Seconds to wait before automatically moving the command to a background job (default: 60)"`
+	AutoBackgroundAfter int    `json:"auto_background_after,omitempty" description:"Seconds to wait before automatically moving the command to a background job (default: 120)"`
 	Timeout             int    `json:"timeout,omitempty" description:"Milliseconds to wait for the command before it moves to a background job, at most the most the tool description gives; auto_background_after wins if both are set"`
 }
 
@@ -63,9 +63,11 @@ func bashEnvInt(name string, def int) int {
 // defaultWaitSeconds is how long a command runs before it moves to the
 // background when its call gives no timeout: BASH_DEFAULT_TIMEOUT_MS, as
 // in Claude Code, rounded up to whole seconds, or
-// DefaultAutoBackgroundAfter. A long job (a test suite, a render) that
-// finishes within it costs the model no job_output round trips, each of
-// which on a local model means a step over the whole conversation.
+// DefaultAutoBackgroundAfter, Claude Code's 2 minutes. A long job (a test
+// suite, a render) that finishes within it costs the model no job_output
+// round trips, each of which on a local model means a step over the whole
+// conversation. Of the commands moved to the background on the AI box in
+// a week at 60 seconds, a sixth or more would have ended within 2 minutes.
 func defaultWaitSeconds() int {
 	return (bashEnvInt("BASH_DEFAULT_TIMEOUT_MS", DefaultAutoBackgroundAfter*1000) + 999) / 1000
 }
@@ -110,7 +112,7 @@ type BashResponseMetadata struct {
 const (
 	BashToolName = "bash"
 
-	DefaultAutoBackgroundAfter = 60 // Commands taking longer automatically become background jobs
+	DefaultAutoBackgroundAfter = 120 // Commands taking longer automatically become background jobs, after Claude Code's 2 minutes
 	MaxOutputLength            = 30000
 	BashNoOutput               = "no output"
 )
