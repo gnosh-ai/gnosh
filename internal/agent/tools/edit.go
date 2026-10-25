@@ -201,11 +201,13 @@ func createNewFile(edit editContext, filePath, content string, call fantasy.Tool
 }
 
 // findAndReplace performs a find-and-replace on content. When replaceAll is
-// false it requires exactly one match. If an exact match fails, it falls back
-// to whitespace-normalized matching and, failing that, returns a diagnostic
-// hint describing why the replacement could not be made. The returned boolean
-// reports whether the replacement relied on the whitespace-normalized
-// fallback rather than an exact match.
+// false it requires exactly one match. If an exact match fails, it looks for
+// old as Claude Code's Edit does, with curly quotes or \uXXXX escapes as the
+// file has them (see actualOldString), then falls back to whitespace-
+// normalized matching and, failing that, returns a diagnostic hint describing
+// why the replacement could not be made. The returned boolean reports whether
+// the replacement relied on the whitespace-normalized fallback rather than an
+// exact match.
 func findAndReplace(content, old, new string, replaceAll bool) (string, bool, error) {
 	if replaceAll {
 		if strings.Contains(content, old) {
@@ -221,6 +223,10 @@ func findAndReplace(content, old, new string, replaceAll bool) (string, bool, er
 		default:
 			return content[:index] + new + content[index+len(old):], false, nil
 		}
+	}
+
+	if actual := actualOldString(content, old); actual != "" && actual != old {
+		return findAndReplace(content, actual, styledNewString(old, actual, new), replaceAll)
 	}
 
 	if result, ok := normalizedReplace(content, old, new, replaceAll); ok {
