@@ -726,6 +726,11 @@ func initTipWanted(state uiState, sessionAsked bool, needsInit func() (bool, err
 	return needs
 }
 
+// initTipTTL is how long the tip to run /init stays: given once, as the
+// UI starts, it would be gone in a status message's usual 5 seconds
+// before most eyes reach it.
+const initTipTTL = 30 * time.Second
+
 // initTipCmd gives the tip to run /init, once: it marks the project as
 // told, as either answer to the question did. nil without initTip.
 func (m *UI) initTipCmd() tea.Cmd {
@@ -733,7 +738,8 @@ func (m *UI) initTipCmd() tea.Cmd {
 		return nil
 	}
 	initFile := cmp.Or(m.com.Config().Options.InitializeAs, "AGENTS.md")
-	return tea.Batch(util.ReportInfo(fmt.Sprintf("Run /init to create a %s file with instructions for Klash", initFile)), m.markProjectInitializedCmd())
+	tip := util.InfoMsg{Type: util.InfoTypeInfo, Msg: fmt.Sprintf("Run /init to create a %s file with instructions for Klash", initFile), TTL: initTipTTL}
+	return tea.Batch(util.CmdHandler(tip), m.markProjectInitializedCmd())
 }
 
 // startState is the screen the UI starts on: onboarding until a provider

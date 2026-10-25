@@ -169,12 +169,13 @@ func TestInitTip(t *testing.T) {
 	u.initTip = true
 	batch, ok := u.initTipCmd()().(tea.BatchMsg)
 	require.True(t, ok)
-	var infos []string
+	var infos []util.InfoMsg
 	for _, cmd := range batch {
 		if info, ok := cmd().(util.InfoMsg); ok {
-			infos = append(infos, info.Msg)
+			infos = append(infos, info)
 		}
 	}
-	require.Equal(t, []string{"Run /init to create a KLASH.md file with instructions for Klash"}, infos)
+	require.Equal(t, []util.InfoMsg{{Type: util.InfoTypeInfo, Msg: "Run /init to create a KLASH.md file with instructions for Klash", TTL: initTipTTL}}, infos)
+	require.Greater(t, initTipTTL, DefaultStatusTTL, "longer than a status message's usual life")
 	require.Equal(t, 1, ws.marked, "told once")
 }
