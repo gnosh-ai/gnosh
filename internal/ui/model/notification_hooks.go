@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/version"
 )
@@ -67,11 +68,13 @@ func (m *UI) armPermissionNotification(toolName string) tea.Cmd {
 
 // armIdleNotification starts the wait for a finished turn's Notification
 // hook, as in Claude Code: it fires once the turn finished
-// idleNotificationDelay ago and the user has not typed since.
-func (m *UI) armIdleNotification(sessionTitle string) tea.Cmd {
+// idleNotificationDelay ago and the user has not typed since. Its
+// session_id is the session whose turn finished, the one its message
+// names, which need not be the session on screen.
+func (m *UI) armIdleNotification(sessionID, sessionTitle string) tea.Cmd {
 	return m.armNotificationHook(notificationHookIdle, idleNotificationDelay,
-		"", "",
-		hooks.NotificationTypeIDlePrompt,
+		"", sessionID,
+		hooks.NotificationTypeIdlePrompt,
 		fmt.Sprintf("Agent's turn completed in \"%s\"", sessionTitle),
 		version.Name+" is waiting...")
 }
@@ -80,6 +83,9 @@ func (m *UI) armIdleNotification(sessionTitle string) tea.Cmd {
 // the wait of the same kind already running (if any): the old wait's
 // token is bumped, so its tick is ignored when it comes.
 func (m *UI) armNotificationHook(kind notificationHookKind, delay time.Duration, toolName, sessionID, notificationType, message, title string) tea.Cmd {
+	if len(m.notificationHooks()) == 0 {
+		return nil
+	}
 	m.notifToken++
 	cwd := ""
 	if m.com != nil && m.com.Workspace != nil {
@@ -163,11 +169,10 @@ func (m *UI) handleNotificationHookExpired(msg notificationHookMsg) tea.Cmd {
 	return m.fireNotificationHook(armed)
 }
 
-// fireNotificationHook runs the Notification hooks for a notification
-// whose wait has elapsed, as in Claude Code: in the background, so the
-// TUI does not wait for them, and without a say — a hook's exit code and
-// output are ignored, and a hook that fails is logged.
-func (m *UI) fireNotificationHook(armed *notificationHookArmed) tea.Cmd {
+// notificationHooks are the config's Notification hooks. With none, no
+// wait is armed: a finished turn otherwise left a minute's tick running
+// for nothing, which a test that runs a turn's commands waited out.
+func (m *UI) notificationHooks() []config.HookConfig {
 	if m.com == nil || m.com.Workspace == nil {
 		return nil
 	}
@@ -175,7 +180,15 @@ func (m *UI) fireNotificationHook(armed *notificationHookArmed) tea.Cmd {
 	if cfg == nil {
 		return nil
 	}
-	hookCfgs := cfg.Hooks[hooks.EventNotification]
+	return cfg.Hooks[hooks.EventNotification]
+}
+
+// fireNotificationHook runs the Notification hooks for a notification
+// whose wait has elapsed, as in Claude Code: in the background, so the
+// TUI does not wait for them, and without a say — a hook's exit code and
+// output are ignored, and a hook that fails is logged.
+func (m *UI) fireNotificationHook(armed *notificationHookArmed) tea.Cmd {
+	hookCfgs := m.notificationHooks()
 	if len(hookCfgs) == 0 {
 		return nil
 	}

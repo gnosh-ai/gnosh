@@ -195,6 +195,18 @@ func runOut(t *testing.T, out tea.Cmd) {
 	_ = m
 }
 
+// requireNoHookRun checks that no Notification hook wrote to path for
+// half a second: a hook that fires runs in the background, so its file
+// can come a moment after the command that fired it, and checking at once
+// passed even when one fired.
+func requireNoHookRun(t *testing.T, path, msg string) {
+	t.Helper()
+	require.Never(t, func() bool {
+		_, err := os.Stat(path)
+		return err == nil
+	}, 500*time.Millisecond, 10*time.Millisecond, msg)
+}
+
 func readNotified(t *testing.T, path string) []map[string]any {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -286,7 +298,7 @@ func TestPermissionNotificationKeypressStartsTheWaitAgain(t *testing.T) {
 	// nothing.
 	_, out := u.Update(waitForTick(t, ch))
 	runOut(t, out)
-	require.NoFileExists(t, payload, "the original wait was restarted by the key press")
+	requireNoHookRun(t, payload, "the original wait was restarted by the key press")
 
 	// The restarted wait fires, once.
 	_, out = u.Update(waitForTick(t, keyCh))
@@ -323,7 +335,7 @@ func TestPermissionNotificationAnsweredSoonerFiresNothing(t *testing.T) {
 	runOut(t, out)
 	_, out = u.Update(waitForTick(t, keyCh))
 	runOut(t, out)
-	require.NoFileExists(t, payload)
+	requireNoHookRun(t, payload, "")
 }
 
 // As in Claude Code, a turn that has finished and the delay has passed
@@ -341,9 +353,11 @@ func TestIdleNotificationFiresAfterTheWait(t *testing.T) {
 	u.com.Config().Options.Notifications = "disabled"
 	u.notifyWindowFocused = true
 
+	// The turn finished in another session than the one on screen; the
+	// hook is told of that one, which the message names.
 	_, cmd := u.Update(pubsub.Event[notify.Notification]{Payload: notify.Notification{
 		Type:         notify.TypeAgentFinished,
-		SessionID:    "sess-1",
+		SessionID:    "sess-2",
 		SessionTitle: "my project",
 	}})
 	ch := runBatchedCmds(t, cmd)
@@ -364,8 +378,24 @@ func TestIdleNotificationFiresAfterTheWait(t *testing.T) {
 	require.Equal(t, "idle_prompt", payloads[0]["notification_type"])
 	require.Equal(t, `Agent's turn completed in "my project"`, payloads[0]["message"])
 	require.Equal(t, version.Name+" is waiting...", payloads[0]["title"])
-	require.Equal(t, "sess-1", payloads[0]["session_id"])
+	require.Equal(t, "sess-2", payloads[0]["session_id"])
 	require.Equal(t, dir, payloads[0]["cwd"])
+}
+
+// With no Notification hooks there is nothing to wait for: neither a
+// permission prompt nor a finished turn arms a wait, so no tick runs on
+// for a minute (a test that ran a finished turn's commands waited out the
+// minute).
+func TestNotificationWaitsOnlyWithHooks(t *testing.T) {
+	u, _ := newNotificationTestUI(t, t.TempDir(), nil)
+	u.Update(pubsub.Event[notify.Notification]{Payload: notify.Notification{
+		Type:         notify.TypeAgentFinished,
+		SessionID:    "sess-1",
+		SessionTitle: "my project",
+	}})
+	require.Nil(t, u.idleNotification)
+	u.Update(permissionRequestEvent("bash"))
+	require.Nil(t, u.permNotification)
 }
 
 // A key press before the finished turn's wait comes due fires nothing.
@@ -388,7 +418,7 @@ func TestIdleNotificationKeypressFiresNothing(t *testing.T) {
 
 	_, out := u.Update(waitForTick(t, ch))
 	runOut(t, out)
-	require.NoFileExists(t, payload)
+	requireNoHookRun(t, payload, "")
 }
 
 // A new prompt before the finished turn's wait comes due fires nothing.
@@ -417,5 +447,5 @@ func TestIdleNotificationNewPromptFiresNothing(t *testing.T) {
 
 	_, out = u.Update(waitForTick(t, ch))
 	runOut(t, out)
-	require.NoFileExists(t, payload)
+	requireNoHookRun(t, payload, "")
 }

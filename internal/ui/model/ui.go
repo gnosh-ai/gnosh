@@ -6575,7 +6575,7 @@ func (m *UI) handleAgentNotification(n notify.Notification) tea.Cmd {
 			Title:   version.Name + " is waiting...",
 			Message: fmt.Sprintf("Agent's turn completed in \"%s\"", n.SessionTitle),
 		}))
-		cmds = append(cmds, m.armIdleNotification(n.SessionTitle))
+		cmds = append(cmds, m.armIdleNotification(n.SessionID, n.SessionTitle))
 		// Show what the stored balance says right away, and fetch again:
 		// the refresh for the turn's last response is only kicked off once
 		// its request finishes, so it may still be in flight here.

@@ -457,8 +457,8 @@ const (
 	// NotificationTypePermissionPrompt is a permission prompt that has
 	// been waiting for the user.
 	NotificationTypePermissionPrompt = "permission_prompt"
-	// NotificationTypeIDlePrompt is a finished turn with no reply.
-	NotificationTypeIDlePrompt = "idle_prompt"
+	// NotificationTypeIdlePrompt is a finished turn with no reply.
+	NotificationTypeIdlePrompt = "idle_prompt"
 )
 
 // BuildNotificationPayload constructs the JSON stdin payload for an

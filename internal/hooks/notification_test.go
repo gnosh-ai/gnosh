@@ -64,7 +64,7 @@ func TestRunNotification(t *testing.T) {
 	// The title is optional, as in Claude Code: a notification without
 	// one leaves it out of the payload.
 	var noTitle map[string]any
-	require.NoError(t, json.Unmarshal(BuildNotificationPayload("s", "/w", NotificationTypeIDlePrompt, "done", ""), &noTitle))
+	require.NoError(t, json.Unmarshal(BuildNotificationPayload("s", "/w", NotificationTypeIdlePrompt, "done", ""), &noTitle))
 	require.NotContains(t, noTitle, "title")
 
 	// A matcher is tested against the notification type.
@@ -72,7 +72,7 @@ func TestRunNotification(t *testing.T) {
 	result, err := matched.RunNotification(context.Background(), "sess", NotificationTypePermissionPrompt, "m", "")
 	require.NoError(t, err)
 	require.Zero(t, result.HookCount, "a hook matched on idle does not fire for a waiting permission prompt")
-	result, err = matched.RunNotification(context.Background(), "sess", NotificationTypeIDlePrompt, "m", "")
+	result, err = matched.RunNotification(context.Background(), "sess", NotificationTypeIdlePrompt, "m", "")
 	require.NoError(t, err)
 	require.Equal(t, 1, result.HookCount)
 }
