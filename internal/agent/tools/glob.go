@@ -77,10 +77,17 @@ func NewGlobTool(permissions permission.Service, workingDir string, cfg config.T
 			// Bound the search so a huge or symlink-heavy root (e.g. $HOME
 			// or a module cache) fails cleanly instead of pinning the CPU
 			// and hanging the agent.
-			searchCtx, cancel := context.WithTimeout(ctx, cfg.GetTimeout())
+			timeout := cfg.GetTimeout()
+			searchCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 
 			files, truncated, err := globFiles(searchCtx, params.Pattern, searchPath, 100)
+			if errors.Is(searchCtx.Err(), context.DeadlineExceeded) {
+				// Cut short by its timeout, the search answered with what
+				// it had found, "No files found" for files that may be
+				// there. It says so, as grep does.
+				err = fmt.Errorf("search timed out after %s; try a narrower path or pattern", timeout)
+			}
 			if err != nil {
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("error finding files: %v", err)), nil
 			}
