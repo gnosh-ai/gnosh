@@ -756,8 +756,22 @@ func checkClaudeCodeGrep(t *testing.T, dir string) {
 	require.Contains(t, counts, filepath.ToSlash(filepath.Join(dir, "a.go"))+": 2\n")
 
 	limited := content(`{"pattern": "three", "glob": "*.go", "head_limit": 1}`)
-	require.Contains(t, limited, "Found 1 matches")
-	require.Contains(t, limited, "(Results are truncated.")
+	require.Contains(t, limited, "Found 2 matches\n")
+	require.Contains(t, limited, "  Line 3, Char 1: three\n")
+	require.NotContains(t, limited, "six three")
+	require.True(t, strings.HasSuffix(limited, "\n[Showing results with pagination = limit: 1]"), limited)
+	next := content(`{"pattern": "three", "glob": "*.go", "head_limit": 1, "offset": 1}`)
+	require.Contains(t, next, "  Line 6, Char 5: six three\n")
+	require.NotContains(t, next, "Line 3")
+	require.True(t, strings.HasSuffix(next, "\n[Showing results with pagination = offset: 1]"), next)
+	require.Contains(t, content(`{"pattern": "three", "glob": "*.go", "offset": 5}`), "No entries at this offset\n[Showing results with pagination = offset: 5]")
+	require.NotContains(t, content(`{"pattern": "three", "glob": "*.go", "head_limit": 0}`), "pagination")
+	pagedFiles := content(`{"pattern": "three", "-i": true, "output_mode": "files_with_matches", "head_limit": 1}`)
+	require.Contains(t, pagedFiles, "Found 2 files\n")
+	require.Equal(t, 1, strings.Count(pagedFiles, filepath.ToSlash(dir)), pagedFiles)
+	require.True(t, strings.HasSuffix(pagedFiles, "\n[Showing results with pagination = limit: 1]"), pagedFiles)
+	require.Contains(t, grepRaw(t, dir, `{"pattern": "three", "head_limit": -1}`).Content, "head_limit must be a whole number of 0 or more, got -1. Pass 0 for unlimited.")
+	require.Contains(t, grepRaw(t, dir, `{"pattern": "three", "offset": -2}`).Content, "offset must be a whole number of 0 or more, got -2.")
 
 	bad := grepRaw(t, dir, `{"pattern": "three", "output_mode": "lines"}`)
 	require.True(t, bad.IsError)
@@ -844,7 +858,25 @@ func TestGrepSchemaHasClaudeCodesNames(t *testing.T) {
 	t.Parallel()
 
 	params := NewGrepTool(&mockPermissionService{}, t.TempDir(), config.ToolGrep{}).Info().Parameters
-	for _, name := range []string{"-A", "-B", "-C", "-i", "glob", "type", "output_mode", "head_limit", "multiline"} {
+	for _, name := range []string{"-A", "-B", "-C", "-i", "glob", "type", "output_mode", "head_limit", "offset", "multiline"} {
 		require.Contains(t, params, name)
 	}
+	require.Equal(t, "integer", params["head_limit"].(map[string]any)["type"], "head_limit is a number, though it may be left out")
+}
+
+// Grep shows the first 250 lines when head_limit does not say, as Claude
+// Code's Grep does, and says it left the rest out.
+func TestGrepShowsTwoHundredFiftyLinesByDefault(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	var b strings.Builder
+	for i := range 300 {
+		fmt.Fprintf(&b, "match %d\n", i)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "many.txt"), []byte(b.String()), 0o644))
+	out := grepContent(t, dir, `{"pattern": "match"}`)
+	require.Contains(t, out, "Found 300 matches\n")
+	require.Equal(t, 250, strings.Count(out, "  Line "))
+	require.True(t, strings.HasSuffix(out, "\n[Showing results with pagination = limit: 250]"), out[len(out)-100:])
 }

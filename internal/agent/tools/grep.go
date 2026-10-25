@@ -85,7 +85,8 @@ type GrepParams struct {
 	After        int    `json:"-A,omitempty" description:"Lines to show after each match, in content mode"`
 	Before       int    `json:"-B,omitempty" description:"Lines to show before each match, in content mode"`
 	ContextLines int    `json:"-C,omitempty" description:"Lines to show before and after each match, in content mode"`
-	HeadLimit    int    `json:"head_limit,omitempty" description:"Show at most this many matches, files or counts. Default is 100."`
+	HeadLimit    *int   `json:"head_limit,omitempty" description:"Limit output to the first N lines or entries, as | head -N: output lines in content mode, file paths in files_with_matches mode, count entries in count mode. Defaults to 250. Pass 0 for unlimited (use sparingly: large result sets waste context)."`
+	Offset       int    `json:"offset,omitempty" description:"Skip the first N lines or entries before applying head_limit, as | tail -n +N | head -N. Defaults to 0."`
 	Multiline    bool   `json:"multiline,omitempty" description:"If true, . matches newlines and a pattern can span lines. Default is false."`
 }
 
@@ -138,8 +139,32 @@ type grepDescriptionData struct {
 
 func grepDescription() string {
 	return renderTemplate(grepDescriptionTpl, grepDescriptionData{
-		MaxResults: 100,
+		MaxResults: grepDefaultLimit,
 	})
+}
+
+// grepDefaultLimit is how many lines or entries grep shows when head_limit
+// does not say, as Claude Code's Grep; grepSearchLimit is how many matches
+// a search keeps, for head_limit and offset to page through.
+const (
+	grepDefaultLimit = 250
+	grepSearchLimit  = 10000
+)
+
+// page is entries from offset on, at most limit of them (0: no limit),
+// and Claude Code's account of the paging when it left any out: "limit:
+// 250", with ", offset: 10" after skipping some.
+func page[T any](entries []T, offset, limit int) ([]T, string) {
+	var said []string
+	entries = entries[min(offset, len(entries)):]
+	if limit > 0 && len(entries) > limit {
+		entries = entries[:limit]
+		said = append(said, fmt.Sprintf("limit: %d", limit))
+	}
+	if offset > 0 {
+		said = append(said, fmt.Sprintf("offset: %d", offset))
+	}
+	return entries, strings.Join(said, ", ")
 }
 
 // escapeRegexPattern escapes special regex characters so they're treated as literal characters
@@ -202,15 +227,19 @@ func NewGrepTool(permissions permission.Service, workingDir string, config confi
 				opts.before = cmp.Or(params.Before, params.ContextLines)
 				opts.after = cmp.Or(params.After, params.ContextLines)
 			}
-			limit := params.HeadLimit
-			if limit <= 0 {
-				limit = 100
+			// Lines and entries are shown head_limit at a time, from
+			// offset, after the search, as Claude Code's Grep shows them.
+			limit := grepDefaultLimit
+			if params.HeadLimit != nil {
+				limit = *params.HeadLimit
 			}
-			// Files and counts are limited per file, after the search.
-			searchLimit := limit
-			if mode != grepOutputContent {
-				searchLimit = 10000
+			if limit < 0 {
+				return fantasy.NewTextErrorResponse(fmt.Sprintf("head_limit must be a whole number of 0 or more, got %d. Pass 0 for unlimited.", limit)), nil
 			}
+			if params.Offset < 0 {
+				return fantasy.NewTextErrorResponse(fmt.Sprintf("offset must be a whole number of 0 or more, got %d.", params.Offset)), nil
+			}
+			searchLimit := grepSearchLimit
 
 			// A relative path is the tool's, as view's is, not the
 			// process's: they differ for the fetch agent, whose tools work
@@ -232,6 +261,7 @@ func NewGrepTool(permissions permission.Service, workingDir string, config confi
 			}
 
 			var output strings.Builder
+			var paging string
 			found := countMatches(matches)
 			switch {
 			case found == 0:
@@ -240,12 +270,21 @@ func NewGrepTool(permissions permission.Service, workingDir string, config confi
 					output.WriteString(regexOperatorHint(params.Pattern))
 				}
 			case mode == grepOutputContent:
-				writeGrepLines(&output, matches, opts.before > 0 || opts.after > 0)
+				var shown []grepMatch
+				shown, paging = page(matches, params.Offset, limit)
+				if len(shown) == 0 {
+					output.WriteString("No entries at this offset")
+				} else {
+					writeGrepLines(&output, shown, found, opts.before > 0 || opts.after > 0)
+				}
 			default:
-				truncated = writeGrepFiles(&output, matches, mode == grepOutputCount, limit) || truncated
+				paging = writeGrepFiles(&output, matches, mode == grepOutputCount, params.Offset, limit)
+			}
+			if paging != "" {
+				fmt.Fprintf(&output, "\n[Showing results with pagination = %s]", paging)
 			}
 			if found > 0 && truncated {
-				output.WriteString("\n(Results are truncated. Consider using a more specific path or pattern.)")
+				fmt.Fprintf(&output, "\n(The search stopped at %d matches. Consider using a more specific path or pattern.)", grepSearchLimit)
 			}
 
 			return fantasy.WithResponseMetadata(
@@ -270,11 +309,12 @@ func countMatches(lines []grepMatch) int {
 	return n
 }
 
-// writeGrepLines writes the matching lines, and the context lines around
-// them, grouped by file. With context, "--" separates the groups of a
-// file that are not next to each other, as grep's does.
-func writeGrepLines(output *strings.Builder, lines []grepMatch, withContext bool) {
-	fmt.Fprintf(output, "Found %d matches\n", countMatches(lines))
+// writeGrepLines writes lines, matching lines and the context lines around
+// them, grouped by file, under how many matches were found in all. With
+// context, "--" separates the groups of a file that are not next to each
+// other, as grep's does.
+func writeGrepLines(output *strings.Builder, lines []grepMatch, found int, withContext bool) {
+	fmt.Fprintf(output, "Found %d matches\n", found)
 	var prev *grepMatch
 	for i := range lines {
 		line := &lines[i]
@@ -309,9 +349,10 @@ func writeGrepLines(output *strings.Builder, lines []grepMatch, withContext bool
 }
 
 // writeGrepFiles writes the files with matches, with how many lines in
-// each match when counts is set, at most limit of them, and reports
-// whether there were more.
-func writeGrepFiles(output *strings.Builder, lines []grepMatch, counts bool, limit int) bool {
+// each match when counts is set, from offset on and at most limit of them
+// (0: no limit), and returns Claude Code's account of the paging when it
+// left any out (see page).
+func writeGrepFiles(output *strings.Builder, lines []grepMatch, counts bool, offset, limit int) string {
 	var files []string
 	perFile := map[string]int{}
 	for _, l := range lines {
@@ -323,23 +364,23 @@ func writeGrepFiles(output *strings.Builder, lines []grepMatch, counts bool, lim
 		}
 		perFile[l.path]++
 	}
-	truncated := len(files) > limit
-	if truncated {
-		files = files[:limit]
-	}
 	if counts {
 		fmt.Fprintf(output, "Found %d matches in %d files\n", countMatches(lines), len(perFile))
 	} else {
 		fmt.Fprintf(output, "Found %d files\n", len(perFile))
 	}
-	for _, f := range files {
+	shown, paging := page(files, offset, limit)
+	if len(shown) == 0 {
+		output.WriteString("No entries at this offset\n")
+	}
+	for _, f := range shown {
 		if counts {
 			fmt.Fprintf(output, "%s: %d\n", filepath.ToSlash(f), perFile[f])
 		} else {
 			fmt.Fprintf(output, "%s\n", filepath.ToSlash(f))
 		}
 	}
-	return truncated
+	return paging
 }
 
 func searchFiles(ctx context.Context, pattern, rootPath string, opts grepOptions, limit int) ([]grepMatch, bool, error) {
