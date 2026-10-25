@@ -738,8 +738,18 @@ func (m *UI) initTipCmd() tea.Cmd {
 		return nil
 	}
 	initFile := cmp.Or(m.com.Config().Options.InitializeAs, "AGENTS.md")
-	tip := util.InfoMsg{Type: util.InfoTypeInfo, Msg: fmt.Sprintf("Run /init to create a %s file with instructions for Klash", initFile), TTL: initTipTTL}
+	tip := util.InfoMsg{Type: util.InfoTypeInfo, Msg: fmt.Sprintf("Run /init to create %s %s file with instructions for Klash", article(initFile), initFile), TTL: initTipTTL}
 	return tea.Batch(util.CmdHandler(tip), m.markProjectInitializedCmd())
+}
+
+// article is "an" before a name that begins with a vowel, as the default
+// AGENTS.md does, and "a" before any other, as CLAUDE.md: the tip said
+// "a AGENTS.md".
+func article(name string) string {
+	if name != "" && strings.ContainsRune("AEIOUaeiou", rune(name[0])) {
+		return "an"
+	}
+	return "a"
 }
 
 // startState is the screen the UI starts on: onboarding until a provider

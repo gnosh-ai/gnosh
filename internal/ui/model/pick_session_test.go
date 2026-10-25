@@ -138,11 +138,12 @@ func TestStartupSessionPickerSearches(t *testing.T) {
 // context file /init writes, and it records being marked as told.
 type initTipWorkspace struct {
 	workspace.Workspace
-	marked int
+	initializeAs string
+	marked       int
 }
 
 func (w *initTipWorkspace) Config() *config.Config {
-	return &config.Config{Options: &config.Options{InitializeAs: "KLASH.md"}}
+	return &config.Config{Options: &config.Options{InitializeAs: w.initializeAs}}
 }
 
 func (w *initTipWorkspace) MarkProjectInitialized() error {
@@ -165,18 +166,26 @@ func TestInitTip(t *testing.T) {
 
 	u := newTestUI()
 	require.Nil(t, u.initTipCmd(), "no tip unless wanted")
-	ws := &initTipWorkspace{}
-	u.com.Workspace = ws
-	u.initTip = true
-	batch, ok := u.initTipCmd()().(tea.BatchMsg)
-	require.True(t, ok)
-	var infos []util.InfoMsg
-	for _, cmd := range batch {
-		if info, ok := cmd().(util.InfoMsg); ok {
-			infos = append(infos, info)
+	tips := func(ws *initTipWorkspace) []util.InfoMsg {
+		u.com.Workspace = ws
+		u.initTip = true
+		batch, ok := u.initTipCmd()().(tea.BatchMsg)
+		require.True(t, ok)
+		var infos []util.InfoMsg
+		for _, cmd := range batch {
+			if info, ok := cmd().(util.InfoMsg); ok {
+				infos = append(infos, info)
+			}
 		}
+		return infos
 	}
-	require.Equal(t, []util.InfoMsg{{Type: util.InfoTypeInfo, Msg: "Run /init to create a KLASH.md file with instructions for Klash", TTL: initTipTTL}}, infos)
+	ws := &initTipWorkspace{initializeAs: "KLASH.md"}
+	require.Equal(t, []util.InfoMsg{{Type: util.InfoTypeInfo, Msg: "Run /init to create a KLASH.md file with instructions for Klash", TTL: initTipTTL}}, tips(ws))
+	// The default, AGENTS.md, takes "an": the tip said "a AGENTS.md".
+	require.Equal(t, "Run /init to create an AGENTS.md file with instructions for Klash", tips(&initTipWorkspace{})[0].Msg)
 	require.Greater(t, initTipTTL, DefaultStatusTTL, "longer than a status message's usual life")
+	for name, want := range map[string]string{"AGENTS.md": "an", "agents.md": "an", "CLAUDE.md": "a", "KLASH.md": "a", "docs/LLMs.md": "a", "": "a"} {
+		require.Equal(t, want, article(name), name)
+	}
 	require.Equal(t, 1, ws.marked, "told once")
 }
