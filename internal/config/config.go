@@ -1076,6 +1076,10 @@ type Config struct {
 
 	Agents map[string]Agent `json:"-"`
 
+	// SafeMode is Claude Code's --safe-mode for this process: the config's
+	// customizations are off (see applySafeMode).
+	SafeMode bool `json:"-"`
+
 	// skippedProviders records, for each provider the user configured
 	// that loading had to leave out, why: a model server that did not
 	// answer, a missing key or endpoint. With no provider left, that is

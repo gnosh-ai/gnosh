@@ -109,6 +109,8 @@ type RuntimeOverrides struct {
 	// same name, or, with --strict-mcp-config (StrictMCP), the only ones.
 	MCP       MCPs
 	StrictMCP bool
+	// SafeMode is Claude Code's --safe-mode (see applySafeMode).
+	SafeMode bool
 }
 
 // ConfigStore is the single entry point for all config access. It owns the
@@ -291,6 +293,25 @@ func (s *ConfigStore) SetupAgents() {
 	cfg.SetupAgents()
 }
 
+// applySafeMode turns off cfg's customizations, for Claude Code's
+// --safe-mode, to troubleshoot a broken one: its hooks, the MCP servers it
+// names (those given with --mcp-config still load), its context files,
+// its skills (the built-in ones stay) and custom commands
+// (Config.SafeMode). Providers, models, permissions and the command
+// line's other flags work as before. A reload of the config applies it
+// again, through SetupAgents.
+func applySafeMode(cfg *Config) {
+	cfg.SafeMode = true
+	cfg.Hooks = nil
+	cfg.MCP = MCPs{}
+	if cfg.Options == nil {
+		cfg.Options = &Options{}
+	}
+	cfg.Options.ContextPaths = []string{}
+	cfg.Options.GlobalContextPaths = []string{}
+	cfg.Options.SkillsPaths = []string{}
+}
+
 // applyToolOverrides adds the tools named on the command line to cfg's
 // options.disabled_tools and permissions.allowed_tools, and the MCP
 // servers loaded with --mcp-config to cfg.MCP. They go into the config
@@ -298,6 +319,9 @@ func (s *ConfigStore) SetupAgents() {
 // the MCP clients when the app starts, a later SetupAgents on cfg) sees
 // them too.
 func applyToolOverrides(cfg *Config, o RuntimeOverrides) {
+	if o.SafeMode {
+		applySafeMode(cfg)
+	}
 	if o.StrictMCP {
 		cfg.MCP = MCPs{}
 	}

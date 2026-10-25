@@ -72,6 +72,7 @@ func init() {
 	rootCmd.PersistentFlags().StringSlice("channels", nil, "MCP servers to enable as channels (repeatable), e.g. --channels server:webhook")
 	_ = rootCmd.PersistentFlags().MarkHidden("channels")
 	addSessionFlags(rootCmd)
+	addSafeModeFlag(rootCmd)
 	rootCmd.Flags().StringP("model", "m", "", "Model for this session, in memory only, as Claude Code's --model: 'model' or 'provider/model', as klash run's -m takes; /model still switches and saves as before")
 
 	rootCmd.AddCommand(
@@ -428,6 +429,29 @@ func addSessionFlags(cmd *cobra.Command) {
 // run.
 const nameUsage = "A name for the session, as /rename gives one: the new session, the one resumed, or with --fork-session its copy"
 
+// addSafeModeFlag adds Claude Code's --safe-mode to cmd.
+func addSafeModeFlag(cmd *cobra.Command) {
+	cmd.Flags().Bool("safe-mode", false, "Start with the config's customizations off, to troubleshoot a broken one: hooks, MCP servers (but --mcp-config's), context files (KLASH.md, AGENTS.md, CLAUDE.md), skills (but the built-in ones) and custom commands; providers, models and permissions work as before. CLAUDE_CODE_SAFE_MODE=1 does the same")
+}
+
+// safeModeOn reports whether Claude Code's --safe-mode is asked for, by
+// the flag or by CLAUDE_CODE_SAFE_MODE (or KLASH_SAFE_MODE) set true.
+func safeModeOn(cmd *cobra.Command) bool {
+	if on, _ := cmd.Flags().GetBool("safe-mode"); on {
+		return true
+	}
+	for _, name := range []string{"CLAUDE_CODE_SAFE_MODE", "KLASH_SAFE_MODE"} {
+		if on, _ := strconv.ParseBool(os.Getenv(name)); on {
+			return true
+		}
+	}
+	return false
+}
+
+// errSafeModeServer is --safe-mode through a server, whose config every
+// client of a workspace shares.
+var errSafeModeServer = errors.New("--safe-mode is not supported with KLASH_CLIENT_SERVER=1 yet")
+
 // nameFlag is the name -n/--name gives the session, as /rename keeps one;
 // "" for none.
 func nameFlag(cmd *cobra.Command) string {
@@ -506,6 +530,7 @@ func sessionFlag(cmd *cobra.Command) string {
 func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
 	debug, _ := cmd.Flags().GetBool("debug")
 	yolo := workspaceYolo(cmd)
+	safeMode := safeModeOn(cmd)
 	channels, _ := cmd.Flags().GetStringSlice("channels")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 	ctx := cmd.Context()
@@ -548,13 +573,14 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 	store.Overrides().AppendSystemPrompt = appendSystemPrompt
 	applyPermissionMode(store.Overrides(), permissionMode)
 	store.Overrides().AddedDirs = addedDirs
-	if len(allowedTools) > 0 || len(allowRules) > 0 || len(disallowedTools) > 0 || len(denyRules) > 0 || len(mcpServers) > 0 || strictMCP {
+	if len(allowedTools) > 0 || len(allowRules) > 0 || len(disallowedTools) > 0 || len(denyRules) > 0 || len(mcpServers) > 0 || strictMCP || safeMode {
 		store.Overrides().AllowedTools = allowedTools
 		store.Overrides().AllowRules = allowRules
 		store.Overrides().DisabledTools = disallowedTools
 		store.Overrides().DenyRules = denyRules
 		store.Overrides().MCP = mcpServers
 		store.Overrides().StrictMCP = strictMCP
+		store.Overrides().SafeMode = safeMode
 		store.SetupAgents()
 	}
 
@@ -634,6 +660,9 @@ func localSkillsDiscoveryConfig(store *config.ConfigStore) skills.DiscoveryConfi
 // setupClientServerWorkspace connects to a server process and wraps the
 // result in a ClientWorkspace.
 func setupClientServerWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error) {
+	if safeModeOn(cmd) {
+		return nil, nil, errSafeModeServer
+	}
 	c, protoWs, _, err := connectToServer(cmd)
 	if err != nil {
 		return nil, nil, err

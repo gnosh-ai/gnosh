@@ -125,6 +125,9 @@ klash run --continue "Follow up on your last response"
 		}
 
 		if useClientServer() {
+			if safeModeOn(cmd) {
+				return errSafeModeServer
+			}
 			c, ws, cleanup, err := connectToServer(cmd)
 			if err != nil {
 				return err
@@ -237,6 +240,7 @@ func addRunFlags(cmd *cobra.Command) {
 	cmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
 	cmd.Flags().Bool("fork-session", false, forkSessionUsage)
 	cmd.Flags().StringP("name", "n", "", nameUsage)
+	addSafeModeFlag(cmd)
 	cmd.Flags().String("output-format", "text", "How the answer is printed: text, as it streams; json, one result object at the end; or stream-json, a JSON line per message and the result at the end (as Claude Code's -p --output-format)")
 	// The yolo flags are accepted so that Claude Code's
 	// `-p --dangerously-skip-permissions` works, and change nothing: run

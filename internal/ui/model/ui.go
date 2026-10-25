@@ -671,6 +671,9 @@ func (m *UI) Init() tea.Cmd {
 	if cmd := m.initTipCmd(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	if cmd := m.safeModeNotice(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	// load the user commands async
 	cmds = append(cmds, m.loadCustomCommands())
 	// Prime the memoized LSP state off-thread.
@@ -833,6 +836,15 @@ func (m *UI) SendAtStart(prompt string) {
 // startPromptMsg sends the prompt given on the command line, now that
 // nothing is loaded first (see SendAtStart).
 type startPromptMsg struct{}
+
+// safeModeNotice says, under Claude Code's --safe-mode, what is off and
+// how to turn it back on.
+func (m *UI) safeModeNotice() tea.Cmd {
+	if cfg := m.com.Config(); cfg == nil || !cfg.SafeMode {
+		return nil
+	}
+	return util.ReportInfo("Safe mode: the config's hooks, MCP servers, context files, skills and custom commands are off. Restart without --safe-mode (or CLAUDE_CODE_SAFE_MODE) to turn them back on.")
+}
 
 // startPromptAtInit is what Init does with the prompt given on the
 // command line: send it now, in a new session, when no session is loading

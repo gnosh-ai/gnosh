@@ -155,3 +155,25 @@ func TestFromSkillCatalog_UsesDiscoveredSymlinkedSkills(t *testing.T) {
 	require.Equal(t, "linked-skill", cmds[0].Skill.Name)
 	require.Equal(t, filepath.Join(link, skills.SkillFileName), cmds[0].Skill.SkillFilePath)
 }
+
+// Under Claude Code's --safe-mode the custom commands are left out.
+func TestLoadCustomCommandsSafeMode(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	data := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(data, "commands"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(data, "commands", "deploy.md"), []byte("deploy it"), 0o644))
+	cfg := &config.Config{Options: &config.Options{DataDirectory: data}}
+	ids := func() []string {
+		t.Helper()
+		cmds, err := LoadCustomCommands(cfg)
+		require.NoError(t, err)
+		var out []string
+		for _, cmd := range cmds {
+			out = append(out, cmd.ID)
+		}
+		return out
+	}
+	require.Contains(t, ids(), "project:deploy")
+	cfg.SafeMode = true
+	require.Empty(t, ids())
+}

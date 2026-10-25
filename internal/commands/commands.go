@@ -58,6 +58,10 @@ type commandSource struct {
 // LoadCustomCommands loads custom commands from multiple sources including
 // XDG config directory, home directory, and project directory.
 func LoadCustomCommands(cfg *config.Config) ([]CustomCommand, error) {
+	if cfg.SafeMode {
+		// Claude Code's --safe-mode leaves custom commands out.
+		return nil, nil
+	}
 	return loadAll(buildCommandSources(cfg))
 }
 
