@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -16,7 +17,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-// SearchResult represents a single search result from DuckDuckGo.
+// SearchResult represents a single search result, from DuckDuckGo or Bing.
 type SearchResult struct {
 	Title    string
 	Link     string
@@ -110,6 +111,178 @@ func searchDuckDuckGo(ctx context.Context, client *http.Client, query string, ma
 	}
 
 	return parseLiteSearchResults(content, maxResults)
+}
+
+// bingEndpoint is a package var so tests can point the search at a
+// local httptest server.
+var bingEndpoint = "https://www.bing.com/search?setlang=en&q="
+
+// ddgCooldown is how long DuckDuckGo is left alone once it rate-limits
+// this machine, asking again only keeps the block on; searches go to
+// Bing meanwhile. A var so tests can change it.
+var ddgCooldown = 10 * time.Minute
+
+var (
+	ddgLimitedMu sync.Mutex
+	ddgLimitedAt time.Time
+)
+
+// search searches DuckDuckGo, or Bing while DuckDuckGo turns this
+// machine away: an agent on the AI box had a third of its searches
+// refused, and went on to fetch Bing's result pages itself.
+func search(ctx context.Context, client *http.Client, query string, maxResults int) ([]SearchResult, error) {
+	ddgLimitedMu.Lock()
+	cooling := !ddgLimitedAt.IsZero() && time.Since(ddgLimitedAt) < ddgCooldown
+	ddgLimitedMu.Unlock()
+	if !cooling {
+		results, err := searchDuckDuckGo(ctx, client, query, maxResults)
+		if !errors.Is(err, errSearchRateLimited) {
+			return results, err
+		}
+		ddgLimitedMu.Lock()
+		ddgLimitedAt = time.Now()
+		ddgLimitedMu.Unlock()
+	}
+	results, err := searchBing(ctx, client, query, maxResults)
+	if err != nil {
+		return nil, fmt.Errorf("DuckDuckGo is rate-limiting this machine, and Bing failed too (%w). "+
+			"Do not retry or rephrase; wait a few minutes or fetch known URLs directly", err)
+	}
+	return results, nil
+}
+
+// searchBing searches Bing's result page.
+func searchBing(ctx context.Context, client *http.Client, query string, maxResults int) ([]SearchResult, error) {
+	if maxResults <= 0 {
+		maxResults = 10
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", bingEndpoint+url.QueryEscape(query), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	setRandomizedHeaders(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute search: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("search failed with status code: %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	// A result page has its results list even when nothing matched; a
+	// page without one is a challenge, not "no results".
+	if !strings.Contains(string(body), `id="b_results"`) {
+		return nil, errors.New("Bing did not serve a result page")
+	}
+	return parseBingResults(string(body), maxResults)
+}
+
+// parseBingResults reads the results of Bing's result page: each
+// li.b_algo, with the link of its h2 and the text of its caption.
+func parseBingResults(htmlContent string, maxResults int) ([]SearchResult, error) {
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse HTML: %w", err)
+	}
+	var results []SearchResult
+	var traverse func(*html.Node)
+	traverse = func(n *html.Node) {
+		if len(results) >= maxResults {
+			return
+		}
+		if n.Type == html.ElementNode && n.Data == "li" && hasClass(n, "b_algo") {
+			if result, ok := bingResult(n); ok {
+				result.Position = len(results) + 1
+				results = append(results, result)
+			}
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			traverse(c)
+		}
+	}
+	traverse(doc)
+	return results, nil
+}
+
+// bingResult is the result an li.b_algo holds.
+func bingResult(li *html.Node) (SearchResult, bool) {
+	var result SearchResult
+	var traverse func(*html.Node)
+	traverse = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			switch {
+			case n.Data == "h2" && result.Link == "":
+				if a := firstElement(n, "a"); a != nil {
+					result.Title = getTextContent(a)
+					result.Link = bingTarget(attrValue(a, "href"))
+				}
+				return
+			case n.Data == "div" && hasClass(n, "b_caption") && result.Snippet == "":
+				if p := firstElement(n, "p"); p != nil {
+					n = p
+				}
+				result.Snippet = getTextContent(n)
+				return
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			traverse(c)
+		}
+	}
+	traverse(li)
+	return result, result.Link != ""
+}
+
+// bingTarget is the page a Bing result link leads to. Bing's click
+// tracker, https://www.bing.com/ck/a?...&u=a1<base64>, carries it in u
+// after "a1"; any other link is the page itself.
+func bingTarget(href string) string {
+	u, err := url.Parse(href)
+	if err != nil || !strings.HasSuffix(u.Hostname(), "bing.com") || u.Path != "/ck/a" {
+		return href
+	}
+	encoded, ok := strings.CutPrefix(u.Query().Get("u"), "a1")
+	if !ok {
+		return href
+	}
+	encoded = strings.TrimRight(encoded, "=")
+	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		decoded, err = base64.RawStdEncoding.DecodeString(encoded)
+	}
+	if err != nil || !strings.HasPrefix(string(decoded), "http") {
+		return href
+	}
+	return string(decoded)
+}
+
+// firstElement is the first element named name in n's subtree, n
+// excluded, or nil.
+func firstElement(n *html.Node, name string) *html.Node {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode && c.Data == name {
+			return c
+		}
+		if found := firstElement(c, name); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// attrValue is the value of n's attribute key, or "".
+func attrValue(n *html.Node, key string) string {
+	for _, attr := range n.Attr {
+		if attr.Key == key {
+			return attr.Val
+		}
+	}
+	return ""
 }
 
 func setRandomizedHeaders(req *http.Request) {
