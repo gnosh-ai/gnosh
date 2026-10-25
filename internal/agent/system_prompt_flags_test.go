@@ -152,6 +152,32 @@ func TestTaskPromptNamesTheAddedDirs(t *testing.T) {
 	require.Contains(t, withDirs, "\nAdditional working directories: /src/gno, /src/bubblerumble\nIs directory a git repo:")
 }
 
+// The task sub-agent is told what Claude Code tells its Explore agent: a
+// read-only search specialist that searches in parallel and reports what it
+// found, where it was told that one-word answers were best; and the agent
+// tool says what to use it for and asks for the breadth of the search.
+func TestTaskAgentIsAnExploreAgent(t *testing.T) {
+	store := config.NewTestStore(&config.Config{Options: &config.Options{}})
+	p, err := taskPrompt(prompt.WithWorkingDir(t.TempDir()))
+	require.NoError(t, err)
+	text, err := p.Build(t.Context(), "", "", store)
+	require.NoError(t, err)
+
+	require.True(t, strings.HasPrefix(text, "You are a file search specialist for Klash."), text)
+	for _, want := range []string{
+		"=== CRITICAL: READ-ONLY MODE - NO FILE MODIFICATIONS ===",
+		"Wherever possible you should try to spawn multiple parallel tool calls for grepping and reading files",
+		"Complete the user's search request efficiently and report your findings clearly.",
+		"Any file paths you return in your final report MUST be absolute.",
+		"\n<env>\nWorking directory: ",
+	} {
+		require.Contains(t, text, want)
+	}
+	require.NotContains(t, text, "One word answers")
+	require.Contains(t, agentToolDescription, `When calling, specify search breadth: "quick" for a single targeted lookup`)
+	require.Contains(t, agentToolDescription, "Do NOT use it for code review")
+}
+
 // After /add-dir, the coder's prompt is built again and names the
 // directory, as --add-dir's does from the start, and so are the prompts of
 // the sub-agents its agent tool runs.
