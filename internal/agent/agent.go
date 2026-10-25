@@ -1686,7 +1686,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID, instructions st
 // within its first tokens, and a full session waited twenty minutes
 // while the server read all of it again. instructions, the text given
 // after /compact, go at the end of the summary instructions.
-func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instructions string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) error {
+func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instructions string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) (retErr error) {
 	// A turn running in the session stops a summary. A prompt that is
 	// still in its UserPromptSubmit hooks does not: IsSessionBusy counts
 	// it, and the summary at the end of a turn failed as busy when the
@@ -1723,8 +1723,23 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 	genCtx, cancel := context.WithCancel(ctx)
 	ac := &activeCancel{cancel: cancel}
 	a.activeRequests.Set(sessionID, ac)
-	defer a.activeRequests.CompareAndDelete(sessionID, ac)
 	defer cancel()
+	// A summary that gave up must still hand the session back and run
+	// what was queued behind it. Every error return below this point sits
+	// above the drain at the end, so without this a prompt sent while the
+	// summary was running stayed in the queue with nothing left to run it:
+	// the session went idle, the prompt stayed shown as queued, and it
+	// never ran. The success path drains itself and sets drained.
+	drained := false
+	defer func() {
+		a.activeRequests.CompareAndDelete(sessionID, ac)
+		if drained {
+			return
+		}
+		if qErr := a.drainQueuedAfterSummary(ctx, sessionID); qErr != nil && retErr == nil {
+			retErr = qErr
+		}
+	}()
 	defer func() {
 		if flushErr := a.messages.FlushAll(ctx); flushErr != nil {
 			slog.Error("Failed to flush pending message updates after summarize", "error", flushErr)
@@ -1922,16 +1937,21 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 	// and before any prompt queued meanwhile runs on it.
 	a.runPostCompactHooks(ctx, sessionID, trigger, summaryMessage.Content().Text)
 
-	// Release the active request before processing queued messages so that
-	// Run() does not see the session as busy.
-	a.activeRequests.Del(sessionID)
 	cancel()
+	drained = true
+	return a.drainQueuedAfterSummary(ctx, sessionID)
+}
 
-	// Process any messages that were queued while summarizing. The
-	// read-modify-write holds the session's dispatch mutex, as every other
-	// queue writer does (enqueueCall, PopQueuedPrompts, the turn-end
-	// handoff), so a prompt queued or popped meanwhile is neither lost nor
-	// put back. Run takes the same mutex, so it is released first.
+// drainQueuedAfterSummary hands the session back and runs the first
+// prompt queued while it was being summarized, if any. The active
+// request is released first so Run() does not see the session as busy.
+//
+// The read-modify-write holds the session's dispatch mutex, as every
+// other queue writer does (enqueueCall, PopQueuedPrompts, the turn-end
+// handoff), so a prompt queued or popped meanwhile is neither lost nor
+// put back. Run takes the same mutex, so it is released first.
+func (a *sessionAgent) drainQueuedAfterSummary(ctx context.Context, sessionID string) error {
+	a.activeRequests.Del(sessionID)
 	mu := a.sessionMu(sessionID)
 	mu.Lock()
 	queuedMessages, ok := a.messageQueue.Get(sessionID)
