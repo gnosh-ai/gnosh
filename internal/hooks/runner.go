@@ -301,6 +301,21 @@ func (r *Runner) RunPostCompact(ctx context.Context, sessionID, trigger, summary
 	return agg, err
 }
 
+// RunNotification executes the Notification hooks whose matcher matches
+// notificationType, when the TUI sends its notification of that kind: a
+// permission prompt that has waited for the user, or a finished turn with
+// no reply. As in Claude Code a Notification hook cannot block or change
+// the notification: its exit code and output are ignored, a hook that
+// fails is logged by runOne, and the caller does not wait for it.
+// UpdatedInput is meaningless without a tool call and is always cleared.
+func (r *Runner) RunNotification(ctx context.Context, sessionID, notificationType, message, title string) (AggregateResult, error) {
+	envVars := append(BuildEnv(EventNotification, "", sessionID, r.cwd, r.projectDir, ""), hookVar("NOTIFICATION_TYPE", notificationType)...)
+	payload := BuildNotificationPayload(sessionID, r.cwd, notificationType, message, title)
+	agg, err := r.run(ctx, r.matchingHooks(notificationType), EventNotification, "", "", envVars, payload)
+	agg.UpdatedInput = ""
+	return agg, err
+}
+
 // RunSessionEnd executes the SessionEnd hooks whose matcher matches the
 // reason, when a session ends. Reason is the
 // SessionEndReasonClear, SessionEndReasonOther or

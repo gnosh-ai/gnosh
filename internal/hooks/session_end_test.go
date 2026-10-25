@@ -133,10 +133,11 @@ func TestRunSessionEndCannotStopAnything(t *testing.T) {
 func TestRunSessionEndFailedHookIsLogged(t *testing.T) {
 	t.Parallel()
 
+	logSwapMu.Lock()
 	var buf strings.Builder
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	t.Cleanup(func() { slog.SetDefault(prev); logSwapMu.Unlock() })
 
 	result, err := sessionEndRunner(t, "", `./hooks/does-not-exist.sh`).RunSessionEnd(context.Background(), "sess", SessionEndReasonClear)
 	require.NoError(t, err)

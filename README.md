@@ -152,7 +152,8 @@ Claude Code's names work here too.
 - **Hooks** take Claude Code's events and answers: `PreToolUse`,
   `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit`, `SessionStart`,
   `SessionEnd`, `Stop`, `SubagentStart`, `SubagentStop`, `StopFailure`,
-  `PreCompact`, `PostCompact`, `InstructionsLoaded` and `PermissionRequest`,
+  `PreCompact`, `PostCompact`, `InstructionsLoaded`, `Notification` and
+  `PermissionRequest`,
   with
   `tool_use_id`,
   `hook_event_name`, `permission_mode`, `continue: false`, `systemMessage` and

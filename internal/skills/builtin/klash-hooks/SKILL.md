@@ -37,7 +37,16 @@ a file there, or for a file a context file imports with `@path`. As in Claude
 Code, it has no decision control: its output is ignored, its exit code is
 ignored, and the turn does not wait for it. `PermissionRequest` fires when a
 permission dialog about a tool call is about to show, and its hook can allow
-or deny the call in the user's place, as in Claude Code.
+or deny the call in the user's place, as in Claude Code. `Notification` runs
+when Klash sends a notification you should see, as in Claude Code: a tool-use
+permission prompt that has waited for you (`notification_type`
+`permission_prompt`, once it has waited about six seconds, each keystroke
+starting the wait again), or a turn that finished about a minute ago with no
+reply from you (`notification_type` `idle_prompt`). It runs whether or not
+desktop notifications are on and whether or not the terminal has focus, and,
+as in Claude Code, it can't block or modify the notification: its exit code
+and output are ignored, a hook that fails is logged, and the TUI does not
+wait for it.
 
 Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
 `PRE_TOOL_USE` are config errors, not spellings of `PreToolUse`: Klash refuses
@@ -46,8 +55,8 @@ would look configured and silently never run.
 
 A `matcher` only makes sense for `PreToolUse`, `PostToolUse`,
 `PostToolUseFailure`, `PreCompact`, `PostCompact`, `StopFailure`,
-`SubagentStart`, `SessionStart`, `SessionEnd`, `InstructionsLoaded` and
-`PermissionRequest`. The first three and `PermissionRequest` match against
+`SubagentStart`, `SessionStart`, `SessionEnd`, `InstructionsLoaded`,
+`Notification` and `PermissionRequest`. The first three and `PermissionRequest` match against
 the tool name;
 `PreCompact` and `PostCompact` match against their trigger; `StopFailure`
 against the error's kind (`rate_limit`, `overloaded`, `authentication_failed`,
@@ -57,7 +66,8 @@ tool's sub-agent, `agentic_fetch` for that tool's) (`manual` or `auto`); `Sessio
 (`startup`, `resume`, `clear` or `compact`); `SessionEnd` matches against
 its reason (`clear`, `other` or `prompt_input_exit`); `InstructionsLoaded`
 matches against the load reason (`session_start`, `nested_traversal`,
-`include` or `compact`). There is nothing to
+`include` or `compact`); `Notification` matches against the notification
+type (`permission_prompt` or `idle_prompt`). There is nothing to
 match when a prompt is sent or a turn ends, so a `matcher` on a
 `UserPromptSubmit`, `Stop` or `SubagentStop` hook is a config error too,
 and every configured hook for those events runs.
@@ -494,8 +504,7 @@ matchers as Claude Code does, with Claude Code's tool names (`Bash`, `Read`,
 Code's groups (`{"matcher": …, "hooks": [{"type": "command", …}]}`) as well as
 its own flat entries (`{"matcher": …, "command": …}`), so a Claude Code hooks
 block can be pasted in as it is; only `command` hooks run, and a hook asking for
-more (`if`, `args`, `async`, another `type`), one on an event Klash does not
-fire (`Notification`), a matcher on an event that takes none, or a
+more (`if`, `args`, `async`, another `type`), a matcher on an event that takes none, or a
 regex Go cannot read (lookahead) is a config error naming it.
 Divergences: Klash treats `updated_input` as shallow-merge, Claude Code
 replaces; and the payload's `tool_name` is Klash's name (`bash`), not Claude

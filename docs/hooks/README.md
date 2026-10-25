@@ -17,7 +17,7 @@ forward.
 - Hooks are Claude Code-compatible
 - Klash ships with a builtin `klash-hook` skill write, edit, and configure
   hooks; just tell Klash how to configure Klash
-- Klash supports thirteen hooks: `PreToolUse`, which fires before a tool call,
+- Klash supports fifteen hooks: `PreToolUse`, which fires before a tool call,
   `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
   fails, `UserPromptSubmit`, which fires when you send a prompt and can add
   context to it or block it, `SessionStart`, which fires before the first
@@ -28,9 +28,11 @@ forward.
   finish and can refuse to let it end, `StopFailure`, which fires instead of `Stop` when a
   turn ends on an error from the model's API, `PreCompact`, which fires just before the session
   is summarized and can object to it, `PostCompact`, which fires once it has
-  been, with the summary, `SessionEnd`, which fires when a session ends, and
+  been, with the summary, `SessionEnd`, which fires when a session ends,
   `InstructionsLoaded`, which fires when a context file is loaded into
-  context, for observability only; plans are to support the full
+  context, for observability only, and `Notification`, which fires on the
+  notifications Klash sends (a permission prompt that has waited, a finished
+  turn with no reply) for observability only; plans are to support the full
   gamut, so please let us know which hooks you'd like to see next
 - Hooks run in parallel for speed, but their results compose in config order
   for determinism
@@ -184,8 +186,7 @@ change nothing, as are the default values of `shell` (`bash`), `async` and
 `asyncRewake` (`false`) and `onFailure` (`continue`). Anything else a Claude
 Code hook can ask for, another `type` (`http`, `mcp_tool`, `prompt`, `agent`),
 an `if` filter, `args`, a background hook, is a config error that names it,
-rather than a hook run some other way than written. So are a hook on an event
-Klash does not fire (`Notification`, …), a matcher on an event
+rather than a hook run some other way than written. So are a matcher on an event
 that takes none (Claude Code ignores it), and a regular expression Go cannot
 read (lookahead such as `(?!…)`): take those entries out, or rewrite them.
 
@@ -857,6 +858,40 @@ call as it is; `updatedPermissions` are not applied.
         "matcher": "Bash",
         "command": "jq -e '.tool_input.command | startswith(\"git status\")' >/dev/null && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}' || true"
       }
+    ]
+  }
+}
+```
+
+### Notification
+
+This hook runs when Klash sends a notification you should see, as in
+Claude Code: a tool-use permission prompt that has waited for you
+(`notification_type` `permission_prompt`, once it has waited about six
+seconds — each keystroke starts the wait again), or a turn that finished
+about a minute ago with no reply from you (`notification_type`
+`idle_prompt`). It runs whether or not desktop notifications are turned
+on, and whether or not the terminal has focus; a prompt you answer, or a
+key you press, before the wait comes due fires nothing. As in Claude
+Code, a Notification hook can't block or modify the notification: its
+exit code and output are ignored, a hook that fails is logged, and the
+TUI does not wait for it.
+
+**Matched against**: the notification type, `permission_prompt` or
+`idle_prompt`.
+
+**Input**: the common fields, plus `message` (the notification's text,
+naming the tool for a permission prompt), an optional `title`, and
+`notification_type`. The environment also carries
+`KLASH_NOTIFICATION_TYPE` with the type.
+
+**Output**: ignored.
+
+```jsonc
+{
+  "hooks": {
+    "Notification": [
+      { "command": "phone-alert --message \"$KLASH_NOTIFICATION_TYPE\"" }
     ]
   }
 }

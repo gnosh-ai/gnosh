@@ -101,11 +101,21 @@ const (
 	// Claude Code a hook can allow or deny the call in the user's place,
 	// and the dialog does not show; with no answer the user is asked.
 	EventPermissionRequest = "PermissionRequest"
+	// EventNotification fires when Klash sends a notification the user
+	// should see: a permission prompt that has waited for the user
+	// (notification_type "permission_prompt"), or a turn that finished a
+	// while ago with no reply (notification_type "idle_prompt"). As in
+	// Claude Code, a hook for it runs whether or not desktop
+	// notifications are on, and its Matcher is tested against the
+	// notification type. A hook cannot block or change the notification:
+	// its exit code and output are ignored, a hook that fails is logged,
+	// and the TUI does not wait for it.
+	EventNotification = "Notification"
 )
 
 // knownHookEvents lists every recognised event name, in the order they
 // are reported to the user.
-var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStart, EventSubagentStop, EventStopFailure, EventPreCompact, EventPostCompact, EventSessionEnd, EventInstructionsLoaded, EventPermissionRequest}
+var knownHookEvents = []string{EventPreToolUse, EventPostToolUse, EventPostToolUseFailure, EventUserPromptSubmit, EventSessionStart, EventStop, EventSubagentStart, EventSubagentStop, EventStopFailure, EventPreCompact, EventPostCompact, EventSessionEnd, EventInstructionsLoaded, EventPermissionRequest, EventNotification}
 
 // KnownHookEvents returns the recognised hook event names.
 func KnownHookEvents() []string {
@@ -122,9 +132,10 @@ func IsKnownHookEvent(name string) bool {
 // tool name; PreCompact
 // and PostCompact against their trigger; StopFailure against the error's kind;
 // SubagentStart against the agent type; SessionStart against its source;
-// SessionEnd against its reason; InstructionsLoaded against the load reason.
+// SessionEnd against its reason; InstructionsLoaded against the load reason;
+// Notification against the notification type.
 func HookEventSupportsMatcher(event string) bool {
-	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventPostCompact || event == EventStopFailure || event == EventSubagentStart || event == EventSessionStart || event == EventSessionEnd || event == EventInstructionsLoaded || event == EventPermissionRequest
+	return event == EventPreToolUse || event == EventPostToolUse || event == EventPostToolUseFailure || event == EventPreCompact || event == EventPostCompact || event == EventStopFailure || event == EventSubagentStart || event == EventSessionStart || event == EventSessionEnd || event == EventInstructionsLoaded || event == EventPermissionRequest || event == EventNotification
 }
 
 // HookMatcher is a hook's matcher read as Claude Code reads one: "*" (or

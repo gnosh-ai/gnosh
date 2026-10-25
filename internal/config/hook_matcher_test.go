@@ -61,6 +61,23 @@ func TestValidateHooksAcceptsAStar(t *testing.T) {
 	require.NoError(t, cfg.ValidateHooks())
 }
 
+// A Notification hook loads with or without a matcher, as in Claude Code:
+// its matcher is tested against the notification type. Before this event
+// was known, a config with one stopped Klash at startup with "unknown
+// event name".
+func TestValidateHooksAcceptsNotification(t *testing.T) {
+	t.Parallel()
+
+	for _, matcher := range []string{"", "*", "permission_prompt", "idle_prompt", "permission_prompt|idle_prompt"} {
+		cfg := &Config{Hooks: map[string][]HookConfig{
+			EventNotification: {{Command: "true", Matcher: matcher}},
+		}}
+		require.NoError(t, cfg.ValidateHooks(), "matcher %q", matcher)
+	}
+	require.True(t, IsKnownHookEvent(EventNotification))
+	require.True(t, HookEventSupportsMatcher(EventNotification))
+}
+
 // An exact matcher name can be a built-in tool's, under any of its names,
 // or an MCP tool's whole name; a server's name alone is no tool's.
 func TestNamesSomeTool(t *testing.T) {

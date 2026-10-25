@@ -127,6 +127,17 @@ type Payload struct {
 	// It is on the events Claude Code puts it on: the tool events,
 	// UserPromptSubmit, Stop and SubagentStop.
 	PermissionMode string `json:"permission_mode,omitempty"`
+
+	// Message is set on an EventNotification payload: the notification's
+	// text, as Claude Code's Notification input carries it.
+	Message string `json:"message,omitempty"`
+	// Title is set on an EventNotification payload when the notification
+	// has one, as Claude Code's Notification input carries it.
+	Title string `json:"title,omitempty"`
+	// NotificationType is set on an EventNotification payload: what the
+	// notification is, as Claude Code's Notification input carries it. A
+	// matcher on a Notification hook is tested against it.
+	NotificationType string `json:"notification_type,omitempty"`
 }
 
 // ToolResponse is what a tool call returned, as a PostToolUse hook sees
@@ -437,6 +448,33 @@ func BuildPostCompactPayload(sessionID, cwd, trigger, summary string) []byte {
 		ToolInput:      json.RawMessage("{}"),
 		Trigger:        trigger,
 		CompactSummary: summary,
+	})
+}
+
+// Notification types, as in Claude Code: what a Notification hook's
+// matcher is tested against, and its payload's notification_type.
+const (
+	// NotificationTypePermissionPrompt is a permission prompt that has
+	// been waiting for the user.
+	NotificationTypePermissionPrompt = "permission_prompt"
+	// NotificationTypeIDlePrompt is a finished turn with no reply.
+	NotificationTypeIDlePrompt = "idle_prompt"
+)
+
+// BuildNotificationPayload constructs the JSON stdin payload for an
+// EventNotification hook: the notification's text, its title when it has
+// one, and what the notification is. There is no tool in play, so
+// tool_name is empty and tool_input is an empty object.
+func BuildNotificationPayload(sessionID, cwd, notificationType, message, title string) []byte {
+	return marshalPayload(Payload{
+		Event:            EventNotification,
+		HookEventName:    EventNotification,
+		SessionID:        sessionID,
+		CWD:              cwd,
+		ToolInput:        json.RawMessage("{}"),
+		NotificationType: notificationType,
+		Message:          message,
+		Title:            title,
 	})
 }
 

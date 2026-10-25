@@ -414,6 +414,14 @@ type UI struct {
 	// Notification state
 	notifyBackend       notification.Backend
 	notifyWindowFocused bool
+	// permNotification is the armed Notification hook for a permission
+	// prompt waiting for the user, or nil when none is; idleNotification
+	// the one for a finished turn with no reply.
+	permNotification *notificationHookArmed
+	idleNotification *notificationHookArmed
+	// notifToken is what an armed Notification hook's tick carries; a key
+	// press or a new prompt bumps it, so the stale tick is ignored.
+	notifToken int
 	// custom commands & mcp commands
 	customCommands []commands.CustomCommand
 	mcpPrompts     []commands.MCPPrompt
@@ -1339,6 +1347,9 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		if cmd := m.armPermissionNotification(msg.Payload.ToolName); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case pubsub.Event[permission.PermissionNotification]:
 		m.handlePermissionNotification(msg.Payload)
 	case pubsub.Event[question.Request]:
@@ -1354,6 +1365,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleQuestionNotification(msg.Payload)
 	case cancelTimerExpiredMsg:
 		m.isCanceling = false
+	case notificationHookMsg:
+		if cmd := m.handleNotificationHookExpired(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case tea.TerminalVersionMsg:
 		termVersion := strings.ToLower(msg.Name)
 		// Only enable progress bar for the following terminals.
@@ -2839,6 +2854,7 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 		m.dialog.CloseDialog(dialog.ReasoningID)
 	case dialog.ActionPermissionResponse:
 		m.dialog.CloseDialog(dialog.PermissionsID)
+		m.cancelPermissionNotification()
 		switch msg.Action {
 		case dialog.PermissionAllow:
 			m.com.Workspace.PermissionGrant(msg.Permission)
@@ -3333,6 +3349,9 @@ func (m *UI) openAuthenticationDialogWithMethod(provider catwalk.Provider, model
 
 func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 	var cmds []tea.Cmd
+	if cmd := m.onUserKeypress(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 
 	handleGlobalKeys := func(msg tea.KeyPressMsg) bool {
 		switch {
@@ -3428,7 +3447,10 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 
 	// Route all messages to dialog if one is open.
 	if m.dialog.HasDialogs() {
-		return m.handleDialogMsg(msg)
+		if cmd := m.handleDialogMsg(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		return tea.Batch(cmds...)
 	}
 
 	// Tab always toggles focus between editor and chat, even when
@@ -5858,6 +5880,9 @@ func (m *UI) restoreRefusedPrompt(prompt string, attachments []message.Attachmen
 
 // sendMessageInternal can hide a generated continuation from the chat.
 func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...message.Attachment) tea.Cmd {
+	// A new prompt means the user is back: a finished turn's Notification
+	// wait ends, as in Claude Code.
+	m.cancelIdleNotification()
 	if err := m.com.Workspace.AgentReadyErr(); err != nil {
 		// Reported like a send that failed, so whatever waits on it (a
 		// running /loop) hears that nothing started.
@@ -6450,6 +6475,7 @@ func (m *UI) handlePermissionNotification(notification permission.PermissionNoti
 	if d := m.dialog.Dialog(dialog.PermissionsID); d != nil {
 		if perm, ok := d.(*dialog.Permissions); ok && perm.ToolCallID() == notification.ToolCallID {
 			m.dialog.CloseDialog(dialog.PermissionsID)
+			m.cancelPermissionNotification()
 		}
 	}
 }
@@ -6549,6 +6575,7 @@ func (m *UI) handleAgentNotification(n notify.Notification) tea.Cmd {
 			Title:   version.Name + " is waiting...",
 			Message: fmt.Sprintf("Agent's turn completed in \"%s\"", n.SessionTitle),
 		}))
+		cmds = append(cmds, m.armIdleNotification(n.SessionTitle))
 		// Show what the stored balance says right away, and fetch again:
 		// the refresh for the turn's last response is only kicked off once
 		// its request finishes, so it may still be in flight here.

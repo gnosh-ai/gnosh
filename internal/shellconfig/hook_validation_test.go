@@ -43,7 +43,8 @@ func TestHookAddAcceptsKnownEvents(t *testing.T) {
 hook add PostToolUse --command "echo post" --matcher "^edit$"
 hook add PostToolUseFailure --command "echo failed" --matcher "^edit$"
 hook add SessionStart --command "echo start"
-hook add Stop --command "echo stop"`)
+hook add Stop --command "echo stop"
+hook add Notification --command "echo alert" --matcher "^permission_prompt$"`)
 
 	hooks := result["hooks"].(map[string]any)
 	require.Len(t, hooks["PreToolUse"].([]any), 1)
@@ -51,6 +52,10 @@ hook add Stop --command "echo stop"`)
 	require.Len(t, hooks["PostToolUseFailure"].([]any), 1)
 	require.Len(t, hooks["SessionStart"].([]any), 1)
 	require.Len(t, hooks["Stop"].([]any), 1)
+	// A matcher on a Notification hook is tested against the
+	// notification type, so the builtin takes one, as it does for
+	// SessionStart.
+	require.Len(t, hooks["Notification"].([]any), 1)
 }
 
 // A matcher on a SessionStart hook is tested against its source, so the

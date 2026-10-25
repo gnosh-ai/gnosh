@@ -56,6 +56,12 @@ const (
 	// call is due; its matcher is tested against the tool name. A hook can
 	// allow or deny the call in the user's place.
 	EventPermissionRequest = config.EventPermissionRequest
+	// EventNotification fires on Klash's two notifications, a permission
+	// prompt that has waited for the user and a finished turn with no
+	// reply; its matcher is tested against the notification type. It has
+	// no decision control: its output is ignored and the TUI does not
+	// wait for it.
+	EventNotification = config.EventNotification
 )
 
 // HaltExitCode is the exit code that halts the whole turn. 2 blocks the
