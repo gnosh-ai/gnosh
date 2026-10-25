@@ -258,3 +258,17 @@ func TestParseGoalCommand(t *testing.T) {
 		require.False(t, ok, line)
 	}
 }
+
+func TestParseAddDirCommand(t *testing.T) {
+	t.Parallel()
+
+	for line, want := range map[string]string{"/add-dir": "", "/add-dir ../gno": "../gno", " /ADD-DIR  ~/src/x ": "~/src/x"} {
+		path, ok := ParseAddDirCommand(line)
+		require.True(t, ok, line)
+		require.Equal(t, want, path, line)
+	}
+	for _, line := range []string{"/add-dirs", "/add dir", "add a dir", ""} {
+		_, ok := ParseAddDirCommand(line)
+		require.False(t, ok, line)
+	}
+}

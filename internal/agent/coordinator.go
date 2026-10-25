@@ -175,6 +175,10 @@ type Coordinator interface {
 	// given there, which it is given again when it next touches a file
 	// in one.
 	Rewound(sessionID string, removed []string)
+	// RebuildSystemPrompts builds the coder agent's system prompt again
+	// from the config as it now is, as after /add-dir adds a directory
+	// its environment names. The plan agent's prompt has no environment.
+	RebuildSystemPrompts(ctx context.Context) error
 }
 
 type coordinator struct {
@@ -1792,6 +1796,28 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID, instructions str
 	// Auth failures during summarize flow through fantasy's OnAuthRefresh,
 	// the same path used by regular turns.
 	return agent.Summarize(ctx, sessionID, instructions, c.providerOptions(agent.Model(), providerCfg), c.makeAuthRefreshCallback(providerCfg), preCompactTriggerManual)
+}
+
+// RebuildSystemPrompts implements Coordinator, for the model the coder is
+// on.
+func (c *coordinator) RebuildSystemPrompts(ctx context.Context) error {
+	c.agentMu.RLock()
+	agent := c.agents[config.AgentCoder]
+	c.agentMu.RUnlock()
+	if agent == nil || agent.Model().Model == nil {
+		return nil
+	}
+	p, err := c.coderSystemPrompt()
+	if err != nil {
+		return err
+	}
+	model := agent.Model().Model
+	systemPrompt, err := p.Build(ctx, model.Provider(), model.Model(), c.cfg)
+	if err != nil {
+		return err
+	}
+	agent.SetSystemPrompt(systemPrompt)
+	return nil
 }
 
 // coderSystemPrompt is the coder agent's prompt: --system-prompt replaces

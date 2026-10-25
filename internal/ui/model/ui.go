@@ -5613,6 +5613,9 @@ func (m *UI) builtinCommand(content string) (tea.Cmd, bool) {
 	if condition, ok := session.ParseGoalCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.goal(condition), true
 	}
+	if path, ok := session.ParseAddDirCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.addDir(path), true
+	}
 	if n, ok := session.ParseCopyCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.copyResponse(n), true
 	}

@@ -524,9 +524,7 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 
 	data.ContextFiles = contextFiles
 	data.GlobalContextFiles = globalContextFiles
-	if o := store.Overrides(); o != nil {
-		data.AddedDirs = o.AddedDirs
-	}
+	data.AddedDirs = store.AddedDirs()
 	return data, nil
 }
 

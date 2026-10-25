@@ -173,6 +173,9 @@ type Service interface {
 	SetSkipRequests(skip bool)
 	SkipRequests() bool
 	SubscribeNotifications(ctx context.Context) <-chan pubsub.Event[PermissionNotification]
+	// AddDir adds dir, an absolute path, to the directories read without
+	// asking, as Claude Code's /add-dir does.
+	AddDir(dir string)
 }
 
 // PermissionKey is a composite key for session permission lookups.
@@ -197,8 +200,10 @@ type permissionService struct {
 	// addedDirs are the directories added with --add-dir (Claude Code's):
 	// reading or listing under them needs no permission, as under the
 	// working directory. Edits there are asked about as usual, but under
-	// acceptEdits.
-	addedDirs []string
+	// acceptEdits. /add-dir adds to them while the session runs, so
+	// they are read under addedDirsMu.
+	addedDirs   []string
+	addedDirsMu sync.RWMutex
 	// acceptEdits is Claude Code's acceptEdits mode: an edit of a file in
 	// the working directory or an added one runs without asking.
 	acceptEdits bool
@@ -564,10 +569,24 @@ func (s *permissionService) SkipRequests() bool {
 // the real tools against an added directory.
 var addedDirTools = map[string]string{"view": "read", "ls": "list"}
 
+// AddDir implements Service.
+func (s *permissionService) AddDir(dir string) {
+	s.addedDirsMu.Lock()
+	defer s.addedDirsMu.Unlock()
+	s.addedDirs = append(s.addedDirs, dir)
+}
+
+// dirs are the directories added with --add-dir or /add-dir.
+func (s *permissionService) dirs() []string {
+	s.addedDirsMu.RLock()
+	defer s.addedDirsMu.RUnlock()
+	return s.addedDirs
+}
+
 // inAddedDir reports whether path lies in one of the directories added
-// with --add-dir.
+// with --add-dir or /add-dir.
 func (s *permissionService) inAddedDir(path string) bool {
-	for _, dir := range s.addedDirs {
+	for _, dir := range s.dirs() {
 		if rel, err := filepath.Rel(dir, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
 			return true
 		}

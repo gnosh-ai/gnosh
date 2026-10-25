@@ -45,6 +45,8 @@ func (m *mockBashPermissionService) ActiveRequest() (permission.PermissionReques
 
 func (m *mockBashPermissionService) SetSkipRequests(skip bool) {}
 
+func (m *mockBashPermissionService) AddDir(string) {}
+
 func (m *mockBashPermissionService) SkipRequests() bool {
 	return false
 }
@@ -159,6 +161,8 @@ func (m *recordingPermissionService) ActiveRequest() (permission.PermissionReque
 }
 
 func (m *recordingPermissionService) SetSkipRequests(skip bool) {}
+
+func (m *recordingPermissionService) AddDir(string) {}
 
 func (m *recordingPermissionService) SkipRequests() bool {
 	return false

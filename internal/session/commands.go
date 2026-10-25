@@ -81,6 +81,13 @@ func ParseGoalCommand(line string) (arg string, ok bool) {
 	return parseCommand(line, "goal")
 }
 
+// ParseAddDirCommand reports whether line is Claude Code's /add-dir
+// command, with or without the slash, and the directory it names ("" for
+// none).
+func ParseAddDirCommand(line string) (path string, ok bool) {
+	return parseCommand(line, "add-dir")
+}
+
 // ParseAutocompactCommand reports whether line is Claude Code's
 // /autocompact command, with or without the slash, and the window it
 // gives ("" when none).

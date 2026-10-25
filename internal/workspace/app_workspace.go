@@ -67,6 +67,10 @@ func (w *AppWorkspace) BranchSession(ctx context.Context, sessionID, title strin
 	return w.app.BranchSession(ctx, sessionID, title)
 }
 
+func (w *AppWorkspace) AddDir(ctx context.Context, path string) (string, bool, error) {
+	return w.app.AddDir(ctx, path)
+}
+
 func (w *AppWorkspace) SessionGoal(_ context.Context, sessionID string) (agent.Goal, bool, error) {
 	return w.app.SessionGoal(sessionID)
 }
@@ -84,7 +88,9 @@ func (w *AppWorkspace) RenameSession(ctx context.Context, sessionID, title strin
 }
 
 func (w *AppWorkspace) PermissionsReport(context.Context) (string, error) {
-	return config.PermissionsReport(w.store.Config(), w.store.Overrides(), w.store.WorkingDir(), w.app.Permissions.SkipRequests()), nil
+	overrides := *w.store.Overrides()
+	overrides.AddedDirs = w.store.AddedDirs()
+	return config.PermissionsReport(w.store.Config(), &overrides, w.store.WorkingDir(), w.app.Permissions.SkipRequests()), nil
 }
 
 // BackgroundJobs lists every job of the process, which hosts this one

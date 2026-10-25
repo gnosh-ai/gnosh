@@ -47,7 +47,7 @@ func (s *permissionService) acceptsEdit(path string) bool {
 		return false
 	}
 	real, _ := resolvedPath(filepath.Clean(path))
-	for _, root := range append([]string{s.workingDir}, s.addedDirs...) {
+	for _, root := range append([]string{s.workingDir}, s.dirs()...) {
 		if root == "" {
 			continue
 		}

@@ -78,3 +78,23 @@ func TestOtherReadsInAddedDirsStillAsk(t *testing.T) {
 		})
 	}
 }
+
+// /add-dir adds a directory while the session runs: reads under it need
+// no permission from then on, and under acceptEdits its edits run
+// unasked, as for one added with --add-dir.
+func TestAddDirAddsADirectoryWhileTheSessionRuns(t *testing.T) {
+	t.Parallel()
+
+	added := t.TempDir()
+	file := filepath.Join(added, "a.go")
+	s := New(Options{WorkingDir: t.TempDir(), AcceptEdits: true}).(*permissionService)
+	require.False(t, s.inAddedDir(file))
+	require.False(t, s.acceptsEdit(file))
+
+	s.AddDir(added)
+	require.True(t, s.inAddedDir(file))
+	require.True(t, s.acceptsEdit(file))
+	ok, err := s.Request(context.Background(), CreatePermissionRequest{SessionID: "s1", ToolName: "view", Action: "read", Path: file})
+	require.NoError(t, err)
+	require.True(t, ok)
+}

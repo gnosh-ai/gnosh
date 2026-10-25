@@ -131,6 +131,10 @@ type Workspace interface {
 	// it has none; SetSessionGoal sets it, or clears it when condition is
 	// "", and returns the goal it had, as Claude Code's /goal does.
 	SessionGoal(ctx context.Context, sessionID string) (agent.Goal, bool, error)
+	// AddDir adds a working directory for the session, as Claude Code's
+	// /add-dir does, and says what it did or why it did not; the bool is
+	// whether it added it.
+	AddDir(ctx context.Context, path string) (string, bool, error)
 	SetSessionGoal(ctx context.Context, sessionID, condition string) (agent.Goal, bool, error)
 	// Rewind restores the session's conversation, its code or both to the
 	// point before its prompt messageID, as Claude Code's /rewind does;

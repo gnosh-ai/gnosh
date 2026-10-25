@@ -41,6 +41,8 @@ func (m *mockPermissionService) ActiveRequest() (permission.PermissionRequest, b
 
 func (m *mockPermissionService) SetSkipRequests(skip bool) {}
 
+func (m *mockPermissionService) AddDir(string) {}
+
 func (m *mockPermissionService) SkipRequests() bool {
 	return false
 }

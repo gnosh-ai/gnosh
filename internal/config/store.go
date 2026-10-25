@@ -358,6 +358,22 @@ func (s *ConfigStore) Overrides() *RuntimeOverrides {
 	return &s.overrides
 }
 
+// AddedDirs are the directories added with --add-dir or /add-dir, as
+// absolute paths.
+func (s *ConfigStore) AddedDirs() []string {
+	s.writeMu.RLock()
+	defer s.writeMu.RUnlock()
+	return s.overrides.AddedDirs
+}
+
+// AddDir adds dir, an absolute path, to the directories added with
+// --add-dir, as Claude Code's /add-dir does for the session.
+func (s *ConfigStore) AddDir(dir string) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	s.overrides.AddedDirs = append(s.overrides.AddedDirs, dir)
+}
+
 // LoadedPaths returns the config file paths that were successfully loaded.
 func (s *ConfigStore) LoadedPaths() []string {
 	s.writeMu.RLock()

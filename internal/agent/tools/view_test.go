@@ -303,6 +303,8 @@ func (m *mockViewPermissionService) ActiveRequest() (permission.PermissionReques
 
 func (m *mockViewPermissionService) SetSkipRequests(skip bool) {}
 
+func (m *mockViewPermissionService) AddDir(string) {}
+
 func (m *mockViewPermissionService) SkipRequests() bool {
 	return false
 }

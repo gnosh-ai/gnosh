@@ -34,7 +34,7 @@ func TestPermissionsReport(t *testing.T) {
 		"| sourcegraph | options.disabled_tools |",
 		"| fetch | --disallowedTools |",
 		"| /p | working directory |",
-		"| /extra | --add-dir |",
+		"| /extra | --add-dir or /add-dir |",
 	} {
 		require.Contains(t, report, want)
 	}

@@ -151,6 +151,12 @@ func (w *ClientWorkspace) BranchSession(ctx context.Context, sessionID, title st
 	return protoToSession(*sess), nil
 }
 
+// AddDir is refused in client/server mode, as --add-dir is: the
+// directory would have to reach the server's permissions.
+func (w *ClientWorkspace) AddDir(context.Context, string) (string, bool, error) {
+	return "", false, errors.New("/add-dir cannot reach the server's permissions with KLASH_CLIENT_SERVER=1 yet")
+}
+
 func (w *ClientWorkspace) SessionGoal(ctx context.Context, sessionID string) (agent.Goal, bool, error) {
 	goal, err := w.client.SessionGoal(ctx, w.workspaceID(), sessionID)
 	return protoToGoal(goal, err)
