@@ -1526,13 +1526,21 @@ func GlobalSkillsDirs() []string {
 		return []string{crushSkills}
 	}
 
-	paths := []string{
-		filepath.Join(appConfigDir(home.Config()), "skills"),
+	configDir := appConfigDir(home.Config())
+	paths := []string{filepath.Join(configDir, "skills")}
+	// The skills directory under the other name too, klash's or crush's,
+	// after the one the config is in, so skills kept under either are found.
+	for _, name := range []string{appName, legacyAppName} {
+		if dir := filepath.Join(home.Config(), name); dir != configDir {
+			paths = append(paths, filepath.Join(dir, "skills"))
+		}
+	}
+	paths = append(paths,
 		filepath.Join(home.Config(), "agents", "skills"),
 		// Per the Agent Skills spec, scan ~/.agents/skills
 		filepath.Join(home.Dir(), ".agents", "skills"),
 		filepath.Join(home.Dir(), ".claude", "skills"),
-	}
+	)
 
 	// On Windows, also load from app data on top of `$HOME/.config/crush`.
 	// This is here mostly for backwards compatibility.
@@ -1556,6 +1564,7 @@ func GlobalSkillsDirs() []string {
 // git-root lookups to prevent drift when a new convention is added.
 var projectSkillSubdirs = []string{
 	".agents/skills",
+	".klash/skills",
 	".crush/skills",
 	".claude/skills",
 	".cursor/skills",
