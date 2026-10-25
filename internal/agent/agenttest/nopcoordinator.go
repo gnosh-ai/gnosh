@@ -68,3 +68,5 @@ func (*NopCoordinator) ToolInfos(context.Context) ([]fantasy.ToolInfo, error) {
 }
 
 func (*NopCoordinator) ToolNames() []string { return nil }
+
+func (*NopCoordinator) Rewound(string, []string) {}

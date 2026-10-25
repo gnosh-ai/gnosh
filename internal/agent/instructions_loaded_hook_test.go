@@ -304,7 +304,7 @@ func TestInstructionsLoadedNestedTraversal(t *testing.T) {
 	c := &coordinator{
 		cfg:               config.NewTestStoreIn(cfg, wd),
 		sessions:          env.sessions,
-		subdirectoryGiven: map[string]bool{},
+		subdirectoryGiven: map[string]string{},
 	}
 	sess, err := env.sessions.Create(t.Context(), "nested")
 	require.NoError(t, err)
@@ -419,7 +419,7 @@ func TestInstructionsLoadedFailingHookDoesNotBlock(t *testing.T) {
 	c := &coordinator{
 		cfg:               config.NewTestStoreIn(cfg, wd),
 		sessions:          env.sessions,
-		subdirectoryGiven: map[string]bool{},
+		subdirectoryGiven: map[string]string{},
 	}
 
 	// The subdirectory context is still returned even though the hook fails.
@@ -458,7 +458,7 @@ func TestInstructionsLoadedSlowHookDoesNotBlock(t *testing.T) {
 	c := &coordinator{
 		cfg:               config.NewTestStoreIn(cfg, wd),
 		sessions:          env.sessions,
-		subdirectoryGiven: map[string]bool{},
+		subdirectoryGiven: map[string]string{},
 	}
 
 	start := time.Now()
@@ -691,7 +691,7 @@ func TestInstructionsLoadedSubdirectoryLocalFile(t *testing.T) {
 	c := &coordinator{
 		cfg:               config.NewTestStoreIn(cfg, wd),
 		sessions:          env.sessions,
-		subdirectoryGiven: map[string]bool{},
+		subdirectoryGiven: map[string]string{},
 	}
 
 	sess, err := env.sessions.Create(t.Context(), "sub local")
@@ -738,7 +738,7 @@ func TestInstructionsLoadedSubAgentSessionDoesNotFire(t *testing.T) {
 	c := &coordinator{
 		cfg:               config.NewTestStoreIn(cfg, wd),
 		sessions:          env.sessions,
-		subdirectoryGiven: map[string]bool{},
+		subdirectoryGiven: map[string]string{},
 	}
 
 	// Create a sub-agent session (has a ParentSessionID).

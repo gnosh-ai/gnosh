@@ -100,8 +100,9 @@ func (a *App) Rewind(ctx context.Context, sessionID, messageID string, opts Rewi
 // rewindConversation keeps the whole of source's conversation, messages,
 // in a session of its own, then cuts source's back to before the message
 // at index at: the messages from there go, and with them the reads of
-// files made since; the todos are what they were then. It returns the
-// session the whole conversation is kept in.
+// files made since and the subdirectories' context given since; the todos
+// are what they were then. It returns the session the whole conversation
+// is kept in.
 func (a *App) rewindConversation(ctx context.Context, source session.Session, messages []message.Message, at int) (session.Session, error) {
 	titles, err := a.sessionTitles(ctx)
 	if err != nil {
@@ -111,10 +112,15 @@ func (a *App) rewindConversation(ctx context.Context, source session.Session, me
 	if err != nil {
 		return session.Session{}, err
 	}
+	removed := make([]string, 0, len(messages)-at)
 	for _, msg := range messages[at:] {
 		if err := a.Messages.Delete(ctx, msg.ID); err != nil {
 			return kept, err
 		}
+		removed = append(removed, msg.ID)
+	}
+	if a.AgentCoordinator != nil {
+		a.AgentCoordinator.Rewound(source.ID, removed)
 	}
 	if err := a.FileTracker.ForgetReadsSince(ctx, source.ID, messages[at].CreatedAt); err != nil {
 		return kept, err

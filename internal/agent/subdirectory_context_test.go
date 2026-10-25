@@ -28,7 +28,7 @@ func TestSubdirectoryContextOncePerSessionAndSummary(t *testing.T) {
 	c := &coordinator{
 		cfg:               config.NewTestStoreIn(&config.Config{Options: &config.Options{ContextPaths: []string{"AGENTS.md"}}}, env.workingDir),
 		sessions:          env.sessions,
-		subdirectoryGiven: map[string]bool{},
+		subdirectoryGiven: map[string]string{},
 	}
 	one, err := env.sessions.Create(t.Context(), "one")
 	require.NoError(t, err)
@@ -60,7 +60,7 @@ func TestSubdirectoryContextOnWriteAndEdit(t *testing.T) {
 	c := &coordinator{
 		cfg:               config.NewTestStoreIn(&config.Config{Options: &config.Options{ContextPaths: []string{"AGENTS.md"}}}, env.workingDir),
 		sessions:          env.sessions,
-		subdirectoryGiven: map[string]bool{},
+		subdirectoryGiven: map[string]string{},
 	}
 	one, err := env.sessions.Create(t.Context(), "one")
 	require.NoError(t, err)
@@ -118,7 +118,7 @@ func subdirectoryTest(t *testing.T) (*coordinator, fakeEnv, string) {
 	c := &coordinator{
 		cfg:               config.NewTestStoreIn(&config.Config{Options: &config.Options{ContextPaths: []string{"AGENTS.md"}}}, env.workingDir),
 		sessions:          env.sessions,
-		subdirectoryGiven: map[string]bool{},
+		subdirectoryGiven: map[string]string{},
 	}
 	return c, env, sub
 }
@@ -198,7 +198,7 @@ func TestSubdirectoryContextCutsAFileOverTheLimit(t *testing.T) {
 	c := &coordinator{
 		cfg:               config.NewTestStoreIn(&config.Config{Options: &config.Options{ContextPaths: []string{"AGENTS.md"}}}, env.workingDir),
 		sessions:          env.sessions,
-		subdirectoryGiven: map[string]bool{},
+		subdirectoryGiven: map[string]string{},
 	}
 	one, err := env.sessions.Create(t.Context(), "one")
 	require.NoError(t, err)
@@ -251,4 +251,44 @@ func TestSubdirectoryContextCutsAFileOverTheLimit(t *testing.T) {
 	// The part given is valid UTF-8 and has exactly 40,000 characters.
 	cutPrefix, _, _ := strings.Cut(got, "over 40000 characters")
 	require.True(t, utf8.ValidString(cutPrefix), "the cut is on a character boundary")
+}
+
+// A /rewind that cuts the message a session was given a subdirectory's
+// context files with has them given again when it next touches a file
+// there. Those given with a message the rewind kept, or to another
+// session, stay given; those given with no message known go.
+func TestSubdirectoryContextAgainAfterRewind(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv(t)
+	for _, dir := range []string{"kept", "cut", "unknown"} {
+		require.NoError(t, os.Mkdir(filepath.Join(env.workingDir, dir), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(env.workingDir, dir, "AGENTS.md"), []byte("the "+dir+" rules"), 0o644))
+	}
+	c := &coordinator{
+		cfg:               config.NewTestStoreIn(&config.Config{Options: &config.Options{ContextPaths: []string{"AGENTS.md"}}}, env.workingDir),
+		sessions:          env.sessions,
+		subdirectoryGiven: map[string]string{},
+	}
+	one, err := env.sessions.Create(t.Context(), "one")
+	require.NoError(t, err)
+	two, err := env.sessions.Create(t.Context(), "two")
+	require.NoError(t, err)
+	give := func(messageID, sessionID, dir string) string {
+		ctx := t.Context()
+		if messageID != "" {
+			ctx = context.WithValue(ctx, tools.MessageIDContextKey, messageID)
+		}
+		return c.subdirectoryContext(ctx, sessionID, filepath.Join(env.workingDir, dir, "main.go"))
+	}
+	require.Contains(t, give("m1", one.ID, "kept"), "the kept rules")
+	require.Contains(t, give("m5", one.ID, "cut"), "the cut rules")
+	require.Contains(t, give("", one.ID, "unknown"), "the unknown rules")
+	require.Contains(t, give("m5", two.ID, "cut"), "the cut rules")
+
+	c.Rewound(one.ID, []string{"m4", "m5", "m6"})
+	require.Empty(t, give("m7", one.ID, "kept"), "given with a message kept")
+	require.Contains(t, give("m7", one.ID, "cut"), "the cut rules", "given with a message cut")
+	require.Contains(t, give("m7", one.ID, "unknown"), "the unknown rules", "given with no message known")
+	require.Empty(t, give("m7", two.ID, "cut"), "another session's")
 }

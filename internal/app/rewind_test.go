@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/agent/agenttest"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/db"
@@ -152,9 +152,21 @@ func TestTodosBefore(t *testing.T) {
 }
 
 // busyCoordinator is an agent that is always busy.
-type busyCoordinator struct{ agent.Coordinator }
+type busyCoordinator struct{ agenttest.NopCoordinator }
 
 func (busyCoordinator) IsSessionBusy(string) bool { return true }
+
+// rewoundCoordinator is an agent that records what it is told a rewind
+// cut.
+type rewoundCoordinator struct {
+	agenttest.NopCoordinator
+	sessionID string
+	removed   []string
+}
+
+func (c *rewoundCoordinator) Rewound(sessionID string, removed []string) {
+	c.sessionID, c.removed = sessionID, removed
+}
 
 // /rewind, as in Claude Code: a dry run says what restoring the code to
 // the point before a prompt changes; restoring the code puts back what
@@ -162,8 +174,9 @@ func (busyCoordinator) IsSessionBusy(string) bool { return true }
 // restoring the conversation keeps the whole of it in a session of its
 // own, then cuts it back to before the prompt, forgetting the reads made
 // since and putting back the todos it had then, with the context's size
-// unknown until the next answer. Only a prompt the model still reads can
-// be gone back to, and not while the agent works.
+// unknown until the next answer, and the agent is told what was cut. Only
+// a prompt the model still reads can be gone back to, and not while the
+// agent works.
 func TestRewind(t *testing.T) {
 	t.Parallel()
 
@@ -175,7 +188,8 @@ func TestRewind(t *testing.T) {
 	sessions := session.NewService(q, conn)
 	messages := message.NewService(q)
 	dir := t.TempDir()
-	a := &App{Sessions: sessions, Messages: messages, FileTracker: filetracker.NewService(q), History: history.NewService(q, conn)}
+	coordinator := &rewoundCoordinator{}
+	a := &App{Sessions: sessions, Messages: messages, FileTracker: filetracker.NewService(q), History: history.NewService(q, conn), AgentCoordinator: coordinator}
 	a.config = config.NewTestStoreIn(&config.Config{}, dir)
 
 	src, err := sessions.Create(ctx, "fix-login-bug")
@@ -244,6 +258,7 @@ func TestRewind(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "a\n", string(data))
 	require.Equal(t, whole, conversation(src.ID), "the conversation stays")
+	require.Nil(t, coordinator.removed, "and nothing is cut")
 
 	result, err = a.Rewind(ctx, src.ID, prompt, RewindOptions{Conversation: true})
 	require.NoError(t, err)
@@ -251,6 +266,8 @@ func TestRewind(t *testing.T) {
 	require.Equal(t, "fix-login-bug (before rewind)", result.Kept.Title)
 	require.Equal(t, whole, conversation(result.Kept.ID), "the whole conversation is kept")
 	require.Equal(t, whole[:6], conversation(src.ID))
+	require.Equal(t, src.ID, coordinator.sessionID)
+	require.Equal(t, ids[6:], coordinator.removed, "the agent is told what was cut")
 	rewound, err := sessions.Get(ctx, src.ID)
 	require.NoError(t, err)
 	require.Equal(t, []session.Todo{{Content: "change a", Status: session.TodoStatusPending}}, rewound.Todos)
@@ -269,7 +286,7 @@ func TestRewind(t *testing.T) {
 	_, err = a.Rewind(ctx, src.ID, ids[0], RewindOptions{Conversation: true})
 	require.EqualError(t, err, "that message is no longer in the active context: choose a more recent one")
 
-	a.AgentCoordinator = busyCoordinator{}
+	a.AgentCoordinator = &busyCoordinator{}
 	_, err = a.Rewind(ctx, src.ID, ids[0], RewindOptions{Code: true})
 	require.EqualError(t, err, "the agent is busy in this session")
 }

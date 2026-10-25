@@ -163,6 +163,12 @@ type Coordinator interface {
 	// conversation, as Claude Code's /rename does with no name, and
 	// returns the name.
 	GenerateSessionName(ctx context.Context, sessionID string) (string, error)
+	// Rewound forgets what the session was given in the messages a
+	// /rewind cut, removed, as Claude Code forgets what the cut
+	// conversation read: the context files of the subdirectories it was
+	// given there, which it is given again when it next touches a file
+	// in one.
+	Rewound(sessionID string, removed []string)
 }
 
 type coordinator struct {
@@ -204,10 +210,11 @@ type coordinator struct {
 	instructionsLoaded *instructionsLoadedState
 
 	// subdirectoryGiven records the subdirectories' context files each
-	// session has been given since its last summary; see
-	// subdirectoryContext. Nil, nothing is given.
+	// session has been given since its last summary, with the message
+	// whose tool call they were given with ("" when not known); see
+	// subdirectoryContext and Rewound. Nil, nothing is given.
 	subdirectoryMu    sync.Mutex
-	subdirectoryGiven map[string]bool
+	subdirectoryGiven map[string]string
 
 	// Skills discovery results (session-start snapshot).
 	allSkills    []*skills.Skill // Pre-filter: all discovered after dedup.
@@ -269,7 +276,7 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		interactive:        opts.Interactive,
 		named:              newNamedChanges(),
 
-		subdirectoryGiven: map[string]bool{},
+		subdirectoryGiven: map[string]string{},
 	}
 
 	agentCfg, ok := opts.Config.Config().Agents[config.AgentCoder]
@@ -354,10 +361,10 @@ func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePa
 	c.subdirectoryMu.Lock()
 	for _, f := range files {
 		key := sessionID + "\x00" + summary + "\x00" + f.Path
-		if c.subdirectoryGiven[key] {
+		if _, given := c.subdirectoryGiven[key]; given {
 			continue
 		}
-		c.subdirectoryGiven[key] = true
+		c.subdirectoryGiven[key] = tools.GetMessageFromContext(ctx)
 		newFiles = append(newFiles, promptContextFile{path: f.Path, parent: f.Parent})
 		fmt.Fprintf(&b, "<file path=\"%s\">\n%s\n</file>\n", f.Path, onDemandContextFile(f))
 	}
@@ -373,6 +380,24 @@ func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePa
 		return ""
 	}
 	return "\n<project_context>\nThis file's directory has context files of its own. Follow their instructions for the files there:\n" + b.String() + "</project_context>\n"
+}
+
+// Rewound forgets the subdirectories' context files the session was
+// given in the messages a rewind cut, and those given it with no message
+// known: it is given them again when it next touches a file there.
+func (c *coordinator) Rewound(sessionID string, removed []string) {
+	cut := make(map[string]bool, len(removed))
+	for _, id := range removed {
+		cut[id] = true
+	}
+	prefix := sessionID + "\x00"
+	c.subdirectoryMu.Lock()
+	defer c.subdirectoryMu.Unlock()
+	for key, messageID := range c.subdirectoryGiven {
+		if strings.HasPrefix(key, prefix) && (messageID == "" || cut[messageID]) {
+			delete(c.subdirectoryGiven, key)
+		}
+	}
 }
 
 // onDemandContextFile cuts a context file over the on-demand limit to
