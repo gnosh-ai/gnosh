@@ -26,6 +26,13 @@ func instructionsLoadedHooks(matcher string, commands ...string) []config.HookCo
 	return cfgs
 }
 
+// writesPayload is a hook command that writes the hook's input to path
+// whole. The hooks run in a goroutine, so a test polling for the file
+// could read it after `cat >` made it and before it wrote.
+func writesPayload(path string) string {
+	return "cat > " + path + ".part && mv " + path + ".part " + path
+}
+
 // TestInstructionsLoadedConfigLoads checks that a config with an
 // InstructionsLoaded hook, with or without a matcher, passes
 // ValidateHooks, and that the matcher is tested against load_reason.
@@ -123,7 +130,7 @@ func TestInstructionsLoadedFiresOnSessionStart(t *testing.T) {
 	dir := t.TempDir()
 	payloadPath := filepath.Join(dir, "payload.json")
 	a, wd := instructionsLoadedAgent(t,
-		instructionsLoadedHooks("", `cat > `+payloadPath)...)
+		instructionsLoadedHooks("", writesPayload(payloadPath))...)
 
 	// Fire the hooks directly (the goroutine in fireInstructionsLoadedForSession
 	// is hard to await in a test, so call the runner through the same path).
@@ -294,7 +301,7 @@ func TestInstructionsLoadedNestedTraversal(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(sub, "a.go"), []byte("package main"), 0o644))
 
 	cfg := &config.Config{
-		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", `cat > `+payloadPath)},
+		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", writesPayload(payloadPath))},
 		Options: &config.Options{ContextPaths: []string{"AGENTS.md"}},
 	}
 	require.NoError(t, cfg.ValidateHooks())
@@ -347,7 +354,7 @@ func TestInstructionsLoadedFiresThroughRun(t *testing.T) {
 
 	cfg := &config.Config{
 		Hooks: map[string][]config.HookConfig{
-			hooks.EventInstructionsLoaded: instructionsLoadedHooks("", `cat > `+payloadPath),
+			hooks.EventInstructionsLoaded: instructionsLoadedHooks("", writesPayload(payloadPath)),
 		},
 		Options: &config.Options{ContextPaths: []string{"AGENTS.md"}},
 	}
@@ -507,7 +514,7 @@ func TestInstructionsLoadedLocalMemoryType(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(wd, "CLAUDE.local.md"), []byte("local rules"), 0o644))
 
 	cfg := &config.Config{
-		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", `cat > `+payloadPath)},
+		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", writesPayload(payloadPath))},
 		Options: &config.Options{ContextPaths: []string{"CLAUDE.local.md"}},
 	}
 	require.NoError(t, cfg.ValidateHooks())
@@ -545,7 +552,7 @@ func TestInstructionsLoadedUserMemoryType(t *testing.T) {
 	require.NoError(t, os.WriteFile(globalFile, []byte("global rules"), 0o644))
 
 	cfg := &config.Config{
-		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", `cat > `+payloadPath)},
+		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", writesPayload(payloadPath))},
 		Options: &config.Options{GlobalContextPaths: []string{globalFile}},
 	}
 	require.NoError(t, cfg.ValidateHooks())
@@ -644,7 +651,7 @@ func TestInstructionsLoadedGlobalLocalFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(globalFile, []byte("global local rules"), 0o644))
 
 	cfg := &config.Config{
-		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", `cat > `+payloadPath)},
+		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", writesPayload(payloadPath))},
 		Options: &config.Options{GlobalContextPaths: []string{globalFile}},
 	}
 	require.NoError(t, cfg.ValidateHooks())
@@ -683,7 +690,7 @@ func TestInstructionsLoadedSubdirectoryLocalFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(sub, "a.go"), []byte("package main"), 0o644))
 
 	cfg := &config.Config{
-		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", `cat > `+payloadPath)},
+		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", writesPayload(payloadPath))},
 		Options: &config.Options{ContextPaths: []string{"CLAUDE.local.md"}},
 	}
 	require.NoError(t, cfg.ValidateHooks())
@@ -730,7 +737,7 @@ func TestInstructionsLoadedSubAgentSessionDoesNotFire(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(sub, "a.go"), []byte("package main"), 0o644))
 
 	cfg := &config.Config{
-		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", `cat > `+payloadPath)},
+		Hooks:   map[string][]config.HookConfig{hooks.EventInstructionsLoaded: instructionsLoadedHooks("", writesPayload(payloadPath))},
 		Options: &config.Options{ContextPaths: []string{"AGENTS.md"}},
 	}
 	require.NoError(t, cfg.ValidateHooks())
