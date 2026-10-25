@@ -78,6 +78,9 @@ func TestStopOnSignal(t *testing.T) {
 	err := stoppedStatus(ctx, context.Canceled)
 	require.Equal(t, exitStatus(143), err)
 	require.Equal(t, 143, exitCode(err))
+	// The TUI quits on SIGTERM by itself (Bubble Tea's handler), with no
+	// error: it exits 143 all the same.
+	require.Equal(t, exitStatus(143), stoppedStatus(ctx, nil))
 
 	ctx, stop = stopOnSignal(context.Background())
 	defer stop()
@@ -134,12 +137,10 @@ func (idleModel) Init() tea.Cmd                         { return nil }
 func (m idleModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return m, nil }
 func (idleModel) View() tea.View                        { return tea.NewView("") }
 
-// The TUI: SIGTERM cancels the program's context, and the program, killed
-// through it, hit no internal error: the command returns ctx's error and
-// exits 143, its shutdown done (SessionEnd hooks, background jobs
-// killed). The TUI took only SIGINT, through fang, so SIGTERM ended it
-// without that shutdown.
-func TestTUIStopsOnSIGTERM(t *testing.T) {
+// A TUI program killed because a signal cancelled its context, as SIGINT
+// cancels fang's, hit no internal error: the command returns the
+// context's error, where it asked for a bug report.
+func TestTUIKilledThroughItsContextIsNoInternalError(t *testing.T) {
 	f := useFakeSignals(t)
 	ctx, stop := stopOnSignal(context.Background())
 	defer stop()
@@ -149,7 +150,7 @@ func TestTUIStopsOnSIGTERM(t *testing.T) {
 		_, err := program.Run()
 		done <- err
 	}()
-	f.deliver(t, ctx, syscall.SIGTERM)
+	f.deliver(t, ctx, os.Interrupt)
 
 	var err error
 	select {
@@ -158,9 +159,7 @@ func TestTUIStopsOnSIGTERM(t *testing.T) {
 		t.Fatal("the program did not stop")
 	}
 	require.ErrorIs(t, err, tea.ErrProgramKilled)
-	stopped := tuiStopped(ctx, err)
-	require.ErrorIs(t, stopped, context.Canceled)
-	require.Equal(t, 143, exitCode(stoppedStatus(ctx, stopped)))
+	require.ErrorIs(t, tuiStopped(ctx, err), context.Canceled)
 
 	// Killed with its context live, by a panic say: an internal error.
 	require.NoError(t, tuiStopped(context.Background(), fmt.Errorf("%w: %w", tea.ErrProgramKilled, tea.ErrProgramPanic)))

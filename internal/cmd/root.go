@@ -164,7 +164,10 @@ klash --continue
 		program := tea.NewProgram(
 			model,
 			tea.WithEnvironment(env),
-			tea.WithContext(ctx),
+			// Not ctx: Bubble Tea quits on SIGTERM by itself, its shutdown
+			// done and the resume hint printed; ctx only makes that a 143
+			// (stopsOnSignal). Killed through ctx, the program skipped both.
+			tea.WithContext(cmd.Context()),
 			tea.WithFilter(inputFilter.Filter),
 		)
 		go ws.Subscribe(program)

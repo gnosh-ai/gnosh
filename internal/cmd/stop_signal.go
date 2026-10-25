@@ -51,10 +51,10 @@ func stopOnSignal(parent context.Context) (ctx context.Context, stop func()) {
 // stopsOnSignal is run as a command's RunE that stops on SIGINT or
 // SIGTERM: either cancels run's ctx, and a command stopped by SIGTERM
 // exits 143 once run has returned, its deferred cleanup done, as Claude
-// Code does, both klash run and the TUI. klash run asked for os.Kill,
-// which cannot be caught, rather than SIGTERM, so SIGTERM ended it on the
-// spot: its Stop hook's checks, reviewers among them, ran on with nothing
-// to stop them.
+// Code does. klash run asked for os.Kill, which cannot be caught, rather
+// than SIGTERM, so SIGTERM ended it on the spot: its Stop hook's checks,
+// reviewers among them, ran on with nothing to stop them. The TUI already
+// quit cleanly on SIGTERM (Bubble Tea's own handler), but exited 0.
 func stopsOnSignal(run func(ctx context.Context, cmd *cobra.Command, args []string) error) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		ctx, stop := stopOnSignal(context.Background())
@@ -63,12 +63,11 @@ func stopsOnSignal(run func(ctx context.Context, cmd *cobra.Command, args []stri
 	}
 }
 
-// tuiStopped is ctx's error when the TUI program was killed because ctx
-// was cancelled, as SIGINT or SIGTERM cancels it (stopsOnSignal), and nil
-// otherwise. A program stopped that way hit no internal error: the
-// command then ends as one a signal stopped, its shutdown done (the
-// session's SessionEnd hooks, its background jobs killed). The TUI took
-// only SIGINT, through fang, and SIGTERM ended it on the spot.
+// tuiStopped is ctx's error when the TUI program was killed because a
+// signal cancelled its context, as SIGINT cancels fang's (and ctx, by
+// stopsOnSignal), and nil otherwise. A program stopped that way hit no
+// internal error; it was reported as one, with a request for a bug
+// report.
 func tuiStopped(ctx context.Context, err error) error {
 	if errors.Is(err, tea.ErrProgramKilled) && ctx.Err() != nil {
 		return ctx.Err()
