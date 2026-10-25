@@ -1092,6 +1092,29 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		go a.GenerateTitle(titleCtx, call.SessionID, call.Prompt)
 	}
 
+	// A conversation already past the point at which it is compacted, as
+	// after a /model switch to a model with a smaller window, is summarized
+	// before the prompt goes out, as Claude Code compacts before a request.
+	// Sent whole, the new model read all of it before it answered, and only
+	// then was it summarized. Just after a summary the session's count is
+	// the summary's alone; the next step's tells whether the summary
+	// brought the conversation under the point (see compacts).
+	if _, summarized := a.justSummarized.Get(call.SessionID); !summarized &&
+		a.compacts(call.SessionID, int64(largeModel.CatwalkCfg.ContextWindow), currentSession.PromptTokens+currentSession.CompletionTokens) {
+		if err := a.compactBeforeRequest(ctx, genCtx, &call); err != nil {
+			if persistErr := a.persistCanceledTurn(ctx, call, false); persistErr != nil {
+				return nil, persistErr
+			}
+			return nil, err
+		}
+		if currentSession, err = a.sessions.Get(ctx, call.SessionID); err != nil {
+			return nil, fmt.Errorf("failed to get session: %w", err)
+		}
+		if msgs, err = a.getSessionMessages(ctx, currentSession); err != nil {
+			return nil, fmt.Errorf("failed to get session messages: %w", err)
+		}
+	}
+
 	// Add the user message to the session.
 	_, err = a.createUserMessage(ctx, call)
 	if err != nil {
@@ -1675,17 +1698,10 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID, instructions st
 	return a.summarize(ctx, sessionID, "", instructions, opts, onAuthRefresh, trigger)
 }
 
-// summarize replaces the session's conversation with a summary of it.
-// The request asking for it is the session's next turn as the provider
-// sees it: the same system prompt and tools, scoped to the channel of
-// the turn being cut short ("" when the user asked), the conversation
-// prepared as a turn prepares it, and the summary instructions as the
-// last user message. So the provider's prompt cache covers the whole
-// conversation. It was sent with a system prompt of its own and no
-// tools: on a local server that differed from the cached conversation
-// within its first tokens, and a full session waited twenty minutes
-// while the server read all of it again. instructions, the text given
-// after /compact, go at the end of the summary instructions.
+// summarize replaces the session's conversation with a summary of it
+// (compactConversation) while no turn runs in it, then runs what was
+// queued meanwhile. instructions, the text given after /compact, go at
+// the end of the summary instructions.
 func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instructions string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) (retErr error) {
 	// A turn running in the session stops a summary. A prompt that is
 	// still in its UserPromptSubmit hooks does not: IsSessionBusy counts
@@ -1700,25 +1716,6 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 	// conversation is summarized. They cannot stop it: whatever they
 	// say, the summary goes ahead.
 	a.runPreCompactHooks(ctx, sessionID, trigger, instructions)
-
-	// Copy mutable fields under lock to avoid races with SetModels.
-	largeModel := a.largeModel.Get()
-	systemPromptPrefix := a.systemPromptPrefix.Get()
-
-	currentSession, err := a.sessions.Get(ctx, sessionID)
-	if err != nil {
-		return fmt.Errorf("failed to get session: %w", err)
-	}
-	msgs, err := a.getSessionMessages(ctx, currentSession)
-	if err != nil {
-		return err
-	}
-	if len(msgs) == 0 {
-		// Nothing to summarize.
-		return nil
-	}
-
-	aiMsgs, _ := a.preparePrompt(msgs, largeModel.CatwalkCfg.SupportsImages)
 
 	genCtx, cancel := context.WithCancel(ctx)
 	ac := &activeCancel{cancel: cancel}
@@ -1740,6 +1737,80 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 			retErr = qErr
 		}
 	}()
+	if err := a.compactConversation(ctx, genCtx, sessionID, channel, instructions, opts, onAuthRefresh, trigger); err != nil {
+		if errors.Is(err, errSummaryCanceled) {
+			return nil
+		}
+		return err
+	}
+
+	cancel()
+	drained = true
+	return a.drainQueuedAfterSummary(ctx, sessionID)
+}
+
+// drainQueuedAfterSummary hands the session back and runs the first
+// prompt queued while it was being summarized, if any. The active
+// request is released first so Run() does not see the session as busy.
+//
+// The read-modify-write holds the session's dispatch mutex, as every
+// other queue writer does (enqueueCall, PopQueuedPrompts, the turn-end
+// handoff), so a prompt queued or popped meanwhile is neither lost nor
+// put back. Run takes the same mutex, so it is released first.
+func (a *sessionAgent) drainQueuedAfterSummary(ctx context.Context, sessionID string) error {
+	a.activeRequests.Del(sessionID)
+	mu := a.sessionMu(sessionID)
+	mu.Lock()
+	queuedMessages, ok := a.messageQueue.Get(sessionID)
+	if !ok || len(queuedMessages) == 0 {
+		mu.Unlock()
+		return nil
+	}
+	firstQueuedMessage := queuedMessages[0]
+	a.messageQueue.Set(sessionID, queuedMessages[1:])
+	mu.Unlock()
+	_, qErr := a.Run(ctx, firstQueuedMessage)
+	return qErr
+}
+
+// errSummaryCanceled is compactConversation's answer when the summary was
+// cancelled, and its message removed.
+var errSummaryCanceled = errors.New("the summary was cancelled")
+
+// compactConversation replaces the session's conversation with a summary
+// of it, in genCtx, the session's active request: summarize's own, or
+// that of the turn compacting before its request. ctx outlasts a cancel,
+// for what is written or undone after one.
+//
+// The request asking for the summary is the session's next turn as the
+// provider sees it: the same system prompt and tools, scoped to the
+// channel of the turn being cut short ("" when the user asked), the
+// conversation prepared as a turn prepares it, and the summary
+// instructions as the last user message. So the provider's prompt cache
+// covers the whole conversation. It was sent with a system prompt of its
+// own and no tools: on a local server that differed from the cached
+// conversation within its first tokens, and a full session waited twenty
+// minutes while the server read all of it again.
+func (a *sessionAgent) compactConversation(ctx, genCtx context.Context, sessionID, channel, instructions string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) error {
+	// Copy mutable fields under lock to avoid races with SetModels.
+	largeModel := a.largeModel.Get()
+	systemPromptPrefix := a.systemPromptPrefix.Get()
+
+	currentSession, err := a.sessions.Get(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to get session: %w", err)
+	}
+	msgs, err := a.getSessionMessages(ctx, currentSession)
+	if err != nil {
+		return err
+	}
+	if len(msgs) == 0 {
+		// Nothing to summarize.
+		return nil
+	}
+
+	aiMsgs, _ := a.preparePrompt(msgs, largeModel.CatwalkCfg.SupportsImages)
+
 	defer func() {
 		if flushErr := a.messages.FlushAll(ctx); flushErr != nil {
 			slog.Error("Failed to flush pending message updates after summarize", "error", flushErr)
@@ -1756,8 +1827,12 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 		return err
 	}
 
+	summaryInstructions := buildSummaryPrompt(currentSession.Todos, instructions)
 	noTools := fantasy.ToolChoiceNone
 	ask := func(systemPrompt string, tools []fantasy.AgentTool, conversation []fantasy.Message) (*fantasy.AgentResult, error) {
+		// Each request writes the summary afresh: none of one the
+		// model's window cut short is kept.
+		summaryMessage.ResetStreamedContent()
 		agent := fantasy.NewAgent(
 			largeModel.Model,
 			fantasy.WithSystemPrompt(systemPrompt),
@@ -1765,7 +1840,7 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 			fantasy.WithUserAgent(userAgent),
 		)
 		return agent.Stream(genCtx, fantasy.AgentStreamCall{
-			Prompt:          buildSummaryPrompt(currentSession.Todos, instructions),
+			Prompt:          summaryInstructions,
 			Messages:        conversation,
 			Headers:         sessionHeaders(sessionID),
 			ProviderOptions: opts,
@@ -1810,33 +1885,58 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 	for i, t := range agentTools {
 		listedTools[i] = unrunnableTool{t}
 	}
-	resp, err := ask(a.requestSystemPrompt(), listedTools, aiMsgs)
-	if tooLongForContext(err) {
+	// The summary needs room left in the model's window to be written. A
+	// request that leaves too little, as after a /model switch to a model
+	// with a smaller window, was sent as it was, and a llama.cpp server
+	// stopped the summary where the window ran out. It is made smaller
+	// first, as a request the provider refuses is (see fitSummary).
+	cw := int64(largeModel.CatwalkCfg.ContextWindow)
+	systemPrompt := a.requestSystemPrompt()
+	bare, conversation, leftOut := fitSummary(cw, currentSession.PromptTokens+currentSession.CompletionTokens,
+		approxTokenCount(systemPrompt)+toolTokens(listedTools), approxTokenCount(systemPromptPrefix)+approxTokenCount(summaryInstructions), aiMsgs)
+	var resp *fantasy.AgentResult
+	if bare {
+		resp, err = ask("", nil, conversation)
+	} else {
+		resp, err = ask(systemPrompt, listedTools, conversation)
+	}
+	// A summary the window cut short is not one: it was kept as if whole,
+	// and the session went on from half a summary. It is asked for again
+	// with less sent, as a request refused as too long is.
+	cutShort := func() bool { return err == nil && filledWindow(resp, cw) }
+	if !bare && (tooLongForContext(err) || cutShort()) {
 		// The system prompt and tools take room that a conversation filled
 		// up by its last step may not have left. Without them, as it was
 		// asked for before, the summary reads the whole conversation again
 		// but fits.
-		resp, err = ask("", nil, aiMsgs)
+		resp, err = ask("", nil, conversation)
 	}
 	// Too long even alone, as after a switch to a model with a smaller
 	// context, the conversation's earliest turns are left out, half at a
 	// time, until the rest fits, as Claude Code leaves them out, and the
 	// summary says what it does not cover. Unsummarized, the session was
 	// stuck: every turn after it was refused as too long.
-	leftOut := false
-	for kept := aiMsgs; tooLongForContext(err); {
+	for kept := conversation; tooLongForContext(err) || cutShort(); {
 		if kept = laterPart(kept); kept == nil {
 			break
 		}
 		leftOut = true
 		resp, err = ask("", nil, kept)
 	}
+	if cutShort() {
+		// Not even part of a summary is kept: a later request would send
+		// what there is as the agent's own words.
+		summaryMessage.ResetStreamedContent()
+		err = errors.New("the summary did not fit in the model's context window")
+	}
 	if err != nil {
 		isCancelErr := errors.Is(err, context.Canceled)
 		if isCancelErr {
 			// User cancelled summarize we need to remove the summary message.
-			deleteErr := a.messages.Delete(ctx, summaryMessage.ID)
-			return deleteErr
+			if deleteErr := a.messages.Delete(ctx, summaryMessage.ID); deleteErr != nil {
+				return deleteErr
+			}
+			return errSummaryCanceled
 		}
 		// Mark the summary message as finished with an error so the UI
 		// stops spinning.
@@ -1936,34 +2036,7 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 	// The user's PostCompact hooks get the summary, now that it is saved
 	// and before any prompt queued meanwhile runs on it.
 	a.runPostCompactHooks(ctx, sessionID, trigger, summaryMessage.Content().Text)
-
-	cancel()
-	drained = true
-	return a.drainQueuedAfterSummary(ctx, sessionID)
-}
-
-// drainQueuedAfterSummary hands the session back and runs the first
-// prompt queued while it was being summarized, if any. The active
-// request is released first so Run() does not see the session as busy.
-//
-// The read-modify-write holds the session's dispatch mutex, as every
-// other queue writer does (enqueueCall, PopQueuedPrompts, the turn-end
-// handoff), so a prompt queued or popped meanwhile is neither lost nor
-// put back. Run takes the same mutex, so it is released first.
-func (a *sessionAgent) drainQueuedAfterSummary(ctx context.Context, sessionID string) error {
-	a.activeRequests.Del(sessionID)
-	mu := a.sessionMu(sessionID)
-	mu.Lock()
-	queuedMessages, ok := a.messageQueue.Get(sessionID)
-	if !ok || len(queuedMessages) == 0 {
-		mu.Unlock()
-		return nil
-	}
-	firstQueuedMessage := queuedMessages[0]
-	a.messageQueue.Set(sessionID, queuedMessages[1:])
-	mu.Unlock()
-	_, qErr := a.Run(ctx, firstQueuedMessage)
-	return qErr
+	return nil
 }
 
 // permissionMode is a session's permission mode as its hooks are told
@@ -2084,12 +2157,106 @@ const earliestLeftOut = "Note: the earliest part of the conversation was too lar
 // a conversation starts with a user message.
 const leftOutTurns = "[The earlier part of this conversation was left out: it was too long to summarize whole.]"
 
+// filledWindow reports whether resp, a summary that came back, stopped
+// because it and its request filled the model's context window cw, as a
+// llama.cpp server stops a reply that runs out of room (finish reason
+// "length"; its log says "truncated"), not at a limit on its output: they
+// come to within 1% of the window, or either is not known.
+func filledWindow(resp *fantasy.AgentResult, cw int64) bool {
+	if resp == nil || len(resp.Steps) == 0 {
+		return false
+	}
+	step := resp.Steps[len(resp.Steps)-1]
+	if step.FinishReason != fantasy.FinishReasonLength {
+		return false
+	}
+	used := contextTokens(step.Usage) + step.Usage.OutputTokens
+	return cw <= 0 || used == 0 || used >= cw-cw/100
+}
+
+// summaryRoom is the room a summary request must leave a model with
+// context window cw to write the summary in: half of what compacting at
+// the default point leaves (compactAt). A conversation compacted there,
+// even one its last step took well past the point, is then summarized as
+// its turn sent it, from the provider's cache. Claude Code keeps 20,000
+// tokens for a summary (MAX_OUTPUT_TOKENS_FOR_SUMMARY); compactAt leaves a
+// large window no more than that in all.
+func summaryRoom(cw int64) int64 {
+	return (cw - compactAt(cw, 0, false)) / 2
+}
+
+// fitSummary is how a summary request of conversation leaves a model with
+// context window cw summaryRoom: sent as it is, with the session's system
+// prompt and tools (aside tokens), when that leaves it; bare, without
+// them, as a request refused as too long is asked again; or bare with
+// only the latest part of the conversation that leaves it (fittingPart),
+// cut set. fixed is what goes in any case: the summary instructions and
+// the system prompt prefix. The estimates of the system prompt, tools and
+// conversation, approxTokenCount's, are raised to counted where they fall
+// short of it: the provider's count of them at the conversation's last
+// step, the session's tokens. With the window unknown the request goes as
+// it is; a refusal or a summary the window cut short then makes it
+// smaller (compactConversation).
+func fitSummary(cw, counted, aside, fixed int64, conversation []fantasy.Message) (bare bool, kept []fantasy.Message, cut bool) {
+	if cw <= 0 {
+		return false, conversation, false
+	}
+	inConversation := estimateMessageTokens(conversation)
+	scale := max(1, float64(counted)/float64(max(aside+inConversation, 1)))
+	fits := func(tokens int64) bool {
+		return int64(float64(tokens)*scale)+fixed+summaryRoom(cw) <= cw
+	}
+	switch {
+	case fits(aside + inConversation):
+		return false, conversation, false
+	case fits(inConversation):
+		return true, conversation, false
+	}
+	if part := fittingPart(conversation, fits); part != nil {
+		return true, part, true
+	}
+	return true, conversation, false
+}
+
+// fittingPart is the latest part of msgs whose estimate fits, cut where
+// laterPart cuts (partFrom): from the first message from which the rest
+// fits on. nil when no cut fits.
+func fittingPart(msgs []fantasy.Message, fits func(tokens int64) bool) []fantasy.Message {
+	rest := estimateMessageTokens(msgs)
+	for from := 1; from < len(msgs); from++ {
+		rest -= estimateMessageTokens(msgs[from-1 : from])
+		if !fits(rest) {
+			continue
+		}
+		if part := partFrom(msgs, from); part != nil {
+			return part
+		}
+	}
+	return nil
+}
+
+// toolTokens estimates, as approxTokenCount does, what the definitions of
+// tools take in a request.
+func toolTokens(tools []fantasy.AgentTool) int64 {
+	var tokens int64
+	for _, t := range tools {
+		definition, _ := json.Marshal(t.Info())
+		tokens += approxTokenCount(string(definition))
+	}
+	return tokens
+}
+
 // laterPart is msgs from the first user message in their second half on,
-// or, in a long turn of tool calls that has none there, from the first of
-// the agent's messages, after leftOutTurns: so no tool result goes without
-// its call. nil when no cut leaves fewer messages.
+// as partFrom cuts them.
 func laterPart(msgs []fantasy.Message) []fantasy.Message {
-	from := max(len(msgs)/2, 1)
+	return partFrom(msgs, max(len(msgs)/2, 1))
+}
+
+// partFrom is msgs from the first user message at or after from on, or,
+// in a long turn of tool calls that has none there, from the first of
+// the agent's messages, after leftOutTurns: so no tool result goes
+// without its call. nil when no cut leaves fewer messages.
+func partFrom(msgs []fantasy.Message, from int) []fantasy.Message {
 	for i := from; i < len(msgs); i++ {
 		if msgs[i].Role == fantasy.MessageRoleUser {
 			return msgs[i:]

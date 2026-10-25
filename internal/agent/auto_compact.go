@@ -167,6 +167,40 @@ func (a *sessionAgent) compacts(sessionID string, cw, tokens int64) bool {
 	return level != compactNever && autoSummarize(cw, window, tokens, a.disableAutoSummarize, level == compactAsAsked)
 }
 
+// compactBeforeRequest summarizes the session's conversation before the
+// turn of call sends its prompt, as that turn's first work: in its
+// context, genCtx, so Esc stops it, and with the prompt kept out of it, to
+// follow the summary. Its PreCompact and PostCompact hooks run as for any
+// automatic summary, and the prompt, the first after it, runs the
+// SessionStart hooks with source "compact" and fires the
+// InstructionsLoaded hooks again. A summary that fails leaves the
+// conversation as it was, and the prompt goes out whole, as Claude Code
+// goes on when compacting fails. One cancelled ends the turn:
+// context.Canceled.
+func (a *sessionAgent) compactBeforeRequest(ctx, genCtx context.Context, call *SessionAgentCall) error {
+	slog.Info("Compacting the conversation before sending the prompt", "session_id", call.SessionID)
+	a.runPreCompactHooks(genCtx, call.SessionID, preCompactTriggerAuto, "")
+	err := a.compactConversation(ctx, genCtx, call.SessionID, call.Channel, "", call.ProviderOptions, call.OnAuthRefresh, preCompactTriggerAuto)
+	if errors.Is(err, errSummaryCanceled) || genCtx.Err() != nil {
+		return context.Canceled
+	}
+	if err != nil {
+		slog.Warn("Could not compact the conversation before sending the prompt; sending it whole", "session_id", call.SessionID, "error", err)
+		return nil
+	}
+	a.justSummarized.Set(call.SessionID, true)
+	// Under the submit lock, as at the start of Run, so a prompt sent
+	// meanwhile does not run them a second time.
+	submitMu := a.sessionSubmitMu(call.SessionID)
+	submitMu.Lock()
+	if a.wantsSessionStartHooks(*call) && a.runSessionStartHooks(genCtx, call) && genCtx.Err() == nil {
+		a.sessionStarts.markStarted(call.SessionID)
+	}
+	submitMu.Unlock()
+	a.fireInstructionsLoadedForSession(call.SessionID)
+	return nil
+}
+
 // idleCompactionAfter is how long a session waits idle before its
 // conversation is compacted, as in Claude Code: about 54 minutes, shortly
 // before an hour-long prompt cache expires.

@@ -233,6 +233,10 @@ or failed without saying so. The ones you will notice:
   again: the summary request starts as the conversation's own, so the model
   server reuses its cache. With a full context on a local model, that read
   took twenty minutes.
+- A conversation too long for the model `/model` switched to is summarized
+  before the next prompt goes out, not after the model has read it all, and
+  the summary is left room to be written. A summary the server cut short was
+  kept as if it were whole.
 - A helper agent no longer pushes the main conversation out of a local model
   server's cache, which cost minutes each time one finished. One started by
   `klash run` gets the run's permission to act, where it used to wait forever

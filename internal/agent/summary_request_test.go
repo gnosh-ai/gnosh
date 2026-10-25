@@ -26,11 +26,14 @@ import (
 
 // requestRecordingModel keeps every request it is sent and answers each
 // with the next of its replies, "ok" once they run out. A reply that
-// starts with "call " calls the tool it names instead. Every answer
-// reports usage as given. With refuseTools set, a request that lists
-// tools fails with it; with tooLongOver set, one of more messages than it
-// is refused as too long for the context. Title requests are answered but
-// not kept: they are the agent's own side effect.
+// starts with "call " calls the tool it names instead, one that starts
+// with "cut " is the rest stopped for length, as a llama.cpp server stops
+// a reply that fills its window, and "hang" closes entered and waits for
+// the request to be cancelled. Every answer reports usage as given. With
+// refuseTools set, a request that lists tools fails with it; with
+// tooLongOver set, one of more messages than it is refused as too long
+// for the context. Title requests are answered but not kept: they are the
+// agent's own side effect.
 type requestRecordingModel struct {
 	fakeLanguageModel
 	mu          sync.Mutex
@@ -39,9 +42,10 @@ type requestRecordingModel struct {
 	usage       fantasy.Usage
 	refuseTools error
 	tooLongOver int
+	entered     chan struct{}
 }
 
-func (m *requestRecordingModel) Stream(_ context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
+func (m *requestRecordingModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
 	reply := "title"
 	if !isTitleRequest(call) {
 		m.mu.Lock()
@@ -61,6 +65,16 @@ func (m *requestRecordingModel) Stream(_ context.Context, call fantasy.Call) (fa
 		m.mu.Unlock()
 	}
 	return func(yield func(fantasy.StreamPart) bool) {
+		if reply == "hang" {
+			close(m.entered)
+			<-ctx.Done()
+			yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeError, Error: ctx.Err()})
+			return
+		}
+		finish := fantasy.FinishReasonStop
+		if text, ok := strings.CutPrefix(reply, "cut "); ok {
+			reply, finish = text, fantasy.FinishReasonLength
+		}
 		if name, ok := strings.CutPrefix(reply, "call "); ok {
 			yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeToolInputStart, ID: "call-1", ToolCallName: name})
 			yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeToolInputDelta, ID: "call-1", Delta: probeInput})
@@ -72,7 +86,7 @@ func (m *requestRecordingModel) Stream(_ context.Context, call fantasy.Call) (fa
 		yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextStart, ID: "t1"})
 		yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextDelta, ID: "t1", Delta: reply})
 		yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextEnd, ID: "t1"})
-		yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeFinish, FinishReason: fantasy.FinishReasonStop, Usage: m.usage})
+		yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeFinish, FinishReason: finish, Usage: m.usage})
 	}, nil
 }
 
@@ -141,12 +155,14 @@ func withoutProviderOptions(msgs []fantasy.Message) []fantasy.Message {
 // conversation, control tokens neutralized alike, and then the summary
 // instructions. It had a system prompt of its own and no tools, so a
 // local server found nothing of it in its cache and read the whole
-// conversation again, twenty minutes for a full one.
+// conversation again, twenty minutes for a full one. (170,000 of the
+// 200,000-token window is past the point, 160,000, and leaves the summary
+// its room; 190,000 would not, and the summary would go without them.)
 func TestSummarize_RequestContinuesTheTurn(t *testing.T) {
 	t.Parallel()
 	llm := &requestRecordingModel{
 		replies: []string{"done", "the summary"},
-		usage:   fantasy.Usage{InputTokens: 190000, OutputTokens: 10},
+		usage:   fantasy.Usage{InputTokens: 170000, OutputTokens: 10},
 	}
 	a, sessionID, _ := summaryRequestAgent(t, llm)
 
@@ -325,7 +341,7 @@ func TestSummaryLeavesATranscript(t *testing.T) {
 	t.Parallel()
 	llm := &requestRecordingModel{
 		replies: []string{"done", "the summary", "done again"},
-		usage:   fantasy.Usage{InputTokens: 190000, OutputTokens: 10},
+		usage:   fantasy.Usage{InputTokens: 170000, OutputTokens: 10},
 	}
 	a, sessionID, _ := summaryRequestAgent(t, llm)
 	dataDir := t.TempDir()
@@ -634,4 +650,203 @@ func TestLaterPartShrinks(t *testing.T) {
 	require.Nil(t, laterPart([]fantasy.Message{user}))
 	require.Len(t, laterPart([]fantasy.Message{user, agent, tool, agent, tool}), 3, "a placeholder and the last call and result")
 	require.Equal(t, []fantasy.Message{user, agent}, laterPart([]fantasy.Message{agent, tool, user, agent}))
+}
+
+// addTurns adds n turns to the session, each a user message "user i" and
+// the agent's "assistant i".
+func addTurns(t *testing.T, a *sessionAgent, sessionID string, n int) {
+	t.Helper()
+	for i := 1; i <= n; i++ {
+		for _, role := range []message.MessageRole{message.User, message.Assistant} {
+			_, err := a.messages.Create(t.Context(), sessionID, message.CreateMessageParams{Role: role, Parts: []message.ContentPart{message.TextContent{Text: fmt.Sprintf("%s %d", role, i)}}})
+			require.NoError(t, err)
+		}
+	}
+}
+
+// The room a summary request must leave is half of what compacting at
+// the default point leaves: a tenth of a small window, 10,000 tokens of
+// a large one.
+func TestSummaryRoom(t *testing.T) {
+	t.Parallel()
+	require.EqualValues(t, 13_107, summaryRoom(131_072), "gpt-oss's 128k window on the AI box")
+	require.EqualValues(t, 10_000, summaryRoom(262_144), "Qwen's 256k")
+	require.EqualValues(t, 3_276, summaryRoom(32_768))
+}
+
+// A summary request that leaves the model too little room to write the
+// summary in is made smaller before it is sent: first without the system
+// prompt and tools, then without the conversation's earliest part, cut at
+// a user message. The provider's count raises estimates that fall short
+// of it.
+func TestFitSummary(t *testing.T) {
+	t.Parallel()
+	// Messages of 1,000 estimated tokens each, the role's included.
+	text := func(role fantasy.MessageRole, tokens int) fantasy.Message {
+		return fantasy.Message{Role: role, Content: []fantasy.MessagePart{fantasy.TextPart{Text: strings.Repeat("x", 4*tokens)}}}
+	}
+	var conversation []fantasy.Message
+	for range 10 {
+		conversation = append(conversation, text(fantasy.MessageRoleUser, 999), text(fantasy.MessageRoleAssistant, 997))
+	}
+	require.EqualValues(t, 20_000, estimateMessageTokens(conversation))
+
+	// A 100,000-token window must leave a summary 10,000. With 5,000 of
+	// system prompt and tools and 1,000 of instructions, the estimates
+	// alone fit, and so does a count of 88,000, 3.52 times them.
+	for _, counted := range []int64{0, 88_000} {
+		bare, kept, cut := fitSummary(100_000, counted, 5_000, 1_000, conversation)
+		require.False(t, bare, counted)
+		require.False(t, cut, counted)
+		require.Len(t, kept, 20, counted)
+	}
+	// 95,000 does not; without the system prompt and tools it does.
+	bare, kept, cut := fitSummary(100_000, 95_000, 5_000, 1_000, conversation)
+	require.True(t, bare)
+	require.False(t, cut)
+	require.Len(t, kept, 20)
+	// 125,000, five times the estimates, as on the model before a /model
+	// switch: the rest from the fourth message on, 17,000, fits five times
+	// over, and the cut is at the user message after it.
+	bare, kept, cut = fitSummary(100_000, 125_000, 5_000, 1_000, conversation)
+	require.True(t, bare)
+	require.True(t, cut)
+	require.Equal(t, conversation[4:], kept)
+	// No cut fits: the request goes bare and whole, to be cut as refused.
+	bare, kept, cut = fitSummary(100_000, 10_000_000, 5_000, 1_000, conversation)
+	require.True(t, bare)
+	require.False(t, cut)
+	require.Len(t, kept, 20)
+	// With the window unknown it goes as it is.
+	bare, kept, cut = fitSummary(0, 125_000, 5_000, 1_000, conversation)
+	require.False(t, bare)
+	require.False(t, cut)
+	require.Len(t, kept, 20)
+
+	// One long turn of tool calls is cut at the agent's message, after a
+	// note that the earlier part was left out.
+	turn := []fantasy.Message{text(fantasy.MessageRoleUser, 999)}
+	for range 4 {
+		turn = append(turn, text(fantasy.MessageRoleAssistant, 997), text(fantasy.MessageRoleTool, 999))
+	}
+	kept = fittingPart(turn, func(tokens int64) bool { return tokens <= 4_000 })
+	require.Equal(t, append([]fantasy.Message{fantasy.NewUserMessage(leftOutTurns)}, turn[5:]...), kept)
+	require.Nil(t, fittingPart(turn, func(tokens int64) bool { return tokens <= 500 }), "not even the last message fits")
+}
+
+// A summary is cut short by the window when it stopped for length with
+// it and its request filling the window, as a llama.cpp server stops a
+// reply that runs out of room; one stopped at a limit on its output,
+// far from the window, is not.
+func TestFilledWindow(t *testing.T) {
+	t.Parallel()
+	result := func(finish fantasy.FinishReason, usage fantasy.Usage) *fantasy.AgentResult {
+		return &fantasy.AgentResult{Steps: []fantasy.StepResult{{Response: fantasy.Response{FinishReason: finish, Usage: usage}}}}
+	}
+	// The AI box's: 131,071 tokens of gpt-oss's 131,072, the summary 2,254
+	// tokens in.
+	full := fantasy.Usage{InputTokens: 1_017, CacheReadTokens: 127_800, OutputTokens: 2_254}
+	require.True(t, filledWindow(result(fantasy.FinishReasonLength, full), 131_072))
+	require.False(t, filledWindow(result(fantasy.FinishReasonStop, full), 131_072), "it ended on its own")
+	limited := fantasy.Usage{InputTokens: 50_000, OutputTokens: 4_096}
+	require.False(t, filledWindow(result(fantasy.FinishReasonLength, limited), 131_072), "an output limit")
+	require.True(t, filledWindow(result(fantasy.FinishReasonLength, fantasy.Usage{}), 131_072), "usage not known")
+	require.True(t, filledWindow(result(fantasy.FinishReasonLength, limited), 0), "the window not known")
+	require.False(t, filledWindow(nil, 131_072))
+	require.False(t, filledWindow(&fantasy.AgentResult{}, 131_072))
+}
+
+// A summary request that would leave the model too little room to write
+// the summary in, as after a /model switch to a model with a smaller
+// window, is made smaller before it goes: one request, without the
+// system prompt and tools, from a later user message on, and the summary
+// says what it does not cover. A llama.cpp server took such a request
+// whole and stopped the summary where its window ran out.
+func TestSummarize_LeavesRoomForTheSummary(t *testing.T) {
+	t.Parallel()
+	llm := &requestRecordingModel{replies: []string{"the summary"}}
+	a, sessionID, _ := summaryRequestAgent(t, llm)
+	addTurns(t, a, sessionID, 20)
+	// Counted at 360,000 on a model with a 400,000-token window, under its
+	// point, then switched to one of 200,000.
+	_, err := a.sessions.UpdateUsage(t.Context(), sessionID, 360_000, 0, 0, false)
+	require.NoError(t, err)
+	a.SetModels(Model{Model: llm, CatwalkCfg: catwalk.Model{ContextWindow: 200_000, DefaultMaxTokens: 1000}}, a.smallModel.Get())
+
+	require.NoError(t, a.Summarize(t.Context(), sessionID, "", fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
+	reqs := llm.requests()
+	require.Len(t, reqs, 1, "made to fit before it was sent, not after a refusal")
+	require.Empty(t, reqs[0].Tools)
+	require.Equal(t, []string{"prefix"}, systemTexts(reqs[0].Prompt), "only the prefix, which goes in any case")
+	sent := withoutSystem(reqs[0].Prompt)
+	require.Equal(t, fantasy.MessageRoleUser, sent[0].Role, "cut at a user message")
+	texts := userTexts(sent)
+	require.NotContains(t, texts, "user 1", "the earliest turns are left out")
+	require.Contains(t, texts, "user 20")
+	require.Equal(t, buildSummaryPrompt(nil, ""), texts[len(texts)-1])
+
+	sess, err := a.sessions.Get(t.Context(), sessionID)
+	require.NoError(t, err)
+	summary, err := a.messages.Get(t.Context(), sess.SummaryMessageID)
+	require.NoError(t, err)
+	require.Equal(t, "the summary\n\n"+fmt.Sprintf(earliestLeftOut, ""), summary.Content().Text)
+}
+
+// A summary the model's window cut short, as a llama.cpp server stops a
+// reply that fills it (finish reason "length"), is asked for again with
+// less sent: without the system prompt and tools, then without the
+// earliest turns. Only a whole one replaces the conversation. gpt-oss on
+// the AI box stopped one 2,254 tokens in, and it was kept as if whole:
+// the session went on from half a summary.
+func TestSummarize_CutShortIsAskedAgainWithLess(t *testing.T) {
+	t.Parallel()
+	// The whole 200,000-token window, request and reply.
+	full := fantasy.Usage{InputTokens: 198_000, OutputTokens: 2_000}
+	llm := &requestRecordingModel{replies: []string{"cut half a sum", "cut half a summ", "the summary"}, usage: full}
+	a, sessionID, _ := summaryRequestAgent(t, llm)
+	addTurns(t, a, sessionID, 8)
+
+	require.NoError(t, a.Summarize(t.Context(), sessionID, "", fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
+	reqs := llm.requests()
+	require.Len(t, reqs, 3)
+	require.NotEmpty(t, reqs[0].Tools)
+	require.Empty(t, reqs[1].Tools, "then without the system prompt and tools")
+	require.Equal(t, withoutProviderOptions(withoutSystem(reqs[0].Prompt)), withoutProviderOptions(withoutSystem(reqs[1].Prompt)))
+	require.Less(t, len(reqs[2].Prompt), len(reqs[1].Prompt), "then without the earliest turns")
+	sess, err := a.sessions.Get(t.Context(), sessionID)
+	require.NoError(t, err)
+	summary, err := a.messages.Get(t.Context(), sess.SummaryMessageID)
+	require.NoError(t, err)
+	require.Equal(t, "the summary\n\n"+fmt.Sprintf(earliestLeftOut, ""), summary.Content().Text, "nothing of the summaries cut short")
+	require.Equal(t, message.FinishReasonEndTurn, summary.FinishReason())
+
+	// Stopped at a limit on its output, far from the window, a summary is
+	// kept as it is.
+	llm = &requestRecordingModel{replies: []string{"cut a long summary"}, usage: fantasy.Usage{InputTokens: 1_000, OutputTokens: 4_096}}
+	a, sessionID, _ = summaryRequestAgent(t, llm)
+	require.NoError(t, a.Summarize(t.Context(), sessionID, "", fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
+	require.Len(t, llm.requests(), 1)
+	sess, err = a.sessions.Get(t.Context(), sessionID)
+	require.NoError(t, err)
+	summary, err = a.messages.Get(t.Context(), sess.SummaryMessageID)
+	require.NoError(t, err)
+	require.Equal(t, "a long summary", summary.Content().Text)
+
+	// Cut short however little is sent, there is no summary: the
+	// conversation is kept, and none of a summary is left to be sent as
+	// the agent's words.
+	llm = &requestRecordingModel{replies: slices.Repeat([]string{"cut half"}, 20), usage: full}
+	a, sessionID, _ = summaryRequestAgent(t, llm)
+	addTurns(t, a, sessionID, 8)
+	err = a.Summarize(t.Context(), sessionID, "", fantasy.ProviderOptions{}, nil, preCompactTriggerManual)
+	require.ErrorContains(t, err, "did not fit")
+	sess, err = a.sessions.Get(t.Context(), sessionID)
+	require.NoError(t, err)
+	require.Empty(t, sess.SummaryMessageID)
+	msgs, err := a.messages.List(t.Context(), sessionID)
+	require.NoError(t, err)
+	last := msgs[len(msgs)-1]
+	require.True(t, last.IsSummaryMessage)
+	require.Empty(t, last.Content().Text)
+	require.Equal(t, message.FinishReasonError, last.FinishReason())
 }
