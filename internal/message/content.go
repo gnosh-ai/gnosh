@@ -72,6 +72,10 @@ type TextContent struct {
 	Text string `json:"text"`
 	// Hidden marks generated user continuations that remain in model history.
 	Hidden bool `json:"hidden,omitempty"`
+	// Notice marks a hidden continuation the chat shows as a notice from
+	// klash, such as a background job's end, as Claude Code shows its
+	// task notifications; other hidden text the chat leaves out.
+	Notice bool `json:"notice,omitempty"`
 }
 
 func (tc TextContent) String() string {
@@ -337,7 +341,8 @@ func (m *Message) AppendContent(delta string) {
 	found := false
 	for i, part := range m.Parts {
 		if c, ok := part.(TextContent); ok {
-			m.Parts[i] = TextContent{Text: c.Text + delta, Hidden: c.Hidden}
+			c.Text += delta
+			m.Parts[i] = c
 			found = true
 		}
 	}

@@ -110,6 +110,9 @@ type SessionAgentCall struct {
 	RunID             string
 	Channel           string
 	HiddenUserMessage bool
+	// NoticeUserMessage makes a hidden prompt a notice the chat shows
+	// (message.TextContent.Notice).
+	NoticeUserMessage bool
 	Prompt            string
 	ProviderOptions   fantasy.ProviderOptions
 	Attachments       []message.Attachment
@@ -2016,7 +2019,7 @@ func sessionHeaders(sessionID string) map[string]string {
 }
 
 func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentCall) (message.Message, error) {
-	parts := []message.ContentPart{message.TextContent{Text: call.Prompt, Hidden: call.HiddenUserMessage}}
+	parts := []message.ContentPart{message.TextContent{Text: call.Prompt, Hidden: call.HiddenUserMessage, Notice: call.NoticeUserMessage}}
 	var attachmentParts []message.ContentPart
 	for _, attachment := range call.Attachments {
 		attachmentParts = append(attachmentParts, message.BinaryContent{Path: attachment.FilePath, MIMEType: attachment.MimeType, Data: attachment.Content})

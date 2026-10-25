@@ -1368,3 +1368,24 @@ func TestProviderRetryLogFields(t *testing.T) {
 		}, fields)
 	})
 }
+
+// A notice's prompt, a background job's end, is stored hidden and marked
+// a notice, which the chat shows; another hidden prompt is not marked.
+func TestCreateUserMessage_MarksANotice(t *testing.T) {
+	env := testEnv(t)
+	agent := testSessionAgent(env, nil, nil, "test prompt").(*sessionAgent)
+	ctx := t.Context()
+	sess, err := env.sessions.Create(ctx, "test")
+	require.NoError(t, err)
+
+	for _, call := range []SessionAgentCall{
+		{SessionID: sess.ID, Prompt: `Background command "render" (job 001) completed (exit code 0).`, HiddenUserMessage: true, NoticeUserMessage: true},
+		{SessionID: sess.ID, Prompt: "Continue.", HiddenUserMessage: true},
+	} {
+		msg, err := agent.createUserMessage(ctx, call)
+		require.NoError(t, err)
+		reloaded, err := env.messages.Get(ctx, msg.ID)
+		require.NoError(t, err)
+		require.Equal(t, message.TextContent{Text: call.Prompt, Hidden: true, Notice: call.NoticeUserMessage}, reloaded.Content())
+	}
+}

@@ -1468,7 +1468,7 @@ func protoToMessage(m proto.Message) message.Message {
 	for _, p := range m.Parts {
 		switch v := p.(type) {
 		case proto.TextContent:
-			msg.Parts = append(msg.Parts, message.TextContent{Text: v.Text, Hidden: v.Hidden})
+			msg.Parts = append(msg.Parts, message.TextContent{Text: v.Text, Hidden: v.Hidden, Notice: v.Notice})
 		case proto.ReasoningContent:
 			msg.Parts = append(msg.Parts, message.ReasoningContent{
 				Thinking:   v.Thinking,

@@ -1103,3 +1103,13 @@ func TestClientWorkspace_GitBranchServerError(t *testing.T) {
 	_, err = ws.GitBranch(t.Context())
 	require.Error(t, err)
 }
+
+// A notice the server sends stays hidden and a notice in the client.
+func TestProtoToMessageKeepsANotice(t *testing.T) {
+	t.Parallel()
+
+	got := protoToMessage(proto.Message{Role: proto.User, Parts: []proto.ContentPart{
+		proto.TextContent{Text: "Background command", Hidden: true, Notice: true},
+	}})
+	require.Equal(t, []message.ContentPart{message.TextContent{Text: "Background command", Hidden: true, Notice: true}}, got.Parts)
+}

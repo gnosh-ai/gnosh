@@ -605,6 +605,7 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 			Channel:           channel,
 			Prompt:            prompt,
 			HiddenUserMessage: message.HiddenUserMessage(ctx),
+			NoticeUserMessage: message.NoticeUserMessage(ctx),
 			Attachments:       attachments,
 			MaxOutputTokens:   maxTokens,
 			ProviderOptions:   mergedOptions,

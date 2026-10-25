@@ -25,8 +25,9 @@ var jobEndGrace = 2 * time.Second
 // (shell.BackgroundShell.ClaimEnd): not one the agent read with
 // job_output, stopped with job_kill, or one klash stopped as it exited.
 type jobWatcher struct {
-	// run sends the notice to the session as a hidden prompt, which the
-	// running turn takes at its next step or which starts a turn.
+	// run sends the notice to the session as a hidden prompt the chat
+	// shows as a notice, which the running turn takes at its next step
+	// or which starts a turn.
 	run func(ctx context.Context, sessionID, prompt string) error
 	// closing is set as klash shuts down; then no job's end starts a turn.
 	closing atomic.Bool
@@ -46,7 +47,7 @@ func (w *jobWatcher) watch(ctx context.Context, job *shell.BackgroundShell) {
 		if w.closing.Load() || !job.ClaimEnd() {
 			return
 		}
-		ctx := message.WithHiddenUserMessage(context.Background())
+		ctx := message.WithNoticeUserMessage(message.WithHiddenUserMessage(context.Background()))
 		if err := w.run(ctx, sessionID, tools.JobEndNotice(job)); err != nil && !errors.Is(err, context.Canceled) {
 			slog.Warn("Could not tell the agent a background job ended", "session_id", sessionID, "job", job.ID, "error", err)
 		}

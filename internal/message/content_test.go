@@ -269,3 +269,12 @@ func TestToolCallSummary(t *testing.T) {
 		})
 	}
 }
+
+// Streaming text into a part keeps what the part is: hidden, a notice.
+func TestAppendContentKeepsHiddenAndNotice(t *testing.T) {
+	t.Parallel()
+
+	msg := Message{Parts: []ContentPart{TextContent{Text: "Background", Hidden: true, Notice: true}}}
+	msg.AppendContent(" command")
+	require.Equal(t, TextContent{Text: "Background command", Hidden: true, Notice: true}, msg.Content())
+}

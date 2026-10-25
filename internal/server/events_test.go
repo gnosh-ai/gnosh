@@ -335,3 +335,15 @@ func TestMessageToProtoPrismModel(t *testing.T) {
 }
 
 func ptrFloat(v float64) *float64 { return &v }
+
+// A hidden notice reaches a client still hidden and still a notice, so a
+// client/server TUI shows a background job's end as the in-process one
+// does.
+func TestMessageToProtoKeepsANotice(t *testing.T) {
+	t.Parallel()
+
+	got := messageToProto(message.Message{Role: message.User, Parts: []message.ContentPart{
+		message.TextContent{Text: "Background command", Hidden: true, Notice: true},
+	}})
+	require.Equal(t, []proto.ContentPart{proto.TextContent{Text: "Background command", Hidden: true, Notice: true}}, got.Parts)
+}

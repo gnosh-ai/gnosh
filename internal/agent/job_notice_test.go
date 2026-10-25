@@ -17,7 +17,7 @@ import (
 // noticeSent is a notice a jobWatcher sent.
 type noticeSent struct {
 	sessionID, prompt string
-	hidden            bool
+	hidden, notice    bool
 }
 
 // recordingJobWatcher is a jobWatcher whose notices go to the channel it
@@ -28,7 +28,7 @@ func recordingJobWatcher(t *testing.T) (*jobWatcher, chan noticeSent) {
 	t.Cleanup(func() { jobEndGrace = old })
 	sent := make(chan noticeSent, 10)
 	return &jobWatcher{run: func(ctx context.Context, sessionID, prompt string) error {
-		sent <- noticeSent{sessionID, prompt, message.HiddenUserMessage(ctx)}
+		sent <- noticeSent{sessionID, prompt, message.HiddenUserMessage(ctx), message.NoticeUserMessage(ctx)}
 		return nil
 	}}, sent
 }
@@ -47,7 +47,8 @@ func startJob(t *testing.T, dir, command string) *shell.BackgroundShell {
 }
 
 // When a background job ends, the session whose bash call started it is
-// sent the notice, as a hidden prompt, as Claude Code tells the agent. A
+// sent the notice, as a hidden prompt the chat shows as a notice, as
+// Claude Code tells the agent. A
 // job whose end something took first (job_output, job_kill, klash's
 // exit) is not told of, nor one started with no session, nor one that
 // ends once klash is shutting down.
@@ -60,7 +61,7 @@ func TestJobWatcherTellsTheSessionOfAJobsEnd(t *testing.T) {
 	w.watch(ctx, job)
 	select {
 	case got := <-sent:
-		require.Equal(t, noticeSent{"s1", tools.JobEndNotice(job), true}, got)
+		require.Equal(t, noticeSent{"s1", tools.JobEndNotice(job), true, true}, got)
 		require.Contains(t, got.prompt, "failed with exit code 3")
 	case <-time.After(10 * time.Second):
 		t.Fatal("the session was not told the job ended")
