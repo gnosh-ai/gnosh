@@ -132,12 +132,17 @@ func NewFetchTool(permissions permission.Service, workingDir string, client *htt
 				return fantasy.NewTextErrorResponse(msg), nil
 			}
 
+			contentType := resp.Header.Get("Content-Type")
+			if isBinaryMedia(contentType) {
+				return fantasy.NewTextErrorResponse(notText(contentType, resp.ContentLength).Error()), nil
+			}
+
 			body, err := io.ReadAll(io.LimitReader(resp.Body, MaxFetchSize))
 			if err != nil {
 				return fantasy.NewTextErrorResponse("Failed to read response body: " + err.Error()), nil
 			}
 
-			content, err := formatFetched(body, resp.Header.Get("Content-Type"), format)
+			content, err := formatFetched(body, contentType, format)
 			if err != nil {
 				return fantasy.NewTextErrorResponse(err.Error()), nil
 			}
@@ -149,11 +154,11 @@ func NewFetchTool(permissions permission.Service, workingDir string, client *htt
 
 // formatFetched renders body, a response with the given content type, the way
 // fetch returns it in format: text, markdown or html. It refuses a body that
-// is not UTF-8 and truncates one at MaxFetchSize.
+// is not UTF-8, saying what it is, and truncates one at MaxFetchSize.
 func formatFetched(body []byte, contentType, format string) (string, error) {
 	content := string(body)
 	if !utf8.ValidString(content) {
-		return "", errors.New("response content is not valid UTF-8")
+		return "", notUTF8(contentType, 0)
 	}
 
 	switch format {

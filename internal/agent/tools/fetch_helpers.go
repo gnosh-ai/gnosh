@@ -7,14 +7,97 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
+	"github.com/dustin/go-humanize"
 	"golang.org/x/net/html"
 )
+
+// binaryMediaPrefixes and binaryMediaTypes are content types that are
+// never text: fetch and web_fetch do not read such a body at all.
+var (
+	binaryMediaPrefixes = []string{"audio/", "video/", "image/", "font/"}
+	binaryMediaTypes    = map[string]bool{
+		"application/pdf":                         true,
+		"application/zip":                         true,
+		"application/gzip":                        true,
+		"application/x-gzip":                      true,
+		"application/x-tar":                       true,
+		"application/x-bzip2":                     true,
+		"application/x-xz":                        true,
+		"application/zstd":                        true,
+		"application/x-7z-compressed":             true,
+		"application/vnd.rar":                     true,
+		"application/x-rar-compressed":            true,
+		"application/wasm":                        true,
+		"application/java-archive":                true,
+		"application/vnd.android.package-archive": true,
+		"application/x-msdownload":                true,
+		"application/x-executable":                true,
+	}
+)
+
+// isBinaryMedia reports whether contentType is a type that is never text.
+// SVG and other +xml images are text.
+func isBinaryMedia(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil || strings.HasSuffix(mediaType, "+xml") {
+		return false
+	}
+	if binaryMediaTypes[mediaType] {
+		return true
+	}
+	for _, prefix := range binaryMediaPrefixes {
+		if strings.HasPrefix(mediaType, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// isTextMedia reports whether contentType is a text type: text/*, JSON,
+// XML or JavaScript.
+func isTextMedia(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	switch mediaType {
+	case "application/json", "application/xml", "application/javascript", "application/ecmascript":
+		return true
+	}
+	return strings.HasPrefix(mediaType, "text/") || strings.HasSuffix(mediaType, "+json") || strings.HasSuffix(mediaType, "+xml")
+}
+
+// notUTF8 is the error for a body that is not UTF-8: a text page in
+// another encoding, or a file that is not text at all (notText).
+func notUTF8(contentType string, size int64) error {
+	if isTextMedia(contentType) {
+		return errors.New("response content is not valid UTF-8")
+	}
+	return notText(contentType, size)
+}
+
+// notText says what a response that is not text is, and how to get it
+// instead: fetching reads text pages, and an agent on the AI box had a
+// song, a video and a model file read up to the size limit, to be told
+// only that their content was "not valid UTF-8". size is the response's
+// length, or not more than 0 when it is not known.
+func notText(contentType string, size int64) error {
+	what, _, err := mime.ParseMediaType(contentType)
+	if err != nil || what == "" {
+		what = "a file of unknown type"
+	}
+	if size > 0 {
+		what += " of " + humanize.Bytes(uint64(size))
+	}
+	return fmt.Errorf("this is not a text page but %s; fetching reads text. Save it with the download tool", what)
+}
 
 // BrowserUserAgent is a realistic browser User-Agent for better compatibility.
 const BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -42,6 +125,10 @@ func FetchURLAndConvert(ctx context.Context, client *http.Client, url string) (s
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("request failed with status code: %d", resp.StatusCode)
 	}
+	contentType := resp.Header.Get("Content-Type")
+	if isBinaryMedia(contentType) {
+		return "", notText(contentType, resp.ContentLength)
+	}
 
 	maxSize := int64(5 * 1024 * 1024) // 5MB
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSize))
@@ -52,10 +139,8 @@ func FetchURLAndConvert(ctx context.Context, client *http.Client, url string) (s
 	content := string(body)
 
 	if !utf8.ValidString(content) {
-		return "", errors.New("response content is not valid UTF-8")
+		return "", notUTF8(contentType, resp.ContentLength)
 	}
-
-	contentType := resp.Header.Get("Content-Type")
 
 	// Convert HTML to markdown for better AI processing.
 	if strings.Contains(contentType, "text/html") {

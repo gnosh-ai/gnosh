@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -114,4 +115,73 @@ func TestFetchToolReturnsContent(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, resp.IsError)
 	require.Contains(t, resp.Content, "hello from fetch")
+}
+
+// fetchServer serves body as contentType ("" for none, unsniffed), with
+// its Content-Length.
+func fetchServer(t *testing.T, contentType string, body []byte) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if contentType == "" {
+			w.Header()["Content-Type"] = nil
+		} else {
+			w.Header().Set("Content-Type", contentType)
+		}
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// An agent on the AI box fetched a song, a video and a model file, and
+// was told only that their content was "not valid UTF-8". A response that
+// is not text now says what it is, and to save it with download; one of
+// a type that is never text is not read at all. Text sent as
+// octet-stream, SVG, and a text page in another encoding are as before.
+func TestFetchSaysAFileIsNotText(t *testing.T) {
+	t.Parallel()
+
+	binary := []byte{0xff, 0xfe, 0x00, 0x01, 0x80, 0x81}
+	song := append([]byte("ID3"), make([]byte, 4_200_000)...)
+	for _, c := range []struct {
+		contentType string
+		body        []byte
+		want        string
+		isErr       bool
+	}{
+		{"audio/mpeg", song, "this is not a text page but audio/mpeg of 4.2 MB; fetching reads text. Save it with the download tool", true},
+		{"application/octet-stream", binary, "this is not a text page but application/octet-stream; fetching reads text. Save it with the download tool", true},
+		{"", binary, "this is not a text page but a file of unknown type; fetching reads text. Save it with the download tool", true},
+		{"text/html; charset=iso-8859-1", []byte("<p>caf\xe9</p>"), "response content is not valid UTF-8", true},
+		{"application/octet-stream", []byte("plain words"), "plain words", false},
+		{"image/svg+xml", []byte(`<svg xmlns="http://www.w3.org/2000/svg"/>`), "<svg", false},
+	} {
+		srv := fetchServer(t, c.contentType, c.body)
+		resp, err := runFetchTool(t, srv.Client(), srv.URL)
+		require.NoError(t, err)
+		require.Equal(t, c.isErr, resp.IsError, c.contentType)
+		if c.isErr {
+			require.Equal(t, c.want, resp.Content, c.contentType)
+		} else {
+			require.Contains(t, resp.Content, c.want, c.contentType)
+		}
+	}
+}
+
+// web_fetch, through FetchURLAndConvert, says the same.
+func TestFetchURLAndConvertSaysAFileIsNotText(t *testing.T) {
+	t.Parallel()
+
+	srv := fetchServer(t, "video/mp4", make([]byte, 2048))
+	_, err := FetchURLAndConvert(context.Background(), srv.Client(), srv.URL)
+	require.EqualError(t, err, "this is not a text page but video/mp4 of 2.0 kB; fetching reads text. Save it with the download tool")
+
+	srv = fetchServer(t, "application/octet-stream", []byte{0xff, 0xfe, 0x00})
+	_, err = FetchURLAndConvert(context.Background(), srv.Client(), srv.URL)
+	require.EqualError(t, err, "this is not a text page but application/octet-stream of 3 B; fetching reads text. Save it with the download tool")
+
+	srv = fetchServer(t, "text/plain; charset=windows-1252", []byte("caf\xe9"))
+	_, err = FetchURLAndConvert(context.Background(), srv.Client(), srv.URL)
+	require.EqualError(t, err, "response content is not valid UTF-8")
 }
