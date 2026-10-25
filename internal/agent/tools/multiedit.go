@@ -256,7 +256,7 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 	} else {
 		message = fmt.Sprintf("File created with %d edits: %s", len(params.Edits), params.FilePath)
 	}
-	message = withWhitespaceNote(message, whitespaceCorrected)
+	message = editedMessage(message, whitespaceCorrected, "", len(failedEdits) == 0)
 
 	return fantasy.WithResponseMetadata(
 		fantasy.NewTextResponse(message),
@@ -374,7 +374,7 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 	} else {
 		message = fmt.Sprintf("Applied %d edits to file: %s", len(params.Edits), params.FilePath)
 	}
-	message = editedMessage(message, whitespaceCorrected, stale)
+	message = editedMessage(message, whitespaceCorrected, stale, len(failedEdits) == 0)
 
 	return fantasy.WithResponseMetadata(
 		fantasy.NewTextResponse(message),

@@ -190,7 +190,7 @@ func createNewFile(edit editContext, filePath, content string, call fantasy.Tool
 	edit.filetracker.RecordRead(edit.ctx, sessionID, filePath)
 
 	return fantasy.WithResponseMetadata(
-		fantasy.NewTextResponse("File created: "+filePath),
+		fantasy.NewTextResponse("File created: "+filePath+fileStateCurrent),
 		EditResponseMetadata{
 			OldContent: "",
 			NewContent: content,
@@ -346,6 +346,11 @@ func loadExistingFile(edit editContext, filePath, sessionError string) (sessionI
 
 // staleEditNote ends the result of an edit made to a file that changed
 // since the agent last read it.
+// fileStateCurrent is Claude Code's word to the agent that an edit or a
+// write went in as given: its context holds the file as it now is, so
+// there is no need to read the file back.
+const fileStateCurrent = " (file state is current in your context \u2014 no need to view it back)"
+
 const staleEditNote = "Note: this file had changed since you last read it, and it holds changes you have not seen besides this edit. View it again before you change it further: until then an edit of it must match it exactly, and it cannot be written over."
 
 // replaceExactly makes the replacement only where old appears in content
@@ -381,11 +386,16 @@ func findAndReplaceIn(content, old, new string, replaceAll bool, stale string) (
 }
 
 // editedMessage is the result of an edit: what it did, and what the
-// agent should know about how it matched.
-func editedMessage(message string, whitespaceCorrected bool, stale string) string {
+// agent should know about how it matched. An edit made complete, as
+// written, in a file unchanged since the agent read it ends with Claude
+// Code's note that the agent's context holds the file as it now is.
+func editedMessage(message string, whitespaceCorrected bool, stale string, complete bool) string {
 	message = withWhitespaceNote(message, whitespaceCorrected)
 	if stale != "" {
 		message += "\n" + staleEditNote
+	}
+	if complete && !whitespaceCorrected && stale == "" {
+		message += fileStateCurrent
 	}
 	return message
 }
@@ -451,7 +461,7 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 	}
 
 	return fantasy.WithResponseMetadata(
-		fantasy.NewTextResponse(editedMessage("Content deleted from file: "+filePath, whitespaceCorrected, stale)),
+		fantasy.NewTextResponse(editedMessage("Content deleted from file: "+filePath, whitespaceCorrected, stale, true)),
 		EditResponseMetadata{
 			OldContent: oldContent,
 			NewContent: writeContent,
@@ -526,7 +536,7 @@ func replaceContent(edit editContext, filePath, oldString, newString string, rep
 	}
 
 	return fantasy.WithResponseMetadata(
-		fantasy.NewTextResponse(editedMessage("Content replaced in file: "+filePath, whitespaceCorrected, stale)),
+		fantasy.NewTextResponse(editedMessage("Content replaced in file: "+filePath, whitespaceCorrected, stale, true)),
 		EditResponseMetadata{
 			OldContent: oldContent,
 			NewContent: writeContent,

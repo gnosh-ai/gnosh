@@ -188,7 +188,7 @@ func NewWriteTool(
 
 			notifyLSPs(ctx, lspManager, params.FilePath)
 
-			result := fmt.Sprintf("File successfully written: %s", filePath)
+			result := fmt.Sprintf("File successfully written: %s", filePath) + fileStateCurrent
 			result = fmt.Sprintf("<result>\n%s\n</result>", result)
 			result += getDiagnostics(filePath, lspManager)
 			if subdirectoryContext != nil {
