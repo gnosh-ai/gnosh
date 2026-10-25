@@ -1189,6 +1189,12 @@ providers, as it does there, with `0` for no limit. Local means `localhost`, a l
 link-local or Tailscale address, a host name of one label, or a name under
 `.local`, `.lan`, `.internal` or `.home.arpa`.
 
+A server that was answering and stops, as when it restarts, is waited for up
+to five minutes before the error is shown. One that has not answered since
+you picked the model, because it is not running, gets fifteen seconds before
+each of the retries, so Klash says so in about a minute and a half rather
+than twenty.
+
 ## Logging
 
 Sometimes you need to look at logs. Luckily, Klash logs all sorts of

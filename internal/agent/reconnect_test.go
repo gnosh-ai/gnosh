@@ -167,6 +167,54 @@ func TestReconnectLetsTheErrorThroughAfterTheWindow(t *testing.T) {
 	require.Equal(t, wantAttempts, inner.callCount())
 }
 
+// A server that has not answered once since the model was set up is more
+// likely stopped than restarting: picking a model whose server was off
+// waited the whole window, four times over, before it said so.
+func TestReconnectGivesUpSoonOnAServerThatNeverAnswered(t *testing.T) {
+	t.Parallel()
+
+	inner := &scriptedStreams{scripts: [][]fantasy.StreamPart{{refused}}}
+	ft := &fakeTime{now: time.Unix(0, 0)}
+	m := testReconnecting(inner, ft)
+	m.newWindow, m.answered = newServerWindow, new(atomic.Bool)
+	parts := collect(t, m)
+
+	require.Equal(t, []fantasy.StreamPart{refused}, parts, "the error must reach the consumer")
+	require.Equal(t, int(newServerWindow/reconnectEvery)+1, inner.callCount())
+	require.False(t, m.answered.Load())
+}
+
+// Once the server has answered, it gets the full window again: it is then
+// restarting, the case the wait is for.
+func TestReconnectWaitsTheFullWindowOnceTheServerAnswered(t *testing.T) {
+	t.Parallel()
+
+	inner := &scriptedStreams{scripts: [][]fantasy.StreamPart{answer, {refused}}}
+	ft := &fakeTime{now: time.Unix(0, 0)}
+	m := testReconnecting(inner, ft)
+	m.newWindow, m.answered = newServerWindow, new(atomic.Bool)
+
+	require.Equal(t, answer, collect(t, m))
+	require.True(t, m.answered.Load(), "an answer must mark the server as seen")
+
+	parts := collect(t, m)
+	require.Equal(t, []fantasy.StreamPart{refused}, parts)
+	require.Equal(t, 1+int(reconnectWindow/reconnectEvery)+1, inner.callCount())
+}
+
+// A server that is up and rejects a request has answered too.
+func TestReconnectCountsARejectionAsAnAnswer(t *testing.T) {
+	t.Parallel()
+
+	inner := &scriptedStreams{scripts: [][]fantasy.StreamPart{{rejected}}}
+	ft := &fakeTime{now: time.Unix(0, 0)}
+	m := testReconnecting(inner, ft)
+	m.newWindow, m.answered = newServerWindow, new(atomic.Bool)
+	collect(t, m)
+
+	require.True(t, m.answered.Load())
+}
+
 func TestReconnectStopsWhenCancelled(t *testing.T) {
 	t.Parallel()
 
