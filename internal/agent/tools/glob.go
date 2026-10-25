@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
@@ -215,8 +216,17 @@ func runRipgrep(cmd *exec.Cmd, searchRoot string, limit int) ([]string, error) {
 		return nil, fmt.Errorf("ripgrep: %w\n%s", waitErr, stderr.String())
 	}
 
+	// Newest first, as the walker sorts, as Claude Code's Glob does and as
+	// the tool's description says: by path length, the ripgrep path put
+	// any short name before the file just edited.
+	modTimes := make(map[string]time.Time, len(matches))
+	for _, m := range matches {
+		if info, err := os.Stat(m); err == nil {
+			modTimes[m] = info.ModTime()
+		}
+	}
 	sort.SliceStable(matches, func(i, j int) bool {
-		return len(matches[i]) < len(matches[j])
+		return modTimes[matches[i]].After(modTimes[matches[j]])
 	})
 
 	if limit > 0 && len(matches) > limit {
