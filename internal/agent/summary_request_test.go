@@ -246,3 +246,23 @@ func TestSummarize_InstructionsEndTheRequest(t *testing.T) {
 	require.True(t, strings.HasSuffix(last, "\n\nAdditional Instructions:\nkeep the API decisions"), last)
 	require.NotContains(t, buildSummaryPrompt(nil, " "), "Additional Instructions")
 }
+
+// The summary is asked for as Claude Code asks for one: in nine sections,
+// among them every message of the user's and the next step in the
+// conversation's own words, with no tool calls.
+func TestSummaryPromptAsksForClaudeCodesSections(t *testing.T) {
+	t.Parallel()
+	p := buildSummaryPrompt(nil, "")
+	for _, section := range []string{
+		"1. Primary Request and Intent:", "2. Key Technical Concepts:", "3. Files and Code Sections:",
+		"4. Errors and fixes:", "5. Problem Solving:", "6. All user messages:", "7. Pending Tasks:",
+		"8. Current Work:", "9. Optional Next Step:",
+	} {
+		require.Equal(t, 2, strings.Count(p, section), "asked for and shown in the example: %s", section)
+	}
+	require.Contains(t, p, "List ALL user messages that are not tool results.")
+	require.Contains(t, p, "Preserve any security-relevant instructions or constraints verbatim")
+	require.Contains(t, p, "include direct quotes from the most recent conversation")
+	require.True(t, strings.HasPrefix(p, "Stop work on the task here."))
+	require.True(t, strings.HasSuffix(p, "REMINDER: Do NOT call any tools. Respond with plain text only."))
+}

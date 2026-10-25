@@ -2934,11 +2934,11 @@ func (a *sessionAgent) workaroundProviderMediaLimitations(messages []fantasy.Mes
 	return convertedMessages
 }
 
-// buildSummaryPrompt is the message asking for a session's summary: how
-// to write it, then the session's todos to carry over.
-// buildSummaryPrompt is the summary request's last user message: the
-// summary instructions, the session's todos, and, as Claude Code adds
-// them, the text given after /compact.
+// buildSummaryPrompt is the summary request's last user message: Claude
+// Code's summary instructions (summary.md), with their nine sections, among
+// them all of the user's messages and the next step in the conversation's
+// own words; the session's todos; and, as Claude Code adds them, the text
+// given after /compact.
 func buildSummaryPrompt(todos []session.Todo, instructions string) string {
 	var sb strings.Builder
 	sb.WriteString(strings.TrimSpace(string(summaryPrompt)))
