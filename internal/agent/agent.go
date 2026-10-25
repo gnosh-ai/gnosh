@@ -1158,6 +1158,12 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				prepared.Messages = append(prepared.Messages, userMessage.ToAIMessage()...)
 			}
 
+			reminder, err := a.remindOfTodos(callContext, call.SessionID, prepared.Tools)
+			if err != nil {
+				return callContext, prepared, err
+			}
+			prepared.Messages = append(prepared.Messages, reminder...)
+
 			prepared.Messages = a.prepareRequestMessages(prepared.Messages, largeModel, promptPrefix)
 
 			sessionLock.Lock()
