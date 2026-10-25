@@ -2,11 +2,13 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"testing"
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
 )
@@ -20,6 +22,62 @@ type savingSessions struct {
 func (s *savingSessions) Save(ctx context.Context, sess session.Session) (session.Session, error) {
 	s.saves.Add(1)
 	return s.Service.Save(ctx, sess)
+}
+
+// renamedAfterReads names the session anew just after each read of it,
+// as the title model's title or a /rename can land between a read and a
+// write: writing back what was read puts an older name back.
+type renamedAfterReads struct {
+	savingSessions
+	names atomic.Int32
+}
+
+func (s *renamedAfterReads) Get(ctx context.Context, id string) (session.Session, error) {
+	sess, err := s.Service.Get(ctx, id)
+	if err == nil {
+		err = s.Service.Rename(ctx, id, fmt.Sprintf("named %d", s.names.Add(1)))
+	}
+	return sess, err
+}
+
+// lastName is the name given last.
+func (s *renamedAfterReads) lastName() string { return fmt.Sprintf("named %d", s.names.Load()) }
+
+// A summary writes what it changes alone: its message, the counters
+// starting again from it, and its cost, added. The name given last is
+// kept, where saving the session read last put back the one before.
+func TestSummarizeWritesOnlyWhatItChanges(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv(t)
+	spy := &renamedAfterReads{savingSessions: savingSessions{Service: env.sessions}}
+	priced := Model{Model: usageModel{}, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000, CostPer1MIn: 1, CostPer1MOut: 2}}
+	a := NewSessionAgent(SessionAgentOptions{
+		LargeModel: priced,
+		SmallModel: priced,
+		Sessions:   spy,
+		Messages:   env.messages,
+	}).(*sessionAgent)
+	sess, err := env.sessions.Create(t.Context(), "the old name")
+	require.NoError(t, err)
+	_, err = env.sessions.UpdateUsage(t.Context(), sess.ID, 50000, 900, 1, false)
+	require.NoError(t, err)
+	_, err = env.messages.Create(t.Context(), sess.ID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: "hello"}},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, a.Summarize(t.Context(), sess.ID, "", fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
+
+	got, err := env.sessions.Get(t.Context(), sess.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, got.SummaryMessageID, "the summary was not saved")
+	require.Equal(t, spy.lastName(), got.Title)
+	require.Zero(t, spy.saves.Load(), "no whole session saved")
+	require.Equal(t, [2]int64{0, 100}, [2]int64{got.PromptTokens, got.CompletionTokens})
+	require.InDelta(t, 1.0012, got.Cost, 1e-9, "the summary's $0.0012 is added")
+	require.False(t, got.EstimatedUsage)
 }
 
 // A step's usage is written alone, never the whole session: saving the

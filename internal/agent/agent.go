@@ -1819,21 +1819,15 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 		}
 	}
 
-	// The summary took a while: read the session again, so that a name it
-	// was given meanwhile (/rename, the sessions dialog) is not put back.
-	currentSession, err = a.sessions.Get(genCtx, sessionID)
-	if err != nil {
-		return err
-	}
-	a.updateSessionUsage(largeModel, &currentSession, resp.TotalUsage, openrouterCost, false)
+	// Only what the summary changes is written, so a name the session was
+	// given while it ran (/rename, the sessions dialog) is kept. Usage
+	// added to an empty session is what the summary cost.
+	spent := session.Session{ID: sessionID}
+	a.updateSessionUsage(largeModel, &spent, resp.TotalUsage, openrouterCost, false)
 
 	// Just in case, get just the last usage info.
 	usage := resp.Response.Usage
-	currentSession.SummaryMessageID = summaryMessage.ID
-	currentSession.CompletionTokens = summaryCompletionTokens(usage, summaryMessage)
-	currentSession.PromptTokens = 0
-	currentSession.EstimatedUsage = usageIsZero(usage)
-	_, err = a.sessions.Save(genCtx, currentSession)
+	_, err = a.sessions.UpdateSummary(genCtx, sessionID, summaryMessage.ID, summaryCompletionTokens(usage, summaryMessage), spent.Cost, usageIsZero(usage))
 	if err != nil {
 		return err
 	}

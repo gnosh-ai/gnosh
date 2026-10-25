@@ -72,8 +72,10 @@ type Querier interface {
 	RecordFileRead(ctx context.Context, arg RecordFileReadParams) error
 	RenameSession(ctx context.Context, arg RenameSessionParams) error
 	SetSessionChannel(ctx context.Context, arg SetSessionChannelParams) (Session, error)
+	SetSessionTodos(ctx context.Context, arg SetSessionTodosParams) (Session, error)
 	UpdateMessage(ctx context.Context, arg UpdateMessageParams) error
 	UpdateSession(ctx context.Context, arg UpdateSessionParams) (Session, error)
+	UpdateSessionSummary(ctx context.Context, arg UpdateSessionSummaryParams) (Session, error)
 	UpdateSessionTitleAndUsage(ctx context.Context, arg UpdateSessionTitleAndUsageParams) error
 	UpdateSessionUsage(ctx context.Context, arg UpdateSessionUsageParams) (Session, error)
 }

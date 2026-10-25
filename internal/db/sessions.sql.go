@@ -248,6 +248,40 @@ func (q *Queries) SetSessionChannel(ctx context.Context, arg SetSessionChannelPa
 	return i, err
 }
 
+const setSessionTodos = `-- name: SetSessionTodos :one
+UPDATE sessions
+SET
+    todos = ?,
+    updated_at = strftime('%s', 'now')
+WHERE id = ?
+RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel
+`
+
+type SetSessionTodosParams struct {
+	Todos sql.NullString `json:"todos"`
+	ID    string         `json:"id"`
+}
+
+func (q *Queries) SetSessionTodos(ctx context.Context, arg SetSessionTodosParams) (Session, error) {
+	row := q.queryRow(ctx, q.setSessionTodosStmt, setSessionTodos, arg.Todos, arg.ID)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.ParentSessionID,
+		&i.Title,
+		&i.MessageCount,
+		&i.PromptTokens,
+		&i.CompletionTokens,
+		&i.Cost,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.SummaryMessageID,
+		&i.Todos,
+		&i.Channel,
+	)
+	return i, err
+}
+
 const updateSession = `-- name: UpdateSession :one
 UPDATE sessions
 SET
@@ -282,6 +316,50 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) (S
 		arg.Cost,
 		arg.Todos,
 		arg.Channel,
+		arg.ID,
+	)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.ParentSessionID,
+		&i.Title,
+		&i.MessageCount,
+		&i.PromptTokens,
+		&i.CompletionTokens,
+		&i.Cost,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.SummaryMessageID,
+		&i.Todos,
+		&i.Channel,
+	)
+	return i, err
+}
+
+const updateSessionSummary = `-- name: UpdateSessionSummary :one
+UPDATE sessions
+SET
+    summary_message_id = ?,
+    prompt_tokens = 0,
+    completion_tokens = ?,
+    cost = cost + ?,
+    updated_at = strftime('%s', 'now')
+WHERE id = ?
+RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel
+`
+
+type UpdateSessionSummaryParams struct {
+	SummaryMessageID sql.NullString `json:"summary_message_id"`
+	CompletionTokens int64          `json:"completion_tokens"`
+	Cost             float64        `json:"cost"`
+	ID               string         `json:"id"`
+}
+
+func (q *Queries) UpdateSessionSummary(ctx context.Context, arg UpdateSessionSummaryParams) (Session, error) {
+	row := q.queryRow(ctx, q.updateSessionSummaryStmt, updateSessionSummary,
+		arg.SummaryMessageID,
+		arg.CompletionTokens,
+		arg.Cost,
 		arg.ID,
 	)
 	var i Session
@@ -337,7 +415,8 @@ UPDATE sessions
 SET
     prompt_tokens = ?,
     completion_tokens = ?,
-    cost = cost + ?
+    cost = cost + ?,
+    updated_at = strftime('%s', 'now')
 WHERE id = ?
 RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel
 `

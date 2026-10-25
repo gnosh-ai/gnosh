@@ -75,7 +75,8 @@ UPDATE sessions
 SET
     prompt_tokens = ?,
     completion_tokens = ?,
-    cost = cost + ?
+    cost = cost + ?,
+    updated_at = strftime('%s', 'now')
 WHERE id = ?
 RETURNING *;
 
@@ -84,6 +85,25 @@ UPDATE sessions
 SET cost = cost + ?
 WHERE id = ?
 RETURNING id;
+
+-- name: SetSessionTodos :one
+UPDATE sessions
+SET
+    todos = ?,
+    updated_at = strftime('%s', 'now')
+WHERE id = ?
+RETURNING *;
+
+-- name: UpdateSessionSummary :one
+UPDATE sessions
+SET
+    summary_message_id = ?,
+    prompt_tokens = 0,
+    completion_tokens = ?,
+    cost = cost + ?,
+    updated_at = strftime('%s', 'now')
+WHERE id = ?
+RETURNING *;
 
 -- name: RenameSession :exec
 UPDATE sessions

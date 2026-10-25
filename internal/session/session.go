@@ -80,6 +80,11 @@ type Service interface {
 	UpdateUsage(ctx context.Context, sessionID string, promptTokens, completionTokens int64, cost float64, estimated bool) (Session, error)
 	// AddCost adds cost to the session's and touches nothing else.
 	AddCost(ctx context.Context, sessionID string, cost float64) error
+	// SetTodos writes the session's todo list and nothing else.
+	SetTodos(ctx context.Context, sessionID string, todos []Todo) (Session, error)
+	// UpdateSummary records a summary and what it changes: the summary
+	// message, the counters starting again from it, and its cost, added.
+	UpdateSummary(ctx context.Context, sessionID, summaryMessageID string, completionTokens int64, cost float64, estimated bool) (Session, error)
 	Rename(ctx context.Context, id string, title string) error
 	Delete(ctx context.Context, id string) error
 	MCPDisabledServers(ctx context.Context) ([]string, error)
@@ -296,6 +301,50 @@ func (s *service) AddCost(ctx context.Context, sessionID string, cost float64) e
 	}
 	s.publishSessionUpdate(ctx, sessionID)
 	return nil
+}
+
+// SetTodos implements Service. Saving the whole session put back a title
+// or cost written between the todos tool's read and its save.
+func (s *service) SetTodos(ctx context.Context, sessionID string, todos []Todo) (Session, error) {
+	todosJSON, err := marshalTodos(todos)
+	if err != nil {
+		return Session{}, err
+	}
+	dbSession, err := s.q.SetSessionTodos(ctx, db.SetSessionTodosParams{
+		ID: sessionID,
+		Todos: sql.NullString{
+			String: todosJSON,
+			Valid:  todosJSON != "",
+		},
+	})
+	if err != nil {
+		return Session{}, err
+	}
+	session := s.fromDBItem(dbSession)
+	s.applyEstimatedUsageState(&session)
+	s.Publish(pubsub.UpdatedEvent, session)
+	return session, nil
+}
+
+// UpdateSummary implements Service, as UpdateUsage does for a step.
+func (s *service) UpdateSummary(ctx context.Context, sessionID, summaryMessageID string, completionTokens int64, cost float64, estimated bool) (Session, error) {
+	dbSession, err := s.q.UpdateSessionSummary(ctx, db.UpdateSessionSummaryParams{
+		ID: sessionID,
+		SummaryMessageID: sql.NullString{
+			String: summaryMessageID,
+			Valid:  summaryMessageID != "",
+		},
+		CompletionTokens: completionTokens,
+		Cost:             cost,
+	})
+	if err != nil {
+		return Session{}, err
+	}
+	s.setEstimatedUsageState(sessionID, estimated)
+	session := s.fromDBItem(dbSession)
+	session.EstimatedUsage = estimated
+	s.Publish(pubsub.UpdatedEvent, session)
+	return session, nil
 }
 
 // Rename updates only the title of a session without touching updated_at or

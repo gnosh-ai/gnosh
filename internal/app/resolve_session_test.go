@@ -70,6 +70,14 @@ func (m *mockSessionService) UpdateUsage(context.Context, string, int64, int64, 
 
 func (m *mockSessionService) AddCost(context.Context, string, float64) error { return nil }
 
+func (m *mockSessionService) SetTodos(context.Context, string, []session.Todo) (session.Session, error) {
+	return session.Session{}, nil
+}
+
+func (m *mockSessionService) UpdateSummary(context.Context, string, string, int64, float64, bool) (session.Session, error) {
+	return session.Session{}, nil
+}
+
 func (m *mockSessionService) UpdateTitleAndUsage(context.Context, string, string, int64, int64, float64) error {
 	return nil
 }
