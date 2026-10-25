@@ -61,12 +61,13 @@ func taskPrompt(opts ...prompt.Option) (*prompt.Prompt, error) {
 	return systemPrompt, nil
 }
 
+// planPrompt builds the plan agent's system prompt: its own instructions,
+// then the coder's environment, skills and context files
+// (builtinCoderContext), as Claude Code's plan mode plans with the
+// CLAUDE.md and environment of the agent it plans for. The plan agent had
+// neither the project's instructions nor its working directory.
 func planPrompt(opts ...prompt.Option) (*prompt.Prompt, error) {
-	systemPrompt, err := prompt.NewPrompt("plan", loadTemplate("plan.md.tpl", planPromptTmpl), opts...)
-	if err != nil {
-		return nil, err
-	}
-	return systemPrompt, nil
+	return prompt.NewPrompt("plan", loadTemplate("plan.md.tpl", planPromptTmpl)+"\n"+builtinCoderContext(), opts...)
 }
 
 func InitializePrompt(cfg *config.ConfigStore) (string, error) {

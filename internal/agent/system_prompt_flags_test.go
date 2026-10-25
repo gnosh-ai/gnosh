@@ -55,6 +55,9 @@ func TestNewCoordinatorUsesTheSystemPromptFlags(t *testing.T) {
 	require.True(t, strings.HasPrefix(coder, "You are Klash, a powerful AI Assistant"), "without the flags the built-in instructions are used")
 	require.Contains(t, coder, "Run the linter before every commit.")
 	plainPlan := plan
+	require.True(t, strings.HasPrefix(plan, "You are Klash in plan mode"), "the plan agent's own instructions come first")
+	require.Contains(t, plan, "\n<env>\nWorking directory: "+env.workingDir, "the plan agent knows where it is, as the coder does")
+	require.Contains(t, plan, "Run the linter before every commit.", "the plan agent plans with the project's KLASH.md, as Claude Code's plan mode has CLAUDE.md")
 
 	coder, plan = prompts("You answer only in haiku.", "End every answer with DONE.")
 	require.True(t, strings.HasPrefix(coder, "You answer only in haiku.\n\n<env>\nWorking directory: "+env.workingDir), "the user's instructions come first, then the environment: %.120q", coder)
@@ -193,4 +196,7 @@ func TestRebuildSystemPromptsNamesAnAddedDir(t *testing.T) {
 	require.NoError(t, coord.RebuildSystemPrompts(t.Context()))
 	require.Contains(t, coder(), "\nAdditional working directories: /src/gno\n")
 	require.Contains(t, task(), "\nAdditional working directories: /src/gno\n")
+	plan := coord.agents[config.AgentPlan].(*sessionAgent).systemPrompt.Get()
+	require.Contains(t, plan, "\nAdditional working directories: /src/gno\n")
+	require.True(t, strings.HasPrefix(plan, "You are Klash in plan mode"))
 }

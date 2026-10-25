@@ -175,10 +175,9 @@ type Coordinator interface {
 	// given there, which it is given again when it next touches a file
 	// in one.
 	Rewound(sessionID string, removed []string)
-	// RebuildSystemPrompts builds the coder agent's system prompt again
-	// from the config as it now is, as after /add-dir adds a directory
-	// its environment names, and its task sub-agents' prompts, which name
-	// the directory too. The plan agent's prompt has no environment.
+	// RebuildSystemPrompts builds the system prompts of the coder and plan
+	// agents and of their task sub-agents again from the config as it now
+	// is, as after /add-dir adds a directory their environments name.
 	RebuildSystemPrompts(ctx context.Context) error
 }
 
@@ -330,8 +329,7 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		return nil, errPlanAgentNotConfigured
 	}
 
-	overrides := c.cfg.Overrides()
-	planSystemPrompt, err := planPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()), prompt.WithTextAfter(overrides.AppendSystemPrompt))
+	planSystemPrompt, err := c.planSystemPrompt()
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +342,7 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 
 	c.mainAgent = agent
 	c.mainAgentName = config.AgentCoder
-	if overrides.MainAgent == config.AgentPlan {
+	if c.cfg.Overrides().MainAgent == config.AgentPlan {
 		c.mainAgent = planAgent
 		c.mainAgentName = config.AgentPlan
 	}
@@ -1823,14 +1821,18 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID, instructions str
 // the directory, though its tools could reach it.
 func (c *coordinator) RebuildSystemPrompts(ctx context.Context) error {
 	c.agentMu.RLock()
-	coder := c.agents[config.AgentCoder]
+	coder, plan := c.agents[config.AgentCoder], c.agents[config.AgentPlan]
 	taskAgents := slices.Collect(maps.Values(c.taskAgents))
 	c.agentMu.RUnlock()
-	p, err := c.coderSystemPrompt()
+	coderP, err := c.coderSystemPrompt()
 	if err != nil {
 		return err
 	}
-	for _, a := range append([]promptedAgent{{agent: coder, prompt: p}}, taskAgents...) {
+	planP, err := c.planSystemPrompt()
+	if err != nil {
+		return err
+	}
+	for _, a := range append([]promptedAgent{{agent: coder, prompt: coderP}, {agent: plan, prompt: planP}}, taskAgents...) {
 		if a.agent == nil || a.agent.Model().Model == nil {
 			continue
 		}
@@ -1849,6 +1851,12 @@ func (c *coordinator) RebuildSystemPrompts(ctx context.Context) error {
 type promptedAgent struct {
 	agent  SessionAgent
 	prompt *prompt.Prompt
+}
+
+// planSystemPrompt is the plan agent's prompt, with --append-system-prompt
+// at its end.
+func (c *coordinator) planSystemPrompt() (*prompt.Prompt, error) {
+	return planPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()), prompt.WithTextAfter(c.cfg.Overrides().AppendSystemPrompt))
 }
 
 // coderSystemPrompt is the coder agent's prompt: --system-prompt replaces
