@@ -132,8 +132,26 @@ func TestCoderPromptNamesTheAddedDirs(t *testing.T) {
 	require.Contains(t, withDirs, "\nAdditional working directories: /src/gno, /src/bubblerumble\nIs directory a git repo:")
 }
 
+// The task sub-agent's environment names them too, as Claude Code's
+// environment does for every agent.
+func TestTaskPromptNamesTheAddedDirs(t *testing.T) {
+	store := config.NewTestStore(&config.Config{Options: &config.Options{}})
+	p, err := taskPrompt(prompt.WithWorkingDir(t.TempDir()))
+	require.NoError(t, err)
+
+	plain, err := p.Build(t.Context(), "", "", store)
+	require.NoError(t, err)
+	require.NotContains(t, plain, "Additional working directories")
+
+	store.Overrides().AddedDirs = []string{"/src/gno", "/src/bubblerumble"}
+	withDirs, err := p.Build(t.Context(), "", "", store)
+	require.NoError(t, err)
+	require.Contains(t, withDirs, "\nAdditional working directories: /src/gno, /src/bubblerumble\nIs directory a git repo:")
+}
+
 // After /add-dir, the coder's prompt is built again and names the
-// directory, as --add-dir's does from the start.
+// directory, as --add-dir's does from the start, and so are the prompts of
+// the sub-agents its agent tool runs.
 func TestRebuildSystemPromptsNamesAnAddedDir(t *testing.T) {
 	env := testEnv(t)
 	t.Setenv("CRUSH_GLOBAL_CONFIG", filepath.Join(t.TempDir(), "crush.json"))
@@ -161,10 +179,18 @@ func TestRebuildSystemPromptsNamesAnAddedDir(t *testing.T) {
 	coord := c.(*coordinator)
 	require.NoError(t, coord.readyWg.Wait())
 	coder := func() string { return coord.agents[config.AgentCoder].(*sessionAgent).systemPrompt.Get() }
+	task := func() string {
+		coord.agentMu.RLock()
+		defer coord.agentMu.RUnlock()
+		return coord.taskAgents[config.AgentCoder].agent.(*sessionAgent).systemPrompt.Get()
+	}
 	require.NotContains(t, coder(), "Additional working directories")
+	require.Contains(t, task(), "Working directory: ")
+	require.NotContains(t, task(), "Additional working directories")
 
 	cfg.AddDir("/src/gno")
 	require.NotContains(t, coder(), "Additional working directories", "built again only when asked")
 	require.NoError(t, coord.RebuildSystemPrompts(t.Context()))
 	require.Contains(t, coder(), "\nAdditional working directories: /src/gno\n")
+	require.Contains(t, task(), "\nAdditional working directories: /src/gno\n")
 }

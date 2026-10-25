@@ -177,7 +177,8 @@ type Coordinator interface {
 	Rewound(sessionID string, removed []string)
 	// RebuildSystemPrompts builds the coder agent's system prompt again
 	// from the config as it now is, as after /add-dir adds a directory
-	// its environment names. The plan agent's prompt has no environment.
+	// its environment names, and its task sub-agents' prompts, which name
+	// the directory too. The plan agent's prompt has no environment.
 	RebuildSystemPrompts(ctx context.Context) error
 }
 
@@ -207,6 +208,9 @@ type coordinator struct {
 	mainAgent     SessionAgent
 	mainAgentName string
 	agents        map[string]SessionAgent
+	// taskAgents are the sub-agents of the agent tools, by the agent whose
+	// tool runs each, with their prompts (agentTool). Guarded by agentMu.
+	taskAgents map[string]promptedAgent
 
 	// sessionStarts is what the SessionStart hooks of the agents the
 	// coordinator builds know of the sessions the process started: one
@@ -1132,7 +1136,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	}
 
 	if slices.Contains(agent.AllowedTools, AgentToolName) {
-		agentTool, err := c.agentTool(ctx)
+		agentTool, err := c.agentTool(ctx, agent.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -1814,26 +1818,37 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID, instructions str
 	return agent.Summarize(ctx, sessionID, instructions, c.providerOptions(agent.Model(), providerCfg), c.makeAuthRefreshCallback(providerCfg), preCompactTriggerManual)
 }
 
-// RebuildSystemPrompts implements Coordinator, for the model the coder is
-// on.
+// RebuildSystemPrompts implements Coordinator, each agent's for the model
+// it is on. A sub-agent the agent tool ran after /add-dir was not told of
+// the directory, though its tools could reach it.
 func (c *coordinator) RebuildSystemPrompts(ctx context.Context) error {
 	c.agentMu.RLock()
-	agent := c.agents[config.AgentCoder]
+	coder := c.agents[config.AgentCoder]
+	taskAgents := slices.Collect(maps.Values(c.taskAgents))
 	c.agentMu.RUnlock()
-	if agent == nil || agent.Model().Model == nil {
-		return nil
-	}
 	p, err := c.coderSystemPrompt()
 	if err != nil {
 		return err
 	}
-	model := agent.Model().Model
-	systemPrompt, err := p.Build(ctx, model.Provider(), model.Model(), c.cfg)
-	if err != nil {
-		return err
+	for _, a := range append([]promptedAgent{{agent: coder, prompt: p}}, taskAgents...) {
+		if a.agent == nil || a.agent.Model().Model == nil {
+			continue
+		}
+		model := a.agent.Model().Model
+		systemPrompt, err := a.prompt.Build(ctx, model.Provider(), model.Model(), c.cfg)
+		if err != nil {
+			return err
+		}
+		a.agent.SetSystemPrompt(systemPrompt)
 	}
-	agent.SetSystemPrompt(systemPrompt)
 	return nil
+}
+
+// promptedAgent is an agent and the prompt its system prompt is built
+// from.
+type promptedAgent struct {
+	agent  SessionAgent
+	prompt *prompt.Prompt
 }
 
 // coderSystemPrompt is the coder agent's prompt: --system-prompt replaces

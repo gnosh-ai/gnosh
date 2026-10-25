@@ -23,7 +23,9 @@ const (
 	AgentToolName = "agent"
 )
 
-func (c *coordinator) agentTool(ctx context.Context) (fantasy.AgentTool, error) {
+// agentTool is the agent tool of the agent named parent: it runs a task
+// sub-agent, which RebuildSystemPrompts builds the prompt of again.
+func (c *coordinator) agentTool(ctx context.Context, parent string) (fantasy.AgentTool, error) {
 	agentCfg, ok := c.cfg.Config().Agents[config.AgentTask]
 	if !ok {
 		return nil, errors.New("task agent not configured")
@@ -37,6 +39,12 @@ func (c *coordinator) agentTool(ctx context.Context) (fantasy.AgentTool, error) 
 	if err != nil {
 		return nil, err
 	}
+	c.agentMu.Lock()
+	if c.taskAgents == nil {
+		c.taskAgents = map[string]promptedAgent{}
+	}
+	c.taskAgents[parent] = promptedAgent{agent: agent, prompt: prompt}
+	c.agentMu.Unlock()
 	return fantasy.NewParallelAgentTool(
 		AgentToolName,
 		agentToolDescription,
