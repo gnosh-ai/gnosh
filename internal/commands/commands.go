@@ -194,6 +194,12 @@ func loadCommand(path, baseDir, prefix string) (CustomCommand, error) {
 	}, nil
 }
 
+// ShortName is the command's name without its user: or project: prefix,
+// the name Claude Code gives a command by its file.
+func (c CustomCommand) ShortName() string {
+	return strings.TrimPrefix(strings.TrimPrefix(c.ID, userCommandPrefix), projectCommandPrefix)
+}
+
 func extractArgNames(content string) []Argument {
 	matches := namedArgPattern.FindAllStringSubmatch(content, -1)
 	if len(matches) == 0 {

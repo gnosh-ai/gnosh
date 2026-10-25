@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -240,6 +241,12 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 					return item.Action()
 				}
 			}
+			// What matches nothing is said to be unknown, as Claude Code
+			// says it, with the command most likely meant.
+			if fields := strings.Fields(c.input.Value()); len(fields) > 0 {
+				name := strings.TrimPrefix(fields[0], "/")
+				return ActionCmd{Cmd: util.ReportWarn(UnknownCommand(name, c.Suggest(name)))}
+			}
 		case key.Matches(msg, c.keyMap.Tab):
 			if len(c.customCommands) > 0 || len(c.mcpPrompts) > 0 {
 				c.selected = c.nextCommandType()
@@ -441,17 +448,7 @@ func (c *Commands) setCommandItems(commandType CommandType) {
 		}
 	case UserCommands:
 		for _, cmd := range c.customCommands {
-			var action Action
-			if cmd.Skill != nil {
-				action = ActionAttachSkill{ID: cmd.Skill.SkillFilePath, Name: cmd.Skill.Name}
-			} else {
-				action = ActionRunCustomCommand{
-					Content:   cmd.Content,
-					Arguments: cmd.Arguments,
-					Skill:     cmd.Skill,
-				}
-			}
-			item := NewCommandItem(c.com.Styles, "custom_"+cmd.ID, cmd.Name, "", action)
+			item := NewCommandItem(c.com.Styles, "custom_"+cmd.ID, cmd.Name, "", customCommandAction(cmd))
 			if cmd.Skill != nil {
 				item = item.WithDescription(cmd.Skill.Description)
 			}
@@ -459,14 +456,7 @@ func (c *Commands) setCommandItems(commandType CommandType) {
 		}
 	case MCPPrompts:
 		for _, cmd := range c.mcpPrompts {
-			action := ActionRunMCPPrompt{
-				Title:       cmd.Title,
-				Description: cmd.Description,
-				PromptID:    cmd.PromptID,
-				ClientID:    cmd.ClientID,
-				Arguments:   cmd.Arguments,
-			}
-			commandItems = append(commandItems, NewCommandItem(c.com.Styles, "mcp_"+cmd.ID, cmd.PromptID, "", action))
+			commandItems = append(commandItems, NewCommandItem(c.com.Styles, "mcp_"+cmd.ID, cmd.PromptID, "", mcpPromptAction(cmd)))
 		}
 	}
 

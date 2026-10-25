@@ -2255,12 +2255,18 @@ func (m *UI) handleChildSessionMessage(event pubsub.Event[message.Message]) tea.
 }
 
 func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
-	var cmds []tea.Cmd
 	action := m.dialog.Update(msg)
 	if action == nil {
-		return tea.Batch(cmds...)
+		return nil
 	}
+	return m.handleDialogAction(action)
+}
 
+// handleDialogAction does what a dialog's action asks, from a dialog or
+// from a slash command typed in the prompt, which runs its palette item's
+// action.
+func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
+	var cmds []tea.Cmd
 	isOnboarding := m.state == uiOnboarding
 
 	switch msg := action.(type) {
@@ -5530,6 +5536,11 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	if filename, ok := session.ParseExportCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.exportConversation(filename)
 	}
+	if name, ok := dialog.SlashCommandName(content); ok {
+		if cmd, ok := m.slashCommand(content, name); ok {
+			return cmd
+		}
+	}
 	return m.sendMessageInternal(content, false, attachments...)
 }
 
@@ -6086,15 +6097,7 @@ func (m *UI) openCommandsDialog() tea.Cmd {
 		return nil
 	}
 
-	var sessionID string
-	hasSession := m.session != nil
-	if hasSession {
-		sessionID = m.session.ID
-	}
-	hasTodos := hasSession && hasIncompleteTodos(m.session.Todos)
-	hasQueue := m.promptQueue > 0
-
-	commands, err := dialog.NewCommands(m.com, sessionID, hasSession, hasTodos, hasQueue, m.customCommands, m.mcpPrompts)
+	commands, err := m.newCommands()
 	if err != nil {
 		return util.ReportError(err)
 	}
@@ -6102,6 +6105,39 @@ func (m *UI) openCommandsDialog() tea.Cmd {
 	m.dialog.OpenDialog(commands)
 
 	return commands.InitialCmd()
+}
+
+// newCommands is the command palette as it stands for the session.
+func (m *UI) newCommands() (*dialog.Commands, error) {
+	var sessionID string
+	hasSession := m.session != nil
+	if hasSession {
+		sessionID = m.session.ID
+	}
+	hasTodos := hasSession && hasIncompleteTodos(m.session.Todos)
+	hasQueue := m.promptQueue > 0
+	return dialog.NewCommands(m.com, sessionID, hasSession, hasTodos, hasQueue, m.customCommands, m.mcpPrompts)
+}
+
+// slashCommand runs content as the slash command it is, named name, as
+// Claude Code runs one wherever it is typed: the palette's command of
+// that name, as if chosen there. A name no command has is said to be
+// unknown, and the line goes back in the editor to be fixed, unless it is
+// a path ("/tmp is full?"), which goes to the model as a prompt. ok is
+// false when content is to be sent.
+func (m *UI) slashCommand(content, name string) (cmd tea.Cmd, ok bool) {
+	commands, err := m.newCommands()
+	if err != nil {
+		return nil, false
+	}
+	if action, found := commands.Lookup(name); found {
+		return m.handleDialogAction(action), true
+	}
+	if _, err := os.Stat("/" + name); err == nil {
+		return nil, false
+	}
+	m.textarea.SetValue(content)
+	return util.ReportWarn(dialog.UnknownCommand(name, commands.Suggest(name))), true
 }
 
 // openReasoningDialog opens the reasoning effort dialog.
