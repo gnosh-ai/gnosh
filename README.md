@@ -281,8 +281,10 @@ or failed without saying so. The ones you will notice:
   the prefix key, so it takes two presses there (or remap your tmux prefix);
   the command palette's "Toggle Sidebar" works regardless of terminal size.
 
-**Better tools.** `view` reads 2,000 lines by default and cuts an oversized
-section instead of failing. `grep` can ignore case, and can search for a
+**Better tools.** `view` reads 2,000 lines by default, and a section over
+Claude Code's 25,000 tokens (or what `CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS`
+sets) is cut there with the offset to read on, instead of failing; at 200KB,
+one read of a log took 40% of a local model's context. `grep` can ignore case, and can search for a
 pattern that starts with a dash. Bash points the agent to the file tools for
 file work, since they keep track of what it has read.
 

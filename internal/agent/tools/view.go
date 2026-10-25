@@ -39,14 +39,32 @@ var viewDescriptionTpl = template.Must(
 
 type viewDescriptionData struct {
 	DefaultReadLimit int
-	MaxViewSizeKB    int
+	MaxReadTokens    int
 }
 
 func viewDescription() string {
 	return renderTemplate(viewDescriptionTpl, viewDescriptionData{
 		DefaultReadLimit: DefaultReadLimit,
-		MaxViewSizeKB:    MaxViewSize / 1024,
+		MaxReadTokens:    readTokens(),
 	})
+}
+
+// readTokens is how many tokens one read returns at most:
+// CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS, as in Claude Code, or
+// MaxReadTokens.
+func readTokens() int {
+	return envInt("CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS", MaxReadTokens)
+}
+
+// readSizeLimit is how many bytes of the file at path one read returns at
+// most: its tokens at Claude Code's estimate of 4 bytes a token, or 2 for
+// JSON, which takes more tokens a byte.
+func readSizeLimit(path string) int {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".json", ".jsonl", ".jsonc":
+		return readTokens() * 2
+	}
+	return readTokens() * 4
 }
 
 type ViewParams struct {
@@ -90,7 +108,10 @@ type ViewResponseMetadata struct {
 
 const (
 	ViewToolName = "view"
-	MaxViewSize  = 200 * 1024 // 200KB
+	// MaxReadTokens is how many tokens one read returns at most, as
+	// Claude Code's Read: 25,000. At 200KB, about 50,000 tokens, one
+	// read of a log took 40% of a local model's 128K context.
+	MaxReadTokens = 25000
 	// DefaultReadLimit is how many lines a view returns when no limit is
 	// given: 2000, as Claude Code's Read tool does. At 200, an agent paged
 	// through any real source file in several calls, each a model round
@@ -279,7 +300,7 @@ func NewViewTool(
 			}
 
 			// Read the file content
-			maxContentSize := MaxViewSize
+			maxContentSize := readSizeLimit(filePath)
 			if isSkillFile {
 				maxContentSize = 0
 			}
@@ -315,8 +336,9 @@ func NewViewTool(
 				if last-skipped < params.Limit {
 					// Cut short at the size limit, not at the line limit.
 					cutShort = true
-					output += fmt.Sprintf("\n\n(Stopped after line %d: one read returns at most %dKB. To read on, use offset %d)",
-						last, maxContentSize/1024, last+1)
+					output += fmt.Sprintf("\n\n(Stopped after line %d: one read returns at most %d tokens. To read on, use offset %d, "+
+						"or grep for a specific section. Do NOT answer from this part alone if the answer may be further in the file)",
+						last, readTokens(), last+1)
 				} else {
 					output += fmt.Sprintf("\n\n(File has more lines. To read on, use offset %d)", last+1)
 				}

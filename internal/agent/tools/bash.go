@@ -50,10 +50,11 @@ func timeoutSeconds(ms int) int {
 	return min((ms+999)/1000, maxWaitSeconds())
 }
 
-// bashEnvInt is the positive whole number the environment variable name
-// holds, or def: Claude Code's BASH_* limits, which a klash.json's env
-// can set too.
-func bashEnvInt(name string, def int) int {
+// envInt is the positive whole number the environment variable name
+// holds, or def: Claude Code's BASH_* limits and its
+// CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS, which a klash.json's env can
+// set too.
+func envInt(name string, def int) int {
 	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name))); err == nil && n > 0 {
 		return n
 	}
@@ -69,21 +70,21 @@ func bashEnvInt(name string, def int) int {
 // conversation. Of the commands moved to the background on the AI box in
 // a week at 60 seconds, a sixth or more would have ended within 2 minutes.
 func defaultWaitSeconds() int {
-	return (bashEnvInt("BASH_DEFAULT_TIMEOUT_MS", DefaultAutoBackgroundAfter*1000) + 999) / 1000
+	return (envInt("BASH_DEFAULT_TIMEOUT_MS", DefaultAutoBackgroundAfter*1000) + 999) / 1000
 }
 
 // maxWaitSeconds is the longest a call's timeout can ask for:
 // BASH_MAX_TIMEOUT_MS, as in Claude Code (maxBashTimeoutSeconds by
 // default), or the default wait when that is longer.
 func maxWaitSeconds() int {
-	return max((bashEnvInt("BASH_MAX_TIMEOUT_MS", maxBashTimeoutSeconds*1000)+999)/1000, defaultWaitSeconds())
+	return max((envInt("BASH_MAX_TIMEOUT_MS", maxBashTimeoutSeconds*1000)+999)/1000, defaultWaitSeconds())
 }
 
 // maxOutputLength is how many characters of a command's output the model
 // reads before the middle is cut: BASH_MAX_OUTPUT_LENGTH, as in Claude
 // Code, at most 150000, or MaxOutputLength.
 func maxOutputLength() int {
-	return min(bashEnvInt("BASH_MAX_OUTPUT_LENGTH", MaxOutputLength), 150_000)
+	return min(envInt("BASH_MAX_OUTPUT_LENGTH", MaxOutputLength), 150_000)
 }
 
 type BashPermissionsParams struct {

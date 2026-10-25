@@ -123,7 +123,7 @@ func TestViewToolAllowsSmallSectionsOfLargeFiles(t *testing.T) {
 
 	workingDir := t.TempDir()
 	filePath := filepath.Join(workingDir, "large.txt")
-	lines := []string{strings.Repeat("a", MaxViewSize+1), "target line", "after target"}
+	lines := []string{strings.Repeat("a", readSizeLimit(filePath)+1), "target line", "after target"}
 	require.NoError(t, os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0o644))
 
 	tool := newViewToolForTest(workingDir)
@@ -144,8 +144,8 @@ func TestViewToolAllowsSmallSectionsOfLargeFiles(t *testing.T) {
 }
 
 // A section past the size limit is cut there, not refused: with the
-// 2000-line default a log of wide lines passes 200KB long before its
-// last line, and failing the whole read left the agent nothing.
+// 2000-line default a log of wide lines passes 25,000 tokens long before
+// its last line, and failing the whole read left the agent nothing.
 func TestViewToolCutsOversizedSectionsAtTheSizeLimit(t *testing.T) {
 	t.Parallel()
 
@@ -166,7 +166,7 @@ func TestViewToolCutsOversizedSectionsAtTheSizeLimit(t *testing.T) {
 	require.False(t, resp.IsError, resp.Content)
 	var meta ViewResponseMetadata
 	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
-	require.LessOrEqual(t, len(meta.Content), MaxViewSize)
+	require.LessOrEqual(t, len(meta.Content), readSizeLimit(filePath))
 	shown := strings.Count(meta.Content, "\n") + 1
 	require.Less(t, shown, DefaultReadLimit)
 	require.Contains(t, resp.Content, fmt.Sprintf("Stopped after line %d", shown))
@@ -517,7 +517,7 @@ func TestViewTellsAModelThatCannotSeeImagesWhatAnImageIs(t *testing.T) {
 	frame := write("frame.png", png.Encode, 32, 18)
 	photo := write("photo.jpg", func(w io.Writer, m image.Image) error { return jpeg.Encode(w, m, nil) }, 9, 16)
 	large := filepath.Join(workingDir, "large.png")
-	require.NoError(t, os.WriteFile(large, []byte(strings.Repeat("a", MaxViewSize+1)), 0o644))
+	require.NoError(t, os.WriteFile(large, []byte(strings.Repeat("a", 200*1024+1)), 0o644))
 
 	tool := newViewToolForTest(workingDir)
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
@@ -584,7 +584,7 @@ func TestViewFitsImagesAsClaudeCodeDoes(t *testing.T) {
 
 	data, err := os.ReadFile(screenshot)
 	require.NoError(t, err)
-	require.Greater(t, len(data), MaxViewSize, "over the 200 KB that was refused")
+	require.Greater(t, len(data), 200*1024, "over the 200 KB that was refused")
 	_, _, resp := view(screenshot)
 	require.Equal(t, data, resp.Data, "sent as it is")
 	require.Equal(t, "image/png", resp.MediaType)
