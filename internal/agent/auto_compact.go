@@ -232,3 +232,17 @@ func idleCompactMinTokens() int64 {
 	}
 	return max(n, 100_000)
 }
+
+// readRoom is how many tokens view's allow_large may bring into a
+// conversation of tokens, on a model with context window cw, in one step:
+// as Claude Code allows, 70% of what is left before the point at which the
+// conversation is compacted (see compactAt; window is the
+// auto_compact_window option), or before the window's end when
+// compaction is off.
+func readRoom(cw, window, tokens int64, disabled bool) int {
+	end := compactAt(cw, window, true)
+	if disabled {
+		end = cw
+	}
+	return int(float64(end-tokens) * 0.7)
+}

@@ -1205,6 +1205,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			callContext = context.WithValue(callContext, tools.ChannelContextKey, call.Channel)
 			callContext = context.WithValue(callContext, tools.SupportsImagesContextKey, largeModel.CatwalkCfg.SupportsImages)
 			callContext = context.WithValue(callContext, tools.ModelNameContextKey, largeModel.CatwalkCfg.Name)
+			callContext = tools.WithContextRoom(callContext, tools.NewContextRoom(readRoom(int64(largeModel.CatwalkCfg.ContextWindow),
+				a.autoCompactWindow(), currentSession.PromptTokens+currentSession.CompletionTokens, a.disableAutoSummarize)))
 			currentAssistant = &assistantMsg
 			return callContext, prepared, err
 		},

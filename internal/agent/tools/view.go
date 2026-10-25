@@ -57,20 +57,29 @@ func readTokens() int {
 }
 
 // readSizeLimit is how many bytes of the file at path one read returns at
-// most: its tokens at Claude Code's estimate of 4 bytes a token, or 2 for
-// JSON, which takes more tokens a byte.
+// most: its tokens at Claude Code's estimate (bytesPerToken).
 func readSizeLimit(path string) int {
+	return readTokens() * bytesPerToken(path)
+}
+
+// bytesPerToken is Claude Code's estimate of the bytes a token of the file
+// at path takes: 4, or 2 for JSON, which takes more tokens a byte.
+func bytesPerToken(path string) int {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".json", ".jsonl", ".jsonc":
-		return readTokens() * 2
+		return 2
 	}
-	return readTokens() * 4
+	return 4
 }
 
 type ViewParams struct {
 	FilePath string `json:"file_path" description:"The path to the file to read"`
 	Offset   int    `json:"offset,omitempty" description:"The line number to start reading from, the first line being 1"`
 	Limit    int    `json:"limit,omitempty" description:"The number of lines to read (defaults to 2000)"`
+	// AllowLarge reads a section over the usual limit, up to what still
+	// fits in the context this turn (ContextRoom), as Claude Code's Read
+	// takes allow_large.
+	AllowLarge bool `json:"allow_large,omitempty" description:"Set to true to read a section that is over the usual size limit, up to what still fits in your context this turn. Only when you genuinely need all of it or the user asked for the whole file; otherwise read it in parts with offset and limit, or grep it."`
 }
 
 // Skipped is how many lines come before the first one read. Offset is a
@@ -223,7 +232,7 @@ func NewViewTool(
 						ToolName:    ViewToolName,
 						Action:      "read",
 						Description: fmt.Sprintf("Read file outside working directory: %s", absFilePath),
-						Params:      ViewPermissionsParams(params),
+						Params:      ViewPermissionsParams{FilePath: params.FilePath, Offset: params.Offset, Limit: params.Limit},
 					},
 				)
 				if permReqErr != nil {
@@ -301,6 +310,25 @@ func NewViewTool(
 
 			// Read the file content
 			maxContentSize := readSizeLimit(filePath)
+			tokenLimit := readTokens()
+			// With allow_large a section may run to what still fits in
+			// the context this turn, as in Claude Code; largeNote says
+			// why it did not.
+			var room *ContextRoom
+			largeNote := ""
+			if params.AllowLarge {
+				room = ContextRoomFrom(ctx)
+				switch {
+				case room == nil:
+					largeNote = " allow_large is not available where this read runs; read it in parts with offset and limit."
+				case room.Left() > tokenLimit:
+					tokenLimit = room.Left()
+					maxContentSize = tokenLimit * bytesPerToken(filePath)
+				default:
+					room = nil
+					largeNote = " Even with allow_large, this is more than fits in the context you have left this turn (other large reads in the same turn share that room)."
+				}
+			}
 			if isSkillFile {
 				maxContentSize = 0
 			}
@@ -324,6 +352,11 @@ func NewViewTool(
 			if !utf8.ValidString(content) {
 				return fantasy.NewTextErrorResponse("File content is not valid UTF-8"), nil
 			}
+			if room != nil {
+				// What this read took is no longer there for the
+				// step's other large reads.
+				room.Claim(len(content) / bytesPerToken(filePath))
+			}
 
 			openInLSPs(ctx, lspManager, filePath)
 			waitForLSPDiagnostics(ctx, lspManager, filePath, 300*time.Millisecond)
@@ -336,9 +369,17 @@ func NewViewTool(
 				if last-skipped < params.Limit {
 					// Cut short at the size limit, not at the line limit.
 					cutShort = true
+					cutNote := largeNote
+					switch {
+					case !params.AllowLarge:
+						cutNote = " To read it anyway, up to what still fits in your context, call view again with allow_large: true, " +
+							"only if you genuinely need all of it or the user asked for the whole file."
+					case cutNote == "":
+						cutNote = " That is what allow_large had room for this turn."
+					}
 					output += fmt.Sprintf("\n\n(Stopped after line %d: one read returns at most %d tokens. To read on, use offset %d, "+
-						"or grep for a specific section. Do NOT answer from this part alone if the answer may be further in the file)",
-						last, readTokens(), last+1)
+						"or grep for a specific section. Do NOT answer from this part alone if the answer may be further in the file.%s)",
+						last, tokenLimit, last+1, cutNote)
 				} else {
 					output += fmt.Sprintf("\n\n(File has more lines. To read on, use offset %d)", last+1)
 				}

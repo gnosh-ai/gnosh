@@ -43,7 +43,9 @@ func TestViewReadsAtMostClaudeCodesTokens(t *testing.T) {
 	size, content := viewedPart(t, lines100(t, "app.log", 1900))
 	require.Equal(t, 1000*100-1, size, "the 1000 lines that fit in 100,000 bytes")
 	require.Contains(t, content, "(Stopped after line 1000: one read returns at most 25000 tokens. To read on, use offset 1001, "+
-		"or grep for a specific section. Do NOT answer from this part alone if the answer may be further in the file)")
+		"or grep for a specific section. Do NOT answer from this part alone if the answer may be further in the file. "+
+		"To read it anyway, up to what still fits in your context, call view again with allow_large: true, "+
+		"only if you genuinely need all of it or the user asked for the whole file.)")
 
 	for _, name := range []string{"events.jsonl", "package.json", "tsconfig.jsonc", "DATA.JSON"} {
 		size, content = viewedPart(t, lines100(t, name, 1900))
