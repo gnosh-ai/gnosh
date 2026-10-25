@@ -88,6 +88,32 @@ func TestShutdownEndsTheOpenSession(t *testing.T) {
 	require.Equal(t, "prompt_input_exit\n", string(data))
 }
 
+// A session ends with its hooks run even when the process's context was
+// cancelled first, as SIGINT cancels it: klash ending on SIGINT is an end
+// the hook is there for (Claude Code runs SessionEnd on SIGINT too), and
+// under the cancelled context the hook never ran.
+func TestShutdownAfterSIGINTStillEndsTheSession(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(t.Context())
+	cfg := &config.Config{Hooks: map[string][]config.HookConfig{hooks.EventSessionEnd: {
+		{Command: `echo "$KLASH_SESSION_END_REASON" >> ` + filepath.Join(dir, "reasons")},
+	}}}
+	require.NoError(t, cfg.ValidateHooks())
+	app := NewForTest(ctx)
+	app.config = config.NewTestStoreIn(cfg, dir)
+	app.LSPManager = lsp.NewManager(app.config)
+
+	app.ReportCurrentSession("s1")
+	cancel()
+	app.Shutdown()
+
+	data, err := os.ReadFile(filepath.Join(dir, "reasons"))
+	require.NoError(t, err, "the SessionEnd hook ran")
+	require.Equal(t, "prompt_input_exit\n", string(data))
+}
+
 func TestShutdownAfterRunEndsWithOther(t *testing.T) {
 	t.Parallel()
 

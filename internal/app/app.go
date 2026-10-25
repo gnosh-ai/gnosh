@@ -359,17 +359,18 @@ func (app *App) endSession(id string, reason sessionEndReason) {
 	done := make(chan struct{})
 	app.sessionEndMu.Lock()
 	app.sessionEndHooks = append(app.sessionEndHooks, done)
-	// The hook runs under the process's context, not a fresh
-	// Background: a cancelled run can stop it, instead of only its own
-	// (default 1.5s, capped 60s) timeout being able to. It is not a
-	// child of the Shutdown's 5-second budget, because the budget
-	// belongs to the process exit, not to the hook: a hook at its own
-	// cap may run a little past the budget, which is what keeps the
+	// The hook runs under the process's context without its
+	// cancellation, its own timeout (default 1.5s, capped 60s) its
+	// bound: SIGINT cancels that context, and klash ending on SIGINT is
+	// an end the hook is there for, as Claude Code runs SessionEnd on
+	// SIGINT and SIGTERM alike. Under the cancelled context it never ran.
+	// It is not a child of the Shutdown's 5-second budget, because the
+	// budget belongs to the process exit, not to the hook: a hook at its
+	// own cap may run a little past the budget, which is what keeps the
 	// hook's timeout the effective bound for it.
-	ctx, cancel := context.WithCancel(app.globalCtx)
+	ctx := context.WithoutCancel(app.globalCtx)
 	app.sessionEndMu.Unlock()
 	go func() {
-		defer cancel()
 		app.runSessionEndHooks(ctx, cfgs, id, reason)
 		// Close the channel only after the hook has finished.
 		close(done)
