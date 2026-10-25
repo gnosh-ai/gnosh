@@ -26,7 +26,9 @@ type JobKillResponseMetadata struct {
 	Description string `json:"description"`
 }
 
-func NewJobKillTool() fantasy.AgentTool {
+// NewJobKillTool stops background jobs; one it cannot find, it answers
+// with those started in workingDir.
+func NewJobKillTool(workingDir string) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		JobKillToolName,
 		jobKillDescription,
@@ -39,7 +41,7 @@ func NewJobKillTool() fantasy.AgentTool {
 
 			bgShell, ok := bgManager.Get(params.ShellID)
 			if !ok {
-				return jobNotFound(params.ShellID), nil
+				return jobNotFound(params.ShellID, workingDir), nil
 			}
 
 			metadata := JobKillResponseMetadata{
@@ -48,12 +50,18 @@ func NewJobKillTool() fantasy.AgentTool {
 				Description: bgShell.Description,
 			}
 
+			// A job that had ended is only removed; saying it was
+			// terminated would tell the model it stopped something.
+			_, _, done, exitErr := bgShell.GetOutput()
 			err := bgManager.Kill(params.ShellID)
 			if err != nil {
 				return fantasy.NewTextErrorResponse(err.Error()), nil
 			}
 
 			result := fmt.Sprintf("Background shell %s terminated successfully", params.ShellID)
+			if done {
+				result = fmt.Sprintf("Background shell %s had already exited with code %d; it is removed.", params.ShellID, shell.ExitCode(exitErr))
+			}
 			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(result), metadata), nil
 		},
 	)

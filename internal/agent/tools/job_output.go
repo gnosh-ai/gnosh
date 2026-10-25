@@ -39,16 +39,36 @@ var maxJobOutputWait = 5 * time.Minute
 
 // jobNotFound answers job_output or job_kill for an ID that names no
 // background job. A model that assumes a command it ran in the foreground
-// became a job, or guesses an ID, is told how jobs come about rather than
-// left to guess again from a bare "not found".
-func jobNotFound(id string) fantasy.ToolResponse {
-	return fantasy.NewTextErrorResponse(fmt.Sprintf("background shell not found: %s. "+
+// became a job, or guesses an ID, is told how jobs come about and which
+// jobs started in dir there are, as Claude Code's TaskStop names the
+// running tasks, rather than left to guess again from a bare "not found".
+func jobNotFound(id, dir string) fantasy.ToolResponse {
+	var jobs []string
+	for _, job := range shell.GetBackgroundShellManager().Jobs(dir) {
+		state := "running"
+		if job.Done {
+			state = fmt.Sprintf("exited %d", job.ExitCode)
+		}
+		line, _, cut := strings.Cut(job.Command, "\n")
+		command := []rune(line)
+		if cut || len(command) > 60 {
+			command = append([]rune(strings.TrimSpace(string(command[:min(len(command), 60)]))), '…')
+		}
+		jobs = append(jobs, fmt.Sprintf("%s (%s: %s)", job.ID, state, string(command)))
+	}
+	there := "There are no background jobs now."
+	if len(jobs) > 0 {
+		there = "The background jobs are " + strings.Join(jobs, ", ") + "."
+	}
+	return fantasy.NewTextErrorResponse(fmt.Sprintf("background shell not found: %s. %s "+
 		"Only a bash command still running when bash returns becomes a background job, "+
 		"with its ID (such as 001) in that bash result; a command that finished in time "+
-		"already returned its output there.", id))
+		"already returned its output there.", id, there))
 }
 
-func NewJobOutputTool(spillDir string) fantasy.AgentTool {
+// NewJobOutputTool reads background jobs; one it cannot find, it answers
+// with those started in workingDir.
+func NewJobOutputTool(workingDir, spillDir string) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
 		JobOutputToolName,
 		jobOutputDescription,
@@ -60,7 +80,7 @@ func NewJobOutputTool(spillDir string) fantasy.AgentTool {
 			bgManager := shell.GetBackgroundShellManager()
 			bgShell, ok := bgManager.Get(params.ShellID)
 			if !ok {
-				return jobNotFound(params.ShellID), nil
+				return jobNotFound(params.ShellID, workingDir), nil
 			}
 
 			if params.Wait {

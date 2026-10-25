@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ func TestJobOutputTool_WaitIsBounded(t *testing.T) {
 	input, err := json.Marshal(JobOutputParams{ShellID: bgShell.ID, Wait: true})
 	require.NoError(t, err)
 	call := fantasy.ToolCall{ID: "test-call", Name: JobOutputToolName, Input: string(input)}
-	tool := NewJobOutputTool(t.TempDir())
+	tool := NewJobOutputTool(t.TempDir(), t.TempDir())
 
 	type result struct {
 		resp fantasy.ToolResponse
@@ -53,24 +54,81 @@ func TestJobOutputTool_WaitIsBounded(t *testing.T) {
 }
 
 // An agent on the AI box asked job_output for "shell_1" after its bash command
-// had finished in the foreground. The answer must say how jobs come about, so
-// it does not go on guessing IDs.
+// had finished in the foreground, and another killed "g1". The answer must say
+// how jobs come about and which jobs there are, those started in the tools'
+// directory, so the model does not go on guessing IDs.
 func TestJobToolsExplainAnUnknownID(t *testing.T) {
 	t.Parallel()
 
-	for name, tool := range map[string]fantasy.AgentTool{
-		JobOutputToolName: NewJobOutputTool(t.TempDir()),
-		JobKillToolName:   NewJobKillTool(),
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			resp, err := tool.Run(context.Background(), fantasy.ToolCall{
-				ID: "test-call", Name: name, Input: `{"shell_id":"shell_1"}`,
-			})
-			require.NoError(t, err)
-			require.True(t, resp.IsError)
-			require.Contains(t, resp.Content, "background shell not found: shell_1")
-			require.Contains(t, resp.Content, "already returned its output")
+	dir, elsewhere := t.TempDir(), t.TempDir()
+	run := func(t *testing.T, tool fantasy.AgentTool, name, id string) fantasy.ToolResponse {
+		t.Helper()
+		resp, err := tool.Run(context.Background(), fantasy.ToolCall{
+			ID: "test-call", Name: name, Input: `{"shell_id":"` + id + `"}`,
 		})
+		require.NoError(t, err)
+		return resp
 	}
+	tools := map[string]fantasy.AgentTool{
+		JobOutputToolName: NewJobOutputTool(dir, t.TempDir()),
+		JobKillToolName:   NewJobKillTool(dir),
+	}
+	for name, tool := range tools {
+		resp := run(t, tool, name, "shell_1")
+		require.True(t, resp.IsError, name)
+		require.Contains(t, resp.Content, "background shell not found: shell_1. There are no background jobs now. ", name)
+		require.Contains(t, resp.Content, "already returned its output", name)
+	}
+
+	bgManager := shell.GetBackgroundShellManager()
+	start := func(dir, command string) *shell.BackgroundShell {
+		job, err := bgManager.Start(context.Background(), dir, nil, command, "", testMaxJobs)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = bgManager.Kill(job.ID) })
+		return job
+	}
+	ended := start(dir, "exit 3")
+	ended.Wait()
+	long := start(dir, "sleep 60 # "+strings.Repeat("é", 60))
+	lines := start(dir, "sleep 60\necho after")
+	other := start(elsewhere, "sleep 60")
+	for name, tool := range tools {
+		resp := run(t, tool, name, "g1")
+		require.True(t, resp.IsError, name)
+		require.Contains(t, resp.Content, "background shell not found: g1. The background jobs are ", name)
+		require.Contains(t, resp.Content, ended.ID+" (exited 3: exit 3)", name)
+		require.Contains(t, resp.Content, long.ID+" (running: sleep 60 # "+strings.Repeat("é", 49)+"…)", name)
+		require.Contains(t, resp.Content, lines.ID+" (running: sleep 60…)", name)
+		require.NotContains(t, resp.Content, other.ID+" (", name)
+	}
+}
+
+// job_kill says a job that had already ended was only removed, with its
+// exit code, rather than that it terminated it.
+func TestJobKillSaysAJobHadEnded(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	tool := NewJobKillTool(dir)
+	bgManager := shell.GetBackgroundShellManager()
+	kill := func(id string) string {
+		resp, err := tool.Run(context.Background(), fantasy.ToolCall{
+			ID: "test-call", Name: JobKillToolName, Input: `{"shell_id":"` + id + `"}`,
+		})
+		require.NoError(t, err)
+		require.False(t, resp.IsError)
+		_, ok := bgManager.Get(id)
+		require.False(t, ok, "removed")
+		return resp.Content
+	}
+
+	ended, err := bgManager.Start(context.Background(), dir, nil, "exit 3", "", testMaxJobs)
+	require.NoError(t, err)
+	ended.Wait()
+	require.Equal(t, "Background shell "+ended.ID+" had already exited with code 3; it is removed.", kill(ended.ID))
+
+	running, err := bgManager.Start(context.Background(), dir, nil, "sleep 60", "", testMaxJobs)
+	require.NoError(t, err)
+	require.Equal(t, "Background shell "+running.ID+" terminated successfully", kill(running.ID))
+	require.True(t, running.IsDone())
 }
