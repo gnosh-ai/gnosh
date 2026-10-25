@@ -267,3 +267,20 @@ func TestGlobWithDoubleStar(t *testing.T) {
 		require.Equal(t, []string{oldestFile, middleDir, newestFile}, matches)
 	})
 }
+
+// A walk asked to search a directory that is itself of an ignored name,
+// such as ~/.local, searches it; below it, such directories are still
+// left out.
+func TestGlobSearchesARootOfAnIgnoredName(t *testing.T) {
+	t.Parallel()
+
+	root := filepath.Join(t.TempDir(), ".local")
+	for _, rel := range []string{"tools/klash.sh", ".git/hook.sh"} {
+		full := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o755))
+		require.NoError(t, os.WriteFile(full, []byte("x"), 0o644))
+	}
+	got, _, err := GlobGitignoreAware("**/*.sh", root, 10)
+	require.NoError(t, err)
+	require.Equal(t, []string{filepath.Join(root, "tools", "klash.sh")}, got)
+}

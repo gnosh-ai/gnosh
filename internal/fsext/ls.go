@@ -236,6 +236,12 @@ func (dl *directoryLister) getCombinedMatcher(dir string) gitignore.Matcher {
 // shouldIgnore checks if a path should be ignored based on gitignore rules.
 // This uses a combined matcher that includes all ancestor patterns for O(1) matching.
 func (dl *directoryLister) shouldIgnore(path string, ignorePatterns []string, isDir bool) bool {
+	// The root itself is never ignored: a search asked to look in
+	// ~/.local or in a .git directory looks there.
+	if path == dl.rootPath {
+		return false
+	}
+
 	base := filepath.Base(path)
 
 	// Fast path: O(1) lookup for commonly ignored directories.
@@ -250,11 +256,6 @@ func (dl *directoryLister) shouldIgnore(path string, ignorePatterns []string, is
 				return true
 			}
 		}
-	}
-
-	// Don't apply gitignore rules to the root directory itself.
-	if path == dl.rootPath {
-		return false
 	}
 
 	relPath, err := filepath.Rel(dl.rootPath, path)

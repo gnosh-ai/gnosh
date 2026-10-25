@@ -5,9 +5,12 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -60,6 +63,11 @@ func NewGlobTool(workingDir string, cfg config.ToolGlob) fantasy.AgentTool {
 
 			// Relative to the tool's working directory, as for grep.
 			searchPath := filepathext.SmartJoin(workingDir, params.Path)
+			if params.Path != "" {
+				if msg := searchDirError(params.Path, searchPath, workingDir); msg != "" {
+					return fantasy.NewTextErrorResponse(msg), nil
+				}
+			}
 
 			// Bound the search so a huge or symlink-heavy root (e.g. $HOME
 			// or a module cache) fails cleanly instead of pinning the CPU
@@ -100,12 +108,26 @@ func globFiles(ctx context.Context, pattern, searchPath string, limit int) ([]st
 	// start there instead of enumerating the entire tree and filtering.
 	// Patterns that begin with a wildcard (e.g. "**/foo.go") have no prefix
 	// and still walk from searchPath.
+	// An absolute pattern names its own directory, whatever the search
+	// path: "/usr/local/bin/k*" walks /usr/local/bin, not a directory of
+	// that name under the search path.
 	prefix, rest := filepathext.SplitGlobPrefix(pattern)
 	walkRoot := searchPath
 	walkPattern := pattern
-	if prefix != "" {
+	switch {
+	case filepath.IsAbs(pattern):
+		walkRoot, walkPattern = prefix, rest
+		if walkRoot == filepath.VolumeName(walkRoot) {
+			walkRoot += string(filepath.Separator)
+		}
+	case prefix != "":
 		walkRoot = filepath.Join(searchPath, prefix)
 		walkPattern = rest
+	}
+	// A pattern whose directory is not there matches nothing, as in
+	// Claude Code, rather than failing the search.
+	if _, err := os.Stat(walkRoot); errors.Is(err, fs.ErrNotExist) {
+		return nil, false, nil
 	}
 
 	cmdRg := getRgCmd(ctx, walkPattern)
@@ -150,11 +172,11 @@ func runRipgrep(cmd *exec.Cmd, searchRoot string, limit int) ([]string, error) {
 		path, err := reader.ReadString(0)
 		if len(path) > 0 {
 			path = strings.TrimRight(path, "\x00")
-			if path != "" {
-				absPath := filepathext.SmartJoin(searchRoot, path)
-				if !fsext.SkipHidden(absPath) {
-					matches = append(matches, absPath)
-				}
+			// Hidden and ignored directories are those below the
+			// search root: a root inside one, such as /usr/local/bin
+			// or a project under ~/build, still has its files found.
+			if path != "" && !fsext.SkipHidden(path) {
+				matches = append(matches, filepathext.SmartJoin(searchRoot, path))
 			}
 		}
 		if err != nil {
@@ -186,6 +208,45 @@ func runRipgrep(cmd *exec.Cmd, searchRoot string, limit int) ([]string, error) {
 		matches = matches[:limit]
 	}
 	return matches, nil
+}
+
+// searchDirError says why path, the directory a search was asked to look
+// in (abs is it resolved), cannot be searched, in Claude Code's words: it
+// does not exist, with a guess at the one meant, or it is not a
+// directory. It is "" when the directory is there, or when what is wrong
+// is for the search itself to report.
+func searchDirError(path, abs, workingDir string) string {
+	info, err := os.Stat(abs)
+	switch {
+	case err == nil && !info.IsDir():
+		return "Path is not a directory: " + path
+	case err == nil, !errors.Is(err, fs.ErrNotExist):
+		return ""
+	}
+	msg := fmt.Sprintf("Directory does not exist: %s. Note: your current working directory is %s.", path, workingDir)
+	if meant := dirMeant(abs, workingDir); meant != "" {
+		msg += fmt.Sprintf(" Did you mean %s?", meant)
+	}
+	return msg
+}
+
+// dirMeant guesses, as Claude Code does, the directory meant by abs, one
+// that does not exist beside the working directory: the same path inside
+// the working directory, as when a model leaves the project's own name
+// out of a path. "" when that is not there either.
+func dirMeant(abs, workingDir string) string {
+	rel, err := filepath.Rel(filepath.Dir(workingDir), abs)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	if within, err := filepath.Rel(workingDir, abs); err == nil && within != ".." && !strings.HasPrefix(within, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	meant := filepath.Join(workingDir, rel)
+	if info, err := os.Stat(meant); err != nil || !info.IsDir() {
+		return ""
+	}
+	return meant
 }
 
 func normalizeFilePaths(paths []string) {
