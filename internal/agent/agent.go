@@ -43,6 +43,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/env"
+	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/pubsub"
@@ -284,7 +285,10 @@ type sessionAgent struct {
 	// cfg backs channel reply routing (config lookup + MCP tool
 	// invocation). Nil in tests and sub-agents that never see channel
 	// turns; sendChannelReply treats nil as "routing disabled".
-	cfg                  *config.ConfigStore
+	cfg *config.ConfigStore
+	// fileTracker knows the files a session read; after a summary the
+	// latest of them are given again (restoredFilesText). Nil gives none.
+	fileTracker          filetracker.Service
 	disableAutoSummarize bool
 	// goals are the sessions' goals, shared with the coordinator that sets
 	// them; nil, there are none (see goalContinuation).
@@ -372,6 +376,7 @@ type SessionAgentOptions struct {
 	Sessions              session.Service
 	Messages              message.Service
 	Cfg                   *config.ConfigStore
+	FileTracker           filetracker.Service
 	Tools                 []fantasy.AgentTool
 	Notify                pubsub.Publisher[notify.Notification]
 	RunComplete           pubsub.Publisher[notify.RunComplete]
@@ -420,6 +425,7 @@ func NewSessionAgent(
 		sessions:              opts.Sessions,
 		messages:              opts.Messages,
 		cfg:                   opts.Cfg,
+		fileTracker:           opts.FileTracker,
 		disableAutoSummarize:  opts.DisableAutoSummarize,
 		disableIdleCompaction: opts.DisableIdleCompaction,
 		idleCompactAfter:      idleCompactionAfter,
@@ -1859,6 +1865,18 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 		}
 	}
 
+	// The files read most recently are given again, read from disk now,
+	// as Claude Code gives them after a summary, so the agent goes on
+	// without reading them again.
+	if restored := a.restoredFilesText(genCtx, sessionID); restored != "" {
+		if _, err := a.messages.Create(genCtx, sessionID, message.CreateMessageParams{
+			Role:  message.User,
+			Parts: []message.ContentPart{message.TextContent{Text: restored, Hidden: true}},
+		}); err != nil {
+			slog.Warn("Could not give the agent the files it read before the summary", "session_id", sessionID, "error", err)
+		}
+	}
+
 	// The next prompt to this session runs its SessionStart hooks again,
 	// with source "compact", as in Claude Code.
 	a.sessionStarts.markSummarized(sessionID)
@@ -2277,6 +2295,43 @@ func (a *sessionAgent) transcriptPath(sessionID, summaryID string) string {
 		return ""
 	}
 	return filepath.Join(a.cfg.Config().Options.DataDirectory, "transcripts", sessionID+"-"+summaryID+".txt")
+}
+
+// After a summary the files the session read most recently are given
+// again, as Claude Code gives them: up to restoredFiles of them, each cut
+// at restoredFileLines lines or restoredFileBytes bytes.
+const (
+	restoredFiles     = 5
+	restoredFileLines = 2000
+	restoredFileBytes = 16 << 10
+)
+
+// restoredFilesText is the text files the session read most recently,
+// read from disk now and cut short when long, each as a view of it
+// ("Called the view tool with the following input: ..."), the way Claude
+// Code gives them after a summary. "" when there are none.
+func (a *sessionAgent) restoredFilesText(ctx context.Context, sessionID string) string {
+	if a.fileTracker == nil {
+		return ""
+	}
+	paths, err := a.fileTracker.ListReadFiles(ctx, sessionID)
+	if err != nil {
+		slog.Debug("Could not list the files the session read", "session_id", sessionID, "error", err)
+		return ""
+	}
+	var parts []string
+	for _, path := range paths {
+		if len(parts) == restoredFiles {
+			break
+		}
+		text, err := tools.FileAsViewed(path, restoredFileLines, restoredFileBytes)
+		if err != nil {
+			continue
+		}
+		input, _ := json.Marshal(map[string]string{"file_path": path})
+		parts = append(parts, fmt.Sprintf("Called the view tool with the following input: %s\n\nResult of calling the view tool:\n%s", input, strings.TrimRight(text, "\n")))
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // writeTranscript writes msgs, the conversation a summary replaces, in

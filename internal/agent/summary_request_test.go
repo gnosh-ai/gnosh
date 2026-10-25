@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -347,4 +348,52 @@ func TestSummaryLeavesATranscript(t *testing.T) {
 	require.NoError(t, os.Remove(path))
 	without := continuedFrom(message.Message{Parts: []message.ContentPart{message.TextContent{Text: "the summary"}}}, path)
 	require.Equal(t, continuedSummary+"\n\nthe summary", without.Content().Text)
+}
+
+// After a summary, the files the session read most recently are given
+// again, read from disk then, as Claude Code gives them: the five latest
+// text files there are, each as a view of it.
+func TestSummaryGivesTheRecentFilesAgain(t *testing.T) {
+	t.Parallel()
+	llm := &requestRecordingModel{
+		replies: []string{"done", "the summary", "done again"},
+		usage:   fantasy.Usage{InputTokens: 190000, OutputTokens: 10},
+	}
+	a, sessionID, _ := summaryRequestAgent(t, llm)
+	dir := t.TempDir()
+	var reads []string
+	for i := 1; i <= 6; i++ {
+		path := filepath.Join(dir, fmt.Sprintf("f%d.txt", i))
+		require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf("file %d", i)), 0o600))
+		reads = append([]string{path}, reads...)
+	}
+	// Most recent first: a file since deleted, a directory, then f6 to f1.
+	a.fileTracker = &readRecorder{reads: append([]string{filepath.Join(dir, "gone.txt"), dir}, reads...)}
+
+	_, err := a.Run(t.Context(), SessionAgentCall{SessionID: sessionID, Prompt: "go on"})
+	require.NoError(t, err)
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sessionID, Prompt: "and then"})
+	require.NoError(t, err)
+
+	reqs := llm.requests()
+	require.GreaterOrEqual(t, len(reqs), 3)
+	texts := userTexts(reqs[2].Prompt)
+	var want []string
+	for i := 6; i >= 2; i-- {
+		path := filepath.Join(dir, fmt.Sprintf("f%d.txt", i))
+		want = append(want, fmt.Sprintf("Called the view tool with the following input: {\"file_path\":%q}\n\nResult of calling the view tool:\n<file>\n     1|file %d\n</file>", path, i))
+	}
+	require.Contains(t, texts, strings.Join(want, "\n\n"), "the five latest files, after the summary")
+	require.Less(t, slices.Index(texts, strings.Join(want, "\n\n")), slices.Index(texts, "and then"))
+	require.True(t, strings.HasPrefix(texts[slices.Index(texts, strings.Join(want, "\n\n"))-1], continuedSummary), "right after the summary")
+
+	msgs, err := a.messages.List(t.Context(), sessionID)
+	require.NoError(t, err)
+	var given []bool
+	for _, msg := range msgs {
+		if text := msg.Content(); strings.HasPrefix(text.Text, "Called the view tool") {
+			given = append(given, text.Hidden)
+		}
+	}
+	require.Equal(t, []bool{true}, given, "given once, out of the chat")
 }

@@ -354,6 +354,25 @@ func NewViewTool(
 	)
 }
 
+// FileAsViewed is the start of the text file at path as the view tool
+// gives it: at most limit lines and maxContentSize bytes, numbered, in a
+// <file> block that says where to read on when there is more. An error
+// says it is not a text file that can be read.
+func FileAsViewed(path string, limit, maxContentSize int) (string, error) {
+	content, hasMore, err := readTextFile(path, 0, limit, maxContentSize)
+	if err != nil {
+		return "", err
+	}
+	if !utf8.ValidString(content) {
+		return "", errors.New("file content is not valid UTF-8")
+	}
+	text := "<file>\n" + addLineNumbers(content, 1)
+	if hasMore {
+		text += fmt.Sprintf("\n\n(File has more lines. To read on, use offset %d)", len(strings.Split(content, "\n"))+1)
+	}
+	return text + "\n</file>\n", nil
+}
+
 func addLineNumbers(content string, startLine int) string {
 	if content == "" {
 		return ""
