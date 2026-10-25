@@ -45,7 +45,6 @@ PURPLE = "#6B50FF"
 PINK = "#FF60FF"
 MAGENTA = "#C337E0"
 DEEP = "#4A30D9"
-DEPTH = "#24135A"
 GOLD = "#FED835"
 AMBER = "#FEA408"
 MINT = "#68FFD6"
@@ -258,15 +257,13 @@ def word_defs(x0, y0, word_w, word_h, stops=NEBULA, gid="word"):
     )
 
 
-def word_layers(on, x0, y0, p, glow=True, depth=True, bevel=True):
-    """Glow, depth, face and a lit top edge for a pixel word."""
+def word_layers(on, x0, y0, p, glow=True, bevel=True):
+    """Glow, face and a lit top edge for a pixel word. No drop shadow: the
+    word floats in space, with nothing behind it to cast one on."""
     face = runs_path(on, x0, y0, p)
     o = []
     if glow:
         o.append(f'<path d="{face}" fill="url(#word)" filter="url(#glow)" opacity=".6"/>')
-    if depth:
-        off = max(2, round(p * 0.21))
-        o.append(f'<path d="{runs_path(on, x0 + off, y0 + off, p)}" fill="{DEPTH}"/>')
     o.append(f'<path d="{face}" fill="url(#word)"/>')
     if bevel:
         o.append(f'<path d="{runs_path(top_edges(on), x0, y0, p, h=min(3, max(1.5, p / 8)))}" fill="#fff" opacity=".38"/>')
