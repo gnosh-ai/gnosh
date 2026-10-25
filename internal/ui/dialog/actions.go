@@ -176,6 +176,9 @@ type (
 	ActionAttachSkill struct {
 		ID   string
 		Name string
+		// Args is what was typed after the skill's name, for the prompt
+		// it goes with.
+		Args string
 	}
 	// ActionRunMCPPrompt is a message to run a custom command.
 	ActionRunMCPPrompt struct {

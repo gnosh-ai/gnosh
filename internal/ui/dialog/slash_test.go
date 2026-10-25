@@ -125,3 +125,64 @@ func TestPaletteSaysUnknownCommand(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, util.NewWarnMsg("Unknown command: /zqx"), action.Cmd())
 }
+
+// What follows a slash command's name is its arguments, as typed.
+func TestSlashCommandArgs(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "fix the  bug", SlashCommandArgs("  /review fix the  bug "))
+	require.Equal(t, "", SlashCommandArgs("/review"))
+	require.Equal(t, "line one\nline two", SlashCommandArgs("/note\tline one\nline two"))
+}
+
+// A command gets the text typed after its name as Claude Code gives it:
+// one argument takes it all as typed; more take a word each and the last
+// the rest, or are asked for when the words are too few; a skill takes it
+// for its prompt; other commands take none.
+func TestWithArgs(t *testing.T) {
+	t.Parallel()
+
+	one := []commands.Argument{{ID: "ARGUMENTS"}}
+	two := []commands.Argument{{ID: "ISSUE"}, {ID: "NOTE"}}
+	run := func(arguments []commands.Argument) ActionRunCustomCommand {
+		return ActionRunCustomCommand{Content: "x", Arguments: arguments}
+	}
+	withArgs := func(arguments []commands.Argument, args map[string]string) ActionRunCustomCommand {
+		a := run(arguments)
+		a.Args = args
+		return a
+	}
+
+	require.Equal(t, withArgs(one, map[string]string{"ARGUMENTS": "fix the  bug"}), WithArgs(run(one), "fix the  bug"))
+	require.Equal(t, withArgs(two, map[string]string{"ISSUE": "123", "NOTE": "high  priority"}), WithArgs(run(two), "123  high  priority"))
+	require.Equal(t, run(two), WithArgs(run(two), "123"), "too few words: asked for")
+	require.Equal(t, run(nil), WithArgs(run(nil), "123"), "no arguments to take them")
+	require.Equal(t, run(one), WithArgs(run(one), ""))
+	require.Equal(t, run(one), WithArgs(run(one), " \t "), "only spaces: none")
+	require.Equal(t, withArgs(one, map[string]string{"ARGUMENTS": "fix it"}), WithArgs(run(one), "  fix it \n"))
+
+	prompt := ActionRunMCPPrompt{PromptID: "summarize", Arguments: []commands.Argument{{ID: "text"}}}
+	require.Equal(t, map[string]string{"text": "the README"}, WithArgs(prompt, "the README").(ActionRunMCPPrompt).Args)
+	require.Equal(t, ActionAttachSkill{ID: "s", Name: "gno", Args: "deploy it"}, WithArgs(ActionAttachSkill{ID: "s", Name: "gno"}, "deploy it"))
+	require.Equal(t, ActionStatusReport{}, WithArgs(ActionStatusReport{}, "now"))
+}
+
+// A custom command, which the palette's system list does not show, runs
+// by its name typed there, with what follows as its arguments.
+func TestPaletteRunsACustomCommandByName(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	review := commands.CustomCommand{ID: "project:review", Name: "project:review", Content: "Review $PR", Arguments: []commands.Argument{{ID: "PR", Title: "PR", Required: true}}}
+	c, err := NewCommands(com, "s1", true, false, false, []commands.CustomCommand{review}, nil)
+	require.NoError(t, err)
+	for _, r := range "review 123" {
+		c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	require.Equal(t, ActionRunCustomCommand{Content: "Review $PR", Arguments: review.Arguments, Args: map[string]string{"PR": "123"}},
+		c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
+}

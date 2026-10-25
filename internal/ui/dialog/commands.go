@@ -241,10 +241,16 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 					return item.Action()
 				}
 			}
-			// What matches nothing is said to be unknown, as Claude Code
-			// says it, with the command most likely meant.
+			// What matches nothing is run by its name, or said to be
+			// unknown as Claude Code says it, with the command most likely
+			// meant.
 			if fields := strings.Fields(c.input.Value()); len(fields) > 0 {
 				name := strings.TrimPrefix(fields[0], "/")
+				// A custom command or skill, which this list may not show,
+				// runs by its name, with what follows as its arguments.
+				if action, ok := c.Lookup(name); ok {
+					return WithArgs(action, SlashCommandArgs(c.input.Value()))
+				}
 				return ActionCmd{Cmd: util.ReportWarn(UnknownCommand(name, c.Suggest(name)))}
 			}
 		case key.Matches(msg, c.keyMap.Tab):

@@ -2816,6 +2816,10 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionAttachSkill:
 		m.dialog.CloseFrontDialog()
 		cmds = append(cmds, m.attachSkill(msg.ID, msg.Name))
+		if msg.Args != "" {
+			// The prompt the skill goes with, ready to send.
+			m.textarea.SetValue(msg.Args)
+		}
 	case dialog.ActionRunMCPPrompt:
 		if len(msg.Arguments) > 0 && msg.Args == nil {
 			m.dialog.CloseFrontDialog()
@@ -6131,7 +6135,7 @@ func (m *UI) slashCommand(content, name string) (cmd tea.Cmd, ok bool) {
 		return nil, false
 	}
 	if action, found := commands.Lookup(name); found {
-		return m.handleDialogAction(action), true
+		return m.handleDialogAction(dialog.WithArgs(action, dialog.SlashCommandArgs(content))), true
 	}
 	if _, err := os.Stat("/" + name); err == nil {
 		return nil, false

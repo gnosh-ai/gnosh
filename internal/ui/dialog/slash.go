@@ -41,6 +41,61 @@ func UnknownCommand(name, suggestion string) string {
 	return "Unknown command: /" + name
 }
 
+// SlashCommandArgs is what follows the name in a slash command line, as
+// typed but for the spaces around it.
+func SlashCommandArgs(line string) string {
+	line = strings.TrimSpace(line)
+	if i := strings.IndexFunc(line, unicode.IsSpace); i >= 0 {
+		return strings.TrimSpace(line[i:])
+	}
+	return ""
+}
+
+// WithArgs is action given args, the text typed after its command's name,
+// as Claude Code gives a command its arguments: a custom command or MCP
+// prompt with one argument gets them all as typed; with more, a word each
+// and the last the rest, when there are enough words (otherwise they are
+// asked for, as before); a skill takes them for the prompt it goes with.
+// Other commands take none.
+func WithArgs(action Action, args string) Action {
+	if args = strings.TrimSpace(args); args == "" {
+		return action
+	}
+	switch a := action.(type) {
+	case ActionRunCustomCommand:
+		a.Args = fillArgs(a.Arguments, args)
+		return a
+	case ActionRunMCPPrompt:
+		a.Args = fillArgs(a.Arguments, args)
+		return a
+	case ActionAttachSkill:
+		a.Args = args
+		return a
+	}
+	return action
+}
+
+// fillArgs gives arguments their values from args, which has no space at
+// either end: a word each, the last the rest as typed; nil when there are
+// fewer words than arguments.
+func fillArgs(arguments []commands.Argument, args string) map[string]string {
+	if len(arguments) == 0 {
+		return nil
+	}
+	filled := make(map[string]string, len(arguments))
+	rest := args
+	for _, arg := range arguments[:len(arguments)-1] {
+		i := strings.IndexFunc(rest, unicode.IsSpace)
+		if i < 0 {
+			return nil
+		}
+		filled[arg.ID] = rest[:i]
+		rest = strings.TrimLeftFunc(rest[i:], unicode.IsSpace)
+	}
+	filled[arguments[len(arguments)-1].ID] = rest
+	return filled
+}
+
 // slashCommand is a command the palette has, with the names a slash
 // command finds it by.
 type slashCommand struct {
