@@ -49,6 +49,9 @@ type MultiEditResponseMetadata struct {
 	NewContent   string       `json:"new_content,omitempty"`
 	EditsApplied int          `json:"edits_applied"`
 	EditsFailed  []FailedEdit `json:"edits_failed,omitempty"`
+	// CRLF says the file had Windows line endings, which OldContent holds
+	// as Unix ones; /rewind puts them back.
+	CRLF bool `json:"crlf"`
 }
 
 const MultiEditToolName = "multiedit"
@@ -382,6 +385,7 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 			Removals:     removals,
 			EditsApplied: editsApplied,
 			EditsFailed:  failedEdits,
+			CRLF:         isCrlf,
 		},
 	), nil
 }

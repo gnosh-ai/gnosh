@@ -32,6 +32,10 @@ func (m mockFileTrackerService) CopyReads(ctx context.Context, from, to string) 
 	return nil
 }
 
+func (m mockFileTrackerService) ForgetReadsSince(ctx context.Context, sessionID string, since int64) error {
+	return nil
+}
+
 func TestWriteToolWritesEmptyNewFile(t *testing.T) {
 	t.Parallel()
 
@@ -194,4 +198,31 @@ func TestWriteToolAddsTheSubdirectoryContext(t *testing.T) {
 	require.False(t, resp.IsError, resp.Content)
 	require.Contains(t, resp.Content, "SUB RULES")
 	require.Equal(t, 2, called, "a successful write after a failure adds it again")
+}
+
+// A write records what it wrote over, and whether it made the file, for
+// /rewind to put back.
+func TestWriteToolRecordsWhatItWroteOver(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+	tool := NewWriteTool(nil, &mockPermissionService{}, &mockHistoryService{}, &mockEditFileTracker{lastRead: time.Now().Add(time.Second)}, nil, workingDir)
+	write := func(content string) WriteResponseMetadata {
+		input, err := json.Marshal(WriteParams{FilePath: "notes.txt", Content: content})
+		require.NoError(t, err)
+		resp, err := tool.Run(ctx, fantasy.ToolCall{ID: "call", Name: WriteToolName, Input: string(input)})
+		require.NoError(t, err)
+		require.False(t, resp.IsError, resp.Content)
+		var meta WriteResponseMetadata
+		require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+		return meta
+	}
+
+	made := write("one\n")
+	require.True(t, made.Created)
+	require.Empty(t, made.OldContent)
+	over := write("two\n")
+	require.False(t, over.Created)
+	require.Equal(t, "one\n", over.OldContent)
 }

@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
+	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/history"
@@ -125,6 +126,10 @@ type Workspace interface {
 	// BranchSession copies the session's conversation into a new session,
 	// titled title or after the session, as Claude Code's /branch does.
 	BranchSession(ctx context.Context, sessionID, title string) (session.Session, error)
+	// Rewind restores the session's conversation, its code or both to the
+	// point before its prompt messageID, as Claude Code's /rewind does;
+	// with opts.DryRun it only says what restoring the code would change.
+	Rewind(ctx context.Context, sessionID, messageID string, opts app.RewindOptions) (app.RewindResult, error)
 	// RenameSession gives the session a new title, and nothing else.
 	RenameSession(ctx context.Context, sessionID, title string) error
 	// PermissionsReport is what the agent may do without asking, the

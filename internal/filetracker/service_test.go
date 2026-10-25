@@ -2,6 +2,7 @@ package filetracker
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,9 +14,10 @@ import (
 )
 
 type testEnv struct {
-	ctx context.Context
-	q   *db.Queries
-	svc Service
+	ctx  context.Context
+	conn *sql.DB
+	q    *db.Queries
+	svc  Service
 }
 
 func setupTest(t *testing.T) *testEnv {
@@ -27,9 +29,10 @@ func setupTest(t *testing.T) *testEnv {
 
 	q := db.New(conn)
 	return &testEnv{
-		ctx: t.Context(),
-		q:   q,
-		svc: NewService(q),
+		ctx:  t.Context(),
+		conn: conn,
+		q:    q,
+		svc:  NewService(q),
 	}
 }
 
@@ -225,4 +228,32 @@ func TestService_CopyReads(t *testing.T) {
 	require.NoError(t, os.Chtimes(path, later, later))
 	require.True(t, env.svc.UnchangedSinceRead(env.ctx, "branch", path), "what was read, not only when")
 	require.False(t, env.svc.UnchangedSinceRead(env.ctx, "branch", elsewhere), "never read in the branch")
+}
+
+// /rewind forgets the reads of a session made since the prompt it goes
+// back to, and what they read: those files are read again before they
+// are changed. Earlier reads, and other sessions', stay.
+func TestService_ForgetReadsSince(t *testing.T) {
+	env := setupTest(t)
+	for _, id := range []string{"s", "other"} {
+		env.createSession(t, id)
+	}
+	dir := t.TempDir()
+	earlier, later := filepath.Join(dir, "a.go"), filepath.Join(dir, "b.go")
+	for _, p := range []string{earlier, later} {
+		require.NoError(t, os.WriteFile(p, []byte("package a\n"), 0o644))
+		env.svc.RecordRead(env.ctx, "s", p)
+		env.svc.RecordRead(env.ctx, "other", p)
+	}
+	_, err := env.conn.ExecContext(env.ctx, "UPDATE read_files SET read_at = read_at - 100 WHERE path LIKE '%a.go'")
+	require.NoError(t, err)
+	before := env.svc.LastReadTime(env.ctx, "s", earlier)
+	since := env.svc.LastReadTime(env.ctx, "s", later).Unix()
+
+	require.NoError(t, env.svc.ForgetReadsSince(env.ctx, "s", since))
+	require.Equal(t, before, env.svc.LastReadTime(env.ctx, "s", earlier))
+	require.True(t, env.svc.UnchangedSinceRead(env.ctx, "s", earlier))
+	require.True(t, env.svc.LastReadTime(env.ctx, "s", later).IsZero())
+	require.False(t, env.svc.UnchangedSinceRead(env.ctx, "s", later), "what it read is forgotten too")
+	require.False(t, env.svc.LastReadTime(env.ctx, "other", later).IsZero(), "another session's read")
 }

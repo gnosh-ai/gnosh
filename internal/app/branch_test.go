@@ -170,7 +170,8 @@ func (failingReads) CopyReads(context.Context, string, string) error {
 func TestBranchTitle(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "a (Branch)", branchTitle("a", nil))
-	require.Equal(t, "a (Branch 2)", branchTitle("a", []string{"a (Branch)"}))
-	require.Equal(t, "a (Branch 3)", branchTitle("a", []string{"a (Branch)", "a (Branch 2)", "b (Branch 3)", "a (Branch 4)"}))
+	require.Equal(t, "a (Branch)", branchTitle("a", "Branch", nil))
+	require.Equal(t, "a (Branch 2)", branchTitle("a", "Branch", []string{"a (Branch)"}))
+	require.Equal(t, "a (Branch 3)", branchTitle("a", "Branch", []string{"a (Branch)", "a (Branch 2)", "b (Branch 3)", "a (Branch 4)"}))
+	require.Equal(t, "a (before rewind 2)", branchTitle("a", "before rewind", []string{"a (before rewind)", "a (Branch 2)"}))
 }

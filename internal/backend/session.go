@@ -3,6 +3,8 @@ package backend
 import (
 	"context"
 
+	"github.com/charmbracelet/crush/internal/app"
+
 	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
@@ -31,6 +33,19 @@ func (b *Backend) BranchSession(ctx context.Context, workspaceID, sessionID, tit
 		return session.Session{}, ErrAgentNotInitialized
 	}
 	return ws.App.BranchSession(ctx, sessionID, title)
+}
+
+// Rewind restores a session's conversation, its code or both to the point
+// before one of its prompts, as Claude Code's /rewind does.
+func (b *Backend) Rewind(ctx context.Context, workspaceID, sessionID, messageID string, opts app.RewindOptions) (app.RewindResult, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return app.RewindResult{}, err
+	}
+	if ws.App == nil {
+		return app.RewindResult{}, ErrAgentNotInitialized
+	}
+	return ws.App.Rewind(ctx, sessionID, messageID, opts)
 }
 
 // GetSession retrieves a session by workspace and session ID.

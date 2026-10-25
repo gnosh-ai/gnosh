@@ -40,6 +40,10 @@ func (m *mockEditFileTracker) CopyReads(ctx context.Context, from, to string) er
 	return nil
 }
 
+func (m *mockEditFileTracker) ForgetReadsSince(ctx context.Context, sessionID string, since int64) error {
+	return nil
+}
+
 func TestReplaceContentPreservesCRLFAndMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -70,6 +74,7 @@ func TestReplaceContentPreservesCRLFAndMetadata(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
 	require.Equal(t, "alpha\nbeta\n", meta.OldContent)
 	require.Equal(t, "alpha\r\nBETA\r\n", meta.NewContent)
+	require.True(t, meta.CRLF, "for /rewind to put the line endings back")
 }
 
 func TestDeleteContentRejectsMultipleMatchesWithoutReplaceAll(t *testing.T) {
@@ -331,4 +336,51 @@ func TestEditToolAddsTheSubdirectoryContext(t *testing.T) {
 	require.True(t, resp.IsError, resp.Content)
 	require.NotContains(t, resp.Content, "SUB RULES")
 	require.Equal(t, 1, called, "a failed edit adds nothing")
+}
+
+// An edit that deletes text from a file with Windows line endings, and a
+// multiedit of one, say so beside the old content they record, which has
+// Unix ones, for /rewind to put them back; an edit of a file with Unix
+// line endings says it had none.
+func TestEditsRecordWindowsLineEndings(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	edit := editContext{
+		ctx:         context.WithValue(t.Context(), SessionIDContextKey, "session"),
+		permissions: &mockPermissionService{},
+		files:       &mockHistoryService{},
+		filetracker: &mockEditFileTracker{lastRead: time.Now().Add(time.Second)},
+		workingDir:  dir,
+	}
+	file := func(name, content string) string {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+		return path
+	}
+	meta := func(resp fantasy.ToolResponse) EditResponseMetadata {
+		require.False(t, resp.IsError, resp.Content)
+		var meta EditResponseMetadata
+		require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+		return meta
+	}
+
+	resp, err := deleteContent(edit, file("del.txt", "alpha\r\nbeta\r\n"), "beta", false, fantasy.ToolCall{ID: "call"})
+	require.NoError(t, err)
+	deleted := meta(resp)
+	require.True(t, deleted.CRLF)
+	require.Equal(t, "alpha\nbeta\n", deleted.OldContent)
+
+	resp, err = processMultiEditExistingFile(edit, MultiEditParams{
+		FilePath: file("multi.txt", "one\r\ntwo\r\n"),
+		Edits:    []MultiEditOperation{{OldString: "two", NewString: "TWO"}},
+	}, fantasy.ToolCall{ID: "call"})
+	require.NoError(t, err)
+	multi := meta(resp)
+	require.True(t, multi.CRLF)
+	require.Equal(t, "one\ntwo\n", multi.OldContent)
+
+	resp, err = replaceContent(edit, file("unix.txt", "alpha\nbeta\n"), "beta", "BETA", false, fantasy.ToolCall{ID: "call"})
+	require.NoError(t, err)
+	require.False(t, meta(resp).CRLF)
 }

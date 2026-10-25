@@ -28,6 +28,23 @@ func (q *Queries) CopySessionReadFiles(ctx context.Context, arg CopySessionReadF
 	return err
 }
 
+const deleteSessionReadFilesSince = `-- name: DeleteSessionReadFilesSince :exec
+DELETE FROM read_files
+WHERE session_id = ? AND read_at >= ?
+`
+
+type DeleteSessionReadFilesSinceParams struct {
+	SessionID string `json:"session_id"`
+	ReadAt    int64  `json:"read_at"`
+}
+
+// Forgets the reads of a session made at or after a time, as /rewind
+// forgets those of the conversation it cuts.
+func (q *Queries) DeleteSessionReadFilesSince(ctx context.Context, arg DeleteSessionReadFilesSinceParams) error {
+	_, err := q.exec(ctx, q.deleteSessionReadFilesSinceStmt, deleteSessionReadFilesSince, arg.SessionID, arg.ReadAt)
+	return err
+}
+
 const getFileRead = `-- name: GetFileRead :one
 SELECT session_id, path, read_at FROM read_files
 WHERE session_id = ? AND path = ? LIMIT 1

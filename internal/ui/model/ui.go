@@ -1039,6 +1039,15 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.dialog.OpenDialog(dialog.NewReport(m.com, msg.title, msg.report))
 	case branchedMsg:
 		cmds = append(cmds, m.loadSession(msg.branch.ID), util.ReportInfo(msg.said()))
+	case rewindPromptsMsg:
+		m.dialog.OpenDialog(dialog.NewRewind(m.com, msg.sessionID, msg.prompts))
+	case rewindPreviewMsg:
+		// Only for the list it was asked from, once.
+		if m.dialog.ContainsDialog(dialog.RewindID) && !m.dialog.ContainsDialog(dialog.RewindConfirmID) {
+			m.dialog.OpenDialog(dialog.NewRewindConfirm(m.com, msg.sessionID, msg.prompt, msg.result.Files, msg.result.Additions, msg.result.Removals))
+		}
+	case rewoundMsg:
+		cmds = append(cmds, m.rewound(msg))
 	case tasksMsg:
 		if cmd := m.showTasks(msg); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -2373,6 +2382,15 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionBranchSession:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.branchSession(msg.Name))
+	case dialog.ActionRewind:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.openRewind())
+	case dialog.ActionRewindPick:
+		cmds = append(cmds, m.previewRewind(msg.SessionID, msg.Prompt))
+	case dialog.ActionRewindTo:
+		m.dialog.CloseDialog(dialog.RewindConfirmID)
+		m.dialog.CloseDialog(dialog.RewindID)
+		cmds = append(cmds, m.rewindTo(msg))
 	case dialog.ActionResumeSession:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.resumeSession(msg.Ref))
@@ -5541,6 +5559,9 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	}
 	if name, ok := session.ParseBranchCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.branchSession(name)
+	}
+	if session.ParseRewindCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.openRewind()
 	}
 	if n, ok := session.ParseCopyCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.copyResponse(n)

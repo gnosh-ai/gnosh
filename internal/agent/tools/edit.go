@@ -40,6 +40,9 @@ type EditResponseMetadata struct {
 	Removals   int    `json:"removals"`
 	OldContent string `json:"old_content,omitempty"`
 	NewContent string `json:"new_content,omitempty"`
+	// CRLF says the file had Windows line endings, which OldContent holds
+	// as Unix ones; /rewind puts them back.
+	CRLF bool `json:"crlf"`
 }
 
 const EditToolName = "edit"
@@ -448,6 +451,7 @@ func deleteContent(edit editContext, filePath, oldString string, replaceAll bool
 			NewContent: writeContent,
 			Additions:  additions,
 			Removals:   removals,
+			CRLF:       isCrlf,
 		},
 	), nil
 }
@@ -522,6 +526,7 @@ func replaceContent(edit editContext, filePath, oldString, newString string, rep
 			NewContent: writeContent,
 			Additions:  additions,
 			Removals:   removals,
+			CRLF:       isCrlf,
 		},
 	), nil
 }

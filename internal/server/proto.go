@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/session"
@@ -394,6 +395,29 @@ func (c *controllerV1) handlePostWorkspaceSessionBranch(w http.ResponseWriter, r
 	out := sessionToProto(branch)
 	out.IsBusy = isSessionBusy(ws, branch.ID)
 	out.AttachedClients = attachedClients(ws, branch.ID)
+	jsonEncode(w, out)
+}
+
+// handlePostWorkspaceSessionRewind restores a session's conversation, its
+// code or both to the point before one of its prompts.
+func (c *controllerV1) handlePostWorkspaceSessionRewind(w http.ResponseWriter, r *http.Request) {
+	var req proto.RewindRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.server.logError(r, "Failed to decode request", "error", err)
+		jsonError(w, http.StatusBadRequest, "failed to decode request")
+		return
+	}
+	opts := app.RewindOptions{Conversation: req.Conversation, Code: req.Code, DryRun: req.DryRun}
+	result, err := c.backend.Rewind(r.Context(), r.PathValue("id"), r.PathValue("sid"), req.MessageID, opts)
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	out := proto.RewindResult{Files: result.Files, Additions: result.Additions, Removals: result.Removals, Skipped: result.Skipped}
+	if result.Kept.ID != "" {
+		kept := sessionToProto(result.Kept)
+		out.Kept = &kept
+	}
 	jsonEncode(w, out)
 }
 

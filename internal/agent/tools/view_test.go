@@ -312,6 +312,10 @@ func (m mockFileTracker) CopyReads(ctx context.Context, from, to string) error {
 	return nil
 }
 
+func (m mockFileTracker) ForgetReadsSince(ctx context.Context, sessionID string, since int64) error {
+	return nil
+}
+
 func newViewToolForTest(workingDir string) fantasy.AgentTool {
 	permissions := &mockViewPermissionService{Broker: pubsub.NewBroker[permission.PermissionRequest]()}
 	return NewViewTool(nil, permissions, mockFileTracker{}, nil, nil, workingDir)

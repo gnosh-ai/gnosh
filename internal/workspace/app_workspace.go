@@ -67,6 +67,10 @@ func (w *AppWorkspace) BranchSession(ctx context.Context, sessionID, title strin
 	return w.app.BranchSession(ctx, sessionID, title)
 }
 
+func (w *AppWorkspace) Rewind(ctx context.Context, sessionID, messageID string, opts app.RewindOptions) (app.RewindResult, error) {
+	return w.app.Rewind(ctx, sessionID, messageID, opts)
+}
+
 func (w *AppWorkspace) RenameSession(ctx context.Context, sessionID, title string) error {
 	return w.app.Sessions.Rename(ctx, sessionID, title)
 }

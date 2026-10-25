@@ -26,6 +26,18 @@ type RenameParams struct {
 
 const RenameToolName = "lsp_rename"
 
+// RenameResponseMetadata is what a rename changed: each file, with what it
+// held before, which /rewind puts back.
+type RenameResponseMetadata struct {
+	Files []RenamedFile `json:"files"`
+}
+
+// RenamedFile is a file a rename changed, and what it held before.
+type RenamedFile struct {
+	Path       string `json:"path"`
+	OldContent string `json:"old_content"`
+}
+
 //go:embed lsp_rename.md
 var renameDescription string
 
@@ -80,13 +92,15 @@ func NewRenameTool(
 				return NewPermissionDeniedResponse(), nil
 			}
 
-			if files != nil {
-				for _, path := range affectedFiles {
-					content, err := os.ReadFile(path)
-					if err != nil {
-						slog.Warn("Failed to read file for version tracking", "path", path, "error", err)
-						continue
-					}
+			var renamed []RenamedFile
+			for _, path := range affectedFiles {
+				content, err := os.ReadFile(path)
+				if err != nil {
+					slog.Warn("Failed to read file for version tracking", "path", path, "error", err)
+					continue
+				}
+				renamed = append(renamed, RenamedFile{Path: path, OldContent: string(content)})
+				if files != nil {
 					if _, err := files.CreateVersion(ctx, sessionID, path, string(content)); err != nil {
 						slog.Warn("Failed to create file version", "path", path, "error", err)
 					}
@@ -117,7 +131,7 @@ func NewRenameTool(
 				text += "\n" + getDiagnostics(affectedFiles[0], lspManager)
 			}
 
-			return fantasy.NewTextResponse(text), nil
+			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(text), RenameResponseMetadata{Files: renamed}), nil
 		},
 	)
 }

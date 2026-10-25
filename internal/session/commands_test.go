@@ -214,3 +214,16 @@ func TestParseBranchCommand(t *testing.T) {
 		require.False(t, ok, line)
 	}
 }
+
+// /rewind is read with its aliases /checkpoint and /undo, with or without
+// the slash; what follows is not used.
+func TestParseRewindCommand(t *testing.T) {
+	t.Parallel()
+
+	for _, line := range []string{"/rewind", "rewind", " /Checkpoint ", "/undo please"} {
+		require.True(t, ParseRewindCommand(line), line)
+	}
+	for _, line := range []string{"/rewinds", "/redo", "git checkout -", ""} {
+		require.False(t, ParseRewindCommand(line), line)
+	}
+}

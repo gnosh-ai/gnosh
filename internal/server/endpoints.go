@@ -163,6 +163,17 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Handle(c.handlePostWorkspaceSessionBranch),
 
+		apigen.Post("/v1/workspaces/{id}/sessions/{sid}/rewind").
+			Summary("Rewind session").
+			Description("Restores the session's conversation, its code or both to the point before one of its prompts, as Claude Code's /rewind does, keeping the whole conversation in a session of its own; with dry_run, says what restoring the code would change.").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Accepts(proto.RewindRequest{}).
+			Responds(proto.RewindResult{}).
+			Fails(400, 404, 500).
+			Handle(c.handlePostWorkspaceSessionRewind),
+
 		apigen.Delete("/v1/workspaces/{id}/sessions/{sid}").
 			Summary("Delete session").
 			Tags("sessions").

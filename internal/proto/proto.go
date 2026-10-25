@@ -198,6 +198,26 @@ type BranchRequest struct {
 	Title string `json:"title,omitempty"`
 }
 
+// RewindRequest asks for a session's conversation, its code or both to be
+// restored to the point before its prompt MessageID; with DryRun, only
+// what restoring the code would change.
+type RewindRequest struct {
+	MessageID    string `json:"message_id"`
+	Conversation bool   `json:"conversation,omitempty"`
+	Code         bool   `json:"code,omitempty"`
+	DryRun       bool   `json:"dry_run,omitempty"`
+}
+
+// RewindResult is what a rewind restored of the code, or would restore,
+// and the session the whole conversation is kept in.
+type RewindResult struct {
+	Files     []string `json:"files,omitempty"`
+	Additions int      `json:"additions"`
+	Removals  int      `json:"removals"`
+	Skipped   []string `json:"skipped,omitempty"`
+	Kept      *Session `json:"kept,omitempty"`
+}
+
 // DoctorReport is the check of the workspace's setup that klash doctor
 // prints, as the Markdown /doctor shows.
 type DoctorReport struct {

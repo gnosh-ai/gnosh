@@ -63,6 +63,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.deleteSessionMessagesStmt, err = db.PrepareContext(ctx, deleteSessionMessages); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteSessionMessages: %w", err)
 	}
+	if q.deleteSessionReadFilesSinceStmt, err = db.PrepareContext(ctx, deleteSessionReadFilesSince); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteSessionReadFilesSince: %w", err)
+	}
 	if q.getAverageResponseTimeStmt, err = db.PrepareContext(ctx, getAverageResponseTime); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAverageResponseTime: %w", err)
 	}
@@ -239,6 +242,11 @@ func (q *Queries) Close() error {
 	if q.deleteSessionMessagesStmt != nil {
 		if cerr := q.deleteSessionMessagesStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing deleteSessionMessagesStmt: %w", cerr)
+		}
+	}
+	if q.deleteSessionReadFilesSinceStmt != nil {
+		if cerr := q.deleteSessionReadFilesSinceStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteSessionReadFilesSinceStmt: %w", cerr)
 		}
 	}
 	if q.getAverageResponseTimeStmt != nil {
@@ -473,6 +481,7 @@ type Queries struct {
 	deleteSessionStmt                    *sql.Stmt
 	deleteSessionFilesStmt               *sql.Stmt
 	deleteSessionMessagesStmt            *sql.Stmt
+	deleteSessionReadFilesSinceStmt      *sql.Stmt
 	getAverageResponseTimeStmt           *sql.Stmt
 	getFileStmt                          *sql.Stmt
 	getFileByPathAndSessionStmt          *sql.Stmt
@@ -528,6 +537,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		deleteSessionStmt:                    q.deleteSessionStmt,
 		deleteSessionFilesStmt:               q.deleteSessionFilesStmt,
 		deleteSessionMessagesStmt:            q.deleteSessionMessagesStmt,
+		deleteSessionReadFilesSinceStmt:      q.deleteSessionReadFilesSinceStmt,
 		getAverageResponseTimeStmt:           q.getAverageResponseTimeStmt,
 		getFileStmt:                          q.getFileStmt,
 		getFileByPathAndSessionStmt:          q.getFileByPathAndSessionStmt,

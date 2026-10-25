@@ -150,6 +150,23 @@ func (w *ClientWorkspace) BranchSession(ctx context.Context, sessionID, title st
 	return protoToSession(*sess), nil
 }
 
+func (w *ClientWorkspace) Rewind(ctx context.Context, sessionID, messageID string, opts app.RewindOptions) (app.RewindResult, error) {
+	result, err := w.client.Rewind(ctx, w.workspaceID(), sessionID, proto.RewindRequest{
+		MessageID:    messageID,
+		Conversation: opts.Conversation,
+		Code:         opts.Code,
+		DryRun:       opts.DryRun,
+	})
+	if err != nil {
+		return app.RewindResult{}, err
+	}
+	out := app.RewindResult{Files: result.Files, Additions: result.Additions, Removals: result.Removals, Skipped: result.Skipped}
+	if result.Kept != nil {
+		out.Kept = protoToSession(*result.Kept)
+	}
+	return out, nil
+}
+
 func (w *ClientWorkspace) GetSession(ctx context.Context, sessionID string) (session.Session, error) {
 	sess, err := w.client.GetSession(ctx, w.workspaceID(), sessionID)
 	if err != nil {

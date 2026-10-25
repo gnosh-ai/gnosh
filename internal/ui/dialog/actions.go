@@ -149,6 +149,23 @@ type (
 		SessionID    string
 		Instructions string
 	}
+	// ActionRewind lists the session's prompts to go back to, as Claude
+	// Code's /rewind does.
+	ActionRewind struct {
+		SessionID string
+	}
+	// ActionRewindPick asks what to restore to the point before Prompt.
+	ActionRewindPick struct {
+		SessionID string
+		Prompt    RewindPrompt
+	}
+	// ActionRewindTo restores the conversation, the code or both to the
+	// point before Prompt.
+	ActionRewindTo struct {
+		SessionID          string
+		Prompt             RewindPrompt
+		Conversation, Code bool
+	}
 	// ActionBranchSession copies the session's conversation into a new
 	// session and goes on there, as Claude Code's /branch does; Name is
 	// the branch's name, "" for one after the session.

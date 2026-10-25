@@ -39,6 +39,10 @@ type WriteResponseMetadata struct {
 	Diff      string `json:"diff"`
 	Additions int    `json:"additions"`
 	Removals  int    `json:"removals"`
+	// OldContent is what the file held before the write, and Created
+	// whether the write made it: what /rewind puts back.
+	OldContent string `json:"old_content,omitempty"`
+	Created    bool   `json:"created"`
 }
 
 const WriteToolName = "write"
@@ -193,9 +197,11 @@ func NewWriteTool(
 			return fantasy.WithResponseMetadata(
 				fantasy.NewTextResponse(result),
 				WriteResponseMetadata{
-					Diff:      diff,
-					Additions: additions,
-					Removals:  removals,
+					Diff:       diff,
+					Additions:  additions,
+					Removals:   removals,
+					OldContent: oldContent,
+					Created:    fileInfo == nil,
 				},
 			), nil
 		},

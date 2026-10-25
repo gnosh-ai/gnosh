@@ -34,21 +34,25 @@ func (a *App) BranchSession(ctx context.Context, sourceID, title string) (sessio
 		return session.Session{}, errors.New("no messages to branch")
 	}
 	if title == "" {
-		sessions, err := a.Sessions.List(ctx)
+		titles, err := a.sessionTitles(ctx)
 		if err != nil {
 			return session.Session{}, err
 		}
-		titles := make([]string, 0, len(sessions))
-		for _, s := range sessions {
-			titles = append(titles, s.Title)
-		}
-		title = branchTitle(cmp.Or(source.Title, "Branched conversation"), titles)
+		title = branchTitle(cmp.Or(source.Title, "Branched conversation"), "Branch", titles)
 	}
+	return a.copySession(ctx, source, messages, title)
+}
+
+// copySession copies source's conversation, messages, into a new session
+// titled title, and returns it: every message in order, as copyConversation
+// copies them, the summary the session was compacted to, its todos and how
+// full its context is.
+func (a *App) copySession(ctx context.Context, source session.Session, messages []message.Message, title string) (session.Session, error) {
 	branch, err := a.Sessions.Create(ctx, title)
 	if err != nil {
 		return session.Session{}, err
 	}
-	ids, err := a.copyConversation(ctx, messages, sourceID, branch.ID)
+	ids, err := a.copyConversation(ctx, messages, source.ID, branch.ID)
 	if err != nil {
 		// Half a branch is no branch.
 		_ = a.Sessions.Delete(context.WithoutCancel(ctx), branch.ID)
@@ -116,13 +120,26 @@ func (a *App) copyMessages(ctx context.Context, messages []message.Message, sess
 	return ids, nil
 }
 
+// sessionTitles are the titles of the sessions there are.
+func (a *App) sessionTitles(ctx context.Context) ([]string, error) {
+	sessions, err := a.Sessions.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	titles := make([]string, len(sessions))
+	for i, s := range sessions {
+		titles[i] = s.Title
+	}
+	return titles, nil
+}
+
 // branchTitle is what Claude Code titles a branch of a session titled
-// base: "base (Branch)", or "base (Branch N)" with the first N from 2 that
-// no title in taken has.
-func branchTitle(base string, taken []string) string {
-	title := base + " (Branch)"
+// base, label "Branch": "base (label)", or "base (label N)" with the first
+// N from 2 that no title in taken has.
+func branchTitle(base, label string, taken []string) string {
+	title := base + " (" + label + ")"
 	for n := 2; slices.Contains(taken, title); n++ {
-		title = fmt.Sprintf("%s (Branch %d)", base, n)
+		title = fmt.Sprintf("%s (%s %d)", base, label, n)
 	}
 	return title
 }

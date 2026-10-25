@@ -37,6 +37,12 @@ type Service interface {
 	// conversation: the branch has read what its conversation says it
 	// read, and can edit those files without reading them again.
 	CopyReads(ctx context.Context, from, to string) error
+
+	// ForgetReadsSince forgets the reads of session sessionID made at or
+	// after since (Unix seconds), as /rewind forgets those of the
+	// conversation it cuts: the agent reads those files again before it
+	// changes them.
+	ForgetReadsSince(ctx context.Context, sessionID string, since int64) error
 }
 
 type service struct {
@@ -149,6 +155,26 @@ func (s *service) CopyReads(ctx context.Context, from, to string) error {
 		if key.sessionID == from {
 			s.sums.Set(readKey{to, key.path}, sum)
 		}
+	}
+	return nil
+}
+
+// ForgetReadsSince forgets the reads of a session made since a time.
+func (s *service) ForgetReadsSince(ctx context.Context, sessionID string, since int64) error {
+	reads, err := s.q.ListSessionReadFiles(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("listing read files: %w", err)
+	}
+	for _, read := range reads {
+		if read.ReadAt >= since {
+			s.sums.Del(readKey{sessionID, read.Path})
+		}
+	}
+	if err := s.q.DeleteSessionReadFilesSince(ctx, db.DeleteSessionReadFilesSinceParams{
+		SessionID: sessionID,
+		ReadAt:    since,
+	}); err != nil {
+		return fmt.Errorf("forgetting file reads: %w", err)
 	}
 	return nil
 }

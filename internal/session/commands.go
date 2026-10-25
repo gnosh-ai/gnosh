@@ -66,6 +66,14 @@ func ParseBranchCommand(line string) (name string, ok bool) {
 	return parseCommand(line, "branch")
 }
 
+// ParseRewindCommand reports whether line is Claude Code's /rewind
+// command or its aliases /checkpoint and /undo, with or without the
+// slash. What follows it is not used.
+func ParseRewindCommand(line string) bool {
+	_, ok := parseCommand(line, "rewind", "checkpoint", "undo")
+	return ok
+}
+
 // ParseCopyCommand reports whether line is Claude Code's /copy command,
 // with or without the slash, and the N after it that picks the
 // Nth-latest response ("" for the latest).

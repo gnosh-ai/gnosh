@@ -838,6 +838,28 @@ func (c *Client) BranchSession(ctx context.Context, id, sessionID, title string)
 	return &sess, nil
 }
 
+// Rewind restores a session's conversation, its code or both to the point
+// before one of its prompts, or with req.DryRun says what restoring the
+// code would change.
+func (c *Client) Rewind(ctx context.Context, id, sessionID string, req proto.RewindRequest) (*proto.RewindResult, error) {
+	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/sessions/%s/rewind", id, sessionID), nil, jsonBody(req), http.Header{"Content-Type": []string{"application/json"}})
+	if err != nil {
+		return nil, fmt.Errorf("failed to rewind session: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		if msg := decodeErrorMessage(rsp.Body); msg != "" {
+			return nil, errors.New(msg)
+		}
+		return nil, fmt.Errorf("failed to rewind session: status code %d", rsp.StatusCode)
+	}
+	var result proto.RewindResult
+	if err := json.NewDecoder(rsp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode rewind result: %w", err)
+	}
+	return &result, nil
+}
+
 // ListSessions lists all sessions in a workspace as proto types.
 func (c *Client) ListSessions(ctx context.Context, id string) ([]proto.Session, error) {
 	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/sessions", id), nil, nil)

@@ -544,6 +544,9 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "rename_session", "Rename Session", "", ActionRenameSession{SessionID: c.sessionID}).
 			WithAliases("rename", "name").
 			WithDescription("Type rename and a name, or rename alone for one made from the conversation"))
+		commands = append(commands, NewCommandItem(c.com.Styles, "rewind", "Rewind", "", ActionRewind{SessionID: c.sessionID}).
+			WithAliases("rewind", "checkpoint", "undo").
+			WithDescription("Restore the code and/or conversation to the point before one of your prompts"))
 		commands = append(commands, NewCommandItem(c.com.Styles, "branch_session", "Branch Conversation", "", ActionBranchSession{SessionID: c.sessionID}).
 			WithAliases("branch").
 			WithDescription("Copy the conversation into a new session and go on there; type branch and a name to name it"))
