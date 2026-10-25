@@ -5,8 +5,7 @@ The wordmark is the TUI's own: the half-block letterforms in
 internal/ui/logo/letterforms.go, where each terminal cell holds two square
 pixels. Drawing the same strings here keeps the banner on GitHub and the
 logo in the terminal the same shape. The colors are the TUI's too: Crush's
-purple and hot pink, a nebula, with green and gold at the ends of every fade
-and in a few stars.
+purple and hot pink, a nebula, with green and gold at the ends of every fade.
 
     python3 scripts/brand.py
 
@@ -249,18 +248,6 @@ def diagonals(x_from, x_to, y, rows, cw, ch, step=0):
     return "".join(d)
 
 
-def field_stars(rng, x_from, x_to, y, rows, cw, ch, every=29, colors=(GOLD, MINT)):
-    """A few stars among a field's cells, as the TUI draws them."""
-    o = []
-    for i in range(rows):
-        x = x_from
-        while x + cw <= x_to + 0.01:
-            if rng.random() < 1 / every:
-                o.append(sparkle(x + cw / 2, y + i * ch + ch / 2, cw * 0.42, rng.choice(colors)))
-            x += cw
-    return "".join(o)
-
-
 def word_defs(x0, y0, word_w, word_h, stops=NEBULA, gid="word"):
     """The word's fade, left to right with a little slope, through stops."""
     n = len(stops) - 1
@@ -320,17 +307,15 @@ def banner(W=1280, H=520, p=24):
     rows = word_rows()
     on = pixels(rows)
     word_w, word_h = len(rows[0]) * p, 5 * p
-    x0, y0 = round((W - word_w) / 2), 178
-    meta_y = y0 - ch  # the TUI puts its meta row one cell above the word
+    x0, y0 = round((W - word_w) / 2), 130
+    meta_y = y0 + 3 * ch  # the TUI puts its meta row one cell under the word
     horizon = 430
 
     face, layers = word_layers(on, x0, y0, p)
-    keep = (x0 - 40, meta_y - 24, x0 + word_w + 40, y0 + 6 * p + 16)
+    keep = (x0 - 40, y0 - 24, x0 + word_w + 40, meta_y + ch + 16)
     lx0 = x0 - 2 * cw - cw * math.ceil(x0 / cw)
-    left = diagonals(lx0, x0 - cw, meta_y, 4, cw, ch)
-    right = diagonals(x0 + word_w + cw, W + cw, meta_y, 4, cw, ch)
-    srng = random.Random(17)
-    stars = field_stars(srng, 0, x0 - cw, meta_y, 4, cw, ch, every=24) + field_stars(srng, x0 + word_w + cw, W, meta_y, 4, cw, ch, every=24)
+    left = diagonals(lx0, x0 - cw, y0, 4, cw, ch)
+    right = diagonals(x0 + word_w + cw, W + cw, y0, 4, cw, ch)
 
     o = [svg_open(W, H, "Klash, a security-first harness for coding agents")]
     o.append(anim(sweep=(x0 - 360, x0 + word_w + 120)))
@@ -346,7 +331,6 @@ def banner(W=1280, H=520, p=24):
     o.append('<g clip-path="url(#frame)">')
     o.append(sky(rng, W, H, horizon, keep, 130, twinkle=True))
     o.append(f'<path d="{left}{right}" stroke="url(#field)" stroke-width="2" fill="none"/>')
-    o.append(f'<g class="tw" style="animation-duration:5s">{stars}</g>')
     ty = meta_y + ch * 0.66
     o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="{MONO}" font-size="21" fill="{GOLD}">klash.pro</text>')
     o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="{MONO}" font-size="21" fill="{HAZE}">security-first agent harness</text>')
@@ -379,13 +363,13 @@ def signoff(W=1280, H=260, p=10):
     on = pixels(rows)
     word_w, word_h = len(rows[0]) * p, 5 * p
     x0 = round((W - word_w) / 2)
-    # Two field rows, the meta row, the word (three cells), one field row.
+    # Two field rows, the word (three cells), the meta row, one field row.
     top = round((H - 7 * ch) / 2) - 18
-    meta_y = top + 2 * ch
-    y0 = meta_y + ch
+    y0 = top + 2 * ch
+    meta_y = y0 + 3 * ch
     horizon = H - 34
-    keep = (x0 - 30, top - 10, x0 + word_w + 30, y0 + 3 * ch + ch + 10)
-    fields = diagonals(x0, x0 + word_w, top, 2, cw, ch) + diagonals(x0, x0 + word_w, y0 + 3 * ch, 1, cw, ch)
+    keep = (x0 - 30, top - 10, x0 + word_w + 30, meta_y + 2 * ch + 10)
+    fields = diagonals(x0, x0 + word_w, top, 2, cw, ch) + diagonals(x0, x0 + word_w, meta_y + ch, 1, cw, ch)
 
     o = [svg_open(W, H, "Klash")]
     o.append(anim())
@@ -479,15 +463,13 @@ def og_svg(W=1280, H=640, p=28):
     rows = word_rows()
     on = pixels(rows)
     word_w, word_h = len(rows[0]) * p, 5 * p
-    x0, y0 = round((W - word_w) / 2), 148
-    meta_y = y0 - ch
+    x0, y0 = round((W - word_w) / 2), 92
+    meta_y = y0 + 3 * ch
     horizon = 560
-    keep = (x0 - 40, meta_y - 30, x0 + word_w + 40, 500)
+    keep = (x0 - 40, y0 - 30, x0 + word_w + 40, 500)
     lx0 = x0 - cw - cw * math.ceil((x0 - cw) / cw)
-    left = diagonals(lx0, x0 - cw, meta_y, 4, cw, ch)
-    right = diagonals(x0 + word_w + cw, W + cw, meta_y, 4, cw, ch)
-    srng = random.Random(19)
-    stars = field_stars(srng, 0, x0 - cw, meta_y, 4, cw, ch, every=18) + field_stars(srng, x0 + word_w + cw, W, meta_y, 4, cw, ch, every=18)
+    left = diagonals(lx0, x0 - cw, y0, 4, cw, ch)
+    right = diagonals(x0 + word_w + cw, W + cw, y0, 4, cw, ch)
 
     o = [svg_open(W, H, "Klash")]
     o.append("<defs>")
@@ -498,7 +480,6 @@ def og_svg(W=1280, H=640, p=28):
     o.append("</defs>")
     o.append(sky(rng, W, H, horizon, keep, 120, twinkle=False, sun_rx=420))
     o.append(f'<path d="{left}{right}" stroke="url(#field)" stroke-width="2.2" fill="none"/>')
-    o.append(stars)
     ty = meta_y + ch * 0.66
     o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="JetBrains Mono,{MONO}" font-weight="500" font-size="24" fill="{GOLD}">klash.pro</text>')
     o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="JetBrains Mono,{MONO}" font-size="24" fill="{HAZE}">github.com/klash-pro/klash</text>')
