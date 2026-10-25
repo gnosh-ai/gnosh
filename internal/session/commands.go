@@ -74,6 +74,13 @@ func ParseRewindCommand(line string) bool {
 	return ok
 }
 
+// ParseAutocompactCommand reports whether line is Claude Code's
+// /autocompact command, with or without the slash, and the window it
+// gives ("" when none).
+func ParseAutocompactCommand(line string) (window string, ok bool) {
+	return parseCommand(line, "autocompact")
+}
+
 // ParseCopyCommand reports whether line is Claude Code's /copy command,
 // with or without the slash, and the N after it that picks the
 // Nth-latest response ("" for the latest).

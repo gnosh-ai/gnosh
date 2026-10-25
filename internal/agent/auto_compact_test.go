@@ -3,6 +3,8 @@ package agent
 import (
 	"testing"
 
+	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,7 +19,7 @@ func TestAutoCompactVariables(t *testing.T) {
 		t.Helper()
 		t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", window)
 		t.Setenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", percent)
-		return compactAt(cw, true)
+		return compactAt(cw, 0, true)
 	}
 
 	require.EqualValues(t, qwen-20_000, at("", "", qwen), "by default, 20k short of a large window")
@@ -44,10 +46,61 @@ func TestAutoCompactVariables(t *testing.T) {
 
 	t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "150k")
 	t.Setenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "50")
-	require.EqualValues(t, qwen-20_000, compactAt(qwen, false), "the default point reads no variable")
+	require.EqualValues(t, qwen-20_000, compactAt(qwen, 0, false), "the default point reads no variable")
 
 	t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "")
-	require.True(t, autoSummarize(qwen, qwen/2, false, true))
-	require.False(t, autoSummarize(qwen, qwen/2-1, false, true))
-	require.False(t, autoSummarize(qwen, qwen, true, true), "disabled stays disabled")
+	require.True(t, autoSummarize(qwen, 0, qwen/2, false, true))
+	require.False(t, autoSummarize(qwen, 0, qwen/2-1, false, true))
+	require.False(t, autoSummarize(qwen, 0, qwen, true, true), "disabled stays disabled")
+}
+
+// The auto_compact_window option /autocompact sets is a window as the
+// variable is: raised to 100k, lowered to 1M, capped at the model's
+// window, and what the percentage is of. The variable, when set, takes
+// precedence, and the default point reads neither.
+func TestAutoCompactWindowOption(t *testing.T) {
+	const qwen = 262_144
+	t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "")
+	t.Setenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "")
+	require.EqualValues(t, 150_000, compactAt(qwen, 150_000, true))
+	require.EqualValues(t, 100_000, compactAt(qwen, 50_000, true), "under 100k is 100k")
+	require.EqualValues(t, qwen-20_000, compactAt(qwen, 2_000_000, true), "capped at the model's window")
+	require.EqualValues(t, 1_000_000, compactAt(2_000_000, 600_000_000, true), "over 1M is 1M")
+	require.EqualValues(t, qwen-20_000, compactAt(qwen, 150_000, false), "the default point reads no option")
+
+	t.Setenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "50")
+	require.EqualValues(t, 75_000, compactAt(qwen, 150_000, true), "the percentage is of the option's window")
+	t.Setenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "")
+	t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "200k")
+	require.EqualValues(t, 200_000, compactAt(qwen, 150_000, true), "the variable takes precedence")
+}
+
+// A session compacts at the auto_compact_window option as it is set when
+// it asks, so /autocompact needs no restart; with no config it is auto.
+func TestCompactsAtTheWindowOptionAsItIsNow(t *testing.T) {
+	const qwen = 262_144
+	t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "")
+	t.Setenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "")
+	cfg := &config.Config{Options: &config.Options{}}
+	a := &sessionAgent{cfg: config.NewTestStore(cfg), compactLevels: csync.NewMap[string, int](), justSummarized: csync.NewMap[string, bool]()}
+	require.False(t, a.compacts("s", qwen, 200_000), "auto")
+	cfg.Options.AutoCompactWindow = 150_000
+	require.True(t, a.compacts("s", qwen, 200_000), "set since")
+	require.False(t, a.compacts("s", qwen, 149_999))
+	require.Zero(t, (&sessionAgent{}).autoCompactWindow(), "no config")
+}
+
+// /context reports the point the auto_compact_window option sets, and
+// none when auto-summarize is off.
+func TestCompactPointReadsTheWindowOption(t *testing.T) {
+	const qwen = 262_144
+	t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "")
+	t.Setenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "")
+	options := &config.Options{}
+	c := &coordinator{cfg: config.NewTestStore(&config.Config{Options: options})}
+	require.EqualValues(t, qwen-20_000, c.compactPoint(qwen))
+	options.AutoCompactWindow = 150_000
+	require.EqualValues(t, 150_000, c.compactPoint(qwen))
+	options.DisableAutoSummarize = true
+	require.Zero(t, c.compactPoint(qwen))
 }

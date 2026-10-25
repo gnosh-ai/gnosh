@@ -382,6 +382,18 @@ func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePa
 	return "\n<project_context>\nThis file's directory has context files of its own. Follow their instructions for the files there:\n" + b.String() + "</project_context>\n"
 }
 
+// compactPoint is the running token total at which a session on a model
+// with context window window compacts, as /context reports it: the
+// variables and the auto_compact_window option read (see compactAt), or
+// 0 when auto-summarize is off.
+func (c *coordinator) compactPoint(window int64) int64 {
+	options := c.cfg.Config().Options
+	if options.DisableAutoSummarize {
+		return 0
+	}
+	return compactAt(window, options.AutoCompactWindow, true)
+}
+
 // Rewound forgets the subdirectories' context files the session was
 // given in the messages a rewind cut, and those given it with no message
 // known: it is given them again when it next touches a file there.
@@ -1787,10 +1799,7 @@ func (c *coordinator) ContextUsage(ctx context.Context, sessionID string) (Conte
 		}
 	}
 	window := model.CatwalkCfg.ContextWindow
-	var at int64
-	if !c.cfg.Config().Options.DisableAutoSummarize {
-		at = compactAt(window, true)
-	}
+	at := c.compactPoint(window)
 	return contextUsage(contextUsageInput{
 		model:        modelID,
 		window:       window,

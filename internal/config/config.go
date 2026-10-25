@@ -573,6 +573,11 @@ type Options struct {
 	// long conversation left idle for 54 minutes is summarized, so the
 	// next prompt does not send the whole of it.
 	DisableIdleCompaction bool `json:"disable_idle_compaction,omitempty" jsonschema:"description=Do not summarize a long conversation left idle for 54 minutes,default=false"`
+	// AutoCompactWindow is how full a conversation's context gets before
+	// it is summarized, in tokens (100k to 1M, and never past the model's
+	// window), as Claude Code's autoCompactWindow setting: 0 for auto, the
+	// point tuned for the model. /autocompact sets it.
+	AutoCompactWindow int64 `json:"auto_compact_window,omitempty" jsonschema:"description=How full the context gets before it is summarized: tokens from 100000 to 1000000 and never past the model's window; unset for auto. Set it in chat with /autocompact,minimum=100000,maximum=1000000"`
 	// DataDirectory is where Crush keeps per-project state such as
 	// the SQLite database and workspace overrides. Relative paths are
 	// resolved against the working directory; absolute paths are used

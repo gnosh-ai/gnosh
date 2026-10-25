@@ -1143,6 +1143,12 @@ quicker for a local model to read again when its cache has lost it:
 }
 ```
 
+As in Claude Code, `/autocompact 150k` sets that window from the chat, kept as
+`"options": {"auto_compact_window": 150000}` in your global config for every
+model (never past a model's own window), `/autocompact auto` goes back to the
+default, and `/autocompact` alone says what is set.
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW`, when set, takes precedence.
+
 A long conversation left idle for 54 minutes is summarized then, as Claude
 Code's idle compaction does, so your next prompt sends a summary rather than
 the whole conversation, and a local model reads it while you are away rather

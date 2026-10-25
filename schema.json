@@ -568,6 +568,12 @@
           "description": "Do not summarize a long conversation left idle for 54 minutes",
           "default": false
         },
+        "auto_compact_window": {
+          "type": "integer",
+          "maximum": 1000000,
+          "minimum": 100000,
+          "description": "How full the context gets before it is summarized: tokens from 100000 to 1000000 and never past the model's window; unset for auto. Set it in chat with /autocompact"
+        },
         "data_directory": {
           "type": "string",
           "description": "Directory for storing application data. Relative paths are resolved against the working directory; absolute paths are used as-is.",

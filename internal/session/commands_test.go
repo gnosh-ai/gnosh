@@ -227,3 +227,18 @@ func TestParseRewindCommand(t *testing.T) {
 		require.False(t, ParseRewindCommand(line), line)
 	}
 }
+
+// /autocompact is read with the window after it, or none.
+func TestParseAutocompactCommand(t *testing.T) {
+	t.Parallel()
+
+	for line, want := range map[string]string{"/autocompact": "", "autocompact 150k": "150k", " /AutoCompact  auto ": "auto"} {
+		window, ok := ParseAutocompactCommand(line)
+		require.True(t, ok, line)
+		require.Equal(t, want, window, line)
+	}
+	for _, line := range []string{"/autocompacts", "/compact 150k", ""} {
+		_, ok := ParseAutocompactCommand(line)
+		require.False(t, ok, line)
+	}
+}

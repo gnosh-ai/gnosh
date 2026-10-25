@@ -45,6 +45,7 @@ func TestPaletteFindsClaudeCodeSlashNames(t *testing.T) {
 		"tasks":         "Background Tasks",
 		"branch":        "Branch Conversation",
 		"rewind":        "Rewind",
+		"autocompact":   "Auto-compact Window",
 		"checkpoint":    "Rewind",
 		"undo":          "Rewind",
 		"bashes":        "Background Tasks",
@@ -274,4 +275,28 @@ func TestPaletteBranchTakesTheName(t *testing.T) {
 	c, err := NewCommands(com, "s1", true, false, false, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, "branch", c.Suggest("brnch"))
+}
+
+// Claude Code's /autocompact takes the window: typed into the palette with
+// it, Enter sets it, with or without a session; alone, it is the
+// Auto-compact Window item.
+func TestPaletteAutocompactTakesTheWindow(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	com := &common.Common{
+		Workspace: &paletteWorkspace{cfg: &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}},
+		Styles:    &sty,
+	}
+	enter := func(sessionID, typed string) Action {
+		c, err := NewCommands(com, sessionID, sessionID != "", false, false, nil, nil)
+		require.NoError(t, err)
+		for _, r := range typed {
+			c.HandleMsg(tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+		return c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+	}
+	require.Equal(t, ActionAutocompact{Window: "150k"}, enter("", "autocompact 150k"))
+	require.Equal(t, ActionAutocompact{Window: "auto"}, enter("s1", "autocompact auto"))
+	require.Equal(t, ActionAutocompact{}, enter("", "autocompact"))
 }

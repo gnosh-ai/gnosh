@@ -17,15 +17,17 @@ import (
 // context window cw compacts before its next request: as close to the
 // window as leaves room for the reply (largeContextWindowBuffer of a large
 // window, smallContextWindowRatio of a small one), or earlier where the
-// user says, with Claude Code's variables. CLAUDE_CODE_AUTO_COMPACT_WINDOW
-// is how full the context may get, from 100k to 1M tokens, capped at the
-// model's window; CLAUDE_AUTOCOMPACT_PCT_OVERRIDE is the percentage of
-// that window at which to compact, and like it can only bring compaction
-// earlier. Compacting earlier keeps a long session short, and with it the
-// time a local model takes to read the conversation again when its cache
-// was lost. Without overrides, the variables are not read: the default
-// point.
-func compactAt(cw int64, overrides bool) int64 {
+// user says, with Claude Code's variables or the auto_compact_window
+// option /autocompact sets, window (0 for none, auto).
+// CLAUDE_CODE_AUTO_COMPACT_WINDOW, which takes precedence over the option,
+// and the option are how full the context may get, from 100k to 1M
+// tokens, capped at the model's window; CLAUDE_AUTOCOMPACT_PCT_OVERRIDE is
+// the percentage of that window at which to compact, and like it can only
+// bring compaction earlier. Compacting earlier keeps a long session short,
+// and with it the time a local model takes to read the conversation again
+// when its cache was lost. Without overrides, neither is read: the
+// default point.
+func compactAt(cw, window int64, overrides bool) int64 {
 	if cw <= 0 {
 		cw = unknownContextWindowFallback
 	}
@@ -36,15 +38,43 @@ func compactAt(cw int64, overrides bool) int64 {
 	if !overrides {
 		return at
 	}
-	window := cw
 	if w, ok := envAutoCompactWindow(); ok {
-		window = min(w, cw)
-		at = min(at, window)
+		window = w
+	} else if window > 0 {
+		window = optionAutoCompactWindow(window)
+	}
+	limit := cw
+	if window > 0 {
+		limit = min(window, cw)
+		at = min(at, limit)
 	}
 	if p, ok := envAutoCompactPercent(); ok {
-		at = min(at, window*p/100)
+		at = min(at, limit*p/100)
 	}
 	return at
+}
+
+// optionAutoCompactWindow is the auto_compact_window option, raised to
+// 100k or lowered to 1M as Claude Code takes its setting.
+func optionAutoCompactWindow(window int64) int64 {
+	switch {
+	case window < 100_000:
+		warnCompactVariable("auto_compact_window", strconv.FormatInt(window, 10), "it is under 100k tokens, so 100k is used")
+		return 100_000
+	case window > 1_000_000:
+		warnCompactVariable("auto_compact_window", strconv.FormatInt(window, 10), "it is over 1M tokens, so 1M is used")
+		return 1_000_000
+	}
+	return window
+}
+
+// autoCompactWindow is the auto_compact_window option as it is set now (0
+// for auto): /autocompact changes it while the session runs.
+func (a *sessionAgent) autoCompactWindow() int64 {
+	if a.cfg == nil || a.cfg.Config().Options == nil {
+		return 0
+	}
+	return a.cfg.Config().Options.AutoCompactWindow
 }
 
 // envAutoCompactWindow is CLAUDE_CODE_AUTO_COMPACT_WINDOW in tokens, as
@@ -119,21 +149,22 @@ const (
 // the earlier point the variables gave for the default, and if it is over
 // that too, it stops compacting, until it is summarized by hand.
 func (a *sessionAgent) compacts(sessionID string, cw, tokens int64) bool {
+	window := a.autoCompactWindow()
 	level, _ := a.compactLevels.Get(sessionID)
 	if _, justSummarized := a.justSummarized.Take(sessionID); justSummarized {
-		if level == compactAsAsked && autoSummarize(cw, tokens, a.disableAutoSummarize, true) {
+		if level == compactAsAsked && autoSummarize(cw, window, tokens, a.disableAutoSummarize, true) {
 			level = compactAtDefault
 			slog.Warn("A summary left the conversation over the point at which it is compacted; compacting at the default point from now on",
-				"session_id", sessionID, "tokens", tokens, "point", compactAt(cw, true))
+				"session_id", sessionID, "tokens", tokens, "point", compactAt(cw, window, true))
 		}
-		if level == compactAtDefault && autoSummarize(cw, tokens, a.disableAutoSummarize, false) {
+		if level == compactAtDefault && autoSummarize(cw, window, tokens, a.disableAutoSummarize, false) {
 			level = compactNever
 			slog.Warn("A summary left the conversation over the default point at which it is compacted; not compacting it again unless asked",
-				"session_id", sessionID, "tokens", tokens, "point", compactAt(cw, false))
+				"session_id", sessionID, "tokens", tokens, "point", compactAt(cw, window, false))
 		}
 		a.compactLevels.Set(sessionID, level)
 	}
-	return level != compactNever && autoSummarize(cw, tokens, a.disableAutoSummarize, level == compactAsAsked)
+	return level != compactNever && autoSummarize(cw, window, tokens, a.disableAutoSummarize, level == compactAsAsked)
 }
 
 // idleCompactionAfter is how long a session waits idle before its

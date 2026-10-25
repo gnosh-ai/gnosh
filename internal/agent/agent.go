@@ -69,8 +69,9 @@ const (
 
 // autoSummarize reports whether a session whose running token total is tokens
 // should be compacted before the next request, given the model's context
-// window cw (see compactAt, which reads the variables when overrides is
-// set). It returns false when auto-summarize is disabled.
+// window cw and the auto_compact_window option window (see compactAt,
+// which reads the variables and the option when overrides is set). It
+// returns false when auto-summarize is disabled.
 //
 // When cw is unknown (<= 0, e.g. a local or custom model whose window could
 // not be discovered) it falls back to unknownContextWindowFallback instead of
@@ -78,8 +79,8 @@ const (
 // the request ("request exceeds the available context size"), which dead-ends
 // the session. Over-summarizing a model that is in fact larger is wasteful but
 // recoverable; crashing is not. A discovered real window is always preferred.
-func autoSummarize(cw, tokens int64, disabled, overrides bool) bool {
-	return !disabled && tokens >= compactAt(cw, overrides)
+func autoSummarize(cw, window, tokens int64, disabled, overrides bool) bool {
+	return !disabled && tokens >= compactAt(cw, window, overrides)
 }
 
 var userAgent = fmt.Sprintf("Charm-Crush/%s (https://charm.land/crush)", version.Version)

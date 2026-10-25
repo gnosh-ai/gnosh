@@ -2385,6 +2385,9 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionRewind:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.openRewind())
+	case dialog.ActionAutocompact:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.autocompact(msg.Window))
 	case dialog.ActionRewindPick:
 		cmds = append(cmds, m.previewRewind(msg.SessionID, msg.Prompt))
 	case dialog.ActionRewindTo:
@@ -5581,6 +5584,9 @@ func (m *UI) builtinCommand(content string) (tea.Cmd, bool) {
 	}
 	if session.ParseRewindCommand(content) && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.openRewind(), true
+	}
+	if window, ok := session.ParseAutocompactCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.autocompact(window), true
 	}
 	if n, ok := session.ParseCopyCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.copyResponse(n), true

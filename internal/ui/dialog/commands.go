@@ -221,6 +221,11 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 			if instructions, ok := session.ParseCompactCommand(c.input.Value()); ok && instructions != "" && c.hasSession {
 				return ActionSummarize{SessionID: c.sessionID, Instructions: instructions}
 			}
+			// And "autocompact" and the window; "autocompact" alone is
+			// the Auto-compact Window item.
+			if window, ok := session.ParseAutocompactCommand(c.input.Value()); ok && window != "" {
+				return ActionAutocompact{Window: window}
+			}
 			// And "branch" and the branch's name; "branch" alone is the
 			// Branch Conversation item.
 			if name, ok := session.ParseBranchCommand(c.input.Value()); ok && name != "" && c.hasSession {
@@ -522,6 +527,9 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	commands = append(commands, NewCommandItem(c.com.Styles, "context_usage", "Context Usage", "", ActionContextUsage{}).
 		WithAliases("context").
 		WithDescription("What fills the context window, as Claude Code's /context shows it"))
+	commands = append(commands, NewCommandItem(c.com.Styles, "autocompact", "Auto-compact Window", "", ActionAutocompact{}).
+		WithAliases("autocompact").
+		WithDescription("Set how full the context gets before auto-summarizing; type autocompact and auto or a token count"))
 	commands = append(commands, NewCommandItem(c.com.Styles, "hooks_report", "Hooks", "", ActionHooksReport{}).
 		WithAliases("hooks").
 		WithDescription("The hooks that run, by event, as Claude Code's /hooks lists them"))

@@ -149,6 +149,12 @@ type (
 		SessionID    string
 		Instructions string
 	}
+	// ActionAutocompact sets how full the context gets before it is
+	// summarized, as Claude Code's /autocompact does: Window is auto or
+	// a token count, "" to say what is set.
+	ActionAutocompact struct {
+		Window string
+	}
 	// ActionRewind lists the session's prompts to go back to, as Claude
 	// Code's /rewind does.
 	ActionRewind struct {
