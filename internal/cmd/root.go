@@ -269,16 +269,21 @@ func Execute() {
 		fang.WithNotifySignal(os.Interrupt),
 		fang.WithErrorHandler(errorHandler),
 	); err != nil {
-		os.Exit(1)
+		os.Exit(exitCode(err))
 	}
 }
 
 // errorHandler prints a command's error as fang does, but capitalizes only
-// its first letter. fang title-cases the whole first word, capitalizing
-// after every - or ( and lowercasing the rest, so an error that starts
-// with a flag, a quoted name, an environment variable or a path showed it
-// changed: --Disallowed-Tools, "Bash(Git:*)", Klash_client_server.
+// its first letter, and prints nothing for an exitStatus, which only sets
+// the status klash exits with. fang title-cases the whole first word,
+// capitalizing after every - or ( and lowercasing the rest, so an error
+// that starts with a flag, a quoted name, an environment variable or a
+// path showed it changed: --Disallowed-Tools, "Bash(Git:*)",
+// Klash_client_server.
 func errorHandler(w io.Writer, styles fang.Styles, err error) {
+	if _, ok := errors.AsType[exitStatus](err); ok {
+		return
+	}
 	styles.ErrorText = styles.ErrorText.Transform(capitalizeFirstLetter)
 	fang.DefaultErrorHandler(w, styles, err)
 }

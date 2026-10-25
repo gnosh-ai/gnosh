@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/signal"
 	"strings"
 	"time"
 
@@ -71,7 +70,7 @@ klash run --session {session-id} "Follow up on your last response"
 klash run --continue "Follow up on your last response"
 
   `,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: stopsOnSignal(func(ctx context.Context, cmd *cobra.Command, args []string) error {
 		var (
 			quiet, _           = cmd.Flags().GetBool("quiet")
 			verbose, _         = cmd.Flags().GetBool("verbose")
@@ -88,10 +87,6 @@ klash run --continue "Follow up on your last response"
 			return errors.New("a session ID or name must follow -r in klash run; `klash -r` on its own lists the sessions to pick from")
 		}
 		resume, _ := cmd.Flags().GetString("resume")
-
-		// Cancel on SIGINT or SIGTERM.
-		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-		defer cancel()
 
 		prompt := strings.Join(args, " ")
 
@@ -210,7 +205,7 @@ klash run --continue "Follow up on your last response"
 				}
 			})
 		}, output.message))
-	},
+	}),
 }
 
 // runOutputFlags maps run's --quiet and --verbose to what a run shows on
