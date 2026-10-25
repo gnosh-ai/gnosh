@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
 	"fmt"
@@ -49,12 +50,7 @@ func jobNotFound(id, dir string) fantasy.ToolResponse {
 		if job.Done {
 			state = fmt.Sprintf("exited %d", job.ExitCode)
 		}
-		line, _, cut := strings.Cut(job.Command, "\n")
-		command := []rune(line)
-		if cut || len(command) > 60 {
-			command = append([]rune(strings.TrimSpace(string(command[:min(len(command), 60)]))), '…')
-		}
-		jobs = append(jobs, fmt.Sprintf("%s (%s: %s)", job.ID, state, string(command)))
+		jobs = append(jobs, fmt.Sprintf("%s (%s: %s)", job.ID, state, commandLabel(job.Command)))
 	}
 	there := "There are no background jobs now."
 	if len(jobs) > 0 {
@@ -64,6 +60,34 @@ func jobNotFound(id, dir string) fantasy.ToolResponse {
 		"Only a bash command still running when bash returns becomes a background job, "+
 		"with its ID (such as 001) in that bash result; a command that finished in time "+
 		"already returned its output there.", id, there))
+}
+
+// commandLabel is the first line of command, cut to 60 characters.
+func commandLabel(command string) string {
+	line, _, cut := strings.Cut(command, "\n")
+	label := []rune(line)
+	if cut || len(label) > 60 {
+		label = append([]rune(strings.TrimSpace(string(label[:min(len(label), 60)]))), '…')
+	}
+	return string(label)
+}
+
+// JobEndNotice is what the agent is told when a background job it
+// started ends, in the words of Claude Code's notice: which command, and
+// whether it completed, failed or was stopped.
+func JobEndNotice(job *shell.BackgroundShell) string {
+	_, _, _, err := job.GetOutput()
+	how := "completed (exit code 0)"
+	switch {
+	case shell.IsInterrupt(err):
+		how = "was stopped"
+	case err != nil && !shell.IsExitStatus(err):
+		how = "could not run: " + err.Error()
+	case err != nil:
+		how = fmt.Sprintf("failed with exit code %d", shell.ExitCode(err))
+	}
+	name := cmp.Or(job.Description, commandLabel(job.Command))
+	return fmt.Sprintf("Background command %q (job %s) %s. Call job_output with shell_id %s for its output.", name, job.ID, how, job.ID)
 }
 
 // NewJobOutputTool reads background jobs; one it cannot find, it answers
@@ -101,6 +125,7 @@ func NewJobOutputTool(workingDir, spillDir string) fantasy.AgentTool {
 
 			status := "running"
 			if done {
+				bgShell.ClaimEnd()
 				status = "completed"
 				if err != nil {
 					exitCode := shell.ExitCode(err)

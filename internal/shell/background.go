@@ -63,6 +63,16 @@ type BackgroundShell struct {
 	done        chan struct{}
 	exitErr     error
 	completedAt atomic.Int64 // Unix timestamp when job completed (0 if still running)
+	// endClaimed is set by the first to take the job's end; see ClaimEnd.
+	endClaimed atomic.Bool
+}
+
+// ClaimEnd takes the job's end and reports whether the caller is the
+// first to. The agent learns once that a job ended: from the job_output
+// result that shows it, from its own job_kill, or from the notice klash
+// sends it; and of a job klash stops as it exits, not at all.
+func (bs *BackgroundShell) ClaimEnd() bool {
+	return bs.endClaimed.CompareAndSwap(false, true)
 }
 
 // BackgroundShellManager manages background shell instances.
@@ -331,6 +341,7 @@ func (m *BackgroundShellManager) KillAll(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, shell := range shells {
 		wg.Go(func() {
+			shell.ClaimEnd()
 			shell.cancel()
 			select {
 			case <-shell.done:

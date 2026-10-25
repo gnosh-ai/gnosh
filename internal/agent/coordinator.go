@@ -193,6 +193,8 @@ type coordinator struct {
 	// them, shared across buildTools calls so a coordinator rebuild does
 	// not reset the dedup state.
 	named *namedChanges
+	// jobs tells a session when a background job its agent started ends.
+	jobs *jobWatcher
 
 	// agentMu guards mainAgent and mainAgentName: SetMainAgent runs on
 	// HTTP handler goroutines while runs, cancels, and probes read the
@@ -289,6 +291,10 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 
 		subdirectoryGiven: map[string]string{},
 	}
+	c.jobs = &jobWatcher{run: func(ctx context.Context, sessionID, prompt string) error {
+		_, err := c.Run(ctx, sessionID, prompt)
+		return err
+	}}
 
 	agentCfg, ok := opts.Config.Config().Agents[config.AgentCoder]
 	if !ok {
@@ -1123,7 +1129,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	allTools = append(
 		allTools,
 		&changedReadFiles{
-			AgentTool:  tools.NewBashTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.cfg.Config().Options.Attribution, modelID, c.cfg.Config().Options.GetMaxBackgroundJobs(), c.cfg.Config().Permissions.BashDenyPatterns(), c.cfg.Config().Permissions.BashAllowPatterns()),
+			AgentTool:  tools.NewBashTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.cfg.Config().Options.Attribution, modelID, c.cfg.Config().Options.GetMaxBackgroundJobs(), c.cfg.Config().Permissions.BashDenyPatterns(), c.cfg.Config().Permissions.BashAllowPatterns(), c.backgroundWatcher(isSubAgent)),
 			files:      c.filetracker,
 			workingDir: c.cfg.WorkingDir(),
 			named:      c.named,
@@ -1680,8 +1686,24 @@ func (c *coordinator) Cancel(sessionID string) {
 	c.currentAgent().Cancel(sessionID)
 }
 
+// CancelAll stops every turn, as klash shuts down; from then on a
+// background job that ends starts no turn.
 func (c *coordinator) CancelAll() {
+	if c.jobs != nil {
+		c.jobs.closing.Store(true)
+	}
 	c.currentAgent().CancelAll()
+}
+
+// backgroundWatcher is what the bash tool tells of a command that
+// becomes a background job: the job watcher, for the main agent of an
+// interactive klash, which goes on after a turn ends. A sub-agent's turn
+// is over by the time its job ends, and `klash run` exits with its turn.
+func (c *coordinator) backgroundWatcher(isSubAgent bool) tools.BackgroundWatcher {
+	if isSubAgent || !c.interactive || c.jobs == nil {
+		return nil
+	}
+	return c.jobs.watch
 }
 
 func (c *coordinator) ClearQueue(sessionID string) {

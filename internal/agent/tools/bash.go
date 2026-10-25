@@ -278,7 +278,15 @@ func blockFuncs(denyRules []string) []shell.BlockFunc {
 // command one matches, wherever in a command line it is. allowRules are
 // the patterns of the Bash(pattern) allow rules: a command line runs
 // without asking when each command in it matches one or only reads.
-func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, modelID string, maxBackgroundJobs int, denyRules, allowRules []string) fantasy.AgentTool {
+// BackgroundWatcher is told of each command that becomes a background
+// job, with the context of the bash call that started it, so the agent
+// can be told when the job ends.
+type BackgroundWatcher func(ctx context.Context, job *shell.BackgroundShell)
+
+// NewBashTool runs shell commands. onBackground, when not nil, is told of
+// each command that becomes a background job, and the result then says
+// the agent will be told when it ends.
+func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, modelID string, maxBackgroundJobs int, denyRules, allowRules []string, onBackground BackgroundWatcher) fantasy.AgentTool {
 	allowed := commandRules(allowRules)
 	return fantasy.NewAgentTool(
 		BashToolName,
@@ -370,7 +378,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 					Background:       true,
 					ShellID:          bgShell.ID,
 				}
-				response := fmt.Sprintf("Background shell started with ID: %s\n\nCall the job_output tool with this ID to read its output, or the job_kill tool to stop it.", bgShell.ID)
+				response := fmt.Sprintf("Background shell started with ID: %s\n\n%s", bgShell.ID, backgrounded(ctx, bgShell, onBackground))
 				return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil
 			}
 
@@ -454,10 +462,22 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				Background:       true,
 				ShellID:          bgShell.ID,
 			}
-			response := fmt.Sprintf("Command is taking longer than expected and has been moved to background.\n\nBackground shell ID: %s\n\nCall the job_output tool with this ID to read its output, or the job_kill tool to stop it.", bgShell.ID)
+			response := fmt.Sprintf("Command is taking longer than expected and has been moved to background.\n\nBackground shell ID: %s\n\n%s", bgShell.ID, backgrounded(ctx, bgShell, onBackground))
 			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil
 		},
 	)
+}
+
+// backgrounded hands job, a command that became a background job, to
+// onBackground, and says what the agent can do with it: with a watcher,
+// it is told when the job ends, as Claude Code tells it, so it need not
+// poll.
+func backgrounded(ctx context.Context, job *shell.BackgroundShell, onBackground BackgroundWatcher) string {
+	if onBackground == nil {
+		return "Call the job_output tool with this ID to read its output, or the job_kill tool to stop it."
+	}
+	onBackground(ctx, job)
+	return "You will be told when it ends; there is no need to poll it. Call the job_output tool with this ID to read its output, or the job_kill tool to stop it."
 }
 
 // sessionEnvSetup is the shell code a bash command runs first: the env

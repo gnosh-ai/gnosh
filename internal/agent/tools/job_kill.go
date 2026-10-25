@@ -50,8 +50,10 @@ func NewJobKillTool(workingDir string) fantasy.AgentTool {
 				Description: bgShell.Description,
 			}
 
-			// A job that had ended is only removed; saying it was
-			// terminated would tell the model it stopped something.
+			// The agent stops the job, so it is not told it ended. A job
+			// that had ended is only removed; saying it was terminated
+			// would tell the model it stopped something.
+			bgShell.ClaimEnd()
 			_, _, done, exitErr := bgShell.GetOutput()
 			err := bgManager.Kill(params.ShellID)
 			if err != nil {

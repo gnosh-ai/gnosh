@@ -132,3 +132,71 @@ func TestJobKillSaysAJobHadEnded(t *testing.T) {
 	require.Equal(t, "Background shell "+running.ID+" terminated successfully", kill(running.ID))
 	require.True(t, running.IsDone())
 }
+
+// The notice of a job's end names the command, by its description or
+// else its command line, and says how it ended, as Claude Code's does.
+func TestJobEndNotice(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	bgManager := shell.GetBackgroundShellManager()
+	start := func(command, description string) *shell.BackgroundShell {
+		job, err := bgManager.Start(context.Background(), dir, nil, command, description, testMaxJobs)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = bgManager.Kill(job.ID) })
+		return job
+	}
+	notice := func(job *shell.BackgroundShell, name, how string) string {
+		return "Background command " + name + " (job " + job.ID + ") " + how + ". Call job_output with shell_id " + job.ID + " for its output."
+	}
+
+	ok := start("true", "check it")
+	ok.Wait()
+	require.Equal(t, notice(ok, `"check it"`, "completed (exit code 0)"), JobEndNotice(ok))
+	failed := start("exit 3\necho never", "")
+	failed.Wait()
+	require.Equal(t, notice(failed, `"exit 3…"`, "failed with exit code 3"), JobEndNotice(failed))
+	broken := start("echo 'unterminated", "")
+	broken.Wait()
+	require.Contains(t, JobEndNotice(broken), "(job "+broken.ID+") could not run: ")
+	stopped := start("sleep 60", "wait")
+	require.NoError(t, bgManager.KillIn(dir, stopped.ID))
+	require.Equal(t, notice(stopped, `"wait"`, "was stopped"), JobEndNotice(stopped))
+}
+
+// job_output takes the end of a job it shows has ended, and job_kill the
+// end of a job it stops, so the agent is not told of it again; a job
+// job_output shows still running keeps its end for the notice.
+func TestJobToolsTakeTheEndsTheyReport(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	bgManager := shell.GetBackgroundShellManager()
+	start := func(command string) *shell.BackgroundShell {
+		job, err := bgManager.Start(context.Background(), dir, nil, command, "", testMaxJobs)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = bgManager.Kill(job.ID) })
+		return job
+	}
+	run := func(tool fantasy.AgentTool, name, id string) {
+		resp, err := tool.Run(context.Background(), fantasy.ToolCall{
+			ID: "test-call", Name: name, Input: `{"shell_id":"` + id + `"}`,
+		})
+		require.NoError(t, err)
+		require.False(t, resp.IsError)
+	}
+	output := NewJobOutputTool(dir, t.TempDir())
+
+	running := start("sleep 60")
+	run(output, JobOutputToolName, running.ID)
+	require.True(t, running.ClaimEnd(), "still running: its end is not taken")
+
+	ended := start("true")
+	ended.Wait()
+	run(output, JobOutputToolName, ended.ID)
+	require.False(t, ended.ClaimEnd(), "job_output showed it ended")
+
+	stopped := start("sleep 60")
+	run(NewJobKillTool(dir), JobKillToolName, stopped.ID)
+	require.False(t, stopped.ClaimEnd(), "job_kill stopped it")
+}
