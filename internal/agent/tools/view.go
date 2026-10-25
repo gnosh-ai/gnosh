@@ -7,6 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"image"
+	_ "image/gif"  // for unseenImage
+	_ "image/jpeg" // for unseenImage
+	_ "image/png"  // for unseenImage
 	"io"
 	"io/fs"
 	"net/http"
@@ -22,6 +26,7 @@ import (
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/skills"
+	"github.com/dustin/go-humanize"
 )
 
 //go:embed view.md.tpl
@@ -226,12 +231,12 @@ func NewViewTool(
 
 			isSupportedImage, mimeType := getImageMimeType(filePath)
 			if isSupportedImage {
+				if !GetSupportsImagesFromContext(ctx) {
+					return fantasy.NewTextErrorResponse(unseenImage(filePath, fileInfo.Size(), GetModelNameFromContext(ctx))), nil
+				}
 				if fileInfo.Size() > MaxViewSize {
 					return fantasy.NewTextErrorResponse(fmt.Sprintf("Image file is too large (%d bytes). Maximum size is %d bytes",
 						fileInfo.Size(), MaxViewSize)), nil
-				}
-				if !GetSupportsImagesFromContext(ctx) {
-					return UnsupportedMediaResponse(GetModelNameFromContext(ctx)), nil
 				}
 
 				imageData, readErr := os.ReadFile(filePath)
@@ -343,6 +348,25 @@ func addLineNumbers(content string, startLine int) string {
 // hasMore, so a section shorter than limit with hasMore set was cut at
 // the size limit. Only a first line that does not fit on its own is an
 // error.
+// unseenImage says, for a model that cannot see images, what the image
+// at path is: its format and dimensions when they can be read, and its
+// size, and how to look into it anyway. An agent on the AI box checking
+// rendered video frames tried to view them nine times, told only that it
+// could not, before it measured their pixels in code instead.
+func unseenImage(path string, size int64, modelName string) string {
+	what := "an image"
+	if f, err := os.Open(path); err == nil {
+		config, format, err := image.DecodeConfig(f)
+		_ = f.Close()
+		if err == nil {
+			what = fmt.Sprintf("a %s image of %dx%d pixels", strings.ToUpper(format), config.Width, config.Height)
+		}
+	}
+	return fmt.Sprintf("This model (%s) cannot see images. %s is %s, %s. To check what it shows, "+
+		"analyze its pixels in code (with Python's PIL or numpy, say) or ask a model that sees images.",
+		modelName, path, what, humanize.Bytes(uint64(size)))
+}
+
 func readTextFile(filePath string, offset, limit, maxContentSize int) (string, bool, error) {
 	file, err := os.Open(filePath)
 	if err != nil {

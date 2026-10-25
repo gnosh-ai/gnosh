@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +18,7 @@ import (
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 )
 
@@ -476,4 +481,42 @@ func TestViewToolAddsTheSubdirectoryContext(t *testing.T) {
 	require.Contains(t, resp.Content, "package a")
 	require.True(t, strings.HasSuffix(strings.TrimSpace(resp.Content), "THE SUB RULES"), resp.Content)
 	require.Equal(t, "s1 "+path, asked)
+}
+
+// A model that cannot see images is told what the image is, its format,
+// dimensions and size, and how to look into it, rather than only that
+// it cannot; a large image too, which no size would let it see.
+func TestViewTellsAModelThatCannotSeeImagesWhatAnImageIs(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	write := func(name string, encode func(io.Writer, image.Image) error, w, h int) string {
+		path := filepath.Join(workingDir, name)
+		f, err := os.Create(path)
+		require.NoError(t, err)
+		require.NoError(t, encode(f, image.NewRGBA(image.Rect(0, 0, w, h))))
+		require.NoError(t, f.Close())
+		return path
+	}
+	frame := write("frame.png", png.Encode, 32, 18)
+	photo := write("photo.jpg", func(w io.Writer, m image.Image) error { return jpeg.Encode(w, m, nil) }, 9, 16)
+	large := filepath.Join(workingDir, "large.png")
+	require.NoError(t, os.WriteFile(large, []byte(strings.Repeat("a", MaxViewSize+1)), 0o644))
+
+	tool := newViewToolForTest(workingDir)
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+	ctx = context.WithValue(ctx, SupportsImagesContextKey, false)
+	ctx = context.WithValue(ctx, ModelNameContextKey, "qwen3.8-27b")
+	for path, what := range map[string]string{
+		frame: "a PNG image of 32x18 pixels",
+		photo: "a JPEG image of 9x16 pixels",
+		large: "an image",
+	} {
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		resp := runViewTool(t, tool, ctx, ViewParams{FilePath: path})
+		require.True(t, resp.IsError)
+		require.Equal(t, "This model (qwen3.8-27b) cannot see images. "+path+" is "+what+", "+humanize.Bytes(uint64(info.Size()))+
+			". To check what it shows, analyze its pixels in code (with Python's PIL or numpy, say) or ask a model that sees images.", resp.Content)
+	}
 }
