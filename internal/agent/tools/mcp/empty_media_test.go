@@ -1,34 +1,39 @@
 package mcp
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
 
-// A blank payload decodes to nothing, so it must reach the agent as empty
-// media rather than as whitespace posing as image bytes.
+// A blank payload decodes to nothing, so it reaches the agent as no media
+// at all rather than as whitespace posing as image bytes, and nothing is
+// saved for it.
 func TestBlankMediaDecodesToEmpty(t *testing.T) {
 	t.Parallel()
 
 	for _, tt := range []struct {
 		name    string
 		content mcp.Content
-		kind    string
 	}{
-		{"empty image", &mcp.ImageContent{Data: []byte{}, MIMEType: "image/png"}, "image"},
-		{"blank image", &mcp.ImageContent{Data: []byte("  "), MIMEType: "image/png"}, "image"},
-		{"nil image", &mcp.ImageContent{MIMEType: "image/png"}, "image"},
-		{"empty audio", &mcp.AudioContent{Data: []byte{}, MIMEType: "audio/wav"}, "media"},
-		{"blank audio", &mcp.AudioContent{Data: []byte("\n"), MIMEType: "audio/wav"}, "media"},
+		{"empty image", &mcp.ImageContent{Data: []byte{}, MIMEType: "image/png"}},
+		{"blank image", &mcp.ImageContent{Data: []byte("  "), MIMEType: "image/png"}},
+		{"nil image", &mcp.ImageContent{MIMEType: "image/png"}},
+		{"empty svg", &mcp.ImageContent{Data: []byte{}, MIMEType: "image/svg+xml"}},
+		{"empty audio", &mcp.AudioContent{Data: []byte{}, MIMEType: "audio/wav"}},
+		{"blank audio", &mcp.AudioContent{Data: []byte("\n"), MIMEType: "audio/wav"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := toolResultFromCall(&mcp.CallToolResult{Content: []mcp.Content{tt.content}}, "srv", t.TempDir())
-			require.Equal(t, tt.kind, got.Type)
-			require.Empty(t, got.Data)
+			dataDir := t.TempDir()
+			got := toolResultFromCall(&mcp.CallToolResult{Content: []mcp.Content{tt.content}}, "srv", dataDir)
+			require.Equal(t, ToolResult{Type: "text"}, got)
+			require.NoDirExists(t, filepath.Join(dataDir, "shell-output"))
 		})
 	}
 }
@@ -61,18 +66,31 @@ func TestLaterNonEmptyImageWins(t *testing.T) {
 	require.Equal(t, "image/png", got.MediaType)
 }
 
-func TestEmptyImageDoesNotHideRealAudio(t *testing.T) {
+// Audio is saved and named, as Claude Code saves it: most models take none
+// in a tool's result.
+func TestAudioIsSaved(t *testing.T) {
 	t.Parallel()
+	dataDir := t.TempDir()
 
 	wav := []byte{0xff, 0xf3, 0x44, 0xc4}
 	got := toolResultFromCall(&mcp.CallToolResult{
 		Content: []mcp.Content{
+			&mcp.TextContent{Text: "a song"},
 			&mcp.ImageContent{Data: []byte{}, MIMEType: "image/png"},
 			&mcp.AudioContent{Data: wav, MIMEType: "audio/wav"},
 		},
-	}, "srv", t.TempDir())
-	require.Equal(t, "media", got.Type)
-	require.Equal(t, wav, got.Data)
+	}, "srv", dataDir)
+
+	require.Equal(t, "text", got.Type)
+	require.Empty(t, got.Data)
+	prefix := "a song\n[Audio from srv] Binary content (audio/wav, 4 bytes) saved to "
+	require.True(t, strings.HasPrefix(got.Content, prefix), got.Content)
+	path := strings.TrimPrefix(got.Content, prefix)
+	require.Equal(t, filepath.Join(dataDir, "shell-output"), filepath.Dir(path))
+	require.Equal(t, ".wav", filepath.Ext(path))
+	saved, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, wav, saved)
 }
 
 func TestGoodImageStillPasses(t *testing.T) {

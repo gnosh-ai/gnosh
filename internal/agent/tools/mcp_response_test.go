@@ -44,12 +44,8 @@ func TestMCPResponseSaysAnUnsavedImageCannotBeSeen(t *testing.T) {
 	t.Parallel()
 	ctx := context.WithValue(context.WithValue(t.Context(), SupportsImagesContextKey, false), ModelNameContextKey, "Qwen")
 
-	for _, result := range []mcp.ToolResult{
-		{Type: "image", Content: "a screenshot", Data: onePixelPNG, MediaType: "image/png"},
-		{Type: "media", Content: "a song", Data: []byte{1, 2}, MediaType: "audio/wav", ImagePath: "/tmp/not-an-image"},
-	} {
-		require.Equal(t, UnsupportedMediaResponse("Qwen"), mcpResponse(ctx, result), result.Type)
-	}
+	got := mcpResponse(ctx, mcp.ToolResult{Type: "image", Content: "a screenshot", Data: onePixelPNG, MediaType: "image/png"})
+	require.Equal(t, UnsupportedMediaResponse("Qwen"), got)
 }
 
 func TestMCPResponseShowsAnImageToAModelThatSees(t *testing.T) {

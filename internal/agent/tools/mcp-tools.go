@@ -140,30 +140,22 @@ func (m *Tool) Run(ctx context.Context, params fantasy.ToolCall) (fantasy.ToolRe
 	return mcpResponse(ctx, result), nil
 }
 
-// mcpResponse is the response to an MCP tool's result: its image or audio
-// with its text, or, for a model that cannot see an image, the text and
-// what the image is and where it was saved. That model was given only
-// that it does not support image data, and lost the text with the image.
+// mcpResponse is the response to an MCP tool's result: its image with its
+// text, or, for a model that cannot see the image, the text and what the
+// image is and where it was saved. That model was given only that it does
+// not support image data, and lost the text with the image.
 func mcpResponse(ctx context.Context, result mcp.ToolResult) fantasy.ToolResponse {
-	switch result.Type {
-	case "image", "media":
-		if !GetSupportsImagesFromContext(ctx) {
-			if result.Type == "image" && result.ImagePath != "" {
-				unseen := unseenImage(result.ImagePath, int64(len(result.Data)), GetModelNameFromContext(ctx))
-				return fantasy.NewTextResponse(strings.TrimPrefix(result.Content+"\n\n"+unseen, "\n\n"))
-			}
-			return UnsupportedMediaResponse(GetModelNameFromContext(ctx))
-		}
-
-		var response fantasy.ToolResponse
-		if result.Type == "image" {
-			response = fantasy.NewImageResponse(result.Data, result.MediaType)
-		} else {
-			response = fantasy.NewMediaResponse(result.Data, result.MediaType)
-		}
-		response.Content = result.Content
-		return response
-	default:
+	if result.Type != "image" {
 		return fantasy.NewTextResponse(result.Content)
 	}
+	if !GetSupportsImagesFromContext(ctx) {
+		if result.ImagePath == "" {
+			return UnsupportedMediaResponse(GetModelNameFromContext(ctx))
+		}
+		unseen := unseenImage(result.ImagePath, int64(len(result.Data)), GetModelNameFromContext(ctx))
+		return fantasy.NewTextResponse(strings.TrimPrefix(result.Content+"\n\n"+unseen, "\n\n"))
+	}
+	response := fantasy.NewImageResponse(result.Data, result.MediaType)
+	response.Content = result.Content
+	return response
 }
