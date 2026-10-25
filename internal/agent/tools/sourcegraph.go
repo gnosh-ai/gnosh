@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -19,7 +20,7 @@ type SourcegraphParams struct {
 	Query         string `json:"query" description:"The Sourcegraph search query"`
 	Count         int    `json:"count,omitempty" description:"Optional number of results to return (default: 10, max: 20)"`
 	ContextWindow int    `json:"context_window,omitempty" description:"The context around the match to return (default: 10 lines)"`
-	Timeout       int    `json:"timeout,omitempty" description:"Optional timeout in seconds (max 120)"`
+	Timeout       int    `json:"timeout,omitempty" description:"Optional timeout in seconds (default 60, max 120)"`
 }
 
 type SourcegraphResponseMetadata struct {
@@ -28,6 +29,12 @@ type SourcegraphResponseMetadata struct {
 }
 
 const SourcegraphToolName = "sourcegraph"
+
+// How long a search may take, in seconds: by default, and at most.
+const (
+	sourcegraphDefaultTimeout = 60
+	sourcegraphMaxTimeout     = 120
+)
 
 //go:embed sourcegraph.md.tpl
 var sourcegraphDescriptionTmpl []byte
@@ -47,6 +54,10 @@ func sourcegraphDescription() string {
 	})
 }
 
+// NewSourcegraphTool searches public code on Sourcegraph. Each search is
+// bounded by its own timeout, so client's Timeout is not used: the
+// 30 seconds it had cut off every search asked to wait longer, and a
+// literal search over every repository can take a minute.
 func NewSourcegraphTool(client *http.Client) fantasy.AgentTool {
 	if client == nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -54,10 +65,11 @@ func NewSourcegraphTool(client *http.Client) fantasy.AgentTool {
 		transport.MaxIdleConnsPerHost = 10
 		transport.IdleConnTimeout = 90 * time.Second
 
-		client = &http.Client{
-			Timeout:   30 * time.Second,
-			Transport: transport,
-		}
+		client = &http.Client{Transport: transport}
+	} else {
+		unbounded := *client
+		unbounded.Timeout = 0
+		client = &unbounded
 	}
 	return fantasy.NewParallelAgentTool(
 		SourcegraphToolName,
@@ -77,17 +89,12 @@ func NewSourcegraphTool(client *http.Client) fantasy.AgentTool {
 				params.ContextWindow = 10 // Default context window
 			}
 
-			// Handle timeout with context
-			requestCtx := ctx
+			timeout := sourcegraphDefaultTimeout
 			if params.Timeout > 0 {
-				maxTimeout := 120 // 2 minutes
-				if params.Timeout > maxTimeout {
-					params.Timeout = maxTimeout
-				}
-				var cancel context.CancelFunc
-				requestCtx, cancel = context.WithTimeout(ctx, time.Duration(params.Timeout)*time.Second)
-				defer cancel()
+				timeout = min(params.Timeout, sourcegraphMaxTimeout)
 			}
+			requestCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+			defer cancel()
 
 			type graphqlRequest struct {
 				Query     string `json:"query"`
@@ -99,7 +106,7 @@ func NewSourcegraphTool(client *http.Client) fantasy.AgentTool {
 			request := graphqlRequest{
 				Query: "query Search($query: String!) { search(query: $query, version: V2, patternType: keyword ) { results { matchCount, limitHit, resultCount, approximateResultCount, missing { name }, timedout { name }, indexUnavailable, results { __typename, ... on FileMatch { repository { name }, file { path, url, content }, lineMatches { preview, lineNumber, offsetAndLengths } } } } } }",
 			}
-			request.Variables.Query = params.Query
+			request.Variables.Query = withSearchTimeout(params.Query, timeout)
 
 			graphqlQueryBytes, err := json.Marshal(request)
 			if err != nil {
@@ -122,6 +129,11 @@ func NewSourcegraphTool(client *http.Client) fantasy.AgentTool {
 
 			resp, err := client.Do(req)
 			if err != nil {
+				if errors.Is(requestCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+					return fantasy.NewTextErrorResponse(fmt.Sprintf("Sourcegraph did not answer within %d seconds. "+
+						"A literal search over every repository is slow: narrow it with repo:, lang: or file:, "+
+						"or give a longer timeout (at most %d).", timeout, sourcegraphMaxTimeout)), nil
+				}
 				return fantasy.NewTextErrorResponse("Failed to fetch URL: " + err.Error()), nil
 			}
 			defer resp.Body.Close()
@@ -152,6 +164,18 @@ func NewSourcegraphTool(client *http.Client) fantasy.AgentTool {
 			return fantasy.NewTextResponse(formattedResults), nil
 		},
 	)
+}
+
+// withSearchTimeout gives query Sourcegraph's own timeout: filter, three
+// quarters of the seconds the tool waits, unless it has one: a slow
+// search then comes back with what it found, rather than not at all.
+func withSearchTimeout(query string, seconds int) string {
+	for _, field := range strings.Fields(query) {
+		if strings.HasPrefix(strings.ToLower(field), "timeout:") {
+			return query
+		}
+	}
+	return fmt.Sprintf("%s timeout:%ds", query, max(seconds*3/4, 1))
 }
 
 func formatSourcegraphResults(result map[string]any, contextWindow, maxResults int) (string, error) {
