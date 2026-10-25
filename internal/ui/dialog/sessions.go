@@ -45,8 +45,9 @@ type Session struct {
 	mouseScrolled bool
 	lastClickTime time.Time
 	lastClickID   string
-	// fork, see Fork.
+	// fork, see Fork; name, see Name.
 	fork bool
+	name string
 
 	keyMap struct {
 		Select        key.Binding
@@ -212,7 +213,7 @@ func (s *Session) HandleMsg(msg tea.Msg) Action {
 			case key.Matches(msg, s.keyMap.Select):
 				if item := s.list.SelectedItem(); item != nil {
 					sessionItem := item.(*SessionItem)
-					return ActionSelectSession{Session: sessionItem.Session, Fork: s.fork}
+					return ActionSelectSession{Session: sessionItem.Session, Fork: s.fork, Name: s.name}
 				}
 			default:
 				prevValue := s.input.Value()
@@ -259,7 +260,7 @@ func (s *Session) handleMouseClick(msg tea.MouseClickMsg) Action {
 	now := time.Now()
 	if s.lastClickID == sessionItem.ID() && now.Sub(s.lastClickTime) <= sessionDoubleClickThreshold {
 		s.resetMouseClick()
-		return ActionSelectSession{Session: sessionItem.Session, Fork: s.fork}
+		return ActionSelectSession{Session: sessionItem.Session, Fork: s.fork, Name: s.name}
 	}
 	s.lastClickTime = now
 	s.lastClickID = sessionItem.ID()
@@ -452,6 +453,12 @@ func (s *Session) Search(term string) {
 // one, for Claude Code's --resume --fork-session.
 func (s *Session) Fork() {
 	s.fork = true
+}
+
+// Name makes the session picked, or its copy with Fork, be named name, for
+// Claude Code's --resume --name.
+func (s *Session) Name(name string) {
+	s.name = name
 }
 
 func (s *Session) updateSession(session session.Session) {

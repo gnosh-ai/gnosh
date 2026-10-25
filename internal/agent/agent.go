@@ -58,7 +58,7 @@ import (
 )
 
 const (
-	DefaultSessionName = "Untitled Session"
+	DefaultSessionName = session.UntitledTitle
 
 	// Constants for auto-summarization thresholds
 	largeContextWindowThreshold = 200_000
@@ -2587,6 +2587,11 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 	sess, getErr := a.sessions.Get(context.WithoutCancel(ctx), sessionID)
 	if getErr != nil {
 		slog.Error("Failed to read the session to title", "error", getErr)
+		return
+	}
+	// A name the session was given before its first prompt (klash -n) is
+	// kept, as Claude Code keeps a --name: only an untitled one is titled.
+	if !session.Untitled(sess.Title) {
 		return
 	}
 	untitled := sess.Title

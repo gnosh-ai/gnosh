@@ -47,3 +47,17 @@ func TestNamed(t *testing.T) {
 	require.Empty(t, Named(sessions, "fix-login"))
 	require.Empty(t, Named(sessions, "  "))
 }
+
+// A session is untitled until its first prompt titles it: it has no title,
+// or the one it was created with by the TUI, a channel or klash run. Any
+// other title was given to it.
+func TestUntitled(t *testing.T) {
+	t.Parallel()
+
+	for _, title := range []string{"", NewTitle, RunTitle, UntitledTitle} {
+		require.True(t, Untitled(title), "%q", title)
+	}
+	for _, title := range []string{"nightly check", "new session", "Fix the flaky test"} {
+		require.False(t, Untitled(title), "%q", title)
+	}
+}

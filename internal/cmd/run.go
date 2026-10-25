@@ -79,6 +79,7 @@ klash run --continue "Follow up on your last response"
 			reasoningEffort, _ = cmd.Flags().GetString("reasoning-effort")
 			useLast, _         = cmd.Flags().GetBool("continue")
 			fork, _            = cmd.Flags().GetBool("fork-session")
+			name               = nameFlag(cmd)
 		)
 
 		// sessionID is read from --session or --resume; --resume also
@@ -157,7 +158,7 @@ klash run --continue "Follow up on your last response"
 				return setThinking(clientWs, enabled, cmd.OutOrStdout())
 			}
 			hideSpinner, traceTools := runOutputFlags(quiet, verbose)
-			return output.finish(runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, fork, output))
+			return output.finish(runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, fork, name, output))
 		}
 
 		ws, cleanup, err := setupLocalWorkspace(cmd)
@@ -194,7 +195,7 @@ klash run --continue "Follow up on your last response"
 		if mode, _ := permissionModeFlag(cmd); mode == config.PermissionModePlan {
 			permissionMode = config.PermissionModePlan
 		}
-		return output.finish(appWs.App().RunNonInteractive(ctx, output.w, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, fork, func(id string) {
+		return output.finish(appWs.App().RunNonInteractive(ctx, output.w, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, fork, name, func(id string) {
 			output.started(id, func() streamInit {
 				// Asked for then, not now: the run replaces the coordinator
 				// with one without the interactive-only tools.
@@ -235,6 +236,7 @@ func addRunFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	cmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
 	cmd.Flags().Bool("fork-session", false, forkSessionUsage)
+	cmd.Flags().StringP("name", "n", "", nameUsage)
 	cmd.Flags().String("output-format", "text", "How the answer is printed: text, as it streams; json, one result object at the end; or stream-json, a JSON line per message and the result at the end (as Claude Code's -p --output-format)")
 	// The yolo flags are accepted so that Claude Code's
 	// `-p --dangerously-skip-permissions` works, and change nothing: run
@@ -326,6 +328,7 @@ func runNonInteractive(
 	hideSpinner, traceTools bool,
 	continueSessionID string,
 	useLast, fork bool,
+	name string,
 	output *runOutput,
 ) error {
 	slog.Info("Running in non-interactive mode")
@@ -396,9 +399,16 @@ func runNonInteractive(
 	if err != nil {
 		return fmt.Errorf("failed to resolve session: %w", err)
 	}
-	if fork {
-		if sess, err = c.BranchSession(ctx, ws.ID, sess.ID, ""); err != nil {
+	switch {
+	case fork:
+		if sess, err = c.BranchSession(ctx, ws.ID, sess.ID, name); err != nil {
 			return fmt.Errorf("failed to fork the session: %w", err)
+		}
+	case name != "":
+		// The server has no rename of its own yet.
+		sess.Title = name
+		if sess, err = c.SaveSession(ctx, ws.ID, *sess); err != nil {
+			return fmt.Errorf("failed to name the session: %w", err)
 		}
 	}
 	output.sessionID = sess.ID
@@ -927,7 +937,7 @@ func resolveSession(ctx context.Context, c *client.Client, wsID, continueSession
 		return &last, nil
 
 	default:
-		return c.CreateSession(ctx, wsID, "non-interactive")
+		return c.CreateSession(ctx, wsID, session.RunTitle)
 	}
 }
 

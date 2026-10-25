@@ -132,7 +132,7 @@ func channelTargetSession(ctx context.Context, channel string, viewed []string, 
 		if len(existing) > 0 {
 			return existing[0].ID, nil
 		}
-		sess, err := sessions.Create(ctx, "New Session")
+		sess, err := sessions.Create(ctx, session.NewTitle)
 		if err != nil {
 			return "", err
 		}

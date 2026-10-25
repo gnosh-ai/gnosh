@@ -11,6 +11,27 @@ import (
 // Claude Code.
 const maxNameLength = 200
 
+// The titles a session is created with until its first prompt titles it:
+// the TUI's and a channel's (NewTitle), and klash run's through a server
+// (RunTitle) and in process (UntitledTitle).
+const (
+	NewTitle      = "New Session"
+	RunTitle      = "non-interactive"
+	UntitledTitle = "Untitled Session"
+)
+
+// Untitled reports whether title is one a session has until its first
+// prompt titles it: none, or a title a session is created with. Any other
+// was given to it, by klash -n or a client of the server, and the first
+// prompt keeps it, as Claude Code keeps a --name.
+func Untitled(title string) bool {
+	switch title {
+	case "", NewTitle, RunTitle, UntitledTitle:
+		return true
+	}
+	return false
+}
+
 // CleanName is name as a session keeps it, as Claude Code keeps one given
 // with /rename: control and invisible characters become spaces, the ends
 // are trimmed, and it is cut at 200 characters. "" means nothing is left.

@@ -10,6 +10,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
 )
 
@@ -90,6 +91,30 @@ func TestGenerateTitleSwitchesThinkingOff(t *testing.T) {
 	sess, err := env.sessions.Get(t.Context(), id)
 	require.NoError(t, err)
 	require.Equal(t, "Fix the flaky test", sess.Title)
+}
+
+// A session named before its first prompt, with klash -n, keeps the name,
+// as Claude Code keeps a --name: no title is asked for. One created with a
+// stand-in title is titled.
+func TestGenerateTitleKeepsAGivenName(t *testing.T) {
+	t.Parallel()
+
+	llm := &titleModel{text: "Fix the flaky test", finish: fantasy.FinishReasonStop}
+	a, env, id := titleAgent(t, llm)
+	require.NoError(t, env.sessions.Rename(t.Context(), id, "nightly check"))
+	a.GenerateTitle(t.Context(), id, "please fix the flaky test in the agent package")
+	sess, err := env.sessions.Get(t.Context(), id)
+	require.NoError(t, err)
+	require.Equal(t, "nightly check", sess.Title)
+	require.Empty(t, llm.recorded(), "no title is asked for")
+
+	for _, untitled := range []string{session.NewTitle, session.RunTitle, session.UntitledTitle} {
+		require.NoError(t, env.sessions.Rename(t.Context(), id, untitled))
+		a.GenerateTitle(t.Context(), id, "please fix the flaky test in the agent package")
+		sess, err = env.sessions.Get(t.Context(), id)
+		require.NoError(t, err)
+		require.Equal(t, "Fix the flaky test", sess.Title, "created as %q", untitled)
+	}
 }
 
 // If every model is still cut off, the session is named after the start of

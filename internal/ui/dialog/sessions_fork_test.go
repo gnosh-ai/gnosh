@@ -25,4 +25,10 @@ func TestSessionsFork(t *testing.T) {
 	require.Nil(t, dialog.HandleMsg(click))
 	require.Equal(t, ActionSelectSession{Session: sessions[1], Fork: true}, dialog.HandleMsg(click))
 	require.Equal(t, ActionSelectSession{Session: sessions[1], Fork: true}, dialog.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
+
+	// With --name, the session picked, or its copy, is to be named.
+	dialog.Name("nightly check")
+	require.Nil(t, dialog.HandleMsg(click))
+	require.Equal(t, ActionSelectSession{Session: sessions[1], Fork: true, Name: "nightly check"}, dialog.HandleMsg(click))
+	require.Equal(t, ActionSelectSession{Session: sessions[1], Fork: true, Name: "nightly check"}, dialog.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
 }

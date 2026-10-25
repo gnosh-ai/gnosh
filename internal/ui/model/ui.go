@@ -232,6 +232,9 @@ type UI struct {
 	// forkAtStart makes the session the UI starts in a copy of the one
 	// asked for (see ForkSessionAtStart).
 	forkAtStart bool
+	// startName names the session the UI starts in, once (see
+	// NameSessionAtStart).
+	startName string
 
 	lastUserMessageTime int64
 
@@ -793,6 +796,32 @@ func (m *UI) ForkSessionAtStart() {
 	m.forkAtStart = true
 }
 
+// NameSessionAtStart names the session the UI starts in, as /rename does,
+// for Claude Code's --name: the one resumed or picked from the list, its
+// copy with ForkSessionAtStart, or else the first one created. The
+// sessions after it are not given the name.
+func (m *UI) NameSessionAtStart(name string) {
+	m.startName = name
+}
+
+// takeStartName is the name NameSessionAtStart gave, once.
+func (m *UI) takeStartName() string {
+	name := m.startName
+	m.startName = ""
+	return name
+}
+
+// createSession creates a session for a prompt to go in, titled with the
+// name NameSessionAtStart gave for the first one, else session.NewTitle,
+// which the first prompt replaces.
+func (m *UI) createSession() (session.Session, error) {
+	sess, err := m.com.Workspace.CreateSession(context.Background(), cmp.Or(m.startName, session.NewTitle))
+	if err == nil {
+		m.startName = ""
+	}
+	return sess, err
+}
+
 // pickSessionMsg opens the sessions list, filtered by search. It is its
 // own message because dialog.ActionOpenDialog is acted on only when an
 // open dialog returns it, so sent at startup, with no dialog open, it did
@@ -822,26 +851,25 @@ func (m *UI) startupSessionPicker() tea.Cmd {
 }
 
 // loadInitialSession loads the initial session if one was specified on
-// startup, or with ForkSessionAtStart goes on in a copy of it.
+// startup, or with ForkSessionAtStart goes on in a copy of it, named as
+// NameSessionAtStart asks.
 func (m *UI) loadInitialSession() tea.Cmd {
 	switch {
 	case m.state != uiLanding:
 		// Only load if we're in landing state (i.e., fully configured)
 		return nil
-	case m.initialSessionID != "" && m.forkAtStart:
-		return m.forkSession(m.initialSessionID)
+	case m.initialSessionID != "" && (m.forkAtStart || m.startName != ""):
+		return m.startIn(m.initialSessionID, m.takeStartName())
 	case m.initialSessionID != "":
 		return m.loadSession(m.initialSessionID)
 	case m.continueLastSession:
+		name := m.takeStartName()
 		return func() tea.Msg {
 			sessions, err := m.com.Workspace.ListSessions(context.Background())
 			if err != nil || len(sessions) == 0 {
 				return nil
 			}
-			if m.forkAtStart {
-				return m.branch(sessions[0], "")()
-			}
-			return m.loadSession(sessions[0].ID)()
+			return m.goOnIn(sessions[0], name, m.forkAtStart)()
 		}
 	default:
 		return nil
@@ -1095,8 +1123,11 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.openSessionsDialog(msg.search); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-		if sessions, ok := m.dialog.Dialog(dialog.SessionsID).(*dialog.Session); ok && m.forkAtStart {
-			sessions.Fork()
+		if sessions, ok := m.dialog.Dialog(dialog.SessionsID).(*dialog.Session); ok {
+			if m.forkAtStart {
+				sessions.Fork()
+			}
+			sessions.Name(m.takeStartName())
 		}
 	case reportMsg:
 		m.dialog.OpenDialog(dialog.NewReport(m.com, msg.title, msg.report))
@@ -2406,11 +2437,7 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	// Session dialog messages.
 	case dialog.ActionSelectSession:
 		m.dialog.CloseDialog(dialog.SessionsID)
-		if msg.Fork {
-			cmds = append(cmds, m.branch(msg.Session, ""))
-		} else {
-			cmds = append(cmds, m.loadSession(msg.Session.ID))
-		}
+		cmds = append(cmds, m.goOnIn(msg.Session, msg.Name, msg.Fork))
 
 	// Open dialog message.
 	case dialog.ActionOpenDialog:
@@ -5590,7 +5617,7 @@ func (m *UI) ensureSession() (tea.Cmd, error) {
 	if m.hasSession() {
 		return nil, nil
 	}
-	newSession, err := m.com.Workspace.CreateSession(context.Background(), "New Session")
+	newSession, err := m.createSession()
 	if err != nil {
 		return nil, err
 	}
@@ -6044,7 +6071,7 @@ func (m *UI) runShellCommand(command string) tea.Cmd {
 func (m *UI) runShellCommandInternal(command string, isFirstMessage bool) tea.Cmd {
 	var cmds []tea.Cmd
 	if !m.hasSession() {
-		newSession, err := m.com.Workspace.CreateSession(context.Background(), "New Session")
+		newSession, err := m.createSession()
 		if err != nil {
 			return util.ReportError(err)
 		}

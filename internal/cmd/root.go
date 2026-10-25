@@ -162,6 +162,9 @@ klash --continue
 		if fork {
 			model.ForkSessionAtStart()
 		}
+		if name := nameFlag(cmd); name != "" {
+			model.NameSessionAtStart(name)
+		}
 		if mode, _ := permissionModeFlag(cmd); mode == config.PermissionModePlan {
 			model.StartInPlanMode()
 		}
@@ -396,6 +399,18 @@ func addSessionFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolP("continue", "C", false, "Continue the most recent session")
 	cmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
 	cmd.Flags().Bool("fork-session", false, forkSessionUsage)
+	cmd.Flags().StringP("name", "n", "", nameUsage)
+}
+
+// nameUsage is the help of Claude Code's -n/--name, in klash and klash
+// run.
+const nameUsage = "A name for the session, as /rename gives one: the new session, the one resumed, or with --fork-session its copy"
+
+// nameFlag is the name -n/--name gives the session, as /rename keeps one;
+// "" for none.
+func nameFlag(cmd *cobra.Command) string {
+	name, _ := cmd.Flags().GetString("name")
+	return session.CleanName(name)
 }
 
 // forkSessionUsage is the help of Claude Code's --fork-session, in klash

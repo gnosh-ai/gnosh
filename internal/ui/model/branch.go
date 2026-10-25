@@ -57,14 +57,33 @@ func (m *UI) branch(from session.Session, title string) tea.Cmd {
 	}
 }
 
-// forkSession goes on in a copy of session id, for --fork-session with
-// the session named on the command line.
-func (m *UI) forkSession(id string) tea.Cmd {
+// startIn goes on in session id as the UI starts, as goOnIn does, for
+// --fork-session or --name with the session named on the command line.
+func (m *UI) startIn(id, name string) tea.Cmd {
 	return func() tea.Msg {
 		from, err := m.com.Workspace.GetSession(context.Background(), id)
 		if err != nil {
 			return util.ReportError(err)()
 		}
-		return m.branch(from, "")()
+		return m.goOnIn(from, name, m.forkAtStart)()
 	}
+}
+
+// goOnIn goes on in session from, the one the UI starts in or picks from
+// the list it opens at the start: with fork, in a copy of it named name,
+// or after from with no name, as --fork-session and --name ask; else in
+// from itself, renamed name, as /rename names one, when name is given.
+func (m *UI) goOnIn(from session.Session, name string, fork bool) tea.Cmd {
+	switch {
+	case fork:
+		return m.branch(from, name)
+	case name != "":
+		return func() tea.Msg {
+			if err := m.com.Workspace.RenameSession(context.Background(), from.ID, name); err != nil {
+				return util.ReportError(err)()
+			}
+			return m.loadSession(from.ID)()
+		}
+	}
+	return m.loadSession(from.ID)
 }

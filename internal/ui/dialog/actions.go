@@ -33,10 +33,11 @@ type ActionOpenDialog struct {
 }
 
 // ActionSelectSession is a message indicating a session has been selected,
-// to go on in it or, with Fork, in a copy of it.
+// to go on in it or, with Fork, in a copy of it; named Name, when set.
 type ActionSelectSession struct {
 	Session session.Session
 	Fork    bool
+	Name    string
 }
 
 // ActionSelectModel is a message indicating a model has been selected.

@@ -479,8 +479,9 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 // RunNonInteractive runs one prompt without the TUI, writing the answer to
 // output. onSession, when set, is told the session the run uses. With
 // fork, for Claude Code's --fork-session, the run goes on in a copy of the
-// session it continues, which is left as it was.
-func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner, traceTools bool, continueSessionID string, useLast, fork bool, onSession func(sessionID string), onMessage func(message.Message)) error {
+// session it continues, which is left as it was. A name, for Claude
+// Code's --name, names the session the run goes on in, as /rename does.
+func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner, traceTools bool, continueSessionID string, useLast, fork bool, name string, onSession func(sessionID string), onMessage func(message.Message)) error {
 	slog.Info("Running in non-interactive mode")
 
 	// Re-initialize the coder agent without interactive-only tools. The
@@ -566,10 +567,16 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 		return fmt.Errorf("failed to create session for non-interactive mode: %w", err)
 	}
 	// After InitCoderAgentNonInteractive, so the coordinator that runs the
-	// prompt is the one told the copy is a fork.
-	if fork {
-		if sess, err = app.BranchSession(ctx, sess.ID, ""); err != nil {
+	// prompt is the one told the copy is a fork. Named before the prompt,
+	// a new session keeps its name: only an untitled one is titled.
+	switch {
+	case fork:
+		if sess, err = app.BranchSession(ctx, sess.ID, name); err != nil {
 			return fmt.Errorf("failed to fork the session: %w", err)
+		}
+	case name != "":
+		if err := app.Sessions.Rename(ctx, sess.ID, name); err != nil {
+			return fmt.Errorf("failed to name the session: %w", err)
 		}
 	}
 	if onSession != nil {
