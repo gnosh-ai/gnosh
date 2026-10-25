@@ -133,6 +133,10 @@ type bashDescriptionData struct {
 	ModelID         string
 	RgAvailable     bool
 	GhAvailable     bool
+	// Notified is set when the agent is told a background command's end,
+	// and so may not start a command with a long sleep (BlockedSleep).
+	Notified     bool
+	BlockedSleep int
 }
 
 var bannedCommands = []string{
@@ -208,7 +212,7 @@ var bannedCommands = []string{
 	"ufw",
 }
 
-func bashDescription(attribution *config.Attribution, modelID string, denyRules []string) string {
+func bashDescription(attribution *config.Attribution, modelID string, denyRules []string, notified bool) string {
 	bannedCommandsStr := strings.Join(bannedCommands, ", ")
 	var out bytes.Buffer
 	if err := bashDescriptionTpl.Execute(&out, bashDescriptionData{
@@ -221,6 +225,8 @@ func bashDescription(attribution *config.Attribution, modelID string, denyRules 
 		ModelID:         modelID,
 		RgAvailable:     getRg() != "",
 		GhAvailable:     ghAvailable,
+		Notified:        notified,
+		BlockedSleep:    blockedSleep,
 	}); err != nil {
 		// this should never happen.
 		panic("failed to execute bash description template: " + err.Error())
@@ -290,10 +296,18 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 	allowed := commandRules(allowRules)
 	return fantasy.NewAgentTool(
 		BashToolName,
-		string(bashDescription(attribution, modelID, denyRules)),
+		string(bashDescription(attribution, modelID, denyRules, onBackground != nil)),
 		func(ctx context.Context, params BashParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			if params.Command == "" {
 				return fantasy.NewTextErrorResponse("missing command"), nil
+			}
+			// Where the agent is told when a background command ends, a
+			// long sleep in the foreground only holds it up, as Claude
+			// Code has it.
+			if onBackground != nil && !params.RunInBackground {
+				if sleep := foregroundSleep(params.Command); sleep != "" {
+					return fantasy.NewTextErrorResponse(fmt.Sprintf(sleepBlocked, sleep)), nil
+				}
 			}
 
 			// Determine working directory

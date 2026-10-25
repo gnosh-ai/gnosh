@@ -51,7 +51,7 @@ func TestBashToolHonorsTheEnvLimits(t *testing.T) {
 	t.Setenv("BASH_MAX_TIMEOUT_MS", "1200000")
 	t.Setenv("BASH_MAX_OUTPUT_LENGTH", "100")
 
-	description := bashDescription(&config.Attribution{}, "m", nil)
+	description := bashDescription(&config.Attribution{}, "m", nil, false)
 	require.Contains(t, description, "Commands exceeding 1 seconds")
 	require.Contains(t, description, "up to 1200000")
 	require.Contains(t, description, "Truncate if exceeds 100 characters")

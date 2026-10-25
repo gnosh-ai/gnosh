@@ -32,6 +32,9 @@ Common shell builtins and core utils available on Windows.
 - Use job_output tool to view current output from background shell
 - Use job_kill tool to terminate a background shell
 - IMPORTANT: NEVER use `&` at the end of commands to run in background - use run_in_background parameter instead
+{{- if .Notified }}
+- You are told when a background command ends: do not poll it while you wait. Foreground `sleep` of {{ .BlockedSleep }} seconds or more is blocked; to wait for a condition, run an until-loop (`until <check>; do sleep 2; done`) with run_in_background=true
+{{- end }}
 - Commands that should run in background:
   * Long-running servers (e.g., `npm start`, `python -m http.server`, `node server.js`)
   * Watch/monitoring tasks (e.g., `npm run watch`, `tail -f logfile`)

@@ -542,7 +542,7 @@ func TestBashTellsTheWatcherOfBackgroundJobs(t *testing.T) {
 	require.Contains(t, resp.Content, "hi")
 	require.Len(t, got(), 1, "ended in time: no job")
 
-	resp = runBashTool(t, tool, ctx, BashParams{Description: "long", Command: "sleep 60", AutoBackgroundAfter: 1})
+	resp = runBashTool(t, tool, ctx, BashParams{Description: "long", Command: "echo start; sleep 60", AutoBackgroundAfter: 1})
 	require.Len(t, got(), 2)
 	require.Contains(t, resp.Content, "moved to background")
 	require.Contains(t, resp.Content, "Background shell ID: "+got()[1])
