@@ -9,7 +9,9 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -977,8 +979,13 @@ type ToolGlob struct {
 	Timeout *time.Duration `json:"timeout,omitempty" jsonschema:"description=Timeout for the glob tool call,default=30s,example=10s"`
 }
 
-// GetTimeout returns the user-defined timeout or the default.
+// GetTimeout returns how long a glob may search:
+// CLAUDE_CODE_GLOB_TIMEOUT_SECONDS, as in Claude Code, when it is a
+// positive number, else the configured timeout, else 30 seconds.
 func (t ToolGlob) GetTimeout() time.Duration {
+	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv("CLAUDE_CODE_GLOB_TIMEOUT_SECONDS"))); err == nil && n > 0 {
+		return time.Duration(n) * time.Second
+	}
 	return ptrValOr(t.Timeout, 30*time.Second)
 }
 
