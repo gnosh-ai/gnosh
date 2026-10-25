@@ -62,9 +62,11 @@ func TestTodoReminderText(t *testing.T) {
 
 // countingModel calls the count tool with a new number on each of its
 // first steps steps, then answers, and keeps the prompt of each request.
+// onStep, when set, is called with each request's number.
 type countingModel struct {
 	fakeLanguageModel
 	steps   int
+	onStep  func(n int)
 	mu      sync.Mutex
 	prompts []fantasy.Prompt
 }
@@ -74,6 +76,9 @@ func (m *countingModel) Stream(_ context.Context, call fantasy.Call) (fantasy.St
 	m.prompts = append(m.prompts, slices.Clone(call.Prompt))
 	n := len(m.prompts)
 	m.mu.Unlock()
+	if m.onStep != nil {
+		m.onStep(n)
+	}
 	return func(yield func(fantasy.StreamPart) bool) {
 		if n > m.steps {
 			yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextStart, ID: "t"})
@@ -97,10 +102,10 @@ type countParams struct {
 
 // Ten replies with no todos call put Claude Code's reminder, with the
 // session's todo list, before the model's next reply, and not again in
-// the ten after it. The reminder is kept as a hidden user message, so the
-// conversation reads the same when it is rebuilt and the chat does not
-// show it; the turn's later steps do not carry it, as they do not carry
-// prompts folded in. A model without the todos tool is not reminded.
+// the ten after it, while the turn's later steps keep it where it was put.
+// The reminder is kept as a hidden user message, so the conversation
+// reads the same when it is rebuilt and the chat does not show it. A
+// model without the todos tool is not reminded.
 func TestRunRemindsTheModelOfItsTodoList(t *testing.T) {
 	for _, withTodos := range []bool{true, false} {
 		t.Run(fmt.Sprintf("todos tool %v", withTodos), func(t *testing.T) {
@@ -152,7 +157,7 @@ func TestRunRemindsTheModelOfItsTodoList(t *testing.T) {
 						}
 					}
 				}
-				if withTodos && i == todoReminderTurns {
+				if withTodos && i >= todoReminderTurns {
 					require.Equal(t, 1, reminders, "request %d", i+1)
 				} else {
 					require.Zero(t, reminders, "request %d", i+1)

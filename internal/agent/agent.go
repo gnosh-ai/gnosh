@@ -1098,6 +1098,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	a.eventPromptSent(call.SessionID)
 
 	var stepMessages []fantasy.Message
+	// What this turn's steps put in after their input, and where; see
+	// keepInjected.
+	var injected []injectedMessages
 	var shouldSummarize bool
 	// The tool calls the agent was caught repeating, when that is what
 	// stopped the run; see loopContinuation.
@@ -1128,10 +1131,12 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		TopK:             call.TopK,
 		FrequencyPenalty: call.FrequencyPenalty,
 		PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
-			prepared.Messages = options.Messages
+			prepared.Messages = keepInjected(options.Messages, injected)
 			for i := range prepared.Messages {
 				prepared.Messages[i].ProviderOptions = nil
 			}
+			inputLen := len(options.Messages)
+			var added []fantasy.Message
 
 			// Use latest tools (updated by SetTools when MCP tools
 			// change).
@@ -1155,14 +1160,18 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				if createErr != nil {
 					return callContext, prepared, createErr
 				}
-				prepared.Messages = append(prepared.Messages, userMessage.ToAIMessage()...)
+				added = append(added, userMessage.ToAIMessage()...)
 			}
 
 			reminder, err := a.remindOfTodos(callContext, call.SessionID, prepared.Tools)
 			if err != nil {
 				return callContext, prepared, err
 			}
-			prepared.Messages = append(prepared.Messages, reminder...)
+			added = append(added, reminder...)
+			if len(added) > 0 {
+				prepared.Messages = append(prepared.Messages, added...)
+				injected = append(injected, injectedMessages{at: inputLen, messages: added})
+			}
 
 			prepared.Messages = a.prepareRequestMessages(prepared.Messages, largeModel, promptPrefix)
 
