@@ -15,6 +15,7 @@ import (
 	"github.com/lucasb-eyer/go-colorful"
 
 	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/ui/fade"
 )
 
 const (
@@ -508,6 +509,7 @@ func (a *Anim) Render() string {
 // makeGradientRamp() returns a slice of colors blended between the given keys.
 // Blending is done as Hcl to stay in gamut.
 func makeGradientRamp(size int, stops ...color.Color) []color.Color {
+	stops = fade.Stops(stops...)
 	if len(stops) < 2 {
 		return nil
 	}

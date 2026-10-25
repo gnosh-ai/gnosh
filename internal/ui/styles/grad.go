@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/ui/fade"
 	"github.com/rivo/uniseg"
 )
 
@@ -30,7 +31,7 @@ func ForegroundGrad(base lipgloss.Style, input string, bold bool, color1, color2
 		clusters = append(clusters, string(gr.Runes()))
 	}
 
-	ramp := lipgloss.Blend1D(len(clusters), color1, color2)
+	ramp := lipgloss.Blend1D(len(clusters), fade.Stops(color1, color2)...)
 	for i, c := range ramp {
 		style := base.Foreground(c)
 		if bold {

@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/ui/fade"
 	"github.com/charmbracelet/x/exp/charmtone"
 )
 
@@ -11,9 +12,9 @@ import (
 const DefaultThemeName = "klash-cosmos"
 
 // Klash keeps Crush's own purple and hot pink, the colors of a nebula, and
-// adds green and gold sparingly, as starlight: the klash.pro mark, the
-// version, a few stars among the logo's diagonal lines. The banner, social
-// card and avatar in docs/brand are drawn in the same colors
+// adds green and gold sparingly: every fade starts green and ends gold with
+// purple and pink between, and there is starlight in the logo. The banner,
+// social card and avatar in docs/brand are drawn in the same colors
 // (scripts/brand.py).
 var (
 	KlashPurple = charmtone.Charple
@@ -34,10 +35,26 @@ func klashOpts() quickStyleOpts {
 	return charmtoneOpts()
 }
 
+// KlashNebula returns the ends of Klash's fades: green, and a gold that the
+// fade reaches through Crush's purple and hot pink, so those two hold the
+// middle and green and gold only the ends.
+func KlashNebula() (from, to color.Color) {
+	return KlashGreen, &fade.Via{Color: KlashGold, Through: []color.Color{KlashPurple, KlashPink}}
+}
+
 // klashOverrides applies Charmtone's own tweaks, then Klash's green and
-// gold, kept to the logo.
+// gold: in every fade, and as starlight in the logo.
 func klashOverrides(s Styles) Styles {
 	s = charmtoneOverrides(s)
+
+	// The wordmark, the small and compact logos, dialog titles and the
+	// working animation all fade through the nebula.
+	from, to := KlashNebula()
+	s.Logo.TitleColorA, s.Logo.TitleColorB = from, to
+	s.Logo.SmallGradFromColor, s.Logo.SmallGradToColor = from, to
+	s.Header.LogoGradFromColor, s.Header.LogoGradToColor = from, to
+	s.Dialog.TitleGradFromColor, s.Dialog.TitleGradToColor = from, to
+	s.WorkingGradFromColor, s.WorkingGradToColor = from, to
 
 	// The logo's fields fade from purple to hot pink instead of lying flat,
 	// with a star here and there.

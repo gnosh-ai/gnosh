@@ -1,6 +1,12 @@
 package styles
 
-import "testing"
+import (
+	"fmt"
+	"image/color"
+	"testing"
+
+	"github.com/charmbracelet/crush/internal/ui/fade"
+)
 
 func TestKlashCosmosIsTheDefault(t *testing.T) {
 	if !IsBuiltinTheme(DefaultThemeName) {
@@ -17,14 +23,13 @@ func TestKlashCosmosIsTheDefault(t *testing.T) {
 }
 
 func TestKlashCosmos_KeepsCrushsColors(t *testing.T) {
-	// Klash adds starlight to Charmtone; it doesn't recolor it.
+	// Klash adds green and gold to Charmtone; it doesn't recolor it.
 	k, c := KlashCosmos(), CharmtonePantera()
 	for _, p := range []struct{ name, klash, crush string }{
-		{"wordmark start", *hex(k.Logo.TitleColorA), *hex(c.Logo.TitleColorA)},
-		{"wordmark end", *hex(k.Logo.TitleColorB), *hex(c.Logo.TitleColorB)},
 		{"fields", *hex(k.Logo.FieldColor), *hex(c.Logo.FieldColor)},
 		{"background", *hex(k.Background), *hex(c.Background)},
 		{"dialog border", *hex(k.Dialog.View.GetBorderTopForeground()), *hex(c.Dialog.View.GetBorderTopForeground())},
+		{"selected item", *hex(k.Dialog.SelectedItem.GetBackground()), *hex(c.Dialog.SelectedItem.GetBackground())},
 	} {
 		if p.klash != p.crush {
 			t.Errorf("%s is %s, want Charmtone's %s", p.name, p.klash, p.crush)
@@ -35,6 +40,29 @@ func TestKlashCosmos_KeepsCrushsColors(t *testing.T) {
 	}
 	if c.Logo.FieldColorB != nil || len(c.Logo.StarColors) != 0 {
 		t.Error("Charmtone's own logo should stay as upstream draws it")
+	}
+}
+
+func TestKlashCosmos_FadesRunThroughTheNebula(t *testing.T) {
+	// Every fade starts green and ends gold, with Crush's purple and hot
+	// pink between them.
+	want := []string{*hex(KlashGreen), *hex(KlashPurple), *hex(KlashPink), *hex(KlashGold)}
+	s := KlashCosmos()
+	for name, ends := range map[string][2]color.Color{
+		"wordmark":       {s.Logo.TitleColorA, s.Logo.TitleColorB},
+		"small wordmark": {s.Logo.SmallGradFromColor, s.Logo.SmallGradToColor},
+		"header":         {s.Header.LogoGradFromColor, s.Header.LogoGradToColor},
+		"dialog title":   {s.Dialog.TitleGradFromColor, s.Dialog.TitleGradToColor},
+		"working":        {s.WorkingGradFromColor, s.WorkingGradToColor},
+	} {
+		stops := fade.Stops(ends[0], ends[1])
+		got := make([]string, len(stops))
+		for i, c := range stops {
+			got[i] = *hex(c)
+		}
+		if fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Errorf("the %s fades through %v, want %v", name, got, want)
+		}
 	}
 }
 

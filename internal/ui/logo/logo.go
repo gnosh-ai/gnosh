@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/ui/fade"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/x/ansi"
@@ -188,7 +189,7 @@ func field(base lipgloss.Style, o Opts, row, col, width int, reverse bool) strin
 		if reverse {
 			from, to = to, from
 		}
-		ramp = lipgloss.Blend1D(width, from, to)
+		ramp = lipgloss.Blend1D(width, fade.Stops(from, to)...)
 	}
 	var b strings.Builder
 	prevStar := false
