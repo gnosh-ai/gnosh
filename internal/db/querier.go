@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	AddSessionCost(ctx context.Context, arg AddSessionCostParams) (string, error)
 	// A copy of a version of a file into another session, as /branch makes:
 	// its version and times as they were, so the latest stays the latest.
 	CopyFile(ctx context.Context, arg CopyFileParams) error
@@ -74,6 +75,7 @@ type Querier interface {
 	UpdateMessage(ctx context.Context, arg UpdateMessageParams) error
 	UpdateSession(ctx context.Context, arg UpdateSessionParams) (Session, error)
 	UpdateSessionTitleAndUsage(ctx context.Context, arg UpdateSessionTitleAndUsageParams) error
+	UpdateSessionUsage(ctx context.Context, arg UpdateSessionUsageParams) (Session, error)
 }
 
 var _ Querier = (*Queries)(nil)

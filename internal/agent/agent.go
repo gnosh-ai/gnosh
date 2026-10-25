@@ -1338,8 +1338,11 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				return getSessionErr
 			}
 			usage, estimated := fallbackStepUsage(stepMessages, stepResult)
+			costBefore := updatedSession.Cost
 			a.updateSessionUsage(largeModel, &updatedSession, usage, a.openrouterCost(stepResult.ProviderMetadata), estimated)
-			_, sessionErr := a.sessions.Save(ctx, updatedSession)
+			// Only the usage is written: the title model's title, or a
+			// /rename, written since the Get is kept.
+			updatedSession, sessionErr := a.sessions.UpdateUsage(ctx, call.SessionID, updatedSession.PromptTokens, updatedSession.CompletionTokens, updatedSession.Cost-costBefore, updatedSession.EstimatedUsage)
 			if sessionErr != nil {
 				return sessionErr
 			}

@@ -2,6 +2,7 @@ package session
 
 import (
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/stretchr/testify/require"
@@ -142,4 +143,54 @@ func TestEstimatedUsageStateCanBeClearedByExplicitSave(t *testing.T) {
 	refetched, err := sessions.Get(t.Context(), created.ID)
 	require.NoError(t, err)
 	require.False(t, refetched.EstimatedUsage)
+}
+
+// A step's usage is written alone: a title written after the step read
+// the session (the title model's, or a /rename) is kept, where saving
+// the session the step had read put its old title back. AddCost, for a
+// sub-agent's run, adds to the cost and touches nothing else.
+func TestUpdateUsageKeepsATitleWrittenMeanwhile(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Cleanup(func() {
+		require.NoError(t, db.Release(dataDir))
+		db.ResetPool()
+	})
+	conn, err := db.Connect(t.Context(), dataDir)
+	require.NoError(t, err)
+	sessions := NewService(db.New(conn), conn)
+
+	created, err := sessions.Create(t.Context(), "New Session")
+	require.NoError(t, err)
+	stale, err := sessions.Get(t.Context(), created.ID)
+	require.NoError(t, err)
+	require.NoError(t, sessions.Rename(t.Context(), created.ID, "Fix the flaky test"))
+
+	events := sessions.Subscribe(t.Context())
+	updated, err := sessions.UpdateUsage(t.Context(), stale.ID, 1200, 80, 0.5, true)
+	require.NoError(t, err)
+	select {
+	case ev := <-events:
+		require.Equal(t, updated, ev.Payload, "published for the UI")
+	case <-time.After(5 * time.Second):
+		t.Fatal("no update published")
+	}
+	require.Equal(t, "Fix the flaky test", updated.Title)
+	require.Equal(t, [2]int64{1200, 80}, [2]int64{updated.PromptTokens, updated.CompletionTokens})
+	require.InDelta(t, 0.5, updated.Cost, 1e-9)
+	require.True(t, updated.EstimatedUsage)
+	fetched, err := sessions.Get(t.Context(), created.ID)
+	require.NoError(t, err)
+	require.Equal(t, updated, fetched)
+
+	updated, err = sessions.UpdateUsage(t.Context(), created.ID, 1300, 90, 0.25, false)
+	require.NoError(t, err)
+	require.InDelta(t, 0.75, updated.Cost, 1e-9, "cost is added")
+	require.False(t, updated.EstimatedUsage)
+
+	require.NoError(t, sessions.AddCost(t.Context(), created.ID, 1))
+	fetched, err = sessions.Get(t.Context(), created.ID)
+	require.NoError(t, err)
+	require.InDelta(t, 1.75, fetched.Cost, 1e-9)
+	require.Equal(t, "Fix the flaky test", fetched.Title)
+	require.Equal(t, [2]int64{1300, 90}, [2]int64{fetched.PromptTokens, fetched.CompletionTokens})
 }

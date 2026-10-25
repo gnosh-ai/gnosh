@@ -70,6 +70,21 @@ SET
 WHERE id = ?;
 
 
+-- name: UpdateSessionUsage :one
+UPDATE sessions
+SET
+    prompt_tokens = ?,
+    completion_tokens = ?,
+    cost = cost + ?
+WHERE id = ?
+RETURNING *;
+
+-- name: AddSessionCost :one
+UPDATE sessions
+SET cost = cost + ?
+WHERE id = ?
+RETURNING id;
+
 -- name: RenameSession :exec
 UPDATE sessions
 SET

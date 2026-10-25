@@ -75,6 +75,11 @@ type Service interface {
 	Save(ctx context.Context, session Session) (Session, error)
 	SetChannel(ctx context.Context, sessionID, channel string) (Session, error)
 	UpdateTitleAndUsage(ctx context.Context, sessionID, title string, promptTokens, completionTokens int64, cost float64) error
+	// UpdateUsage records a step's usage and nothing else: the counters'
+	// new values, cost added, and whether they are estimated.
+	UpdateUsage(ctx context.Context, sessionID string, promptTokens, completionTokens int64, cost float64, estimated bool) (Session, error)
+	// AddCost adds cost to the session's and touches nothing else.
+	AddCost(ctx context.Context, sessionID string, cost float64) error
 	Rename(ctx context.Context, id string, title string) error
 	Delete(ctx context.Context, id string) error
 	MCPDisabledServers(ctx context.Context) ([]string, error)
@@ -257,6 +262,36 @@ func (s *service) UpdateTitleAndUsage(ctx context.Context, sessionID, title stri
 		CompletionTokens: completionTokens,
 		Cost:             cost,
 	}); err != nil {
+		return err
+	}
+	s.publishSessionUpdate(ctx, sessionID)
+	return nil
+}
+
+// UpdateUsage implements Service. Saving the whole session after a step
+// put back the title it had read, so a title the title model, or
+// /rename, gave the session meanwhile was undone; only the usage is
+// written now.
+func (s *service) UpdateUsage(ctx context.Context, sessionID string, promptTokens, completionTokens int64, cost float64, estimated bool) (Session, error) {
+	dbSession, err := s.q.UpdateSessionUsage(ctx, db.UpdateSessionUsageParams{
+		ID:               sessionID,
+		PromptTokens:     promptTokens,
+		CompletionTokens: completionTokens,
+		Cost:             cost,
+	})
+	if err != nil {
+		return Session{}, err
+	}
+	s.setEstimatedUsageState(sessionID, estimated)
+	session := s.fromDBItem(dbSession)
+	session.EstimatedUsage = estimated
+	s.Publish(pubsub.UpdatedEvent, session)
+	return session, nil
+}
+
+// AddCost implements Service, for what a sub-agent's run cost its parent.
+func (s *service) AddCost(ctx context.Context, sessionID string, cost float64) error {
+	if _, err := s.q.AddSessionCost(ctx, db.AddSessionCostParams{ID: sessionID, Cost: cost}); err != nil {
 		return err
 	}
 	s.publishSessionUpdate(ctx, sessionID)

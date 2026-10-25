@@ -2203,18 +2203,11 @@ func (c *coordinator) updateParentSessionCost(ctx context.Context, childSessionI
 	if err != nil {
 		return fmt.Errorf("get child session: %w", err)
 	}
-
-	parentSession, err := c.sessions.Get(ctx, parentSessionID)
-	if err != nil {
-		return fmt.Errorf("get parent session: %w", err)
+	// Only the cost is added: saving the whole parent session put back
+	// what it had read, over the parent's own steps' usage and title.
+	if err := c.sessions.AddCost(ctx, parentSessionID, childSession.Cost); err != nil {
+		return fmt.Errorf("add to parent session cost: %w", err)
 	}
-
-	parentSession.Cost += childSession.Cost
-
-	if _, err := c.sessions.Save(ctx, parentSession); err != nil {
-		return fmt.Errorf("save parent session: %w", err)
-	}
-
 	return nil
 }
 

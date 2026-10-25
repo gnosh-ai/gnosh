@@ -551,7 +551,7 @@ func TestUpdateParentSessionCost(t *testing.T) {
 
 		err = coord.updateParentSessionCost(t.Context(), child.ID, "non-existent")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "get parent session")
+		assert.Contains(t, err.Error(), "parent session")
 	})
 
 	t.Run("zero cost handled correctly", func(t *testing.T) {

@@ -10,6 +10,25 @@ import (
 	"database/sql"
 )
 
+const addSessionCost = `-- name: AddSessionCost :one
+UPDATE sessions
+SET cost = cost + ?
+WHERE id = ?
+RETURNING id
+`
+
+type AddSessionCostParams struct {
+	Cost float64 `json:"cost"`
+	ID   string  `json:"id"`
+}
+
+func (q *Queries) AddSessionCost(ctx context.Context, arg AddSessionCostParams) (string, error) {
+	row := q.queryRow(ctx, q.addSessionCostStmt, addSessionCost, arg.Cost, arg.ID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createSession = `-- name: CreateSession :one
 INSERT INTO sessions (
     id,
@@ -311,4 +330,46 @@ func (q *Queries) UpdateSessionTitleAndUsage(ctx context.Context, arg UpdateSess
 		arg.ID,
 	)
 	return err
+}
+
+const updateSessionUsage = `-- name: UpdateSessionUsage :one
+UPDATE sessions
+SET
+    prompt_tokens = ?,
+    completion_tokens = ?,
+    cost = cost + ?
+WHERE id = ?
+RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel
+`
+
+type UpdateSessionUsageParams struct {
+	PromptTokens     int64   `json:"prompt_tokens"`
+	CompletionTokens int64   `json:"completion_tokens"`
+	Cost             float64 `json:"cost"`
+	ID               string  `json:"id"`
+}
+
+func (q *Queries) UpdateSessionUsage(ctx context.Context, arg UpdateSessionUsageParams) (Session, error) {
+	row := q.queryRow(ctx, q.updateSessionUsageStmt, updateSessionUsage,
+		arg.PromptTokens,
+		arg.CompletionTokens,
+		arg.Cost,
+		arg.ID,
+	)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.ParentSessionID,
+		&i.Title,
+		&i.MessageCount,
+		&i.PromptTokens,
+		&i.CompletionTokens,
+		&i.Cost,
+		&i.UpdatedAt,
+		&i.CreatedAt,
+		&i.SummaryMessageID,
+		&i.Todos,
+		&i.Channel,
+	)
+	return i, err
 }

@@ -24,6 +24,9 @@ func New(db DBTX) *Queries {
 func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	q := Queries{db: db}
 	var err error
+	if q.addSessionCostStmt, err = db.PrepareContext(ctx, addSessionCost); err != nil {
+		return nil, fmt.Errorf("error preparing query AddSessionCost: %w", err)
+	}
 	if q.copyFileStmt, err = db.PrepareContext(ctx, copyFile); err != nil {
 		return nil, fmt.Errorf("error preparing query CopyFile: %w", err)
 	}
@@ -174,11 +177,19 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.updateSessionTitleAndUsageStmt, err = db.PrepareContext(ctx, updateSessionTitleAndUsage); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateSessionTitleAndUsage: %w", err)
 	}
+	if q.updateSessionUsageStmt, err = db.PrepareContext(ctx, updateSessionUsage); err != nil {
+		return nil, fmt.Errorf("error preparing query UpdateSessionUsage: %w", err)
+	}
 	return &q, nil
 }
 
 func (q *Queries) Close() error {
 	var err error
+	if q.addSessionCostStmt != nil {
+		if cerr := q.addSessionCostStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing addSessionCostStmt: %w", cerr)
+		}
+	}
 	if q.copyFileStmt != nil {
 		if cerr := q.copyFileStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing copyFileStmt: %w", cerr)
@@ -429,6 +440,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing updateSessionTitleAndUsageStmt: %w", cerr)
 		}
 	}
+	if q.updateSessionUsageStmt != nil {
+		if cerr := q.updateSessionUsageStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing updateSessionUsageStmt: %w", cerr)
+		}
+	}
 	return err
 }
 
@@ -468,6 +484,7 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 type Queries struct {
 	db                                   DBTX
 	tx                                   *sql.Tx
+	addSessionCostStmt                   *sql.Stmt
 	copyFileStmt                         *sql.Stmt
 	copyMessageStmt                      *sql.Stmt
 	copySessionReadFilesStmt             *sql.Stmt
@@ -518,12 +535,14 @@ type Queries struct {
 	updateMessageStmt                    *sql.Stmt
 	updateSessionStmt                    *sql.Stmt
 	updateSessionTitleAndUsageStmt       *sql.Stmt
+	updateSessionUsageStmt               *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
 		db:                                   tx,
 		tx:                                   tx,
+		addSessionCostStmt:                   q.addSessionCostStmt,
 		copyFileStmt:                         q.copyFileStmt,
 		copyMessageStmt:                      q.copyMessageStmt,
 		copySessionReadFilesStmt:             q.copySessionReadFilesStmt,
@@ -574,5 +593,6 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		updateMessageStmt:                    q.updateMessageStmt,
 		updateSessionStmt:                    q.updateSessionStmt,
 		updateSessionTitleAndUsageStmt:       q.updateSessionTitleAndUsageStmt,
+		updateSessionUsageStmt:               q.updateSessionUsageStmt,
 	}
 }
