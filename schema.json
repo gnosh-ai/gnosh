@@ -540,9 +540,12 @@
           "type": "array",
           "description": "Paths to directories containing Agent Skills (folders with SKILL.md files)"
         },
-        "thinking": {
-          "type": "boolean",
-          "description": "Whether a model with a thinking switch (Qwen on llama.cpp and other OpenAI-compatible servers) thinks before answering; unset keeps the server's default. Toggle it in chat with /think and /no_think"
+        "reasoning": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "description": "How hard each model thinks, keyed by provider/model: nothink or think for a Qwen, low or medium or high for a gpt-oss. Set it with /model and the left and right arrows."
         },
         "tui": {
           "$ref": "#/$defs/TUIOptions",

@@ -1021,17 +1021,26 @@ func namedSession(sessions []session.Session, name string, idErr error) (session
 	return session.Session{}, errors.New(sb.String())
 }
 
-// setThinking stores a /think or /no_think line as the global switch and says
-// so, instead of sending it to the model.
+// setThinking moves the current model to one end of its own reasoning axis,
+// as a /think or /no_think line asks, and says so instead of sending the
+// line to the model. /model and the arrows reach the levels in between.
 func setThinking(ws workspace.Workspace, enabled bool, out io.Writer) error {
-	if err := ws.SetConfigField(config.ScopeGlobal, config.ThinkingKey, enabled); err != nil {
+	cfg := ws.Config()
+	selected := cfg.Models[config.SelectedModelTypeLarge]
+	model := cfg.GetModel(selected.Provider, selected.Model)
+	if model == nil {
+		return fmt.Errorf("no large model is selected")
+	}
+	kind, levels := config.ReasoningAxis(*model)
+	if kind == config.ReasoningNone {
+		_, err := fmt.Fprintf(out, "%s has no thinking switch.\n", cmp.Or(model.Name, model.ID))
 		return err
 	}
-	state := "off"
-	if enabled {
-		state = "on"
+	level := config.ThinkingLevel(enabled, kind, levels)
+	if err := ws.SetConfigField(config.ScopeGlobal, config.ReasoningField(selected.Provider, selected.Model), level); err != nil {
+		return err
 	}
-	_, err := fmt.Fprintf(out, "Thinking %s for all future requests.\n", state)
+	_, err := fmt.Fprintf(out, "%s set to %q.\n", cmp.Or(model.Name, model.ID), level)
 	return err
 }
 

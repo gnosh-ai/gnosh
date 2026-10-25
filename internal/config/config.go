@@ -563,14 +563,18 @@ func (Attribution) JSONSchemaExtend(schema *jsonschema.Schema) {
 }
 
 type Options struct {
-	ContextPaths         []string    `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=CRUSH.md"`
-	GlobalContextPaths   []string    `json:"global_context_paths,omitempty" jsonschema:"description=Paths to files containing global context information for the AI,default=~/.config/crush/CRUSH.md,default=~/.config/AGENTS.md"`
-	SkillsPaths          []string    `json:"skills_paths,omitempty" jsonschema:"description=Paths to directories containing Agent Skills (folders with SKILL.md files),example=~/.config/crush/skills,example=./skills"`
-	Thinking             *bool       `json:"thinking,omitempty" jsonschema:"description=Whether a model with a thinking switch (Qwen on llama.cpp and other OpenAI-compatible servers) thinks before answering; unset keeps the server's default. Toggle it in chat with /think and /no_think"`
-	TUI                  *TUIOptions `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
-	Debug                bool        `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
-	DebugLSP             bool        `json:"debug_lsp,omitempty" jsonschema:"description=Enable debug logging for LSP servers,default=false"`
-	DisableAutoSummarize bool        `json:"disable_auto_summarize,omitempty" jsonschema:"description=Disable automatic conversation summarization,default=false"`
+	ContextPaths       []string `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=CRUSH.md"`
+	GlobalContextPaths []string `json:"global_context_paths,omitempty" jsonschema:"description=Paths to files containing global context information for the AI,default=~/.config/crush/CRUSH.md,default=~/.config/AGENTS.md"`
+	SkillsPaths        []string `json:"skills_paths,omitempty" jsonschema:"description=Paths to directories containing Agent Skills (folders with SKILL.md files),example=~/.config/crush/skills,example=./skills"`
+	// Reasoning holds how hard each model thinks, keyed by
+	// "provider/model". A Qwen takes nothink or think, a gpt-oss takes
+	// low, medium or high; see [ReasoningAxis]. /model and the left and
+	// right arrows set it.
+	Reasoning            map[string]string `json:"reasoning,omitempty" jsonschema:"description=How hard each model thinks\\, keyed by provider/model: nothink or think for a Qwen\\, low or medium or high for a gpt-oss. Set it with /model and the left and right arrows."`
+	TUI                  *TUIOptions       `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
+	Debug                bool              `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
+	DebugLSP             bool              `json:"debug_lsp,omitempty" jsonschema:"description=Enable debug logging for LSP servers,default=false"`
+	DisableAutoSummarize bool              `json:"disable_auto_summarize,omitempty" jsonschema:"description=Disable automatic conversation summarization,default=false"`
 	// DisableIdleCompaction turns off Claude Code's idle compaction: a
 	// long conversation left idle for 54 minutes is summarized, so the
 	// next prompt does not send the whole of it.

@@ -499,22 +499,15 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		NewCommandItem(c.com.Styles, "switch_model", "Switch Model", "ctrl+l", ActionOpenDialog{ModelsID}).WithAliases("model"),
 	}
 
-	// /think and /no_think: the stored switch for models with a thinking
-	// mode on OpenAI-compatible and local servers (Qwen on llama.cpp).
-	thinkingOn, thinkingSet := c.com.Config().Thinking()
-	onTitle, offTitle := "Thinking On", "Thinking Off"
-	if thinkingSet && thinkingOn {
-		onTitle += " (current)"
-	} else if thinkingSet {
-		offTitle += " (current)"
-	}
+	// /think and /no_think: either end of the current model's own
+	// reasoning axis. /model and the arrows reach the levels between.
 	commands = append(commands,
-		NewCommandItem(c.com.Styles, "think", onTitle, "", ActionSetThinking{Enabled: true}).
+		NewCommandItem(c.com.Styles, "think", "Thinking Up", "", ActionSetThinking{Enabled: true}).
 			WithAliases("think", "/think").
-			WithDescription("Models with a thinking switch reason before answering, from now on"),
-		NewCommandItem(c.com.Styles, "no_think", offTitle, "", ActionSetThinking{Enabled: false}).
+			WithDescription("The current model thinks as hard as it can (/model and the arrows pick a level)"),
+		NewCommandItem(c.com.Styles, "no_think", "Thinking Down", "", ActionSetThinking{Enabled: false}).
 			WithAliases("nothink", "no_think", "no-think", "/no_think").
-			WithDescription("Models with a thinking switch answer directly, from now on"),
+			WithDescription("The current model thinks as little as it can (/model and the arrows pick a level)"),
 	)
 
 	// /loop and /noloop: keep the session working on its task without the

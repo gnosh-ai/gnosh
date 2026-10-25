@@ -594,7 +594,7 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 	}
 
 	mergedOptions, temp, topP, topK, freqPenalty, presPenalty := mergeCallOptions(model, providerCfg)
-	applyThinking(mergedOptions, providerCfg, c.cfg.Config())
+	applyReasoning(mergedOptions, model.CatwalkCfg, model.ModelCfg.Provider, providerCfg, c.cfg.Config())
 
 	if err := c.refreshTokenIfExpired(ctx, providerCfg); err != nil {
 		// NOTE(@andreynering): We don't return here because the event handling to ask the user to reauthenticate
@@ -726,10 +726,10 @@ func effectiveReasoningEffort(model Model) string {
 	return ""
 }
 
-// providerOptions is getProviderOptions plus the user's /think switch.
+// providerOptions is getProviderOptions plus how hard this model thinks.
 func (c *coordinator) providerOptions(model Model, providerCfg config.ProviderConfig) fantasy.ProviderOptions {
 	opts := getProviderOptions(model, providerCfg)
-	applyThinking(opts, providerCfg, c.cfg.Config())
+	applyReasoning(opts, model.CatwalkCfg, model.ModelCfg.Provider, providerCfg, c.cfg.Config())
 	return opts
 }
 

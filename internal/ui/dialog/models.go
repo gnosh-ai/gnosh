@@ -81,13 +81,16 @@ type Models struct {
 	providers []catwalk.Provider
 
 	keyMap struct {
-		Tab      key.Binding
-		UpDown   key.Binding
-		Select   key.Binding
-		Edit     key.Binding
-		Next     key.Binding
-		Previous key.Binding
-		Close    key.Binding
+		Tab       key.Binding
+		UpDown    key.Binding
+		Select    key.Binding
+		Edit      key.Binding
+		Next      key.Binding
+		Previous  key.Binding
+		Close     key.Binding
+		LevelUp   key.Binding
+		LevelDown key.Binding
+		Level     key.Binding
 	}
 	list  *ModelsList
 	input textinput.Model
@@ -141,6 +144,18 @@ func NewModels(com *common.Common, isOnboarding bool) (*Models, error) {
 		key.WithKeys("up", "ctrl+p"),
 		key.WithHelp("↑", "previous item"),
 	)
+	m.keyMap.LevelDown = key.NewBinding(
+		key.WithKeys("left"),
+		key.WithHelp("←", "less thinking"),
+	)
+	m.keyMap.LevelUp = key.NewBinding(
+		key.WithKeys("right"),
+		key.WithHelp("→", "more thinking"),
+	)
+	m.keyMap.Level = key.NewBinding(
+		key.WithKeys("left", "right"),
+		key.WithHelp("←/→", "thinking"),
+	)
 	m.keyMap.Close = CloseKey
 
 	// A stale catalog must not keep this dialog from opening: it is the
@@ -189,6 +204,23 @@ func (m *Models) HandleMsg(msg tea.Msg) Action {
 				m.list.SelectNext()
 			}
 			m.list.ScrollToSelected()
+		case key.Matches(msg, m.keyMap.LevelDown, m.keyMap.LevelUp):
+			// The arrows move how hard the highlighted model thinks.
+			// A model with no reasoning axis has no level to move, and
+			// the key is then a no-op rather than an error.
+			modelItem, ok := m.list.SelectedItem().(*ModelItem)
+			if !ok || modelItem.ReasoningKind() == config.ReasoningNone {
+				break
+			}
+			delta := 1
+			if key.Matches(msg, m.keyMap.LevelDown) {
+				delta = -1
+			}
+			level, changed := modelItem.StepLevel(delta)
+			if !changed {
+				break
+			}
+			return ActionCmd{m.persistLevel(modelItem, level)}
 		case key.Matches(msg, m.keyMap.Select, m.keyMap.Edit):
 			selectedItem := m.list.SelectedItem()
 			if selectedItem == nil {
@@ -235,6 +267,20 @@ func (m *Models) HandleMsg(msg tea.Msg) Action {
 		}
 	}
 	return nil
+}
+
+// persistLevel stores a model's reasoning level so it holds for that model
+// in every later session, and in `klash run`. It is written per model, not
+// per slot, so switching models brings each one's own level back.
+func (m *Models) persistLevel(item *ModelItem, level string) tea.Cmd {
+	provider := string(item.prov.ID)
+	field := config.ReasoningField(provider, item.model.ID)
+	return func() tea.Msg {
+		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, field, level); err != nil {
+			return util.ReportError(err)()
+		}
+		return nil
+	}
 }
 
 // Cursor returns the cursor for the dialog.
@@ -316,9 +362,11 @@ func (m *Models) ShortHelp() []key.Binding {
 	}
 	h := []key.Binding{
 		m.keyMap.UpDown,
-		m.keyMap.Tab,
-		m.keyMap.Select,
 	}
+	if item, ok := m.list.SelectedItem().(*ModelItem); ok && item.ReasoningKind() != config.ReasoningNone {
+		h = append(h, m.keyMap.Level)
+	}
+	h = append(h, m.keyMap.Tab, m.keyMap.Select)
 	if m.isSelectedConfigured() {
 		h = append(h, m.keyMap.Edit)
 	}
@@ -515,6 +563,14 @@ func (m *Models) setProviderItems() error {
 
 		if len(recentGroup.Items) > 0 {
 			groups = append([]ModelGroup{recentGroup}, groups...)
+		}
+	}
+
+	// Seed every row with the level stored for that model, so the
+	// arrows start from what is in force rather than from nothing.
+	for i := range groups {
+		for _, item := range groups[i].Items {
+			item.SetLevel(cfg.ReasoningLevelOrDefault(string(item.prov.ID), item.model))
 		}
 	}
 
