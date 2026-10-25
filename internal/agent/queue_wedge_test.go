@@ -114,7 +114,7 @@ func TestSummarize_DrainsQueueWhenTheSummaryFails(t *testing.T) {
 	mu.Unlock()
 	require.Equal(t, 1, a.QueuedPrompts(sessionID))
 
-	err := a.summarize(t.Context(), sessionID, "", "", nil, nil, preCompactTriggerAuto)
+	err := a.summarize(t.Context(), sessionID, "", "", nil, nil, preCompactTriggerAuto, false)
 	require.Error(t, err, "the summary request fails in this test")
 
 	require.False(t, a.hasActiveRun(sessionID), "the failed compaction must release the session")

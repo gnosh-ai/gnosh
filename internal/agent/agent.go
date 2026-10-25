@@ -272,6 +272,11 @@ type Model struct {
 // the explicit Del and the function return.
 type activeCancel struct {
 	cancel context.CancelFunc
+	// yieldable marks a request that may be given up when the user
+	// sends a prompt: an idle compaction, which is opportunistic
+	// housekeeping. A summary the context window forced is not
+	// yieldable, because the next turn cannot proceed without it.
+	yieldable bool
 }
 
 type sessionAgent struct {
@@ -940,6 +945,23 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		return nil, nil
 	}
 
+	if ac, ok := a.activeRequests.Get(call.SessionID); ok && ac != nil && ac.yieldable {
+		// An idle compaction holds the session. It is opportunistic
+		// housekeeping, so it gives way to the user rather than making
+		// them wait: against a local server with one model slot, a
+		// summary that cannot get the model back sits in its reconnect
+		// window for minutes.
+		//
+		// This only cancels; it does not run the prompt inline. The
+		// summary's own deferred drain picks the queued prompt up as it
+		// unwinds, which is what keeps this off the dispatch lock:
+		// that drain takes the same mutex, so waiting here would
+		// deadlock. The turn this prompt starts arms idle compaction
+		// again when it ends, so the summary is postponed, not lost.
+		slog.Info("Giving up an idle compaction for a prompt", "session_id", call.SessionID)
+		ac.cancel()
+	}
+
 	if a.hasActiveRun(call.SessionID) {
 		// Busy: an earlier prompt is active. Queue this call so it is
 		// folded into (or sequenced after) the active turn, and release any
@@ -973,6 +995,29 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	sessMu.Unlock()
 
 	defer cancel()
+	// A turn that gave up must still run what was queued behind it. The
+	// handoff that does this sits at the end of the turn, below every
+	// error return above it, so without this a prompt sent while the
+	// turn was running stayed in the queue with nothing left to run it:
+	// the session went idle, the prompt stayed shown as queued, and it
+	// never ran. A model server that holds the response open, sends
+	// nothing and then drops it takes exactly that path. This is the
+	// normal-turn twin of the drain summarize does.
+	//
+	// Defers run last-registered-first, so this is registered before the
+	// release below and therefore runs after it: the dequeued prompt
+	// finds the session idle rather than queueing behind a turn that is
+	// already over.
+	handedOff := false
+	defer func() {
+		if handedOff {
+			return
+		}
+		if qErr := a.runFirstQueued(ctx, call.SessionID); qErr != nil {
+			slog.Error("Could not run a prompt queued behind a turn that gave up",
+				"session_id", call.SessionID, "error", qErr)
+		}
+	}()
 	// Conditional cleanup: only remove our entry if it hasn't been replaced
 	// by a newer run. Without this guard, the deferred Del fires after a
 	// concurrent run registers in the completion window, silently wiping
@@ -1515,7 +1560,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 
 	if shouldSummarize {
 		a.activeRequests.Del(call.SessionID)
-		if summarizeErr := a.summarize(genCtx, call.SessionID, call.Channel, "", call.ProviderOptions, call.OnAuthRefresh, preCompactTriggerAuto); summarizeErr != nil {
+		if summarizeErr := a.summarize(genCtx, call.SessionID, call.Channel, "", call.ProviderOptions, call.OnAuthRefresh, preCompactTriggerAuto, false); summarizeErr != nil {
 			return nil, summarizeErr
 		}
 		a.justSummarized.Set(call.SessionID, true)
@@ -1572,7 +1617,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// TUI handlers poll IsSessionBusy() and only re-evaluate when a
 	// tea.Msg arrives, so the cleanup must precede the notify or
 	// subscribers see stale busy state at the moment of receipt.
-	a.activeRequests.Del(call.SessionID)
+	a.activeRequests.CompareAndDelete(call.SessionID, ac)
 	cancel()
 
 	// Send notification that agent has finished its turn (skip for
@@ -1600,6 +1645,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// across the recursive Run's own dispatch handoff — keeping the
 	// session observable to Cancel for the entire transition and
 	// closing the dequeue -> re-register window.
+	handedOff = true
 	mu := a.sessionMu(call.SessionID)
 	mu.Lock()
 	queuedMessages, _ := a.messageQueue.Get(call.SessionID)
@@ -1695,14 +1741,14 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID, instructions st
 	// A summary asked for by hand starts the session's auto-compaction
 	// afresh (see compacts).
 	a.compactLevels.Del(sessionID)
-	return a.summarize(ctx, sessionID, "", instructions, opts, onAuthRefresh, trigger)
+	return a.summarize(ctx, sessionID, "", instructions, opts, onAuthRefresh, trigger, false)
 }
 
 // summarize replaces the session's conversation with a summary of it
 // (compactConversation) while no turn runs in it, then runs what was
 // queued meanwhile. instructions, the text given after /compact, go at
 // the end of the summary instructions.
-func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instructions string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger) (retErr error) {
+func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instructions string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error, trigger preCompactTrigger, yieldable bool) (retErr error) {
 	// A turn running in the session stops a summary. A prompt that is
 	// still in its UserPromptSubmit hooks does not: IsSessionBusy counts
 	// it, and the summary at the end of a turn failed as busy when the
@@ -1718,7 +1764,7 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 	a.runPreCompactHooks(ctx, sessionID, trigger, instructions)
 
 	genCtx, cancel := context.WithCancel(ctx)
-	ac := &activeCancel{cancel: cancel}
+	ac := &activeCancel{cancel: cancel, yieldable: yieldable}
 	a.activeRequests.Set(sessionID, ac)
 	defer cancel()
 	// A summary that gave up must still hand the session back and run
@@ -1759,6 +1805,13 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 // put back. Run takes the same mutex, so it is released first.
 func (a *sessionAgent) drainQueuedAfterSummary(ctx context.Context, sessionID string) error {
 	a.activeRequests.Del(sessionID)
+	return a.runFirstQueued(ctx, sessionID)
+}
+
+// runFirstQueued takes the first prompt queued for the session and runs
+// it. The caller must have released the session first, or the prompt is
+// only put straight back on the queue.
+func (a *sessionAgent) runFirstQueued(ctx context.Context, sessionID string) error {
 	mu := a.sessionMu(sessionID)
 	mu.Lock()
 	queuedMessages, ok := a.messageQueue.Get(sessionID)
@@ -3074,11 +3127,10 @@ func (a *sessionAgent) Cancel(sessionID string) {
 		ac.cancel()
 	}
 
-	// Also check for summarize requests.
-	if ac, ok := a.activeRequests.Get(sessionID + "-summarize"); ok && ac != nil {
-		slog.Debug("Summarize cancellation initiated", "session_id", sessionID)
-		ac.cancel()
-	}
+	// A summary registers under the session's own key (see summarize),
+	// so the cancel above already covers one in flight. A separate
+	// "<sessionID>-summarize" key was read here but never written by
+	// anything, so it only looked like summaries were handled twice.
 
 	// Record a pending cancel only when a dispatched-but-not-yet-active
 	// run exists. This catches runs still in the goroutine scheduler or
