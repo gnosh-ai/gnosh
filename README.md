@@ -3,10 +3,10 @@
 </p>
 
 <p align="center">
-  <a href="#nothing-phones-home"><img alt="Telemetry: opt-in" src="https://img.shields.io/badge/telemetry-opt--in-12E89A?style=flat-square&labelColor=0F1B16"></a>
-  <a href="#local-models"><img alt="Models: hosted or local" src="https://img.shields.io/badge/models-hosted%20or%20local-BBF132?style=flat-square&labelColor=0F1B16"></a>
-  <a href="#coming-from-claude-code"><img alt="Speaks Claude Code" src="https://img.shields.io/badge/speaks-Claude%20Code-FED835?style=flat-square&labelColor=0F1B16"></a>
-  <a href="./LICENSE.md"><img alt="License: FSL-1.1-MIT" src="https://img.shields.io/badge/license-FSL--1.1--MIT-819183?style=flat-square&labelColor=0F1B16"></a>
+  <a href="#nothing-phones-home"><img alt="Telemetry: opt-in" src="https://img.shields.io/badge/telemetry-opt--in-6B50FF?style=flat-square&labelColor=201F26"></a>
+  <a href="#local-models"><img alt="Models: hosted or local" src="https://img.shields.io/badge/models-hosted%20or%20local-FF60FF?style=flat-square&labelColor=201F26"></a>
+  <a href="#coming-from-claude-code"><img alt="Speaks Claude Code" src="https://img.shields.io/badge/speaks-Claude%20Code-8B75FF?style=flat-square&labelColor=201F26"></a>
+  <a href="./LICENSE.md"><img alt="License: FSL-1.1-MIT" src="https://img.shields.io/badge/license-FSL--1.1--MIT-605F6B?style=flat-square&labelColor=201F26"></a>
 </p>
 
 <p align="center"><strong>A security-first harness for coding agents, in your terminal.</strong><br>

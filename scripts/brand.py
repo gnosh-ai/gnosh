@@ -4,7 +4,8 @@
 The wordmark is the TUI's own: the half-block letterforms in
 internal/ui/logo/letterforms.go, where each terminal cell holds two square
 pixels. Drawing the same strings here keeps the banner on GitHub and the
-logo in the terminal the same shape.
+logo in the terminal the same shape. The colors are the TUI's too: Crush's
+purple and hot pink, a nebula, with green and gold kept to a few stars.
 
     python3 scripts/brand.py
 
@@ -29,25 +30,29 @@ from string import Template
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "brand")
 
 # ── Palette ──────────────────────────────────────────────────────────────
-# Deep space; an aurora green that fades through lime to starlight gold.
-VOID = "#050A0B"
-NIGHT = "#08110E"
-HORIZON = "#0A1A14"
-GROUND = "#040907"
-RIM = "#22352C"
-HAZE = "#819183"
-MOON = "#DEDFD3"
-STAR = "#F8F6E7"
-AURORA = "#12E89A"
-MINT = "#5BF0B8"
-LIME = "#BBF132"
+# Deep space and a nebula in Crush's purple and hot pink (Charmtone's
+# Charple and Dolly); gold and mint only as starlight.
+VOID = "#07060D"
+NIGHT = "#0D0A1A"
+HORIZON = "#160F2B"
+GROUND = "#05040A"
+RIM = "#2D2C36"
+HAZE = "#858392"
+MOON = "#ECEBF0"
+STAR = "#FFFAF1"
+LAVENDER = "#C9C1FF"
+PURPLE = "#6B50FF"
+PINK = "#FF60FF"
+ORCHID = "#B65CFF"
+MAGENTA = "#C337E0"
+DEEP = "#4A30D9"
+DEPTH = "#24135A"
 GOLD = "#FED835"
 AMBER = "#FEA408"
-MOSS = "#0B3B2A"
-TEAL = "#14B8A6"
+MINT = "#68FFD6"
 # Deeper versions of the gradient that read on a white page.
-PINE = "#0A8F5C"
-OCHRE = "#B98500"
+INK_PURPLE = "#5B40EC"
+INK_MAGENTA = "#B02DCB"
 
 MONO = "SFMono-Regular,Menlo,Consolas,'Liberation Mono','DejaVu Sans Mono',monospace"
 
@@ -137,20 +142,23 @@ def svg_open(w, h, label, extra=""):
 
 
 def sky_defs(w, h, horizon):
-    """Gradients for the sky, aurora, sunrise and the planet's rim."""
+    """Gradients for the sky, the nebula, the sunrise and the planet's rim."""
     return f"""
 <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{VOID}"/><stop offset=".62" stop-color="{NIGHT}"/><stop offset="1" stop-color="{HORIZON}"/></linearGradient>
-<radialGradient id="aur1"><stop offset="0" stop-color="{AURORA}" stop-opacity=".30"/><stop offset="1" stop-color="{AURORA}" stop-opacity="0"/></radialGradient>
-<radialGradient id="aur2"><stop offset="0" stop-color="{LIME}" stop-opacity=".16"/><stop offset="1" stop-color="{LIME}" stop-opacity="0"/></radialGradient>
-<radialGradient id="aur3"><stop offset="0" stop-color="{TEAL}" stop-opacity=".20"/><stop offset="1" stop-color="{TEAL}" stop-opacity="0"/></radialGradient>
-<radialGradient id="sun"><stop offset="0" stop-color="{GOLD}" stop-opacity=".55"/><stop offset=".45" stop-color="{AMBER}" stop-opacity=".18"/><stop offset="1" stop-color="{AMBER}" stop-opacity="0"/></radialGradient>
-<linearGradient id="ray" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{AURORA}" stop-opacity="0"/><stop offset=".55" stop-color="{AURORA}" stop-opacity=".9"/><stop offset="1" stop-color="{AURORA}" stop-opacity="0"/></linearGradient>
-<linearGradient id="rim" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="{w}" y2="0"><stop offset="0" stop-color="{AURORA}" stop-opacity="0"/><stop offset=".3" stop-color="{AURORA}" stop-opacity=".7"/><stop offset=".5" stop-color="{GOLD}"/><stop offset=".7" stop-color="{AURORA}" stop-opacity=".7"/><stop offset="1" stop-color="{AURORA}" stop-opacity="0"/></linearGradient>
+<radialGradient id="neb1"><stop offset="0" stop-color="{PURPLE}" stop-opacity=".40"/><stop offset="1" stop-color="{PURPLE}" stop-opacity="0"/></radialGradient>
+<radialGradient id="neb2"><stop offset="0" stop-color="{PINK}" stop-opacity=".26"/><stop offset="1" stop-color="{PINK}" stop-opacity="0"/></radialGradient>
+<radialGradient id="neb3"><stop offset="0" stop-color="{MAGENTA}" stop-opacity=".26"/><stop offset="1" stop-color="{MAGENTA}" stop-opacity="0"/></radialGradient>
+<radialGradient id="neb4"><stop offset="0" stop-color="{DEEP}" stop-opacity=".34"/><stop offset="1" stop-color="{DEEP}" stop-opacity="0"/></radialGradient>
+<radialGradient id="sun"><stop offset="0" stop-color="{GOLD}" stop-opacity=".55"/><stop offset=".3" stop-color="{PINK}" stop-opacity=".22"/><stop offset="1" stop-color="{PINK}" stop-opacity="0"/></radialGradient>
+<linearGradient id="ray1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{PURPLE}" stop-opacity="0"/><stop offset=".55" stop-color="{PURPLE}" stop-opacity=".9"/><stop offset="1" stop-color="{PURPLE}" stop-opacity="0"/></linearGradient>
+<linearGradient id="ray2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{PINK}" stop-opacity="0"/><stop offset=".55" stop-color="{PINK}" stop-opacity=".9"/><stop offset="1" stop-color="{PINK}" stop-opacity="0"/></linearGradient>
+<linearGradient id="rim" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="{w}" y2="0"><stop offset="0" stop-color="{PURPLE}" stop-opacity="0"/><stop offset=".28" stop-color="{PURPLE}" stop-opacity=".8"/><stop offset=".44" stop-color="{PINK}"/><stop offset=".5" stop-color="{GOLD}"/><stop offset=".56" stop-color="{PINK}"/><stop offset=".72" stop-color="{PURPLE}" stop-opacity=".8"/><stop offset="1" stop-color="{PURPLE}" stop-opacity="0"/></linearGradient>
 <filter id="soft" x="-10%" y="-300%" width="120%" height="700%"><feGaussianBlur stdDeviation="6"/></filter>
 <filter id="hblur" x="-20%" y="-5%" width="140%" height="110%"><feGaussianBlur stdDeviation="5 0"/></filter>"""
 
 
 def make_stars(rng, n, w, ymax, keepout):
+    """Mostly white and lavender; gold and mint only among the brightest."""
     stars = []
     tries = 0
     while len(stars) < n and tries < n * 50:
@@ -160,12 +168,12 @@ def make_stars(rng, n, w, ymax, keepout):
         if kx0 < x < kx1 and ky0 < y < ky1:
             continue
         roll = rng.random()
-        if roll < 0.70:
+        if roll < 0.72:
             r, col, op = rng.uniform(0.55, 1.05), STAR, rng.uniform(0.35, 0.75)
-        elif roll < 0.93:
-            r, col, op = rng.uniform(1.0, 1.6), rng.choice([STAR, GOLD, MINT]), rng.uniform(0.6, 0.95)
+        elif roll < 0.94:
+            r, col, op = rng.uniform(1.0, 1.6), rng.choice([STAR, LAVENDER, PINK]), rng.uniform(0.6, 0.95)
         else:
-            r, col, op = rng.uniform(1.4, 2.0), rng.choice([GOLD, MINT, STAR]), 1.0
+            r, col, op = rng.uniform(1.4, 2.0), rng.choice([GOLD, MINT, STAR, LAVENDER]), 1.0
         stars.append((x, y, r, col, op))
     return stars
 
@@ -182,22 +190,25 @@ def sparkle(x, y, s, col, attrs=""):
 
 
 def sky(rng, w, h, horizon, keepout, n_stars, twinkle, rays=True, sun_rx=380):
-    """Sky, aurora, stars, and a planet whose rim catches a rising sun."""
+    """Sky, nebula, stars, and a planet whose rim catches a rising sun."""
     o = [f'<rect width="{w}" height="{h}" fill="url(#sky)"/>']
     o.append('<g class="aur">')
-    o.append(f'<ellipse cx="{w * .30:.0f}" cy="{h * .29:.0f}" rx="{w * .41:.0f}" ry="{h * .29:.0f}" fill="url(#aur1)" transform="rotate(-9 {w * .30:.0f} {h * .29:.0f})"/>')
-    o.append(f'<ellipse cx="{w * .70:.0f}" cy="{h * .23:.0f}" rx="{w * .36:.0f}" ry="{h * .23:.0f}" fill="url(#aur2)" transform="rotate(7 {w * .70:.0f} {h * .23:.0f})"/>')
-    o.append(f'<ellipse cx="{w * .52:.0f}" cy="{h * .12:.0f}" rx="{w * .47:.0f}" ry="{h * .21:.0f}" fill="url(#aur3)"/>')
+    o.append(f'<ellipse cx="{w * .26:.0f}" cy="{h * .30:.0f}" rx="{w * .40:.0f}" ry="{h * .32:.0f}" fill="url(#neb1)" transform="rotate(-12 {w * .26:.0f} {h * .30:.0f})"/>')
+    o.append(f'<ellipse cx="{w * .74:.0f}" cy="{h * .26:.0f}" rx="{w * .36:.0f}" ry="{h * .26:.0f}" fill="url(#neb2)" transform="rotate(9 {w * .74:.0f} {h * .26:.0f})"/>')
+    o.append(f'<ellipse cx="{w * .52:.0f}" cy="{h * .14:.0f}" rx="{w * .44:.0f}" ry="{h * .20:.0f}" fill="url(#neb3)"/>')
+    o.append(f'<ellipse cx="{w * .12:.0f}" cy="{h * .70:.0f}" rx="{w * .30:.0f}" ry="{h * .22:.0f}" fill="url(#neb4)"/>')
+    o.append(f'<ellipse cx="{w * .90:.0f}" cy="{h * .66:.0f}" rx="{w * .26:.0f}" ry="{h * .20:.0f}" fill="url(#neb4)"/>')
     o.append("</g>")
     if rays:
-        # Aurora curtains: thin vertical streaks along a gentle wave.
+        # Nebula filaments: thin streaks along a gentle wave, purple and pink.
         r, n = [], 70
         for i in range(n):
             x = w * 0.03 + i * (w * 0.94) / n + rng.uniform(-6, 6)
             base = horizon * 0.48 + horizon * 0.09 * math.sin(i / n * 2 * math.pi * 1.3 + 0.6)
             hgt = rng.uniform(horizon * 0.21, horizon * 0.44)
-            op = rng.uniform(0.05, 0.16) * (1 - abs(i - n / 2) / (n * 0.86))
-            r.append(f'<rect x="{x:.1f}" y="{base - hgt:.1f}" width="{rng.uniform(4, 11):.1f}" height="{hgt:.1f}" fill="url(#ray)" opacity="{op:.3f}"/>')
+            op = rng.uniform(0.05, 0.15) * (1 - abs(i - n / 2) / (n * 0.86))
+            grad = "ray2" if rng.random() < 0.4 else "ray1"
+            r.append(f'<rect x="{x:.1f}" y="{base - hgt:.1f}" width="{rng.uniform(4, 11):.1f}" height="{hgt:.1f}" fill="url(#{grad})" opacity="{op:.3f}"/>')
         o.append(f'<g filter="url(#hblur)">{"".join(r)}</g>')
     for x, y, rad, col, op in make_stars(rng, n_stars, w, horizon - 30, keepout):
         if rad > 1.5 and rng.random() < 0.6:
@@ -234,7 +245,19 @@ def diagonals(x_from, x_to, y, rows, cw, ch, step=0):
     return "".join(d)
 
 
-def word_defs(x0, y0, word_w, word_h, a=AURORA, b=LIME, c=GOLD, gid="word"):
+def field_stars(rng, x_from, x_to, y, rows, cw, ch, every=29, colors=(GOLD, MINT)):
+    """A few stars among a field's cells, as the TUI draws them."""
+    o = []
+    for i in range(rows):
+        x = x_from
+        while x + cw <= x_to + 0.01:
+            if rng.random() < 1 / every:
+                o.append(sparkle(x + cw / 2, y + i * ch + ch / 2, cw * 0.42, rng.choice(colors)))
+            x += cw
+    return "".join(o)
+
+
+def word_defs(x0, y0, word_w, word_h, a=PINK, b=ORCHID, c=PURPLE, gid="word"):
     return (
         f'<linearGradient id="{gid}" gradientUnits="userSpaceOnUse" x1="{fmt(x0)}" y1="{fmt(y0)}" '
         f'x2="{fmt(x0 + word_w)}" y2="{fmt(y0 + word_h)}"><stop offset="0" stop-color="{a}"/>'
@@ -247,18 +270,26 @@ def word_layers(on, x0, y0, p, glow=True, depth=True, bevel=True):
     face = runs_path(on, x0, y0, p)
     o = []
     if glow:
-        o.append(f'<path d="{face}" fill="url(#word)" filter="url(#glow)" opacity=".55"/>')
+        o.append(f'<path d="{face}" fill="url(#word)" filter="url(#glow)" opacity=".6"/>')
     if depth:
         off = max(2, round(p * 0.21))
-        o.append(f'<path d="{runs_path(on, x0 + off, y0 + off, p)}" fill="{MOSS}"/>')
+        o.append(f'<path d="{runs_path(on, x0 + off, y0 + off, p)}" fill="{DEPTH}"/>')
     o.append(f'<path d="{face}" fill="url(#word)"/>')
     if bevel:
         o.append(f'<path d="{runs_path(top_edges(on), x0, y0, p, h=min(3, max(1.5, p / 8)))}" fill="#fff" opacity=".38"/>')
     return face, "".join(o)
 
 
+def field_gradient(gid, x1, x2, peak=".55"):
+    return (
+        f'<linearGradient id="{gid}" gradientUnits="userSpaceOnUse" x1="{fmt(x1)}" y1="0" x2="{fmt(x2)}" y2="0">'
+        f'<stop offset="0" stop-color="{PURPLE}" stop-opacity="0"/><stop offset=".2" stop-color="{PURPLE}" stop-opacity="{peak}"/>'
+        f'<stop offset=".8" stop-color="{PINK}" stop-opacity="{peak}"/><stop offset="1" stop-color="{PINK}" stop-opacity="0"/></linearGradient>'
+    )
+
+
 def anim(sweep=None):
-    """Twinkling stars and a breathing aurora; with sweep=(from, to), also a
+    """Twinkling stars and a breathing nebula; with sweep=(from, to), also a
     band of light crossing the word. All of it stops for reduced motion."""
     css = [
         "@keyframes tw{0%,100%{opacity:.15}50%{opacity:1}}",
@@ -277,7 +308,7 @@ def anim(sweep=None):
 # ── Images ───────────────────────────────────────────────────────────────
 
 def banner(W=1280, H=520, p=24):
-    """The README's banner: the wordmark over a planet's sunrise."""
+    """The README's banner: the wordmark in a nebula, over a planet's sunrise."""
     rng = random.Random(7)
     cw, ch = p, 2 * p
     rows = word_rows()
@@ -289,15 +320,18 @@ def banner(W=1280, H=520, p=24):
 
     face, layers = word_layers(on, x0, y0, p)
     keep = (x0 - 40, meta_y - 24, x0 + word_w + 40, y0 + 6 * p + 16)
-    left = diagonals(x0 - 2 * cw - cw * math.ceil(x0 / cw), x0 - cw, meta_y, 4, cw, ch)
+    lx0 = x0 - 2 * cw - cw * math.ceil(x0 / cw)
+    left = diagonals(lx0, x0 - cw, meta_y, 4, cw, ch)
     right = diagonals(x0 + word_w + cw, W + cw, meta_y, 4, cw, ch)
+    srng = random.Random(17)
+    stars = field_stars(srng, 0, x0 - cw, meta_y, 4, cw, ch, every=24) + field_stars(srng, x0 + word_w + cw, W, meta_y, 4, cw, ch, every=24)
 
     o = [svg_open(W, H, "Klash, a security-first harness for coding agents")]
     o.append(anim(sweep=(x0 - 360, x0 + word_w + 120)))
     o.append("<defs>")
     o.append(sky_defs(W, H, horizon))
     o.append(word_defs(x0, y0, word_w, word_h))
-    o.append(f'<linearGradient id="field" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="{W}" y2="0"><stop offset="0" stop-color="{AURORA}" stop-opacity="0"/><stop offset=".2" stop-color="{AURORA}" stop-opacity=".5"/><stop offset=".8" stop-color="{GOLD}" stop-opacity=".5"/><stop offset="1" stop-color="{GOLD}" stop-opacity="0"/></linearGradient>')
+    o.append(field_gradient("field", 0, W))
     o.append('<linearGradient id="shineg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>')
     o.append('<filter id="glow" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="14"/></filter>')
     o.append(f'<clipPath id="frame"><rect width="{W}" height="{H}" rx="22"/></clipPath>')
@@ -306,6 +340,7 @@ def banner(W=1280, H=520, p=24):
     o.append('<g clip-path="url(#frame)">')
     o.append(sky(rng, W, H, horizon, keep, 130, twinkle=True))
     o.append(f'<path d="{left}{right}" stroke="url(#field)" stroke-width="2" fill="none"/>')
+    o.append(f'<g class="tw" style="animation-duration:5s">{stars}</g>')
     ty = meta_y + ch * 0.66
     o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="{MONO}" font-size="21" fill="{GOLD}">klash.pro</text>')
     o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="{MONO}" font-size="21" fill="{HAZE}">security-first agent harness</text>')
@@ -320,8 +355,8 @@ def banner(W=1280, H=520, p=24):
 
 def divider(light=False, W=1280, H=24):
     """A row of the TUI's ╱ field, faded at both ends."""
-    a, b = (PINE, OCHRE) if light else (AURORA, GOLD)
-    peak = ".75" if light else ".6"
+    a, b = (INK_PURPLE, INK_MAGENTA) if light else (PURPLE, PINK)
+    peak = ".75" if light else ".65"
     o = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" aria-hidden="true">']
     o.append(f'<defs><linearGradient id="f" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="{W}" y2="0"><stop offset="0" stop-color="{a}" stop-opacity="0"/><stop offset=".3" stop-color="{a}" stop-opacity="{peak}"/><stop offset=".7" stop-color="{b}" stop-opacity="{peak}"/><stop offset="1" stop-color="{b}" stop-opacity="0"/></linearGradient></defs>')
     o.append(f'<path d="{diagonals(0, W, 0, 1, 12, H)}" stroke="url(#f)" stroke-width="1.6" fill="none"/>')
@@ -344,19 +379,22 @@ def signoff(W=1280, H=260, p=10):
     horizon = H - 34
     keep = (x0 - 30, top - 10, x0 + word_w + 30, y0 + 3 * ch + ch + 10)
     fields = diagonals(x0, x0 + word_w, top, 2, cw, ch) + diagonals(x0, x0 + word_w, y0 + 3 * ch, 1, cw, ch)
+    srng = random.Random(23)
+    stars = field_stars(srng, x0, x0 + word_w, top, 2, cw, ch, every=12) + field_stars(srng, x0, x0 + word_w, y0 + 3 * ch, 1, cw, ch, every=12)
 
     o = [svg_open(W, H, "Klash")]
     o.append(anim())
     o.append("<defs>")
     o.append(sky_defs(W, H, horizon))
     o.append(word_defs(x0, y0, word_w, word_h))
-    o.append(f'<linearGradient id="field" gradientUnits="userSpaceOnUse" x1="{x0}" y1="0" x2="{x0 + word_w}" y2="0"><stop offset="0" stop-color="{AURORA}" stop-opacity=".7"/><stop offset="1" stop-color="{GOLD}" stop-opacity=".7"/></linearGradient>')
+    o.append(f'<linearGradient id="field" gradientUnits="userSpaceOnUse" x1="{x0}" y1="0" x2="{x0 + word_w}" y2="0"><stop offset="0" stop-color="{PINK}" stop-opacity=".75"/><stop offset="1" stop-color="{PURPLE}" stop-opacity=".75"/></linearGradient>')
     o.append('<filter id="glow" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="8"/></filter>')
     o.append(f'<clipPath id="frame"><rect width="{W}" height="{H}" rx="22"/></clipPath>')
     o.append("</defs>")
     o.append('<g clip-path="url(#frame)">')
     o.append(sky(rng, W, H, horizon, keep, 70, twinkle=True, rays=False, sun_rx=260))
     o.append(f'<path d="{fields}" stroke="url(#field)" stroke-width="1.4" fill="none"/>')
+    o.append(stars)
     o.append(f'<text x="{x0}" y="{fmt(meta_y + ch * 0.72)}" font-family="{MONO}" font-size="13" fill="{GOLD}">klash.pro</text>')
     o.append(word_layers(on, x0, y0, p)[1])
     o.append("</g>")
@@ -366,7 +404,7 @@ def signoff(W=1280, H=260, p=10):
 
 
 def avatar(S=512, p=60):
-    """The organisation's picture: the wordmark's K over the sunrise."""
+    """The organisation's picture: the wordmark's K in the nebula."""
     rng = random.Random(3)
     rows = letter_rows("K")
     on = pixels(rows)
@@ -384,6 +422,7 @@ def avatar(S=512, p=60):
     o.append("</defs>")
     o.append(sky(rng, S, S, horizon, keep, 60, twinkle=False, sun_rx=220))
     o.append(word_layers(on, x0, y0, p)[1])
+    o.append(sparkle(x0 + word_w + 34, y0 + 18, 15, GOLD))
     o.append("</svg>")
     return "\n".join(o)
 
@@ -407,21 +446,21 @@ OG_HTML = Template("""<!doctype html>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600&family=JetBrains+Mono:wght@400;500;700&display=block" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{width:1280px;height:640px;overflow:hidden;background:#050A0B}
+html,body{width:1280px;height:640px;overflow:hidden;background:$void}
 .bg{position:absolute;inset:0}
 .wrap{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center}
 .tag{margin-top:356px;font:600 37px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.012em;color:$moon}
-.tag b{font-weight:600;background:linear-gradient(90deg,$aurora,$lime 55%,$gold);-webkit-background-clip:text;background-clip:text;color:transparent}
-.pts{margin-top:26px;display:flex;gap:14px;font:500 19px/1 'JetBrains Mono',monospace;color:#C9CEC2}
-.pts span{display:flex;align-items:center;gap:10px;padding:11px 16px;border:1px solid $rim;border-radius:999px;background:rgba(8,17,14,.72)}
+.tag b{font-weight:600;background:linear-gradient(90deg,$pink,$orchid 55%,$purple);-webkit-background-clip:text;background-clip:text;color:transparent}
+.pts{margin-top:26px;display:flex;gap:14px;font:500 19px/1 'JetBrains Mono',monospace;color:#D6D3DC}
+.pts span{display:flex;align-items:center;gap:10px;padding:11px 16px;border:1px solid $rim;border-radius:999px;background:rgba(13,10,26,.72)}
 .pts i{width:9px;height:9px;border-radius:2px;display:block}
 </style></head><body>
 <div class="bg">$svg</div>
 <div class="wrap">
   <div class="tag">A <b>security-first</b> harness for coding agents, in your terminal.</div>
   <div class="pts">
-    <span><i style="background:$aurora"></i>nothing phones home</span>
-    <span><i style="background:$lime"></i>any model, hosted or local</span>
+    <span><i style="background:$purple"></i>nothing phones home</span>
+    <span><i style="background:$pink"></i>any model, hosted or local</span>
     <span><i style="background:$gold"></i>speaks Claude Code</span>
   </div>
 </div>
@@ -440,18 +479,22 @@ def og_svg(W=1280, H=640, p=28):
     meta_y = y0 - ch
     horizon = 560
     keep = (x0 - 40, meta_y - 30, x0 + word_w + 40, 500)
-    left = diagonals(x0 - cw - cw * math.ceil((x0 - cw) / cw), x0 - cw, meta_y, 4, cw, ch)
+    lx0 = x0 - cw - cw * math.ceil((x0 - cw) / cw)
+    left = diagonals(lx0, x0 - cw, meta_y, 4, cw, ch)
     right = diagonals(x0 + word_w + cw, W + cw, meta_y, 4, cw, ch)
+    srng = random.Random(19)
+    stars = field_stars(srng, 0, x0 - cw, meta_y, 4, cw, ch, every=18) + field_stars(srng, x0 + word_w + cw, W, meta_y, 4, cw, ch, every=18)
 
     o = [svg_open(W, H, "Klash")]
     o.append("<defs>")
     o.append(sky_defs(W, H, horizon))
     o.append(word_defs(x0, y0, word_w, word_h))
-    o.append(f'<linearGradient id="field" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="{W}" y2="0"><stop offset="0" stop-color="{AURORA}" stop-opacity="0"/><stop offset=".2" stop-color="{AURORA}" stop-opacity=".5"/><stop offset=".8" stop-color="{GOLD}" stop-opacity=".5"/><stop offset="1" stop-color="{GOLD}" stop-opacity="0"/></linearGradient>')
+    o.append(field_gradient("field", 0, W))
     o.append('<filter id="glow" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="16"/></filter>')
     o.append("</defs>")
     o.append(sky(rng, W, H, horizon, keep, 120, twinkle=False, sun_rx=420))
     o.append(f'<path d="{left}{right}" stroke="url(#field)" stroke-width="2.2" fill="none"/>')
+    o.append(stars)
     ty = meta_y + ch * 0.66
     o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="JetBrains Mono,{MONO}" font-weight="500" font-size="24" fill="{GOLD}">klash.pro</text>')
     o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="JetBrains Mono,{MONO}" font-size="24" fill="{HAZE}">github.com/klash-pro/klash</text>')
@@ -461,7 +504,7 @@ def og_svg(W=1280, H=640, p=28):
 
 
 def og_html():
-    return OG_HTML.substitute(svg=og_svg(), aurora=AURORA, lime=LIME, gold=GOLD, moon=MOON, rim=RIM)
+    return OG_HTML.substitute(svg=og_svg(), void=VOID, pink=PINK, orchid=ORCHID, purple=PURPLE, gold=GOLD, moon=MOON, rim=RIM)
 
 
 def main():
