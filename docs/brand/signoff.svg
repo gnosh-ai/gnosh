@@ -19,7 +19,7 @@
 <linearGradient id="rim" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1280" y2="0"><stop offset="0" stop-color="#6B50FF" stop-opacity="0"/><stop offset=".28" stop-color="#6B50FF" stop-opacity=".8"/><stop offset=".44" stop-color="#FF60FF"/><stop offset=".5" stop-color="#FED835"/><stop offset=".56" stop-color="#FF60FF"/><stop offset=".72" stop-color="#6B50FF" stop-opacity=".8"/><stop offset="1" stop-color="#6B50FF" stop-opacity="0"/></linearGradient>
 <filter id="soft" x="-10%" y="-300%" width="120%" height="700%"><feGaussianBlur stdDeviation="6"/></filter>
 <filter id="hblur" x="-20%" y="-5%" width="140%" height="110%"><feGaussianBlur stdDeviation="5 0"/></filter>
-<linearGradient id="word" gradientUnits="userSpaceOnUse" x1="500" y1="102" x2="780" y2="152"><stop offset="0" stop-color="#FF60FF"/><stop offset=".5" stop-color="#B65CFF"/><stop offset="1" stop-color="#6B50FF"/></linearGradient>
+<linearGradient id="word" gradientUnits="userSpaceOnUse" x1="500" y1="102" x2="780" y2="152"><stop offset="0" stop-color="#00FFB2"/><stop offset="0.333" stop-color="#6B50FF"/><stop offset="0.667" stop-color="#FF60FF"/><stop offset="1" stop-color="#FED835"/></linearGradient>
 <linearGradient id="field" gradientUnits="userSpaceOnUse" x1="500" y1="0" x2="780" y2="0"><stop offset="0" stop-color="#FF60FF" stop-opacity=".75"/><stop offset="1" stop-color="#6B50FF" stop-opacity=".75"/></linearGradient>
 <filter id="glow" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="8"/></filter>
 <clipPath id="frame"><rect width="1280" height="260" rx="22"/></clipPath>

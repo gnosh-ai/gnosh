@@ -5,7 +5,8 @@ The wordmark is the TUI's own: the half-block letterforms in
 internal/ui/logo/letterforms.go, where each terminal cell holds two square
 pixels. Drawing the same strings here keeps the banner on GitHub and the
 logo in the terminal the same shape. The colors are the TUI's too: Crush's
-purple and hot pink, a nebula, with green and gold kept to a few stars.
+purple and hot pink, a nebula, with green and gold at the ends of every fade
+and in a few stars.
 
     python3 scripts/brand.py
 
@@ -43,13 +44,16 @@ STAR = "#FFFAF1"
 LAVENDER = "#C9C1FF"
 PURPLE = "#6B50FF"
 PINK = "#FF60FF"
-ORCHID = "#B65CFF"
 MAGENTA = "#C337E0"
 DEEP = "#4A30D9"
 DEPTH = "#24135A"
 GOLD = "#FED835"
 AMBER = "#FEA408"
 MINT = "#68FFD6"
+GREEN = "#00FFB2"
+# Every fade, as in the TUI: green, then Crush's purple and hot pink, then
+# gold. Purple and pink hold the middle; green and gold only the ends.
+NEBULA = (GREEN, PURPLE, PINK, GOLD)
 # Deeper versions of the gradient that read on a white page.
 INK_PURPLE = "#5B40EC"
 INK_MAGENTA = "#B02DCB"
@@ -257,11 +261,13 @@ def field_stars(rng, x_from, x_to, y, rows, cw, ch, every=29, colors=(GOLD, MINT
     return "".join(o)
 
 
-def word_defs(x0, y0, word_w, word_h, a=PINK, b=ORCHID, c=PURPLE, gid="word"):
+def word_defs(x0, y0, word_w, word_h, stops=NEBULA, gid="word"):
+    """The word's fade, left to right with a little slope, through stops."""
+    n = len(stops) - 1
+    marks = "".join(f'<stop offset="{i / n:.3g}" stop-color="{c}"/>' for i, c in enumerate(stops))
     return (
         f'<linearGradient id="{gid}" gradientUnits="userSpaceOnUse" x1="{fmt(x0)}" y1="{fmt(y0)}" '
-        f'x2="{fmt(x0 + word_w)}" y2="{fmt(y0 + word_h)}"><stop offset="0" stop-color="{a}"/>'
-        f'<stop offset=".5" stop-color="{b}"/><stop offset="1" stop-color="{c}"/></linearGradient>'
+        f'x2="{fmt(x0 + word_w)}" y2="{fmt(y0 + word_h)}">{marks}</linearGradient>'
     )
 
 
@@ -450,7 +456,7 @@ html,body{width:1280px;height:640px;overflow:hidden;background:$void}
 .bg{position:absolute;inset:0}
 .wrap{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center}
 .tag{margin-top:356px;font:600 37px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.012em;color:$moon}
-.tag b{font-weight:600;background:linear-gradient(90deg,$pink,$orchid 55%,$purple);-webkit-background-clip:text;background-clip:text;color:transparent}
+.tag b{font-weight:600;background:linear-gradient(90deg,$green,$purple 35%,$pink 70%,$gold);-webkit-background-clip:text;background-clip:text;color:transparent}
 .pts{margin-top:26px;display:flex;gap:14px;font:500 19px/1 'JetBrains Mono',monospace;color:#D6D3DC}
 .pts span{display:flex;align-items:center;gap:10px;padding:11px 16px;border:1px solid $rim;border-radius:999px;background:rgba(13,10,26,.72)}
 .pts i{width:9px;height:9px;border-radius:2px;display:block}
@@ -504,7 +510,7 @@ def og_svg(W=1280, H=640, p=28):
 
 
 def og_html():
-    return OG_HTML.substitute(svg=og_svg(), void=VOID, pink=PINK, orchid=ORCHID, purple=PURPLE, gold=GOLD, moon=MOON, rim=RIM)
+    return OG_HTML.substitute(svg=og_svg(), void=VOID, green=GREEN, pink=PINK, purple=PURPLE, gold=GOLD, moon=MOON, rim=RIM)
 
 
 def main():
