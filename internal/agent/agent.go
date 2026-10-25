@@ -1740,7 +1740,7 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 	}
 
 	noTools := fantasy.ToolChoiceNone
-	ask := func(systemPrompt string, tools []fantasy.AgentTool) (*fantasy.AgentResult, error) {
+	ask := func(systemPrompt string, tools []fantasy.AgentTool, conversation []fantasy.Message) (*fantasy.AgentResult, error) {
 		agent := fantasy.NewAgent(
 			largeModel.Model,
 			fantasy.WithSystemPrompt(systemPrompt),
@@ -1749,7 +1749,7 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 		)
 		return agent.Stream(genCtx, fantasy.AgentStreamCall{
 			Prompt:          buildSummaryPrompt(currentSession.Todos, instructions),
-			Messages:        aiMsgs,
+			Messages:        conversation,
 			Headers:         sessionHeaders(sessionID),
 			ProviderOptions: opts,
 			OnAuthRefresh:   onAuthRefresh,
@@ -1793,13 +1793,26 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 	for i, t := range agentTools {
 		listedTools[i] = unrunnableTool{t}
 	}
-	resp, err := ask(a.requestSystemPrompt(), listedTools)
+	resp, err := ask(a.requestSystemPrompt(), listedTools, aiMsgs)
 	if tooLongForContext(err) {
 		// The system prompt and tools take room that a conversation filled
 		// up by its last step may not have left. Without them, as it was
 		// asked for before, the summary reads the whole conversation again
 		// but fits.
-		resp, err = ask("", nil)
+		resp, err = ask("", nil, aiMsgs)
+	}
+	// Too long even alone, as after a switch to a model with a smaller
+	// context, the conversation's earliest turns are left out, half at a
+	// time, until the rest fits, as Claude Code leaves them out, and the
+	// summary says what it does not cover. Unsummarized, the session was
+	// stuck: every turn after it was refused as too long.
+	leftOut := false
+	for kept := aiMsgs; tooLongForContext(err); {
+		if kept = laterPart(kept); kept == nil {
+			break
+		}
+		leftOut = true
+		resp, err = ask("", nil, kept)
 	}
 	if err != nil {
 		isCancelErr := errors.Is(err, context.Canceled)
@@ -1828,6 +1841,13 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 		return err
 	}
 
+	if leftOut {
+		inTranscript := ""
+		if a.transcriptPath(sessionID, summaryMessage.ID) != "" {
+			inTranscript = " (the full transcript named below still has it)"
+		}
+		summaryMessage.AppendContent(fmt.Sprintf("\n\n"+earliestLeftOut, inTranscript))
+	}
 	summaryMessage.AddFinish(message.FinishReasonEndTurn, "", "")
 	err = a.messages.Update(genCtx, summaryMessage)
 	if err != nil {
@@ -2032,6 +2052,21 @@ func tooLongForContext(err error) bool {
 		return false
 	}
 	return providerErr.IsContextTooLarge() || strings.Contains(providerErr.Message, "exceeds the available context size")
+}
+
+// earliestLeftOut ends a summary of a conversation whose earliest part was
+// left out, in Claude Code's words; %s says where it still is.
+const earliestLeftOut = "Note: the earliest part of the conversation was too large to include and is NOT covered by this summary%s. If the task turns out to depend on something from that part, say so plainly rather than guessing at it."
+
+// laterPart is msgs from the first user message in their second half on,
+// so that no tool result goes without its call, or nil when none is.
+func laterPart(msgs []fantasy.Message) []fantasy.Message {
+	for i := max(len(msgs)/2, 1); i < len(msgs); i++ {
+		if msgs[i].Role == fantasy.MessageRoleUser {
+			return msgs[i:]
+		}
+	}
+	return nil
 }
 
 // unrunnableTool lists a tool in a request without letting it run.

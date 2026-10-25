@@ -28,8 +28,9 @@ import (
 // with the next of its replies, "ok" once they run out. A reply that
 // starts with "call " calls the tool it names instead. Every answer
 // reports usage as given. With refuseTools set, a request that lists
-// tools fails with it. Title requests are answered but not kept: they
-// are the agent's own side effect.
+// tools fails with it; with tooLongOver set, one of more messages than it
+// is refused as too long for the context. Title requests are answered but
+// not kept: they are the agent's own side effect.
 type requestRecordingModel struct {
 	fakeLanguageModel
 	mu          sync.Mutex
@@ -37,6 +38,7 @@ type requestRecordingModel struct {
 	replies     []string
 	usage       fantasy.Usage
 	refuseTools error
+	tooLongOver int
 }
 
 func (m *requestRecordingModel) Stream(_ context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
@@ -47,6 +49,10 @@ func (m *requestRecordingModel) Stream(_ context.Context, call fantasy.Call) (fa
 		if m.refuseTools != nil && len(call.Tools) > 0 {
 			m.mu.Unlock()
 			return nil, m.refuseTools
+		}
+		if m.tooLongOver > 0 && len(call.Prompt) > m.tooLongOver {
+			m.mu.Unlock()
+			return nil, &fantasy.ProviderError{StatusCode: 400, Message: "the request exceeds the available context size, try increasing it"}
 		}
 		reply = "ok"
 		if len(m.replies) > 0 {
@@ -525,4 +531,58 @@ func TestRestoredSkillsStayWithinTheirBudget(t *testing.T) {
 	// s7 is the latest; then five of the large ones fit, and s1 does not.
 	require.Equal(t, []string{"s7", "s6", "s5", "s4", "s3", "s2"}, given)
 	require.LessOrEqual(t, len(text)-len(skillsGivenAgain), restoredSkillsChars+1000)
+}
+
+// A conversation too long for the context even without the system prompt
+// and tools, as after a switch to a model with a smaller one, is
+// summarized from its later turns: the earliest are left out, half at a
+// time, until the rest fits, as Claude Code leaves them out, and the
+// summary says what it does not cover. It was not summarized at all, and
+// every turn after it was refused as too long.
+func TestSummarize_TooLongEvenAloneLeavesOutTheEarliestPart(t *testing.T) {
+	t.Parallel()
+	llm := &requestRecordingModel{replies: []string{"the summary"}, tooLongOver: 8}
+	a, sessionID, _ := summaryRequestAgent(t, llm)
+	dataDir := t.TempDir()
+	a.cfg = config.NewTestStore(&config.Config{Options: &config.Options{DataDirectory: dataDir}})
+	for i := 1; i <= 8; i++ {
+		for _, role := range []message.MessageRole{message.User, message.Assistant} {
+			_, err := a.messages.Create(t.Context(), sessionID, message.CreateMessageParams{Role: role, Parts: []message.ContentPart{message.TextContent{Text: fmt.Sprintf("%s %d", role, i)}}})
+			require.NoError(t, err)
+		}
+	}
+
+	require.NoError(t, a.Summarize(t.Context(), sessionID, "", fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
+	reqs := llm.requests()
+	last := reqs[len(reqs)-1]
+	require.LessOrEqual(t, len(last.Prompt), 8, "the request that fit")
+	// Refused with tools, refused without, refused from "user 5" on, and
+	// fit from "user 7": half the turns left out at each cut.
+	require.Len(t, reqs, 4)
+	conversation := userTexts(last.Prompt)
+	require.Equal(t, []string{"user 7", "user 8", buildSummaryPrompt(nil, "")}, conversation)
+	require.Equal(t, "user 5", userTexts(reqs[2].Prompt)[0])
+	for _, req := range reqs[2:] {
+		require.Equal(t, fantasy.MessageRoleUser, withoutSystem(req.Prompt)[0].Role, "each cut starts at a user message")
+	}
+
+	sess, err := a.sessions.Get(t.Context(), sessionID)
+	require.NoError(t, err)
+	summary, err := a.messages.Get(t.Context(), sess.SummaryMessageID)
+	require.NoError(t, err)
+	require.Equal(t, "the summary\n\n"+fmt.Sprintf(earliestLeftOut, " (the full transcript named below still has it)"), summary.Content().Text)
+	transcript, err := os.ReadFile(filepath.Join(dataDir, "transcripts", sessionID+"-"+sess.SummaryMessageID+".txt"))
+	require.NoError(t, err)
+	require.Contains(t, string(transcript), "User: user 1", "the transcript keeps what the summary left out")
+}
+
+// withoutSystem is msgs without their system messages.
+func withoutSystem(msgs []fantasy.Message) []fantasy.Message {
+	var out []fantasy.Message
+	for _, msg := range msgs {
+		if msg.Role != fantasy.MessageRoleSystem {
+			out = append(out, msg)
+		}
+	}
+	return out
 }
