@@ -1124,7 +1124,10 @@ You can still list models explicitly. User-defined models always take
 precedence over discovered ones, and any fields you set won't be overwritten
 by auto-discovery. Auto discovery will run if the model list is empty for any
 `openai-compat` provider or if you pass `"discover_models": true` it will merge
-the found models with your hand configured ones.
+the found models with your hand configured ones. A model you list without a
+context window gets it from a llama.cpp, LM Studio, Ollama, oMLX or LiteLLM
+server, unless `"discover_models"` is `false`: an unknown window is taken for
+32,768 tokens, and the conversation is compacted long before it needs to be.
 
 ```bash
 # klashrc

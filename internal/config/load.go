@@ -408,9 +408,17 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 	// Discover models concurrently for custom providers that need it.
 	// A provider needs discovery when discover_models is explicitly true,
 	// or when the models list is empty (auto-trigger, unless opted out).
+	// A provider that lists its models, one of them with no context
+	// window, has the server fill that in, as a discovered model has, when
+	// its type can (an enricher) and discovery is not turned off: unknown,
+	// the window is taken for 32,768 tokens, and the AI box's Qwen, named
+	// in a crushrc with no window, was compacted at 26,215 of its 262,144.
 	type discoveryResult struct {
 		models []catwalk.Model
 		err    error
+		// filledIn is set when the listed models only had their context
+		// windows filled in.
+		filledIn bool
 	}
 
 	discoveryResults := make(map[string]discoveryResult)
@@ -427,7 +435,10 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 		}
 		wantsDiscovery := pc.AutoDiscoverModels != nil && *pc.AutoDiscoverModels
 		autoTrigger := len(pc.Models) == 0 && (pc.AutoDiscoverModels == nil || *pc.AutoDiscoverModels)
-		if !wantsDiscovery && !autoTrigger {
+		enricher := discover.GetEnricher(string(cmp.Or(pc.Type, catwalk.TypeOpenAICompat)))
+		fillIn := !wantsDiscovery && !autoTrigger && pc.AutoDiscoverModels == nil && enricher != nil &&
+			slices.ContainsFunc(pc.Models, func(m catwalk.Model) bool { return m.ContextWindow == 0 })
+		if !wantsDiscovery && !autoTrigger && !fillIn {
 			continue
 		}
 		providerID := cmp.Or(pc.ID, id)
@@ -438,13 +449,17 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 			ExtraHeaders:   pc.ExtraHeaders,
 			ExistingModels: pc.Models,
 		}
-		providerType := cmp.Or(pc.Type, catwalk.TypeOpenAICompat)
 		wg.Go(func() {
+			if fillIn {
+				models, _ := enricher.EnrichModels(discoverCtx, cfg, resolver, slices.Clone(pc.Models))
+				mu.Lock()
+				discoveryResults[id] = discoveryResult{models: models, filledIn: true}
+				mu.Unlock()
+				return
+			}
 			models, err := discover.DiscoverModels(discoverCtx, cfg, resolver)
-			if err == nil && len(models) > 0 {
-				if enricher := discover.GetEnricher(string(providerType)); enricher != nil {
-					models, _ = enricher.EnrichModels(discoverCtx, cfg, resolver, models)
-				}
+			if err == nil && len(models) > 0 && enricher != nil {
+				models, _ = enricher.EnrichModels(discoverCtx, cfg, resolver, models)
 			}
 			mu.Lock()
 			discoveryResults[id] = discoveryResult{models: models, err: err}
@@ -498,6 +513,8 @@ func (c *Config) configureProviders(ctx context.Context, store *ConfigStore, env
 					c.skipProvider(id, fmt.Sprintf("its model server did not answer (%v)", result.err))
 					continue
 				}
+			} else if result.filledIn {
+				providerConfig.Models = result.models
 			} else if len(result.models) > 0 {
 				providerConfig.Models = result.models
 				slog.Info("Discovered models for provider", "provider", id, "count", len(result.models))
