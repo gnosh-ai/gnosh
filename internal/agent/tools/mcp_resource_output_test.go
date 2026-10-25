@@ -64,7 +64,7 @@ func TestResourceTextSaysWhyABinaryPartWasNotSaved(t *testing.T) {
 	require.True(t, strings.HasPrefix(got, "Binary content could not be saved to disk: "), got)
 	require.Contains(t, got, "not a directory")
 
-	tooBig := make([]byte, resourceBlobLimit+1)
+	tooBig := make([]byte, 100<<20+1)
 	got = resourceText([]*mcp.ResourceContents{{Blob: tooBig}}, "pics", "res://asked", t.TempDir())
 	require.Equal(t, "Binary content could not be saved to disk: content is 104857601 bytes, over the 104857600 byte persist limit", got)
 }
@@ -124,37 +124,6 @@ func TestResourceTextCutsTextItCannotSave(t *testing.T) {
 		"the rest was dropped. If the tool can page or filter its results, call it again for the part you need.\n\n" +
 		text[:49994] + "\n</truncated-output>"
 	require.Equal(t, want, got)
-}
-
-func TestBlobExtension(t *testing.T) {
-	t.Parallel()
-	for mimeType, want := range map[string]string{
-		"image/png":                  "png",
-		" IMAGE/JPEG ; quality=high": "jpg",
-		"application/pdf":            "pdf",
-		"image/vnd.microsoft.icon":   "ico",
-		"application/x-unknown":      "bin",
-		"":                           "bin",
-	} {
-		require.Equal(t, want, blobExtension(mimeType), mimeType)
-	}
-}
-
-func TestClaudeSize(t *testing.T) {
-	t.Parallel()
-	for n, want := range map[int]string{
-		0:                     "0 bytes",
-		1023:                  "1023 bytes",
-		1024:                  "1KB",
-		1536:                  "1.5KB",
-		2000:                  "2KB",
-		1 << 20:               "1MB",
-		5<<20 + 1<<19 + 1<<17: "5.6MB",
-		1 << 30:               "1GB",
-		3<<30 + 1<<29:         "3.5GB",
-	} {
-		require.Equal(t, want, claudeSize(n), n)
-	}
 }
 
 func TestPreviewOf(t *testing.T) {

@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -57,13 +58,15 @@ func RunTool(ctx context.Context, cfg *config.ConfigStore, name, toolName string
 		return ToolResult{}, err
 	}
 
-	return toolResultFromCall(result), nil
+	return toolResultFromCall(result, name, cfg.Config().Options.DataDirectory), nil
 }
 
-// toolResultFromCall folds the content blocks of an MCP reply into the one
-// result Crush carries, keeping at most one image and one audio payload,
-// and its text cut to what it may bring into the conversation (capOutput).
-func toolResultFromCall(result *mcp.CallToolResult) ToolResult {
+// toolResultFromCall folds the content blocks of server's MCP reply into
+// the one result Crush carries, keeping at most one image and one audio
+// payload, and its text cut to what it may bring into the conversation
+// (capOutput). An embedded resource and a resource link come in Claude
+// Code's words, a binary resource saved to a file under dataDir.
+func toolResultFromCall(result *mcp.CallToolResult, server, dataDir string) ToolResult {
 	if len(result.Content) == 0 {
 		return ToolResult{Type: "text", Content: ""}
 	}
@@ -78,6 +81,16 @@ func toolResultFromCall(result *mcp.CallToolResult) ToolResult {
 			image.offer(content.Data, content.MIMEType)
 		case *mcp.AudioContent:
 			audio.offer(content.Data, content.MIMEType)
+		case *mcp.EmbeddedResource:
+			if text, ok := embeddedResource(content.Resource, server, dataDir, &image); ok {
+				textParts = append(textParts, text)
+			}
+		case *mcp.ResourceLink:
+			link := fmt.Sprintf("[Resource link: %s] %s", content.Name, content.URI)
+			if content.Description != "" {
+				link += fmt.Sprintf(" (%s)", content.Description)
+			}
+			textParts = append(textParts, link)
 		default:
 			textParts = append(textParts, fmt.Sprintf("%v", v))
 		}
@@ -92,6 +105,33 @@ func toolResultFromCall(result *mcp.CallToolResult) ToolResult {
 	default:
 		return ToolResult{Type: "text", Content: textContent}
 	}
+}
+
+// embeddedResource is what the model is told of a resource embedded in
+// server's MCP reply, in Claude Code's words: its text after "[Resource
+// from SERVER at URI] ", or, when it is binary, that heading with an image
+// of a type a model is shown offered as the reply's image, or else the file
+// it was saved to under dataDir. ok is false for one with neither text nor
+// binary. %v printed these as Go values, pointers and all.
+func embeddedResource(r *mcp.ResourceContents, server, dataDir string, image *mediaPayload) (text string, ok bool) {
+	if r == nil {
+		return "", false
+	}
+	heading := fmt.Sprintf("[Resource from %s at %s]", server, r.URI)
+	switch {
+	case r.Text != "":
+		return heading + " " + r.Text, true
+	case len(r.Blob) == 0:
+		return "", false
+	case modelImageTypes[mimeBase(r.MIMEType)]:
+		image.offer(r.Blob, mimeBase(r.MIMEType))
+		return heading, true
+	}
+	saved, err := SaveBlob(r.Blob, r.MIMEType, heading+" ", dataDir)
+	if err != nil {
+		return fmt.Sprintf("%s Binary content (%s, %d bytes) could not be saved to disk: %s", heading, cmp.Or(r.MIMEType, "unknown type"), len(r.Blob), err), true
+	}
+	return saved, true
 }
 
 // mediaPayload keeps the first non-empty payload offered, or the first one

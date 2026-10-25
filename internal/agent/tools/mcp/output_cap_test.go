@@ -48,6 +48,6 @@ func TestCapOutput(t *testing.T) {
 // result.
 func TestToolResultFromCallCapsItsText(t *testing.T) {
 	t.Setenv("MAX_MCP_OUTPUT_TOKENS", "5")
-	got := toolResultFromCall(&mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: strings.Repeat("x", 30)}}})
+	got := toolResultFromCall(&mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: strings.Repeat("x", 30)}}}, "srv", "")
 	require.True(t, strings.HasPrefix(got.Content, strings.Repeat("x", 20)+truncatedNote(5)), got.Content)
 }
