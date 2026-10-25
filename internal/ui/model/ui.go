@@ -359,6 +359,9 @@ type UI struct {
 	onboarding struct {
 		yesInitializeSelected bool
 	}
+	// initTip is set to give the tip to run /init as the UI starts, in a
+	// project with no context file (see Init).
+	initTip bool
 
 	// lspStates / lspDiagnostics memoize the workspace LSP state and
 	// per-server severity counts (each probe behind them is a synchronous
@@ -620,11 +623,9 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	// set onboarding state defaults
 	ui.onboarding.yesInitializeSelected = true
 
-	desiredState := startState(com.Config().IsConfigured(), func() bool {
-		n, _ := com.Workspace.ProjectNeedsInitialization()
-		return n
-	}, initialSessionID != "" || continueLast)
+	desiredState := startState(com.Config().IsConfigured())
 	desiredFocus := uiFocusEditor
+	ui.initTip = initTipWanted(desiredState, initialSessionID != "" || continueLast, com.Workspace.ProjectNeedsInitialization)
 
 	// set initial state
 	ui.setState(desiredState, desiredFocus)
@@ -654,6 +655,9 @@ func (m *UI) Init() tea.Cmd {
 		if why := m.com.Config().SkippedProvidersSummary(); why != "" {
 			cmds = append(cmds, util.ReportWarn("No configured provider can be used: "+why))
 		}
+	}
+	if cmd := m.initTipCmd(); cmd != nil {
+		cmds = append(cmds, cmd)
 	}
 	// load the user commands async
 	cmds = append(cmds, m.loadCustomCommands())
@@ -709,20 +713,38 @@ func (m *UI) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// startState is the screen the UI starts on: onboarding until a provider
-// can be used; then, in a project never initialized, the question whether
-// to initialize it, unless the command line asked for a session to
-// continue, which either answer to the question used to drop (it is asked
-// on the next start instead); else the landing page.
-func startState(configured bool, needsInit func() bool, sessionAsked bool) uiState {
-	switch {
-	case !configured:
-		return uiOnboarding
-	case !sessionAsked && needsInit():
-		return uiInitialize
-	default:
-		return uiLanding
+// initTipWanted is whether the UI starts with Claude Code's tip to run
+// /init: on the landing page, with no session asked for, in a project
+// with no context file, where it was asked whether to initialize the
+// project. A prompt typed at once answered that question, its "y" starting
+// an agent turn that wrote a context file.
+func initTipWanted(state uiState, sessionAsked bool, needsInit func() (bool, error)) bool {
+	if state != uiLanding || sessionAsked {
+		return false
 	}
+	needs, _ := needsInit()
+	return needs
+}
+
+// initTipCmd gives the tip to run /init, once: it marks the project as
+// told, as either answer to the question did. nil without initTip.
+func (m *UI) initTipCmd() tea.Cmd {
+	if !m.initTip {
+		return nil
+	}
+	initFile := cmp.Or(m.com.Config().Options.InitializeAs, "AGENTS.md")
+	return tea.Batch(util.ReportInfo(fmt.Sprintf("Run /init to create a %s file with instructions for Klash", initFile)), m.markProjectInitializedCmd())
+}
+
+// startState is the screen the UI starts on: onboarding until a provider
+// can be used, else the landing page, with the editor ready. A project
+// never initialized is not asked whether to initialize it, as Claude Code
+// does not ask: it gets the tip to run /init instead (initTip).
+func startState(configured bool) uiState {
+	if !configured {
+		return uiOnboarding
+	}
+	return uiLanding
 }
 
 // StartInPlanMode shows the UI in plan mode from the start, for Claude

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
@@ -69,18 +70,14 @@ func TestStartupSessionPickerWaitsOutOnboarding(t *testing.T) {
 	require.Nil(t, u.startupSessionPicker())
 }
 
-// A session asked for on the command line is not put behind the question
-// whether to initialize the project: answering it either way dropped the
-// session, so `klash -C` in such a project came up without it.
+// The UI starts on onboarding until a provider can be used, and then on
+// the landing page, never on the question whether to initialize the
+// project: a prompt typed at once answered it.
 func TestStartStateLetsAnAskedForSessionPastTheInitQuestion(t *testing.T) {
 	t.Parallel()
 
-	needsInit := func() bool { return true }
-	noInit := func() bool { return false }
-	require.Equal(t, uiOnboarding, startState(false, needsInit, true))
-	require.Equal(t, uiInitialize, startState(true, needsInit, false))
-	require.Equal(t, uiLanding, startState(true, needsInit, true))
-	require.Equal(t, uiLanding, startState(true, noInit, false))
+	require.Equal(t, uiOnboarding, startState(false))
+	require.Equal(t, uiLanding, startState(true))
 
 	u := newTestUI()
 	u.com.Workspace = &pickSessionWorkspace{sessions: []session.Session{{ID: "s1"}}}
@@ -134,4 +131,50 @@ func TestStartupSessionPickerSearches(t *testing.T) {
 	_, _ = u.Update(msg)
 	require.True(t, u.dialog.ContainsDialog(dialog.SessionsID))
 	require.Equal(t, dialog.ActionSelectSession{Session: sessions[1]}, u.dialog.Update(tea.KeyPressMsg{Code: tea.KeyEnter}))
+}
+
+// initTipWorkspace is a project never initialized: its config names the
+// context file /init writes, and it records being marked as told.
+type initTipWorkspace struct {
+	workspace.Workspace
+	marked int
+}
+
+func (w *initTipWorkspace) Config() *config.Config {
+	return &config.Config{Options: &config.Options{InitializeAs: "KLASH.md"}}
+}
+
+func (w *initTipWorkspace) MarkProjectInitialized() error {
+	w.marked++
+	return nil
+}
+
+// A project never initialized gets Claude Code's tip to run /init as the
+// UI starts, once, with the editor ready, and is not asked whether to
+// initialize it.
+func TestInitTip(t *testing.T) {
+	t.Parallel()
+
+	needs := func() (bool, error) { return true, nil }
+	initialized := func() (bool, error) { return false, nil }
+	require.True(t, initTipWanted(uiLanding, false, needs))
+	require.False(t, initTipWanted(uiLanding, true, needs), "a session asked for")
+	require.False(t, initTipWanted(uiOnboarding, false, needs), "before onboarding is done")
+	require.False(t, initTipWanted(uiLanding, false, initialized))
+
+	u := newTestUI()
+	require.Nil(t, u.initTipCmd(), "no tip unless wanted")
+	ws := &initTipWorkspace{}
+	u.com.Workspace = ws
+	u.initTip = true
+	batch, ok := u.initTipCmd()().(tea.BatchMsg)
+	require.True(t, ok)
+	var infos []string
+	for _, cmd := range batch {
+		if info, ok := cmd().(util.InfoMsg); ok {
+			infos = append(infos, info.Msg)
+		}
+	}
+	require.Equal(t, []string{"Run /init to create a KLASH.md file with instructions for Klash"}, infos)
+	require.Equal(t, 1, ws.marked, "told once")
 }
