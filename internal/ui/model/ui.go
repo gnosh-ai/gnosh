@@ -290,8 +290,9 @@ type UI struct {
 	isCanceling bool
 
 	// rewindEscAt is when Esc was pressed on an empty prompt, if it was
-	// just now: a second press soon after opens /rewind.
-	rewindEscAt time.Time
+	// just now: a second press soon after opens /rewind. clearEscAt is
+	// the same on a prompt with text: a second press clears it.
+	rewindEscAt, clearEscAt time.Time
 
 	// bangMode tracks whether the editor is in bang (!) shell mode.
 	bangMode     bool
@@ -502,8 +503,11 @@ type UI struct {
 	// Prompt history for up/down navigation through previous messages.
 	promptHistory struct {
 		messages []string
-		index    int
-		draft    string
+		times    []int64 // when each of messages was sent
+		// cleared are the prompts Esc Esc cleared, newest first.
+		cleared []clearedPrompt
+		index   int
+		draft   string
 	}
 }
 
@@ -1182,6 +1186,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case promptHistoryLoadedMsg:
 		m.promptHistory.messages = msg.messages
+		m.promptHistory.times = msg.times
 		m.promptHistory.index = -1
 		m.promptHistory.draft = ""
 
@@ -3626,10 +3631,14 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					cmds = append(cmds, cmd)
 				}
 			case key.Matches(msg, m.keyMap.Editor.Escape):
-				if cmd, ok := m.escapeToRewind(msg); ok {
+				cmd, took := m.escapeTwice(msg)
+				if cmd != nil {
 					cmds = append(cmds, cmd)
-				} else if cmd := m.handleHistoryEscape(msg); cmd != nil {
-					cmds = append(cmds, cmd)
+				}
+				if !took {
+					if cmd := m.handleHistoryEscape(msg); cmd != nil {
+						cmds = append(cmds, cmd)
+					}
 				}
 			case key.Matches(msg, m.keyMap.Editor.Commands) && m.textarea.Value() == "":
 				if cmd := m.openCommandsDialog(); cmd != nil {

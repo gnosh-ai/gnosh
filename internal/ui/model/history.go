@@ -3,17 +3,31 @@ package model
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/charmbracelet/crush/internal/message"
 )
 
-// promptHistoryLoadedMsg is sent when prompt history is loaded.
+// promptHistoryLoadedMsg is sent when prompt history is loaded: the
+// prompts, newest first, and when each was sent (Unix seconds).
 type promptHistoryLoadedMsg struct {
 	messages []string
+	times    []int64
 }
+
+// clearedPrompt is a prompt Esc Esc cleared, kept for Up as Claude Code
+// keeps it: its text, and when it was cleared (Unix seconds).
+type clearedPrompt struct {
+	text string
+	at   int64
+}
+
+// maxClearedPrompts is how many cleared prompts Up keeps.
+const maxClearedPrompts = 50
 
 // loadPromptHistory loads user messages for history navigation. Both queries
 // stop at the 200 most recent entries; recall only steps back one at a time.
@@ -33,7 +47,8 @@ func (m *UI) loadPromptHistory() tea.Cmd {
 			return promptHistoryLoadedMsg{messages: nil}
 		}
 
-		return promptHistoryLoadedMsg{messages: historyTexts(messages)}
+		texts, times := historyItems(messages)
+		return promptHistoryLoadedMsg{messages: texts, times: times}
 	}
 }
 
@@ -42,16 +57,38 @@ func (m *UI) loadPromptHistory() tea.Cmd {
 // Stop hook's objection, /loop's "Continue working" and its check-in), not
 // what the user typed, and the chat does not show them either.
 func historyTexts(messages []message.Message) []string {
-	texts := make([]string, 0, len(messages))
+	texts, _ := historyItems(messages)
+	return texts
+}
+
+// historyItems is historyTexts with when each was sent.
+func historyItems(messages []message.Message) (texts []string, times []int64) {
 	for _, msg := range messages {
 		if content := msg.Content(); content.Text != "" && !content.Hidden {
 			texts = append(texts, content.Text)
+			times = append(times, msg.CreatedAt)
 		}
 		for _, sc := range msg.ShellCommands() {
 			texts = append(texts, "!"+sc.Command)
+			times = append(times, msg.CreatedAt)
 		}
 	}
-	return texts
+	return texts, times
+}
+
+// clearPrompt empties the prompt, as Claude Code's Esc Esc does, keeping
+// what it held, a shell command with its "!", for Up to bring back.
+func (m *UI) clearPrompt() tea.Cmd {
+	prevHeight := m.textarea.Height()
+	text := m.textarea.Value()
+	if m.bangMode {
+		text = "!" + text
+	}
+	m.promptHistory.cleared = slices.Insert(m.promptHistory.cleared, 0, clearedPrompt{text: text, at: time.Now().Unix()})
+	m.promptHistory.cleared = m.promptHistory.cleared[:min(len(m.promptHistory.cleared), maxClearedPrompts)]
+	m.textarea.Reset()
+	m.historyReset()
+	return m.updateTextareaWithPrevHeight(nil, prevHeight)
 }
 
 // handleHistoryUp handles up arrow for history navigation.
@@ -156,7 +193,28 @@ func (m *UI) syncBangModeFromTextarea() {
 // edit (dispatchPromptQueuePop), and a copy of a queued prompt offered here,
 // edited and sent, would run it twice: once from the queue, once as typed.
 func (m *UI) historyEntries() []string {
-	return m.promptHistory.messages
+	cleared := m.promptHistory.cleared
+	if len(cleared) == 0 {
+		return m.promptHistory.messages
+	}
+	// Both are newest first: a cleared prompt goes before the prompts
+	// sent before it was cleared.
+	entries := make([]string, 0, len(cleared)+len(m.promptHistory.messages))
+	for i, text := range m.promptHistory.messages {
+		var sent int64
+		if i < len(m.promptHistory.times) {
+			sent = m.promptHistory.times[i]
+		}
+		for len(cleared) > 0 && cleared[0].at >= sent {
+			entries = append(entries, cleared[0].text)
+			cleared = cleared[1:]
+		}
+		entries = append(entries, text)
+	}
+	for _, c := range cleared {
+		entries = append(entries, c.text)
+	}
+	return entries
 }
 
 // historyPrev changes the text area content to the previous message in the history

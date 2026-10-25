@@ -262,9 +262,66 @@ func TestEscEscOpensRewind(t *testing.T) {
 
 	require.Nil(t, esc(0))
 	u.textarea.SetValue("half a thought")
-	require.Nil(t, esc(0), "a prompt with text")
+	require.Equal(t, util.NewInfoMsg("Esc again to clear"), esc(0), "a prompt with text")
 	require.Equal(t, "half a thought", u.textarea.Value())
 	u.textarea.SetValue("")
 	require.Nil(t, esc(0), "the text started it over")
 	require.Equal(t, opened, esc(0))
+}
+
+// Esc twice on a prompt with text clears it, as in Claude Code: the first
+// says "Esc again to clear", the second, within rewindEscWindow, empties
+// the editor, and Up brings the text back, a shell command with its "!".
+// A second Esc too late says it again; alt+esc clears at once; Esc while
+// browsing history goes back to the draft, as before.
+func TestEscEscClearsAPromptForUp(t *testing.T) {
+	pinTTLs(t)
+	u := newTestUI()
+	u.keyMap = DefaultKeyMap()
+	u.dialog = dialog.NewOverlay()
+	u.attachments = attachments.New(nil, attachments.Keymap{})
+	u.com.Workspace = &rewindWorkspace{}
+	warmCaches(u, false)
+	u.session = &session.Session{ID: "s1"}
+	u.promptHistory.index = -1
+	u.promptHistory.messages = []string{"sent before"}
+	u.promptHistory.times = []int64{time.Now().Unix() - 60}
+	press := func(code rune, mod tea.KeyMod) tea.Cmd {
+		return u.handleKeyPressMsg(tea.KeyPressMsg{Code: code, Mod: mod})
+	}
+	again := util.NewInfoMsg("Esc again to clear")
+
+	u.textarea.SetValue("half a thought")
+	require.Equal(t, again, press(tea.KeyEscape, 0)())
+	require.Equal(t, "half a thought", u.textarea.Value())
+	press(tea.KeyEscape, 0)
+	require.Empty(t, u.textarea.Value())
+	require.Equal(t, []string{"half a thought", "sent before"}, u.historyEntries())
+	press(tea.KeyUp, 0)
+	require.Equal(t, "half a thought", u.textarea.Value(), "Up brings it back")
+
+	press(tea.KeyEscape, 0)
+	require.Empty(t, u.textarea.Value(), "browsing history: back to the draft")
+	require.Equal(t, -1, u.promptHistory.index)
+	require.Len(t, u.promptHistory.cleared, 1, "nothing cleared")
+
+	u.textarea.SetValue("second thought")
+	require.Equal(t, again, press(tea.KeyEscape, 0)())
+	u.clearEscAt = u.clearEscAt.Add(-rewindEscWindow - time.Millisecond)
+	require.Equal(t, again, press(tea.KeyEscape, 0)(), "too late")
+	require.Equal(t, "second thought", u.textarea.Value())
+	press(tea.KeyEscape, tea.ModAlt)
+	require.Empty(t, u.textarea.Value(), "two at once")
+
+	u.bangMode = true
+	u.textarea.SetValue("ls -la")
+	press(tea.KeyEscape, 0)
+	press(tea.KeyEscape, 0)
+	require.Empty(t, u.textarea.Value())
+	require.Equal(t, []string{"!ls -la", "second thought", "half a thought", "sent before"}, u.historyEntries())
+
+	// History reloads after a prompt is sent; a prompt sent after the
+	// clearing comes before what was cleared.
+	u.Update(promptHistoryLoadedMsg{messages: []string{"sent after", "sent before"}, times: []int64{time.Now().Unix() + 10, time.Now().Unix() - 60}})
+	require.Equal(t, []string{"sent after", "!ls -la", "second thought", "half a thought", "sent before"}, u.historyEntries())
 }

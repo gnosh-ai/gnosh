@@ -119,25 +119,45 @@ func (m *UI) openRewind() tea.Cmd {
 	}
 }
 
-// rewindEscWindow is how soon after an Esc on an empty prompt a second
-// one opens /rewind: Claude Code's double press.
+// rewindEscWindow is how soon after an Esc a second one is Claude Code's
+// double press.
 const rewindEscWindow = 800 * time.Millisecond
 
-// escapeToRewind takes an Esc in the editor. On an empty prompt in a
-// session, a second Esc within rewindEscWindow of the first opens
-// /rewind, as in Claude Code; an alt+esc is two Escs that reached klash
-// together. It reports whether it took the key.
-func (m *UI) escapeToRewind(msg tea.KeyPressMsg) (tea.Cmd, bool) {
-	if !m.hasSession() || m.textarea.Value() != "" {
-		m.rewindEscAt = time.Time{}
-		return nil, false
-	}
+// escapeTwice takes an Esc in the editor, as Claude Code does: a second
+// Esc within rewindEscWindow of the first opens /rewind on an empty
+// prompt in a session, and clears a prompt with text in it, keeping the
+// text for Up; on the first there, it says "Esc again to clear". An
+// alt+esc is two Escs that reached klash together. Esc while browsing
+// history goes back to the draft, as before. It reports whether it took
+// the key.
+func (m *UI) escapeTwice(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	now := time.Now()
-	if !msg.Mod.Contains(tea.ModAlt) && (m.rewindEscAt.IsZero() || now.Sub(m.rewindEscAt) > rewindEscWindow) {
-		m.rewindEscAt = now
+	twice := func(at *time.Time) bool {
+		if !msg.Mod.Contains(tea.ModAlt) && (at.IsZero() || now.Sub(*at) > rewindEscWindow) {
+			*at = now
+			return false
+		}
+		*at = time.Time{}
+		return true
+	}
+	switch {
+	case m.promptHistory.index >= 0:
+		m.rewindEscAt, m.clearEscAt = time.Time{}, time.Time{}
+		return nil, false
+	case m.textarea.Value() != "":
+		m.rewindEscAt = time.Time{}
+		if !twice(&m.clearEscAt) {
+			return util.ReportInfo("Esc again to clear"), false
+		}
+		return m.clearPrompt(), true
+	case !m.hasSession():
+		m.rewindEscAt, m.clearEscAt = time.Time{}, time.Time{}
 		return nil, false
 	}
-	m.rewindEscAt = time.Time{}
+	m.clearEscAt = time.Time{}
+	if !twice(&m.rewindEscAt) {
+		return nil, false
+	}
 	return m.openRewind(), true
 }
 

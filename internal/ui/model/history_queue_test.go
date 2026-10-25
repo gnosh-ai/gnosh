@@ -43,3 +43,27 @@ func TestHistoryTexts_LeavesHiddenPromptsOut(t *testing.T) {
 	}
 	require.Equal(t, []string{"fix the parser"}, historyTexts(msgs))
 }
+
+// Prompts Esc Esc cleared are offered by Up among the prompts sent, by
+// when each was cleared or sent, newest first; with no times known, the
+// cleared ones come first.
+func TestHistoryEntriesPutsClearedPromptsByTime(t *testing.T) {
+	t.Parallel()
+
+	m := &UI{}
+	m.promptHistory.messages = []string{"sent later", "sent before"}
+	m.promptHistory.times = []int64{1000, 900}
+	m.promptHistory.cleared = []clearedPrompt{{"cleared between", 950}, {"cleared first", 800}}
+	require.Equal(t, []string{"sent later", "cleared between", "sent before", "cleared first"}, m.historyEntries())
+
+	m.promptHistory.times = nil
+	require.Equal(t, []string{"cleared between", "cleared first", "sent later", "sent before"}, m.historyEntries())
+
+	texts, times := historyItems([]message.Message{
+		{Role: message.User, CreatedAt: 1000, Parts: []message.ContentPart{message.TextContent{Text: "sent later"}}},
+		{Role: message.User, CreatedAt: 950, Parts: []message.ContentPart{message.TextContent{Text: "hidden", Hidden: true}}},
+		{Role: message.User, CreatedAt: 900, Parts: []message.ContentPart{message.ShellCommand{Command: "ls"}}},
+	})
+	require.Equal(t, []string{"sent later", "!ls"}, texts)
+	require.Equal(t, []int64{1000, 900}, times)
+}
