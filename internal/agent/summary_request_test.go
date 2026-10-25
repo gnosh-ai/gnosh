@@ -586,3 +586,52 @@ func withoutSystem(msgs []fantasy.Message) []fantasy.Message {
 	}
 	return out
 }
+
+// A long turn of tool calls, too long to summarize, is cut at one of the
+// agent's messages, never between a call and its result, with a user
+// message first that says the earlier part was left out: one turn has no
+// user message to cut at, and the summary failed as it did before.
+func TestSummarize_TooLongCutsInALongTurn(t *testing.T) {
+	t.Parallel()
+	llm := &requestRecordingModel{replies: []string{"the summary"}, tooLongOver: 8}
+	a, sessionID, _ := summaryRequestAgent(t, llm)
+	for i := 1; i <= 6; i++ {
+		id := fmt.Sprintf("call-%d", i)
+		_, err := a.messages.Create(t.Context(), sessionID, message.CreateMessageParams{Role: message.Assistant, Parts: []message.ContentPart{
+			message.ToolCall{ID: id, Name: "probe", Input: probeInput, Finished: true},
+		}})
+		require.NoError(t, err)
+		_, err = a.messages.Create(t.Context(), sessionID, message.CreateMessageParams{Role: message.Tool, Parts: []message.ContentPart{
+			message.ToolResult{ToolCallID: id, Name: "probe", Content: fmt.Sprintf("looked %d", i)},
+		}})
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, a.Summarize(t.Context(), sessionID, "", fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
+	reqs := llm.requests()
+	last := withoutSystem(reqs[len(reqs)-1].Prompt)
+	require.LessOrEqual(t, len(reqs[len(reqs)-1].Prompt), 8, "the request that fit")
+	require.Equal(t, []string{leftOutTurns, buildSummaryPrompt(nil, "")}, userTexts(last))
+	require.Equal(t, fantasy.MessageRoleAssistant, last[1].Role, "cut at the agent's message")
+	for i, msg := range last {
+		if msg.Role == fantasy.MessageRoleTool {
+			require.Equal(t, fantasy.MessageRoleAssistant, last[i-1].Role, "a result follows its call")
+		}
+	}
+	sess, err := a.sessions.Get(t.Context(), sessionID)
+	require.NoError(t, err)
+	require.NotEmpty(t, sess.SummaryMessageID)
+}
+
+// A cut that leaves no fewer messages is no cut: the summary stops trying.
+func TestLaterPartShrinks(t *testing.T) {
+	t.Parallel()
+	user := fantasy.NewUserMessage("u")
+	agent := fantasy.Message{Role: fantasy.MessageRoleAssistant}
+	tool := fantasy.Message{Role: fantasy.MessageRoleTool}
+	require.Nil(t, laterPart([]fantasy.Message{user, agent}))
+	require.Nil(t, laterPart([]fantasy.Message{user, agent, tool}))
+	require.Nil(t, laterPart([]fantasy.Message{user}))
+	require.Len(t, laterPart([]fantasy.Message{user, agent, tool, agent, tool}), 3, "a placeholder and the last call and result")
+	require.Equal(t, []fantasy.Message{user, agent}, laterPart([]fantasy.Message{agent, tool, user, agent}))
+}

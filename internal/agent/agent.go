@@ -2058,12 +2058,27 @@ func tooLongForContext(err error) bool {
 // left out, in Claude Code's words; %s says where it still is.
 const earliestLeftOut = "Note: the earliest part of the conversation was too large to include and is NOT covered by this summary%s. If the task turns out to depend on something from that part, say so plainly rather than guessing at it."
 
+// leftOutTurns stands first in a conversation cut in the agent's turn, as
+// a conversation starts with a user message.
+const leftOutTurns = "[The earlier part of this conversation was left out: it was too long to summarize whole.]"
+
 // laterPart is msgs from the first user message in their second half on,
-// so that no tool result goes without its call, or nil when none is.
+// or, in a long turn of tool calls that has none there, from the first of
+// the agent's messages, after leftOutTurns: so no tool result goes without
+// its call. nil when no cut leaves fewer messages.
 func laterPart(msgs []fantasy.Message) []fantasy.Message {
-	for i := max(len(msgs)/2, 1); i < len(msgs); i++ {
+	from := max(len(msgs)/2, 1)
+	for i := from; i < len(msgs); i++ {
 		if msgs[i].Role == fantasy.MessageRoleUser {
 			return msgs[i:]
+		}
+	}
+	for i := from; i < len(msgs); i++ {
+		if msgs[i].Role == fantasy.MessageRoleAssistant {
+			if len(msgs)-i+1 >= len(msgs) {
+				return nil
+			}
+			return append([]fantasy.Message{fantasy.NewUserMessage(leftOutTurns)}, msgs[i:]...)
 		}
 	}
 	return nil
