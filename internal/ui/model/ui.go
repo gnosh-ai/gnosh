@@ -121,7 +121,6 @@ type uiState uint8
 // Possible uiState values.
 const (
 	uiOnboarding uiState = iota
-	uiInitialize
 	uiLanding
 	uiChat
 )
@@ -355,10 +354,6 @@ type UI struct {
 	// Chat components
 	chat *Chat
 
-	// onboarding state
-	onboarding struct {
-		yesInitializeSelected bool
-	}
 	// initTip is set to give the tip to run /init as the UI starts, in a
 	// project with no context file (see Init).
 	initTip bool
@@ -628,9 +623,6 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	// Initialize compact mode from config
 	ui.forceCompactMode = com.Config().Options.TUI.CompactMode
 
-	// set onboarding state defaults
-	ui.onboarding.yesInitializeSelected = true
-
 	desiredState := startState(com.Config().IsConfigured())
 	desiredFocus := uiFocusEditor
 	ui.initTip = initTipWanted(desiredState, initialSessionID != "" || continueLast, com.Workspace.ProjectNeedsInitialization)
@@ -778,9 +770,6 @@ func (m *UI) StartInPlanMode() {
 func (m *UI) PickSessionAtStart(search string) {
 	m.pickSessionAtStart = true
 	m.pickSessionSearch = search
-	if m.state == uiInitialize {
-		m.setState(uiLanding, uiFocusEditor)
-	}
 }
 
 // pickSessionMsg opens the sessions list, filtered by search. It is its
@@ -3509,9 +3498,6 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 	switch m.state {
 	case uiOnboarding:
 		return tea.Batch(cmds...)
-	case uiInitialize:
-		cmds = append(cmds, m.updateInitializeView(msg)...)
-		return tea.Batch(cmds...)
 	case uiChat, uiLanding:
 		switch m.focus {
 		case uiFocusEditor:
@@ -3961,12 +3947,6 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		// NOTE: Onboarding flow will be rendered as dialogs below, but
 		// positioned at the bottom left of the screen.
 
-	case uiInitialize:
-		m.drawHeader(scr, layout.header)
-
-		main := uv.NewStyledString(m.initializeView())
-		main.Draw(scr, layout.main)
-
 	case uiLanding:
 		m.drawHeader(scr, layout.header)
 		main := uv.NewStyledString(m.landingView())
@@ -4193,8 +4173,6 @@ func (m *UI) ShortHelp() []key.Binding {
 	}
 
 	switch m.state {
-	case uiInitialize:
-		binds = append(binds, k.Quit)
 	case uiChat:
 		// Show cancel binding if agent is busy.
 		if m.isAgentBusy() {
@@ -4309,11 +4287,6 @@ func (m *UI) FullHelp() [][]key.Binding {
 	}
 
 	switch m.state {
-	case uiInitialize:
-		binds = append(binds,
-			[]key.Binding{
-				k.Quit,
-			})
 	case uiChat:
 		// Show cancel binding if agent is busy.
 		if m.isAgentBusy() {
@@ -4719,7 +4692,7 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 	appRect.Min.X += 1
 	appRect.Max.X -= 1
 
-	if slices.Contains([]uiState{uiOnboarding, uiInitialize, uiLanding}, m.state) {
+	if slices.Contains([]uiState{uiOnboarding, uiLanding}, m.state) {
 		// extra padding on left and right for these states
 		appRect.Min.X += 1
 		appRect.Max.X -= 1
@@ -4732,7 +4705,7 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 
 	// Handle different app states
 	switch m.state {
-	case uiOnboarding, uiInitialize:
+	case uiOnboarding:
 		// Layout
 		//
 		// header

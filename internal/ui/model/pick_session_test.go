@@ -71,9 +71,10 @@ func TestStartupSessionPickerWaitsOutOnboarding(t *testing.T) {
 }
 
 // The UI starts on onboarding until a provider can be used, and then on
-// the landing page, never on the question whether to initialize the
-// project: a prompt typed at once answered it.
-func TestStartStateLetsAnAskedForSessionPastTheInitQuestion(t *testing.T) {
+// the landing page, where a session asked for at the start opens its
+// picker. There is no question whether to initialize the project, which a
+// prompt typed at once answered: a tip says to run /init instead.
+func TestStartStateGoesStraightToTheLandingPage(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, uiOnboarding, startState(false))
@@ -81,7 +82,7 @@ func TestStartStateLetsAnAskedForSessionPastTheInitQuestion(t *testing.T) {
 
 	u := newTestUI()
 	u.com.Workspace = &pickSessionWorkspace{sessions: []session.Session{{ID: "s1"}}}
-	u.state = uiInitialize
+	u.state = startState(true)
 	u.PickSessionAtStart("")
 	require.Equal(t, uiLanding, u.state)
 	require.NotNil(t, u.startupSessionPicker())
