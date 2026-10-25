@@ -215,6 +215,9 @@ func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 			// process's: they differ for the fetch agent, whose tools work
 			// in a temporary directory.
 			searchPath := filepathext.SmartJoin(workingDir, params.Path)
+			if msg := missingSearchPath(params.Path, searchPath, workingDir); msg != "" {
+				return fantasy.NewTextErrorResponse(msg), nil
+			}
 
 			searchCtx, cancel := context.WithTimeout(ctx, config.GetTimeout())
 			defer cancel()

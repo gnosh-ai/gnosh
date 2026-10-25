@@ -150,6 +150,10 @@ func TestGlobSaysASearchPathIsNotThere(t *testing.T) {
 	require.True(t, isErr)
 	require.NotContains(t, out, "Did you mean", "nothing like it in the project")
 
+	out, isErr = runGlob(t, project, GlobParams{Pattern: "*", Path: filepath.Join(parent, "notes.txt")})
+	require.True(t, isErr)
+	require.NotContains(t, out, "Did you mean", "a file is no directory to search")
+
 	out, isErr = runGlob(t, project, GlobParams{Pattern: "*", Path: "notes.txt"})
 	require.True(t, isErr)
 	require.Equal(t, "Path is not a directory: notes.txt", out)

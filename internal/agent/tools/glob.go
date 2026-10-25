@@ -223,30 +223,13 @@ func searchDirError(path, abs, workingDir string) string {
 	case err == nil, !errors.Is(err, fs.ErrNotExist):
 		return ""
 	}
-	msg := fmt.Sprintf("Directory does not exist: %s. Note: your current working directory is %s.", path, workingDir)
-	if meant := dirMeant(abs, workingDir); meant != "" {
-		msg += fmt.Sprintf(" Did you mean %s?", meant)
+	msg := fmt.Sprintf("Directory does not exist: %s. %s", path, workingDirNote(workingDir))
+	if meant := pathMeant(abs, workingDir); meant != "" {
+		if info, err := os.Stat(meant); err == nil && info.IsDir() {
+			msg += fmt.Sprintf(" Did you mean %s?", meant)
+		}
 	}
 	return msg
-}
-
-// dirMeant guesses, as Claude Code does, the directory meant by abs, one
-// that does not exist beside the working directory: the same path inside
-// the working directory, as when a model leaves the project's own name
-// out of a path. "" when that is not there either.
-func dirMeant(abs, workingDir string) string {
-	rel, err := filepath.Rel(filepath.Dir(workingDir), abs)
-	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return ""
-	}
-	if within, err := filepath.Rel(workingDir, abs); err == nil && within != ".." && !strings.HasPrefix(within, ".."+string(filepath.Separator)) {
-		return ""
-	}
-	meant := filepath.Join(workingDir, rel)
-	if info, err := os.Stat(meant); err != nil || !info.IsDir() {
-		return ""
-	}
-	return meant
 }
 
 func normalizeFilePaths(paths []string) {

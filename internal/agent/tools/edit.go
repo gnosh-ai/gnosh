@@ -294,7 +294,7 @@ func loadExistingFile(edit editContext, filePath, sessionError string) (sessionI
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", "", false, "", fantasy.NewTextErrorResponse(fmt.Sprintf("file not found: %s", filePath)), nil
+			return "", "", false, "", fantasy.NewTextErrorResponse(missingFile(filePath, edit.workingDir)), nil
 		}
 		return "", "", false, "", fantasy.ToolResponse{}, fmt.Errorf("failed to access file: %w", err)
 	}
