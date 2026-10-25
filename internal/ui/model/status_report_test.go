@@ -34,7 +34,7 @@ func TestStatusReport(t *testing.T) {
 	t.Parallel()
 
 	providers := csync.NewMap[string, config.ProviderConfig]()
-	providers.Set("standin", config.ProviderConfig{ID: "standin", Name: "Stand-in"})
+	providers.Set("standin", config.ProviderConfig{ID: "standin", Name: "Stand-in", Models: []catwalk.Model{{ID: "qwen3.8-4b", Name: "Qwen 3.8 4B"}}})
 	cfg := &config.Config{
 		Providers: providers,
 		Models: map[config.SelectedModelType]config.SelectedModel{
@@ -45,6 +45,7 @@ func TestStatusReport(t *testing.T) {
 			"docs": {},
 			"old":  {Disabled: true},
 			"new":  {},
+			"one":  {},
 		},
 	}
 	u := newTestUI()
@@ -60,6 +61,7 @@ func TestStatusReport(t *testing.T) {
 	u.mcpStates = map[string]mcp.ClientInfo{
 		"gno":  {Name: "gno", State: mcp.StateConnected, Counts: mcp.Counts{Tools: 12}},
 		"docs": {Name: "docs", State: mcp.StateError, Error: errors.New("connection refused")},
+		"one":  {Name: "one", State: mcp.StateConnected, Counts: mcp.Counts{Tools: 1}},
 	}
 	u.lspStates = map[string]workspace.LSPClientInfo{
 		"gopls": {Name: "gopls", State: lsp.StateReady, DiagnosticCount: 3},
@@ -73,10 +75,11 @@ func TestStatusReport(t *testing.T) {
 		"| Working directory | /home/jae/project |",
 		"| Model | Qwen 3.8 via Stand-in |",
 		"| Context | 17.9K of 1M tokens (2%), $0.00 |",
-		"| Small model | qwen3.8-4b via Stand-in |",
+		"| Small model | Qwen 3.8 4B via Stand-in |",
 		"| Permissions | everything runs without asking (yolo); /permissions has the rules |",
 		"| docs | error: connection refused |",
 		"| gno | connected, 12 tools |",
+		"| one | connected, 1 tool |",
 		"| old | disabled |",
 		"| new | not started |",
 		"| gopls | ready, 3 diagnostics |",

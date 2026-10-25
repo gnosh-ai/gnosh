@@ -48,7 +48,11 @@ func (m *UI) statusReport() string {
 		row("Model", "not ready yet")
 	}
 	if small, ok := cfg.Models[config.SelectedModelTypeSmall]; ok && small.Model != "" {
-		row("Small model", providerModel(cfg, small.Model, small.Provider))
+		name := small.Model
+		if model := cfg.GetModelByType(config.SelectedModelTypeSmall); model != nil && model.Name != "" {
+			name = model.Name
+		}
+		row("Small model", providerModel(cfg, name, small.Provider))
 	}
 	if m.com.Workspace.PermissionSkipRequests() {
 		row("Permissions", "everything runs without asking (yolo); /permissions has the rules")
@@ -92,7 +96,10 @@ func mcpStatus(info mcp.ClientInfo, known, disabled bool) string {
 	}
 	text := mcpStatusText(info)
 	if info.State == mcp.StateConnected {
-		text += fmt.Sprintf(", %d tools", info.Counts.Tools)
+		text += fmt.Sprintf(", %d tool", info.Counts.Tools)
+		if info.Counts.Tools != 1 {
+			text += "s"
+		}
 	}
 	return text
 }

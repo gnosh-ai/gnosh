@@ -62,3 +62,20 @@ func TestReportDialog(t *testing.T) {
 	require.Zero(t, d.offset, "never above the first line")
 	require.Equal(t, ActionClose{}, d.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEscape}))
 }
+
+// A line break made with two trailing spaces, as /context writes its
+// header after Claude Code's, keeps its lines apart in the dialog.
+func TestReportKeepsHardBreaks(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+	d := NewReport(&common.Common{Styles: &sty}, "Context Usage", "## Context Usage\n\n**Model:** Qwen  \n**Tokens:** 7.1k / 1M (1%)\n")
+	var model string
+	for line := range strings.SplitSeq(ansi.Strip(d.rendered(80)), "\n") {
+		if strings.Contains(line, "Model:") {
+			model = line
+		}
+	}
+	require.Contains(t, model, "Model: Qwen")
+	require.NotContains(t, model, "Tokens", "the two lines ran together")
+}

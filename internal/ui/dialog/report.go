@@ -102,13 +102,16 @@ func (d *Report) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 }
 
 // rendered is the report as the chat renders Markdown, at width; the
-// Markdown as written when the renderer fails.
+// Markdown as written when the renderer fails. A line break made with two
+// trailing spaces, as /context writes its header after Claude Code's, is
+// lost by the renderer and ran its lines together, so it is a paragraph
+// break here.
 func (d *Report) rendered(width int) string {
 	r := common.MarkdownRenderer(d.com.Styles, width)
 	mu := common.LockMarkdownRenderer(r)
 	mu.Lock()
 	defer mu.Unlock()
-	out, err := r.Render(d.report)
+	out, err := r.Render(strings.ReplaceAll(d.report, "  \n", "\n\n"))
 	if err != nil {
 		return d.report
 	}
