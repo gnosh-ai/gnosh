@@ -72,6 +72,7 @@ func init() {
 	rootCmd.PersistentFlags().StringSlice("channels", nil, "MCP servers to enable as channels (repeatable), e.g. --channels server:webhook")
 	_ = rootCmd.PersistentFlags().MarkHidden("channels")
 	addSessionFlags(rootCmd)
+	rootCmd.Flags().StringP("model", "m", "", "Model for this session, in memory only, as Claude Code's --model: 'model' or 'provider/model', as klash run's -m takes; /model still switches and saves as before")
 
 	rootCmd.AddCommand(
 		promptCmd,
@@ -152,10 +153,20 @@ klash --continue
 			sessionID = sess.ID
 		}
 
+		chosen, _ := cmd.Flags().GetString("model")
+		if chosen != "" {
+			if err := overrideTUIModel(ctx, ws, chosen); err != nil {
+				return err
+			}
+		}
+
 		event.AppInitialized()
 
 		com := common.DefaultCommon(ws)
 		model := ui.New(com, sessionID, continueLast)
+		if chosen != "" {
+			model.ModelChosenAtStart()
+		}
 		if pick || search != "" {
 			model.PickSessionAtStart(search)
 		}
@@ -411,6 +422,18 @@ const nameUsage = "A name for the session, as /rename gives one: the new session
 func nameFlag(cmd *cobra.Command) string {
 	name, _ := cmd.Flags().GetString("name")
 	return session.CleanName(name)
+}
+
+// overrideTUIModel has the TUI's session use model, as Claude Code's
+// --model does, in memory only: the config files are not changed. A
+// server's models are shared by every client of its workspace and it can
+// only save a choice, so through one --model is refused.
+func overrideTUIModel(ctx context.Context, ws workspace.Workspace, model string) error {
+	appWs, ok := ws.(*workspace.AppWorkspace)
+	if !ok {
+		return fmt.Errorf("--model is not supported with %s=1 yet; pick the model with /model", "KLASH_CLIENT_SERVER")
+	}
+	return appWs.App().OverrideModels(ctx, model, "")
 }
 
 // forkSessionUsage is the help of Claude Code's --fork-session, in klash

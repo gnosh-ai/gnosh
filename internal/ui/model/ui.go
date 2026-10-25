@@ -235,6 +235,9 @@ type UI struct {
 	// startName names the session the UI starts in, once (see
 	// NameSessionAtStart).
 	startName string
+	// keepModel keeps the model chosen with --model when the first
+	// session is loaded (see ModelChosenAtStart).
+	keepModel bool
 
 	lastUserMessageTime int64
 
@@ -804,6 +807,14 @@ func (m *UI) NameSessionAtStart(name string) {
 	m.startName = name
 }
 
+// ModelChosenAtStart keeps the model Claude Code's --model chose, for the
+// session the UI starts in: loading the first session does not switch to
+// the model that session last used, as loading one otherwise does.
+// Sessions loaded after it do.
+func (m *UI) ModelChosenAtStart() {
+	m.keepModel = true
+}
+
 // takeStartName is the name NameSessionAtStart gave, once.
 func (m *UI) takeStartName() string {
 	name := m.startName
@@ -1190,7 +1201,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.setSessionMessages(msgs); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-		if cmd := m.restoreModelFromSession(msgs); cmd != nil {
+		if cmd := m.restoreModelOnLoad(msgs); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 		if cmd := m.autoExpandPillsIfReasonable(); cmd != nil {
@@ -3092,6 +3103,17 @@ func (m *UI) gitBranchTicker() tea.Cmd {
 	return tea.Tick(gitBranchPollInterval, func(time.Time) tea.Msg {
 		return gitBranchPollMsg{}
 	})
+}
+
+// restoreModelOnLoad is restoreModelFromSession for a session just
+// loaded, but for the first one when --model chose the model (see
+// ModelChosenAtStart).
+func (m *UI) restoreModelOnLoad(msgs []message.Message) tea.Cmd {
+	if m.keepModel {
+		m.keepModel = false
+		return nil
+	}
+	return m.restoreModelFromSession(msgs)
 }
 
 // restoreModelFromSession checks the last assistant message in the

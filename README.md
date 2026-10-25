@@ -140,6 +140,7 @@ Claude Code's names work here too.
 | `claude -c`                      | `klash -C`                                         | Continue the last session; `-c` sets the working directory |
 | `--fork-session`                 | `--fork-session`, with `-C`, `-r` or `-s`          | Go on in a copy of the session you resume, as `/branch` makes one, and leave the session as it was |
 | `-n "nightly check"`             | `-n "nightly check"`, or `--name`                  | Name the session as `/rename` does: a new one from its start (no title is made for it), the one you resume, or the `--fork-session` copy |
+| `--model sonnet`                 | `-m qwen3.8-27b`, or `--model` (`provider/model` too) | Use this model for the session without saving it; a session you resume does not switch it back to the model it last used |
 | `--dangerously-skip-permissions` | `--yolo`, or `--dangerously-skip-permissions`      | Skip every permission prompt                                |
 | `--permission-mode plan`         | `--permission-mode plan` (or `acceptEdits`, `dontAsk`, `bypassPermissions`) | Start in plan mode; or let edits in the project (not `.git`, shell or tool settings) run without asking; or deny, instead of asking, whatever is not read-only or allowed (`klash run` then approves nothing else, for scripts and CI); or run everything without asking |
 | `--add-dir ../other`            | `--add-dir ../other` (repeatable), or `/add-dir ../other` in a session | Let the agent read another directory without asking         |

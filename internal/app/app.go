@@ -495,7 +495,7 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	defer cancel()
 
 	if largeModel != "" || smallModel != "" {
-		if err := app.overrideModelsForNonInteractive(ctx, largeModel, smallModel); err != nil {
+		if err := app.OverrideModels(ctx, largeModel, smallModel); err != nil {
 			return fmt.Errorf("failed to override models: %w", err)
 		}
 	}
@@ -908,13 +908,14 @@ func (app *App) restoreModelFromSession(ctx context.Context, sessionID string) e
 	return nil
 }
 
-// overrideModelsForNonInteractive parses the model strings and temporarily
-// overrides the model configurations, then rebuilds the agent.
+// OverrideModels parses the model strings and overrides the model
+// configurations in memory, not saved, for klash run's --model and
+// --small-model and the TUI's --model, then rebuilds the agent.
 // Format: "model-name" (searches all providers) or "provider/model-name".
 // Model matching is case-insensitive.
 // If largeModel is provided but smallModel is not, the small model defaults to
 // the provider's default small model.
-func (app *App) overrideModelsForNonInteractive(ctx context.Context, largeModel, smallModel string) error {
+func (app *App) OverrideModels(ctx context.Context, largeModel, smallModel string) error {
 	providers := app.config.Config().Providers.Copy()
 
 	largeMatches, smallMatches, err := findModels(providers, largeModel, smallModel)
@@ -931,7 +932,7 @@ func (app *App) overrideModelsForNonInteractive(ctx context.Context, largeModel,
 			return err
 		}
 		largeProviderID = found.provider
-		slog.Info("Overriding large model for non-interactive run", "provider", found.provider, "model", found.modelID)
+		slog.Info("Overriding large model", "provider", found.provider, "model", found.modelID)
 		app.config.OverridePreferredModel(config.SelectedModelTypeLarge, config.SelectedModel{
 			Provider: found.provider,
 			Model:    found.modelID,
@@ -945,7 +946,7 @@ func (app *App) overrideModelsForNonInteractive(ctx context.Context, largeModel,
 		if err != nil {
 			return err
 		}
-		slog.Info("Overriding small model for non-interactive run", "provider", found.provider, "model", found.modelID)
+		slog.Info("Overriding small model", "provider", found.provider, "model", found.modelID)
 		app.config.OverridePreferredModel(config.SelectedModelTypeSmall, config.SelectedModel{
 			Provider: found.provider,
 			Model:    found.modelID,
