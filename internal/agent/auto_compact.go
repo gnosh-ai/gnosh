@@ -233,8 +233,9 @@ func (a *sessionAgent) disarmIdleCompaction(sessionID string) {
 // than the whole conversation. A local model whose cache another
 // conversation took meanwhile reads it all again before it answers; here
 // it does so while no one waits, and while the cache may still hold it. A
-// turn running in the session stops the summary (summarize), and a prompt
-// sent meanwhile waits for it, as it would for a turn.
+// turn running in the session stops the summary (summarize). A prompt
+// sent while it runs does not wait for it: the summary is yieldable, so
+// Run gives it up and the prompt goes first (see activeCancel).
 func (a *sessionAgent) compactIdle(sessionID string, opts fantasy.ProviderOptions) {
 	ctx := context.Background()
 	sess, err := a.sessions.Get(ctx, sessionID)
@@ -246,7 +247,10 @@ func (a *sessionAgent) compactIdle(sessionID string, opts fantasy.ProviderOption
 		return
 	}
 	slog.Info("Compacting a conversation left idle", "session_id", sessionID, "tokens", tokens)
-	if err := a.summarize(ctx, sessionID, "", "", opts, nil, preCompactTriggerAuto); err != nil && !errors.Is(err, ErrSessionBusy) {
+	// A summary the user's prompt pushed aside reports nothing to say:
+	// summarize drops its half-written summary message and returns nil
+	// when it is cancelled. Run logs the hand-over where it happens.
+	if err := a.summarize(ctx, sessionID, "", "", opts, nil, preCompactTriggerAuto, true); err != nil && !errors.Is(err, ErrSessionBusy) {
 		slog.Warn("Could not compact a conversation left idle", "session_id", sessionID, "error", err)
 	}
 }
