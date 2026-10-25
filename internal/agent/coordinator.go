@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -575,10 +576,7 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 	}
 
 	model := agent.Model()
-	maxTokens := model.CatwalkCfg.DefaultMaxTokens
-	if model.ModelCfg.MaxTokens != 0 {
-		maxTokens = model.ModelCfg.MaxTokens
-	}
+	maxTokens := runMaxTokens(model)
 
 	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
 	if !ok {
@@ -2127,10 +2125,7 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 
 	// Get model configuration
 	model := params.Agent.Model()
-	maxTokens := model.CatwalkCfg.DefaultMaxTokens
-	if model.ModelCfg.MaxTokens != 0 {
-		maxTokens = model.ModelCfg.MaxTokens
-	}
+	maxTokens := runMaxTokens(model)
 
 	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
 	if !ok {
@@ -2368,4 +2363,19 @@ func logDiscoveryStats(
 		"prompt_tok_est", skills.ApproxTokenCount(xml),
 		"active_names", activeNames,
 	)
+}
+
+// runMaxTokens is how many tokens a turn's reply may run to:
+// CLAUDE_CODE_MAX_OUTPUT_TOKENS, as in Claude Code, when it is a positive
+// number, or else the selected model's max_tokens, or else its catalog
+// default. A run and a sub-agent's alike; the title and summary requests
+// keep their own limits.
+func runMaxTokens(model Model) int64 {
+	if n, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("CLAUDE_CODE_MAX_OUTPUT_TOKENS")), 10, 64); err == nil && n > 0 {
+		return n
+	}
+	if model.ModelCfg.MaxTokens != 0 {
+		return model.ModelCfg.MaxTokens
+	}
+	return model.CatwalkCfg.DefaultMaxTokens
 }
