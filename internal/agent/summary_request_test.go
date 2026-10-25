@@ -266,3 +266,39 @@ func TestSummaryPromptAsksForClaudeCodesSections(t *testing.T) {
 	require.True(t, strings.HasPrefix(p, "Stop work on the task here."))
 	require.True(t, strings.HasSuffix(p, "REMINDER: Do NOT call any tools. Respond with plain text only."))
 }
+
+// After the context fills up mid-task, the model is given the summary as
+// Claude Code gives it, saying the session goes on from a conversation
+// that ran out of context, and is told to go on with the task without
+// recapping it or asking. The summary as saved stays as it was written.
+func TestSummaryContinuesInClaudeCodesWords(t *testing.T) {
+	t.Parallel()
+	llm := &requestRecordingModel{
+		replies: []string{"call probe", "the summary", "picked up"},
+		usage:   fantasy.Usage{InputTokens: 190000, OutputTokens: 10},
+	}
+	a, sessionID, runs := summaryRequestAgent(t, llm)
+
+	_, err := a.Run(t.Context(), SessionAgentCall{SessionID: sessionID, Prompt: "go on"})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, runs.Load())
+
+	reqs := llm.requests()
+	require.GreaterOrEqual(t, len(reqs), 3, "the turn, its summary, then the turn going on")
+	require.Equal(t, fantasy.ToolChoiceNone, *reqs[1].ToolChoice, "the second request is the summary")
+	resumed := userTexts(reqs[2].Prompt)
+	require.GreaterOrEqual(t, len(resumed), 2)
+	require.Equal(t, []string{continuedSummary + "\n\nthe summary", resumeAfterSummary}, resumed[len(resumed)-2:],
+		"after any reminder, the summary as Claude Code gives it, then the prompt that goes on")
+	require.True(t, strings.HasPrefix(resumeAfterSummary, "Continue the conversation from where it left off without asking the user any further questions."))
+
+	msgs, err := a.messages.List(t.Context(), sessionID)
+	require.NoError(t, err)
+	var summaries []string
+	for _, msg := range msgs {
+		if msg.IsSummaryMessage {
+			summaries = append(summaries, msg.Content().Text)
+		}
+	}
+	require.Contains(t, summaries, "the summary", "the summary is saved as written")
+}

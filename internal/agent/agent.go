@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1484,7 +1485,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		a.justSummarized.Set(call.SessionID, true)
 		// If the agent wasn't done...
 		if len(currentAssistant.ToolCalls()) > 0 {
-			call.Prompt = fmt.Sprintf("The previous session was interrupted because it got too long, the initial user request was: `%s`", call.Prompt)
+			call.Prompt = resumeAfterSummary
 			a.queueContinuation(call)
 		}
 	}
@@ -2219,10 +2220,37 @@ func (a *sessionAgent) getSessionMessages(ctx context.Context, session session.S
 		}
 		if summaryMsgIndex != -1 {
 			msgs = msgs[summaryMsgIndex:]
-			msgs[0].Role = message.User
+			msgs[0] = continuedFrom(msgs[0])
 		}
 	}
 	return msgs, nil
+}
+
+// continuedSummary is what the model is told of the summary a session
+// goes on from, in Claude Code's words.
+const continuedSummary = "This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation."
+
+// resumeAfterSummary is the prompt that continues a turn the context
+// filled up in, in Claude Code's words: the summary holds the task, in the
+// user's words, so the model goes on with it rather than recapping it or
+// asking.
+const resumeAfterSummary = "Continue the conversation from where it left off without asking the user any further questions. Resume directly \u2014 do not acknowledge the summary, do not recap what was happening, do not preface with \"I'll continue\" or similar. Pick up the last task as if the break never happened."
+
+// continuedFrom is a session's summary message as the model is given it:
+// a user message that says the session goes on from a conversation that
+// ran out of context (continuedSummary), then the summary. The model was
+// given the summary alone, with nothing to say what it was.
+func continuedFrom(summary message.Message) message.Message {
+	summary.Role = message.User
+	summary.Parts = slices.Clone(summary.Parts)
+	for i, part := range summary.Parts {
+		if text, ok := part.(message.TextContent); ok {
+			text.Text = continuedSummary + "\n\n" + text.Text
+			summary.Parts[i] = text
+			break
+		}
+	}
+	return summary
 }
 
 // hasUserTextMessage reports whether any user message in msgs contains
