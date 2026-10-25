@@ -371,7 +371,8 @@ def divider(light=False, W=1280, H=24):
 
 
 def signoff(W=1280, H=260, p=10):
-    """The sidebar's compact logo, as a closing mark: fields above and below."""
+    """The sidebar's compact logo, as a closing mark: fields above and below,
+    without stars, as the TUI draws it."""
     rng = random.Random(11)
     cw, ch = p, 2 * p
     rows = word_rows()
@@ -385,8 +386,6 @@ def signoff(W=1280, H=260, p=10):
     horizon = H - 34
     keep = (x0 - 30, top - 10, x0 + word_w + 30, y0 + 3 * ch + ch + 10)
     fields = diagonals(x0, x0 + word_w, top, 2, cw, ch) + diagonals(x0, x0 + word_w, y0 + 3 * ch, 1, cw, ch)
-    srng = random.Random(23)
-    stars = field_stars(srng, x0, x0 + word_w, top, 2, cw, ch, every=12) + field_stars(srng, x0, x0 + word_w, y0 + 3 * ch, 1, cw, ch, every=12)
 
     o = [svg_open(W, H, "Klash")]
     o.append(anim())
@@ -400,7 +399,6 @@ def signoff(W=1280, H=260, p=10):
     o.append('<g clip-path="url(#frame)">')
     o.append(sky(rng, W, H, horizon, keep, 70, twinkle=True, rays=False, sun_rx=260))
     o.append(f'<path d="{fields}" stroke="url(#field)" stroke-width="1.4" fill="none"/>')
-    o.append(stars)
     o.append(f'<text x="{x0}" y="{fmt(meta_y + ch * 0.72)}" font-family="{MONO}" font-size="13" fill="{GOLD}">klash.pro</text>')
     o.append(word_layers(on, x0, y0, p)[1])
     o.append("</g>")

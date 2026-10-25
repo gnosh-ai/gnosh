@@ -123,11 +123,14 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 	// The fields run the other way to the title above it and the same way
 	// below, so the stack shimmers.
 	if compact {
+		// The narrow logo is small enough that stars only clutter it.
+		plain := o
+		plain.StarColors = nil
 		return strings.Join([]string{
-			field(base, o, 0, 0, titleWidth, true),
-			field(base, o, 1, 0, titleWidth, false),
+			field(base, plain, 0, 0, titleWidth, true),
+			field(base, plain, 1, 0, titleWidth, false),
 			title,
-			field(base, o, 2, 0, titleWidth, true),
+			field(base, plain, 2, 0, titleWidth, true),
 			"",
 		}, "\n")
 	}
