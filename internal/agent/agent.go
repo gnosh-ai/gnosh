@@ -2572,7 +2572,7 @@ func (a *sessionAgent) titleProviderOptions(model Model) fantasy.ProviderOptions
 		return opts
 	}
 	if providerCfg, ok := a.cfg.Config().Providers.Get(model.ModelCfg.Provider); ok {
-		disableThinking(opts, providerCfg)
+		quietReasoning(opts, model.CatwalkCfg, providerCfg)
 	}
 	return opts
 }

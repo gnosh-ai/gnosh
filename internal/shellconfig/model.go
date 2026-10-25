@@ -17,6 +17,7 @@ import (
 //	    [--supports-images true|false] [--price-input F]
 //	    [--price-output F] [--price-cache-create F]
 //	    [--price-cache-hit F] [--reasoning-effort low|medium|high]
+//	    [--reasoning-levels L,L,L]
 //	model remove <provider>/<id>   (alias: rm)
 //	model large [<provider>/<id>] [--think] [--reasoning-effort L]
 //	    [--max-tokens N] [--temperature F] [--top-p F] [--top-k N]
@@ -71,6 +72,7 @@ var modelAddFlags = []flagSpec{
 	{name: "--price-cache-create", jsonKey: "cost_per_1m_in_cached", kind: flagFloat, op: opSet},
 	{name: "--price-cache-hit", jsonKey: "cost_per_1m_out_cached", kind: flagFloat, op: opSet},
 	{name: "--reasoning-effort", jsonKey: "default_reasoning_effort", kind: flagString, op: opSet},
+	{name: "--reasoning-levels", jsonKey: "reasoning_levels", kind: flagStringList, op: opSet},
 }
 
 func modelAdd(b *ConfigBuilder, args []string, stderr io.Writer) error {

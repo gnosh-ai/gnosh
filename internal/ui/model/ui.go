@@ -5822,20 +5822,37 @@ func (m *UI) resumeSession(ref string) tea.Cmd {
 	return m.openSessionsDialog(ref)
 }
 
-// setThinking stores a typed /think or /no_think as the global switch and
-// rebuilds the agent's models so the next request already carries it.
+// setThinking moves the current model to one end of its own reasoning
+// axis, as a typed /think or /no_think asks, and rebuilds the agent's
+// models so the next request already carries it.
+//
+// It is the old global switch, kept because it is in the fingers. The
+// switch could only ever say yes or no, which is all a Qwen has; a gpt-oss
+// has three levels and no off at all, so the message points at /model,
+// where the arrows reach every level.
 func (m *UI) setThinking(enabled bool) tea.Cmd {
 	return m.updateAgentModelCmd(func() tea.Msg {
-		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, config.ThinkingKey, enabled); err != nil {
+		cfg := m.com.Config()
+		selected := cfg.Models[config.SelectedModelTypeLarge]
+		model := cfg.GetModel(selected.Provider, selected.Model)
+		if model == nil {
+			return util.ReportError(fmt.Errorf("no large model is selected"))()
+		}
+		kind, levels := config.ReasoningAxis(*model)
+		if kind == config.ReasoningNone {
+			return util.NewInfoMsg(fmt.Sprintf("%s has no thinking switch", cmp.Or(model.Name, model.ID)))
+		}
+		level := config.ThinkingLevel(enabled, kind, levels)
+		field := config.ReasoningField(selected.Provider, selected.Model)
+		if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, field, level); err != nil {
 			return util.ReportError(err)()
 		}
 		if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
 			return util.ReportError(err)()
 		}
-		if enabled {
-			return util.NewInfoMsg("Thinking on for all future requests (/no_think turns it off)")
-		}
-		return util.NewInfoMsg("Thinking off for all future requests (/think turns it on)")
+		return util.NewInfoMsg(fmt.Sprintf(
+			"%s set to %q (/model, then the left and right arrows, picks any level)",
+			cmp.Or(model.Name, model.ID), level))
 	})
 }
 

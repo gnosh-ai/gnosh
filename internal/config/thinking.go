@@ -2,14 +2,15 @@ package config
 
 import "strings"
 
-// ThinkingKey is the config field the /think switch is stored under.
-const ThinkingKey = "options.thinking"
-
 // ParseThinkingCommand reads a chat line typed as a thinking switch: "/think"
-// turns a model's thinking on, "/no_think" (also "/nothink", "/no-think")
-// turns it off. ok is false for any other line, which is then an ordinary
-// prompt. The switch is global and holds for every later request, in the
-// chat and in `crush run`, until it is typed again.
+// asks for as much reasoning as the model offers, "/no_think" (also
+// "/nothink", "/no-think") for as little. ok is false for any other line,
+// which is then an ordinary prompt.
+//
+// These are the old global switch, kept because they are in the fingers.
+// They now move the current model's own level, which /model and the left and
+// right arrows set directly — and which is the only way to reach the levels
+// in between.
 func ParseThinkingCommand(line string) (enabled, ok bool) {
 	switch strings.ToLower(strings.TrimSpace(line)) {
 	case "/think":
@@ -20,11 +21,14 @@ func ParseThinkingCommand(line string) (enabled, ok bool) {
 	return false, false
 }
 
-// Thinking returns the stored switch. set is false when it was never
-// toggled; the server's own default then stands.
-func (c *Config) Thinking() (enabled, set bool) {
-	if c == nil || c.Options == nil || c.Options.Thinking == nil {
-		return false, false
+// ThinkingLevel is the level a typed /think or /no_think asks for on a
+// model's axis: either end of it. It returns "" for a model with no axis.
+func ThinkingLevel(enabled bool, kind ReasoningKind, levels []string) string {
+	if kind == ReasoningNone || len(levels) == 0 {
+		return ""
 	}
-	return *c.Options.Thinking, true
+	if enabled {
+		return levels[len(levels)-1]
+	}
+	return levels[0]
 }

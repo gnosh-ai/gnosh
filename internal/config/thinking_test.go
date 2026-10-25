@@ -24,18 +24,26 @@ func TestParseThinkingCommand(t *testing.T) {
 	}
 }
 
-func TestConfigThinking(t *testing.T) {
+func TestConfigReasoningLevel(t *testing.T) {
 	t.Parallel()
 	var nilCfg *Config
-	if _, set := nilCfg.Thinking(); set {
-		t.Fatal("nil config reports a set switch")
+	if _, set := nilCfg.ReasoningLevel("qwen", "qwen3.8-27b"); set {
+		t.Fatal("nil config reports a stored level")
 	}
-	if _, set := (&Config{}).Thinking(); set {
-		t.Fatal("empty config reports a set switch")
+	if _, set := (&Config{}).ReasoningLevel("qwen", "qwen3.8-27b"); set {
+		t.Fatal("empty config reports a stored level")
 	}
-	off := false
-	enabled, set := (&Config{Options: &Options{Thinking: &off}}).Thinking()
-	if !set || enabled {
-		t.Fatalf("stored false: got enabled=%v set=%v", enabled, set)
+	if _, set := (&Config{Options: &Options{}}).ReasoningLevel("qwen", "qwen3.8-27b"); set {
+		t.Fatal("config with no reasoning map reports a stored level")
+	}
+	cfg := &Config{Options: &Options{Reasoning: map[string]string{"qwen/qwen3.8-27b": "nothink"}}}
+	level, set := cfg.ReasoningLevel("qwen", "qwen3.8-27b")
+	if !set || level != "nothink" {
+		t.Fatalf("stored nothink: got level=%q set=%v", level, set)
+	}
+	// An empty string is not a choice.
+	cfg = &Config{Options: &Options{Reasoning: map[string]string{"qwen/qwen3.8-27b": ""}}}
+	if _, set := cfg.ReasoningLevel("qwen", "qwen3.8-27b"); set {
+		t.Fatal("empty level reports as set")
 	}
 }

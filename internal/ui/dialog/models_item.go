@@ -78,6 +78,49 @@ type ModelItem struct {
 	m            fuzzy.Match
 	focused      bool
 	showProvider bool
+
+	// level is how hard this model thinks, one of the levels its axis
+	// offers, or "" for a model with no axis. The left and right arrows
+	// move it; see [ModelItem.StepLevel].
+	level string
+}
+
+// ReasoningKind reports how this model's reasoning is controlled, and
+// ReasoningLevels the levels it offers. A model with no axis reports
+// [config.ReasoningNone] and no levels.
+func (m *ModelItem) ReasoningKind() config.ReasoningKind {
+	kind, _ := config.ReasoningAxis(m.model)
+	return kind
+}
+
+// Level returns the model's current reasoning level, or "" when it has no
+// reasoning axis.
+func (m *ModelItem) Level() string { return m.level }
+
+// SetLevel sets the model's reasoning level and redraws the row.
+func (m *ModelItem) SetLevel(level string) {
+	if m.level == level {
+		return
+	}
+	m.cache = nil
+	m.level = level
+	if m.Versioned != nil {
+		m.Bump()
+	}
+}
+
+// StepLevel moves this model's reasoning one step along its own levels,
+// +1 for the right arrow and -1 for the left, and reports the new level.
+// ok is false when the model has no axis or the step runs off an end, and
+// the level is then unchanged.
+func (m *ModelItem) StepLevel(delta int) (string, bool) {
+	kind, levels := config.ReasoningAxis(m.model)
+	next, ok := config.StepReasoningLevel(m.level, delta, kind, levels)
+	if !ok {
+		return m.level, false
+	}
+	m.SetLevel(next)
+	return next, true
 }
 
 // Finished implements list.Item. Model items are render-stable
@@ -87,11 +130,17 @@ func (m *ModelItem) Finished() bool {
 }
 
 // SelectedModel returns this model item as a [config.SelectedModel] instance.
+// A model whose reasoning is an effort scale carries the chosen level, so
+// selecting it keeps what the arrows set.
 func (m *ModelItem) SelectedModel() config.SelectedModel {
+	effort := m.model.DefaultReasoningEffort
+	if m.ReasoningKind() == config.ReasoningEffort && m.level != "" {
+		effort = m.level
+	}
 	return config.SelectedModel{
 		Model:           m.model.ID,
 		Provider:        string(m.prov.ID),
-		ReasoningEffort: m.model.DefaultReasoningEffort,
+		ReasoningEffort: effort,
 		MaxTokens:       m.model.DefaultMaxTokens,
 	}
 }
@@ -131,6 +180,19 @@ func (m *ModelItem) Render(width int) string {
 	var providerInfo string
 	if m.showProvider {
 		providerInfo = string(m.prov.Name)
+	}
+	// The level sits in the same info column as the provider name, with
+	// arrows on the focused row to say the left and right keys move it.
+	if m.level != "" {
+		level := m.level
+		if m.focused {
+			level = "‹ " + level + " ›"
+		}
+		if providerInfo != "" {
+			providerInfo += "  " + level
+		} else {
+			providerInfo = level
+		}
 	}
 	styles := ListItemStyles{
 		ItemBlurred:     m.t.Dialog.NormalItem,
