@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -24,6 +23,9 @@ type ToolResult struct {
 	Content   string
 	Data      []byte
 	MediaType string
+	// ImagePath is where the image in Data was saved, or "" when it was
+	// not, so a model that cannot see it can be told where it is.
+	ImagePath string
 }
 
 var allTools = csync.NewMap[string, []*Tool]()
@@ -65,7 +67,9 @@ func RunTool(ctx context.Context, cfg *config.ConfigStore, name, toolName string
 // the one result Crush carries, keeping at most one image and one audio
 // payload, and its text cut to what it may bring into the conversation
 // (capOutput). An embedded resource and a resource link come in Claude
-// Code's words, a binary resource saved to a file under dataDir.
+// Code's words, a binary resource saved to a file under dataDir. The image
+// shown is saved there too and named in the text ("[Image: source: PATH]"),
+// and any other image is saved in its place, where it was dropped before.
 func toolResultFromCall(result *mcp.CallToolResult, server, dataDir string) ToolResult {
 	if len(result.Content) == 0 {
 		return ToolResult{Type: "text", Content: ""}
@@ -78,7 +82,9 @@ func toolResultFromCall(result *mcp.CallToolResult, server, dataDir string) Tool
 		case *mcp.TextContent:
 			textParts = append(textParts, content.Text)
 		case *mcp.ImageContent:
-			image.offer(content.Data, content.MIMEType)
+			if text, saved := image.showOrSave(content.Data, content.MIMEType, fmt.Sprintf("[Image from %s]", server), dataDir); saved {
+				textParts = append(textParts, text)
+			}
 		case *mcp.AudioContent:
 			audio.offer(content.Data, content.MIMEType)
 		case *mcp.EmbeddedResource:
@@ -99,7 +105,16 @@ func toolResultFromCall(result *mcp.CallToolResult, server, dataDir string) Tool
 
 	switch {
 	case image.seen && (len(image.data) > 0 || !audio.seen):
-		return ToolResult{Type: "image", Content: textContent, Data: image.data, MediaType: image.mimeType}
+		var imagePath string
+		if len(image.data) > 0 {
+			if path, err := saveBlob(image.data, image.mimeType, dataDir); err == nil {
+				imagePath = path
+				textContent = strings.TrimPrefix(textContent+"\n[Image: source: "+path+"]", "\n")
+			} else {
+				slog.Debug("Could not save an MCP tool's image", "server", server, "error", err)
+			}
+		}
+		return ToolResult{Type: "image", Content: textContent, Data: image.data, MediaType: image.mimeType, ImagePath: imagePath}
 	case audio.seen:
 		return ToolResult{Type: "media", Content: textContent, Data: audio.data, MediaType: audio.mimeType}
 	default:
@@ -109,10 +124,10 @@ func toolResultFromCall(result *mcp.CallToolResult, server, dataDir string) Tool
 
 // embeddedResource is what the model is told of a resource embedded in
 // server's MCP reply, in Claude Code's words: its text after "[Resource
-// from SERVER at URI] ", or, when it is binary, that heading with an image
-// of a type a model is shown offered as the reply's image, or else the file
-// it was saved to under dataDir. ok is false for one with neither text nor
-// binary. %v printed these as Go values, pointers and all.
+// from SERVER at URI] ", or, when it is binary, that heading with the
+// reply's image (image.showOrSave), or the file it was saved to under
+// dataDir. ok is false for one with neither text nor binary. %v printed
+// these as Go values, pointers and all.
 func embeddedResource(r *mcp.ResourceContents, server, dataDir string, image *mediaPayload) (text string, ok bool) {
 	if r == nil {
 		return "", false
@@ -123,15 +138,11 @@ func embeddedResource(r *mcp.ResourceContents, server, dataDir string, image *me
 		return heading + " " + r.Text, true
 	case len(r.Blob) == 0:
 		return "", false
-	case modelImageTypes[mimeBase(r.MIMEType)]:
-		image.offer(r.Blob, mimeBase(r.MIMEType))
-		return heading, true
 	}
-	saved, err := SaveBlob(r.Blob, r.MIMEType, heading+" ", dataDir)
-	if err != nil {
-		return fmt.Sprintf("%s Binary content (%s, %d bytes) could not be saved to disk: %s", heading, cmp.Or(r.MIMEType, "unknown type"), len(r.Blob), err), true
+	if text, saved := image.showOrSave(r.Blob, r.MIMEType, heading, dataDir); saved {
+		return text, true
 	}
-	return saved, true
+	return heading, true
 }
 
 // mediaPayload keeps the first non-empty payload offered, or the first one
@@ -147,6 +158,23 @@ func (m *mediaPayload) offer(data []byte, mimeType string) {
 		return
 	}
 	*m = mediaPayload{data: ensureRawBytes(data), mimeType: mimeType, seen: true}
+}
+
+// showOrSave offers an image to be the reply's, when it is the first
+// non-empty one of a type a model is shown (shownImageType), and otherwise
+// saves it under dataDir and says where, after heading, as Claude Code
+// saves an image of another type. saved is false when it was offered.
+func (m *mediaPayload) showOrSave(data []byte, mimeType, heading, dataDir string) (text string, saved bool) {
+	raw := ensureRawBytes(data)
+	if len(raw) == 0 {
+		m.offer(data, mimeType)
+		return "", false
+	}
+	if shown := shownImageType(raw, mimeType); shown != "" && len(m.data) == 0 {
+		*m = mediaPayload{data: raw, mimeType: shown, seen: true}
+		return "", false
+	}
+	return savedBinary(raw, mimeType, heading, dataDir), true
 }
 
 // RefreshTools gets the updated list of tools from the MCP and updates the

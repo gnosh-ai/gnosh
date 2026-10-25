@@ -3,6 +3,7 @@ package mcp
 import (
 	"cmp"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -59,14 +60,29 @@ var blobExtensions = map[string]string{
 // named by its MIME type's extension, and says where in Claude Code's
 // words, after prefix. It refuses content over blobLimit.
 func SaveBlob(blob []byte, mimeType, prefix, dataDir string) (string, error) {
-	if len(blob) > blobLimit {
-		return "", fmt.Errorf("content is %d bytes, over the %d byte persist limit", len(blob), blobLimit)
-	}
-	path, err := shell.SpillBytes(blob, dataDir, blobExtension(mimeType))
+	path, err := saveBlob(blob, mimeType, dataDir)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("%sBinary content (%s, %s) saved to %s", prefix, cmp.Or(mimeType, "unknown type"), ClaudeSize(len(blob)), path), nil
+}
+
+// saveBlob is SaveBlob's saving: it returns the file's path.
+func saveBlob(blob []byte, mimeType, dataDir string) (string, error) {
+	if len(blob) > blobLimit {
+		return "", fmt.Errorf("content is %d bytes, over the %d byte persist limit", len(blob), blobLimit)
+	}
+	return shell.SpillBytes(blob, dataDir, blobExtension(mimeType))
+}
+
+// savedBinary saves binary content under dataDir and says where, after
+// heading, or why it could not, in Claude Code's words.
+func savedBinary(blob []byte, mimeType, heading, dataDir string) string {
+	saved, err := SaveBlob(blob, mimeType, heading+" ", dataDir)
+	if err != nil {
+		return fmt.Sprintf("%s Binary content (%s, %d bytes) could not be saved to disk: %s", heading, cmp.Or(mimeType, "unknown type"), len(blob), err)
+	}
+	return saved
 }
 
 // blobExtension is the extension binary content of mimeType is saved
@@ -75,9 +91,22 @@ func blobExtension(mimeType string) string {
 	return cmp.Or(blobExtensions[mimeBase(mimeType)], "bin")
 }
 
-// modelImageTypes are the image types a model is shown, as Claude Code shows
-// an embedded resource's image; other binary content is saved to a file.
+// modelImageTypes are the image types a model is shown, as in Claude Code;
+// an image of another type is saved to a file.
 var modelImageTypes = map[string]bool{"image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true}
+
+// shownImageType is the type an image is shown to a model as: its own when
+// a model takes that type, or what its bytes are when those are one, as
+// for an image sent as image/jpg; "" when it is neither.
+func shownImageType(data []byte, mimeType string) string {
+	if t := mimeBase(mimeType); modelImageTypes[t] {
+		return t
+	}
+	if t := mimeBase(http.DetectContentType(data)); modelImageTypes[t] {
+		return t
+	}
+	return ""
+}
 
 // mimeBase is mimeType without its parameters, in lower case.
 func mimeBase(mimeType string) string {

@@ -49,7 +49,11 @@ func TestToolResultShowsAnEmbeddedImage(t *testing.T) {
 		&mcp.EmbeddedResource{Resource: &mcp.ResourceContents{URI: "file:///shot.png", MIMEType: "IMAGE/PNG; q=1", Blob: png}},
 	}}, "pics", t.TempDir())
 
-	require.Equal(t, ToolResult{Type: "image", Content: "[Resource from pics at file:///shot.png]", Data: png, MediaType: "image/png"}, got)
+	require.NotEmpty(t, got.ImagePath)
+	require.Equal(t, ToolResult{
+		Type: "image", Content: "[Resource from pics at file:///shot.png]\n[Image: source: " + got.ImagePath + "]",
+		Data: png, MediaType: "image/png", ImagePath: got.ImagePath,
+	}, got)
 }
 
 func TestToolResultSavesAnEmbeddedImageOfAnotherType(t *testing.T) {

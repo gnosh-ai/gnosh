@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
@@ -136,11 +137,22 @@ func (m *Tool) Run(ctx context.Context, params fantasy.ToolCall) (fantasy.ToolRe
 	if err != nil {
 		return fantasy.NewTextErrorResponse(err.Error()), nil
 	}
+	return mcpResponse(ctx, result), nil
+}
 
+// mcpResponse is the response to an MCP tool's result: its image or audio
+// with its text, or, for a model that cannot see an image, the text and
+// what the image is and where it was saved. That model was given only
+// that it does not support image data, and lost the text with the image.
+func mcpResponse(ctx context.Context, result mcp.ToolResult) fantasy.ToolResponse {
 	switch result.Type {
 	case "image", "media":
 		if !GetSupportsImagesFromContext(ctx) {
-			return UnsupportedMediaResponse(GetModelNameFromContext(ctx)), nil
+			if result.Type == "image" && result.ImagePath != "" {
+				unseen := unseenImage(result.ImagePath, int64(len(result.Data)), GetModelNameFromContext(ctx))
+				return fantasy.NewTextResponse(strings.TrimPrefix(result.Content+"\n\n"+unseen, "\n\n"))
+			}
+			return UnsupportedMediaResponse(GetModelNameFromContext(ctx))
 		}
 
 		var response fantasy.ToolResponse
@@ -150,8 +162,8 @@ func (m *Tool) Run(ctx context.Context, params fantasy.ToolCall) (fantasy.ToolRe
 			response = fantasy.NewMediaResponse(result.Data, result.MediaType)
 		}
 		response.Content = result.Content
-		return response, nil
+		return response
 	default:
-		return fantasy.NewTextResponse(result.Content), nil
+		return fantasy.NewTextResponse(result.Content)
 	}
 }
