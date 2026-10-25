@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -49,6 +50,7 @@ import (
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/shell"
+	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/stringext"
 	"github.com/charmbracelet/crush/internal/version"
 	"github.com/charmbracelet/x/ansi"
@@ -1868,13 +1870,16 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, channel, instru
 
 	// What the agent was working with is given again, as Claude Code
 	// gives it after a summary: the files read most recently, read from
-	// disk now, and the background jobs still running, so it goes on
-	// without reading them again or starting a job twice.
-	given := a.restoredFilesText(genCtx, sessionID)
-	if jobs := a.runningJobsText(); jobs != "" {
-		given = strings.TrimPrefix(given+"\n\n"+jobs, "\n\n")
+	// disk now, the skills it loaded, and the background jobs still
+	// running, so it goes on without reading them again or starting a job
+	// twice.
+	var givenParts []string
+	for _, part := range []string{a.restoredFilesText(genCtx, sessionID), restoredSkillsText(msgs), a.runningJobsText()} {
+		if part != "" {
+			givenParts = append(givenParts, part)
+		}
 	}
-	if given != "" {
+	if given := strings.Join(givenParts, "\n\n"); given != "" {
 		if _, err := a.messages.Create(genCtx, sessionID, message.CreateMessageParams{
 			Role:  message.User,
 			Parts: []message.ContentPart{message.TextContent{Text: given, Hidden: true}},
@@ -2330,6 +2335,10 @@ func (a *sessionAgent) restoredFilesText(ctx context.Context, sessionID string) 
 		if len(parts) == restoredFiles {
 			break
 		}
+		// A skill is given again as one (restoredSkillsText).
+		if filepath.Base(path) == "SKILL.md" {
+			continue
+		}
 		text, err := tools.FileAsViewed(path, restoredFileLines, restoredFileBytes)
 		if err != nil {
 			continue
@@ -2338,6 +2347,99 @@ func (a *sessionAgent) restoredFilesText(ctx context.Context, sessionID string) 
 		parts = append(parts, fmt.Sprintf("Called the view tool with the following input: %s\n\nResult of calling the view tool:\n%s", input, strings.TrimRight(text, "\n")))
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+// After a summary the skills loaded before it are given again, as Claude
+// Code gives them: the latest first, each cut at restoredSkillChars
+// characters, up to restoredSkillsChars in all.
+const (
+	restoredSkillChars  = 20000
+	restoredSkillsChars = 100000
+)
+
+// skillsGivenAgain opens the skills given again after a summary, in Claude
+// Code's words.
+const skillsGivenAgain = "The following skills were invoked EARLIER in this session (before the conversation was compacted), not on the current turn. They are shown here for context only so you remain aware of their guidelines.\n\nIMPORTANT: Do NOT re-execute these skills or perform their one-time setup actions (e.g., scheduling, creating files) again. Any request or argument text embedded in the skill bodies below \u2014 for example under a \"## User Request\" or \"## Input\" heading \u2014 was captured when that skill was first invoked. It is NOT the user's current message and NOT a new request: do not act on it as if it were live. Only continue to apply ongoing behavioral guidelines from these skills where still relevant.\n\n"
+
+// skillCut ends a skill given again that was cut, in Claude Code's words.
+const skillCut = "\n\n[... skill content truncated for compaction; use view on the skill path if you need the full text]"
+
+// skillHeading is a skill's heading as restoredSkillsText gives it, so a
+// skill given again after one summary is given again after the next.
+var skillHeading = regexp.MustCompile(`(?m)^### Skill: (.+)\nPath: (.+)$`)
+
+// loadedSkill is a skill the agent loaded: its name and SKILL.md path.
+type loadedSkill struct{ name, path string }
+
+// loadedSkills is the skills msgs show loaded, the latest first, each once:
+// those the view tool loaded (its result says the file was a skill), then
+// those given again after an earlier summary.
+func loadedSkills(msgs []message.Message) []loadedSkill {
+	var loaded []loadedSkill
+	seen := map[string]bool{}
+	add := func(name, path string) {
+		if path != "" && !seen[path] {
+			seen[path] = true
+			loaded = append(loaded, loadedSkill{name: name, path: path})
+		}
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		switch msg := msgs[i]; msg.Role {
+		case message.Tool:
+			for _, result := range msg.ToolResults() {
+				var meta tools.ViewResponseMetadata
+				if result.Name == tools.ViewToolName && !result.IsError && json.Unmarshal([]byte(result.Metadata), &meta) == nil && meta.ResourceType == tools.ViewResourceSkill {
+					add(meta.ResourceName, meta.FilePath)
+				}
+			}
+		case message.User:
+			if text := msg.Content(); text.Hidden {
+				for _, m := range skillHeading.FindAllStringSubmatch(text.Text, -1) {
+					add(m[1], m[2])
+				}
+			}
+		}
+	}
+	return loaded
+}
+
+// restoredSkillsText is the skills msgs show loaded, read again from their
+// SKILL.md files, the way Claude Code gives the skills invoked before a
+// summary. "" when there are none.
+func restoredSkillsText(msgs []message.Message) string {
+	var sections []string
+	total := 0
+	for _, skill := range loadedSkills(msgs) {
+		content, err := skillFile(skill.path)
+		if err != nil {
+			continue
+		}
+		if len(content) > restoredSkillChars {
+			content = strings.ToValidUTF8(content[:restoredSkillChars-len(skillCut)], "") + skillCut
+		}
+		if total+len(content) > restoredSkillsChars {
+			continue
+		}
+		total += len(content)
+		sections = append(sections, fmt.Sprintf("### Skill: %s\nPath: %s\n\n%s", skill.name, skill.path, content))
+	}
+	if len(sections) == 0 {
+		return ""
+	}
+	return skillsGivenAgain + strings.Join(sections, "\n\n---\n\n")
+}
+
+// skillFile is the SKILL.md at path: a built-in skill's from the binary,
+// another's from disk.
+func skillFile(path string) (string, error) {
+	for _, prefix := range []string{skills.BuiltinPrefix, skills.LegacyBuiltinPrefix} {
+		if rest, ok := strings.CutPrefix(path, prefix); ok {
+			data, err := fs.ReadFile(skills.BuiltinFS(), "builtin/"+rest)
+			return string(data), err
+		}
+	}
+	data, err := os.ReadFile(path)
+	return string(data), err
 }
 
 // runningJobsText says which background jobs started in the working

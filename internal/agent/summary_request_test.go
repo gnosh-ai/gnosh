@@ -2,8 +2,10 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,9 +16,11 @@ import (
 
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/shell"
+	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/stretchr/testify/require"
 )
 
@@ -368,8 +372,12 @@ func TestSummaryGivesTheRecentFilesAgain(t *testing.T) {
 		require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf("file %d", i)), 0o600))
 		reads = append([]string{path}, reads...)
 	}
-	// Most recent first: a file since deleted, a directory, then f6 to f1.
-	a.fileTracker = &readRecorder{reads: append([]string{filepath.Join(dir, "gone.txt"), dir}, reads...)}
+	// Most recent first: a skill, given as one, a file since deleted, a
+	// directory, then f6 to f1.
+	skillDir := filepath.Join(dir, "a-skill")
+	require.NoError(t, os.MkdirAll(skillDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: a-skill\n---\nDo it."), 0o600))
+	a.fileTracker = &readRecorder{reads: append([]string{filepath.Join(skillDir, "SKILL.md"), filepath.Join(dir, "gone.txt"), dir}, reads...)}
 
 	_, err := a.Run(t.Context(), SessionAgentCall{SessionID: sessionID, Prompt: "go on"})
 	require.NoError(t, err)
@@ -430,4 +438,91 @@ func TestSummaryNamesTheJobsStillRunning(t *testing.T) {
 		"Do not start it again; to restart it, stop it with job_kill first. Call job_output with shell_id " + running.ID + " to read its output."
 	require.Contains(t, userTexts(reqs[2].Prompt), want)
 	require.NotContains(t, strings.Join(userTexts(reqs[2].Prompt), "\n"), "Background shell "+ended.ID+" ", "a job that ended is not named")
+}
+
+// After a summary, the skills the agent loaded are given again, read from
+// their SKILL.md files, in Claude Code's words: the latest first, a long
+// one cut. After the next summary they are given again too.
+func TestSummaryGivesTheLoadedSkillsAgain(t *testing.T) {
+	t.Parallel()
+	llm := &requestRecordingModel{
+		replies: []string{"done", "the summary", "done again", "the second summary", "done a third time"},
+		usage:   fantasy.Usage{InputTokens: 190000, OutputTokens: 10},
+	}
+	a, sessionID, _ := summaryRequestAgent(t, llm)
+	for _, name := range []string{"klash-hooks", "jq"} {
+		path := skills.BuiltinPrefix + name + "/SKILL.md"
+		meta, err := json.Marshal(tools.ViewResponseMetadata{FilePath: path, ResourceType: tools.ViewResourceSkill, ResourceName: name})
+		require.NoError(t, err)
+		_, err = a.messages.Create(t.Context(), sessionID, message.CreateMessageParams{Role: message.Assistant, Parts: []message.ContentPart{
+			message.ToolCall{ID: "call-" + name, Name: tools.ViewToolName, Input: `{"file_path":"` + path + `"}`, Finished: true},
+		}})
+		require.NoError(t, err)
+		_, err = a.messages.Create(t.Context(), sessionID, message.CreateMessageParams{Role: message.Tool, Parts: []message.ContentPart{
+			message.ToolResult{ToolCallID: "call-" + name, Name: tools.ViewToolName, Content: "<file>the skill</file>", Metadata: string(meta)},
+		}})
+		require.NoError(t, err)
+	}
+	skillMD := func(name string) string {
+		data, err := fs.ReadFile(skills.BuiltinFS(), "builtin/"+name+"/SKILL.md")
+		require.NoError(t, err)
+		return string(data)
+	}
+	hooks := skillMD("klash-hooks")
+	require.Greater(t, len(hooks), restoredSkillChars, "klash-hooks is long enough to be cut")
+	want := skillsGivenAgain +
+		"### Skill: jq\nPath: klash://skills/jq/SKILL.md\n\n" + skillMD("jq") + "\n\n---\n\n" +
+		"### Skill: klash-hooks\nPath: klash://skills/klash-hooks/SKILL.md\n\n" + hooks[:restoredSkillChars-len(skillCut)] + skillCut
+	given := func(req fantasy.Call) string {
+		for _, text := range userTexts(req.Prompt) {
+			if strings.HasPrefix(text, skillsGivenAgain) {
+				return text
+			}
+		}
+		return ""
+	}
+
+	_, err := a.Run(t.Context(), SessionAgentCall{SessionID: sessionID, Prompt: "go on"})
+	require.NoError(t, err)
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sessionID, Prompt: "and then"})
+	require.NoError(t, err)
+	require.NoError(t, a.Summarize(t.Context(), sessionID, "", fantasy.ProviderOptions{}, nil, preCompactTriggerManual))
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sessionID, Prompt: "and after that"})
+	require.NoError(t, err)
+	reqs := llm.requests()
+	require.GreaterOrEqual(t, len(reqs), 5)
+	require.Equal(t, want, given(reqs[2]), "after the first summary")
+	require.Equal(t, want, given(reqs[4]), "after the second, from what the first gave")
+}
+
+// The skills given again after a summary stay within restoredSkillsChars:
+// a skill that would take them past it is left out, and later, smaller
+// ones still come.
+func TestRestoredSkillsStayWithinTheirBudget(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	var msgs []message.Message
+	for i := 1; i <= 7; i++ {
+		size := restoredSkillChars - 100
+		if i == 7 {
+			size = 50
+		}
+		path := filepath.Join(dir, fmt.Sprintf("s%d", i), "SKILL.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(strings.Repeat(fmt.Sprint(i), size)), 0o600))
+		meta, err := json.Marshal(tools.ViewResponseMetadata{FilePath: path, ResourceType: tools.ViewResourceSkill, ResourceName: fmt.Sprintf("s%d", i)})
+		require.NoError(t, err)
+		msgs = append(msgs, message.Message{Role: message.Tool, Parts: []message.ContentPart{
+			message.ToolResult{Name: tools.ViewToolName, Content: "<file>...</file>", Metadata: string(meta)},
+		}})
+	}
+
+	text := restoredSkillsText(msgs)
+	var given []string
+	for _, m := range skillHeading.FindAllStringSubmatch(text, -1) {
+		given = append(given, m[1])
+	}
+	// s7 is the latest; then five of the large ones fit, and s1 does not.
+	require.Equal(t, []string{"s7", "s6", "s5", "s4", "s3", "s2"}, given)
+	require.LessOrEqual(t, len(text)-len(skillsGivenAgain), restoredSkillsChars+1000)
 }
