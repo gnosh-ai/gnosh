@@ -118,7 +118,7 @@ klash --session {session-id}
 # Continue the most recent session
 klash --continue
   `,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: stopsOnSignal(func(ctx context.Context, cmd *cobra.Command, args []string) error {
 		// Ask once per machine, before anything sets up metrics or the TUI
 		// takes the terminal.
 		maybeAskMetricsConsent()
@@ -138,9 +138,9 @@ klash --continue
 
 		var search string
 		if sessionID != "" {
-			sess, err := resolveWorkspaceSessionID(cmd.Context(), ws, sessionID)
+			sess, err := resolveWorkspaceSessionID(ctx, ws, sessionID)
 			if resume, _ := cmd.Flags().GetString("resume"); err != nil && resume != "" {
-				sess, search, err = resumeByName(cmd.Context(), ws, resume)
+				sess, search, err = resumeByName(ctx, ws, resume)
 			}
 			if err != nil {
 				return err
@@ -164,12 +164,15 @@ klash --continue
 		program := tea.NewProgram(
 			model,
 			tea.WithEnvironment(env),
-			tea.WithContext(cmd.Context()),
+			tea.WithContext(ctx),
 			tea.WithFilter(inputFilter.Filter),
 		)
 		go ws.Subscribe(program)
 
 		if _, err := program.Run(); err != nil {
+			if stopped := tuiStopped(ctx, err); stopped != nil {
+				return stopped
+			}
 			event.Error(err)
 			slog.Error("TUI run error", "error", err)
 			return errors.New(version.Name + " hit an internal error. If metrics are enabled, we were notified about it. If you'd like to report it, please copy the stacktrace above and open an issue at https://github.com/charmbracelet/crush/issues/new?template=bug.yml") //nolint:staticcheck
@@ -180,7 +183,7 @@ klash --continue
 		}
 		printSessionResume(model, banner)
 		return nil
-	},
+	}),
 }
 
 // versionArt is the compact KLASH wordmark printed above `klash --version`,

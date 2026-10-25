@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/fang/v2"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
@@ -122,4 +125,43 @@ func TestRunStopsOnSIGTERMAfterItsCleanup(t *testing.T) {
 	require.Empty(t, printed.String(), "an exit status prints nothing")
 	errorHandler(&printed, fang.Styles{}, errors.New("some failure"))
 	require.Contains(t, printed.String(), "Some failure")
+}
+
+// idleModel is a TUI program's model that waits for nothing.
+type idleModel struct{}
+
+func (idleModel) Init() tea.Cmd                         { return nil }
+func (m idleModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return m, nil }
+func (idleModel) View() tea.View                        { return tea.NewView("") }
+
+// The TUI: SIGTERM cancels the program's context, and the program, killed
+// through it, hit no internal error: the command returns ctx's error and
+// exits 143, its shutdown done (SessionEnd hooks, background jobs
+// killed). The TUI took only SIGINT, through fang, so SIGTERM ended it
+// without that shutdown.
+func TestTUIStopsOnSIGTERM(t *testing.T) {
+	f := useFakeSignals(t)
+	ctx, stop := stopOnSignal(context.Background())
+	defer stop()
+	program := tea.NewProgram(idleModel{}, tea.WithContext(ctx), tea.WithInput(nil), tea.WithOutput(io.Discard), tea.WithoutRenderer())
+	done := make(chan error, 1)
+	go func() {
+		_, err := program.Run()
+		done <- err
+	}()
+	f.deliver(t, ctx, syscall.SIGTERM)
+
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the program did not stop")
+	}
+	require.ErrorIs(t, err, tea.ErrProgramKilled)
+	stopped := tuiStopped(ctx, err)
+	require.ErrorIs(t, stopped, context.Canceled)
+	require.Equal(t, 143, exitCode(stoppedStatus(ctx, stopped)))
+
+	// Killed with its context live, by a panic say: an internal error.
+	require.NoError(t, tuiStopped(context.Background(), fmt.Errorf("%w: %w", tea.ErrProgramKilled, tea.ErrProgramPanic)))
 }

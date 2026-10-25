@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -50,15 +51,29 @@ func stopOnSignal(parent context.Context) (ctx context.Context, stop func()) {
 // stopsOnSignal is run as a command's RunE that stops on SIGINT or
 // SIGTERM: either cancels run's ctx, and a command stopped by SIGTERM
 // exits 143 once run has returned, its deferred cleanup done, as Claude
-// Code does. klash run asked for os.Kill, which cannot be caught, rather
-// than SIGTERM, so SIGTERM ended it on the spot: its Stop hook's checks,
-// reviewers among them, ran on with nothing to stop them.
+// Code does, both klash run and the TUI. klash run asked for os.Kill,
+// which cannot be caught, rather than SIGTERM, so SIGTERM ended it on the
+// spot: its Stop hook's checks, reviewers among them, ran on with nothing
+// to stop them.
 func stopsOnSignal(run func(ctx context.Context, cmd *cobra.Command, args []string) error) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		ctx, stop := stopOnSignal(context.Background())
 		defer stop()
 		return stoppedStatus(ctx, run(ctx, cmd, args))
 	}
+}
+
+// tuiStopped is ctx's error when the TUI program was killed because ctx
+// was cancelled, as SIGINT or SIGTERM cancels it (stopsOnSignal), and nil
+// otherwise. A program stopped that way hit no internal error: the
+// command then ends as one a signal stopped, its shutdown done (the
+// session's SessionEnd hooks, its background jobs killed). The TUI took
+// only SIGINT, through fang, and SIGTERM ended it on the spot.
+func tuiStopped(ctx context.Context, err error) error {
+	if errors.Is(err, tea.ErrProgramKilled) && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return nil
 }
 
 // exitStatus is an error that only sets the status the process exits
