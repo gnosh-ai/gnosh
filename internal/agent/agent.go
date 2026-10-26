@@ -175,6 +175,12 @@ type SessionAgentCall struct {
 	// reason to stop. Only on such a turn does StopMarker in its reply
 	// end the turn; elsewhere the Stop hook stays in charge.
 	stopHookReflecting bool
+	// emptyAnswerDepth counts how many times in a row the model has
+	// answered this turn with nothing, riding along on the queued
+	// continuation as stopHookDepth does, so the cap in
+	// emptyAnswerContinuation is enforced across the recursive run path;
+	// a prompt the user actually typed always starts at 0.
+	emptyAnswerDepth int
 	// goalChecks counts how many checks in a row found the session's goal
 	// not met, riding along on the queued continuation as stopHookDepth
 	// does, and goalReflecting marks a continuation sent at a reflection
@@ -1592,6 +1598,23 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			)
 			a.queueContinuation(loopContinuation(call, loopCalls))
 			continued = true
+		} else if next, nothing := emptyAnswerContinuation(call, currentAssistant); nothing {
+			// The model said nothing at all. Asking the Stop hooks or the goal
+			// check whether the turn may end would have them judge a reply that
+			// was never made, so ask the model again first.
+			slog.Warn("Model answered with nothing; asking again",
+				"session_id", call.SessionID,
+				"attempt", next.emptyAnswerDepth,
+			)
+			a.queueContinuation(next)
+			continued = true
+		} else if answeredNothing(currentAssistant) {
+			slog.Error("Model answered with nothing and did not recover; ending the turn",
+				"session_id", call.SessionID,
+				"attempts", call.emptyAnswerDepth,
+				"model", a.largeModel.Get().ModelCfg.Model,
+				"hint", "the model may be spending its whole budget on reasoning: lower its reasoning level (/model, then the left arrow) or raise its max tokens",
+			)
 		} else if next, unmet := a.goalContinuation(ctx, call, currentAssistant.Content().String()); unmet {
 			a.queueContinuation(next)
 			continued = true
