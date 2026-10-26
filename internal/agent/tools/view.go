@@ -257,6 +257,9 @@ func NewViewTool(
 				if os.IsNotExist(err) {
 					return fantasy.NewTextErrorResponse(missingFile(absFilePath, absWorkingDir)), nil
 				}
+				if denied := deniedPath(absFilePath); denied != "" {
+					return fantasy.NewTextErrorResponse(denied), nil
+				}
 				return fantasy.ToolResponse{}, fmt.Errorf("error accessing file: %w", err)
 			}
 

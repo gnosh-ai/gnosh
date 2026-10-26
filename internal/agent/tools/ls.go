@@ -125,6 +125,9 @@ func NewLsTool(permissions permission.Service, workingDir string, lsConfig confi
 			if msg := missingSearchPath(params.Path, absSearchPath, absWorkingDir); msg != "" {
 				return fantasy.NewTextErrorResponse(msg), nil
 			}
+			if denied := deniedPath(absSearchPath); denied != "" {
+				return fantasy.NewTextErrorResponse(denied), nil
+			}
 			output, metadata, err := ListDirectoryTree(searchPath, params, lsConfig)
 			if err != nil {
 				return fantasy.NewTextErrorResponse(err.Error()), nil
