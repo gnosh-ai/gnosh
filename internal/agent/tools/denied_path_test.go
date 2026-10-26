@@ -95,3 +95,26 @@ func TestDeniedPathOnDisk(t *testing.T) {
 	require.Contains(t, msg, inside)
 	require.Equal(t, "", deniedPath(t.TempDir()), "a readable directory is not denied")
 }
+
+// Every tool that stats a path before touching it says the same thing, so
+// a closed directory never reaches the model as a bare "permission
+// denied". write hit this in production after view and ls were fixed: the
+// agent asked to write /root/scripts/render_v2.py, got the bare error, and
+// the whole turn failed with it.
+func TestDeniedPathCoversEveryFileTool(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root is refused nothing, so nothing is denied")
+	}
+	t.Parallel()
+
+	closed := filepath.Join(t.TempDir(), "closed")
+	require.NoError(t, os.Mkdir(closed, 0o700))
+	target := filepath.Join(closed, "render_v2.py")
+	require.NoError(t, os.WriteFile(target, []byte("print(1)\n"), 0o644))
+	require.NoError(t, os.Chmod(closed, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(closed, 0o700) })
+
+	msg := deniedPath(target)
+	require.Contains(t, msg, closed, "the closed directory is named")
+	require.Contains(t, msg, "do not assume the path exists")
+}

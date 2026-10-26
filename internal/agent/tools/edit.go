@@ -119,6 +119,9 @@ func createNewFile(edit editContext, filePath, content string, call fantasy.Tool
 		}
 		return fantasy.NewTextErrorResponse(fmt.Sprintf("file already exists: %s", filePath)), nil
 	} else if !os.IsNotExist(err) {
+		if denied := deniedPath(filePath); denied != "" {
+			return fantasy.NewTextErrorResponse(denied), nil
+		}
 		return fantasy.ToolResponse{}, fmt.Errorf("failed to access file: %w", err)
 	}
 
@@ -301,6 +304,9 @@ func loadExistingFile(edit editContext, filePath, sessionError string) (sessionI
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", "", false, "", fantasy.NewTextErrorResponse(missingFile(filePath, edit.workingDir)), nil
+		}
+		if denied := deniedPath(filePath); denied != "" {
+			return "", "", false, "", fantasy.NewTextErrorResponse(denied), nil
 		}
 		return "", "", false, "", fantasy.ToolResponse{}, fmt.Errorf("failed to access file: %w", err)
 	}

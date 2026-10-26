@@ -105,6 +105,9 @@ func NewWriteTool(
 					return fantasy.NewTextErrorResponse(fmt.Sprintf("File %s already contains the exact content. No changes made.", filePath)), nil
 				}
 			} else if !os.IsNotExist(err) {
+				if denied := deniedPath(filePath); denied != "" {
+					return fantasy.NewTextErrorResponse(denied), nil
+				}
 				return fantasy.ToolResponse{}, fmt.Errorf("error checking file: %w", err)
 			}
 
