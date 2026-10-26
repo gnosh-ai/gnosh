@@ -28,6 +28,19 @@ const (
 	loopPrompt = "Continue working on the task until it is complete. " +
 		"When, and only when, the whole task is finished, reply with exactly " + loopDoneSentinel + " on its own line."
 
+	// loopDonePrompt answers the first claim that the task is finished.
+	// A model under pressure will say the word to get out of a hard step:
+	// on the AI box, gpt-oss wrote "Given time, I'll output LOOP_DONE" and
+	// did, twice, with nothing rendered and its own reasoning still saying
+	// "we need to continue". Being asked once to show the work costs a
+	// turn when the task really is done, and catches the escape when it is
+	// not.
+	loopDonePrompt = "You replied " + loopDoneSentinel + ", so the task should be finished. " +
+		"Before I take that as true: name what you actually produced — the files, with the output of the " +
+		"command you listed them with — and how you checked each one. If all of it is really there, " +
+		"reply " + loopDoneSentinel + " again on its own line. If any of it is not, say so plainly and carry on working; " +
+		"do not reply " + loopDoneSentinel + " to get out of a hard step."
+
 	// loopReflectEvery is how many turns a loop runs between checkpoints.
 	//
 	// There is deliberately no cap by default. A task can genuinely need any
@@ -92,6 +105,10 @@ type loopState struct {
 	// reflecting marks that the latest continue prompt was the checkpoint
 	// question: only the reply to it may end the loop with loopStopSentinel.
 	reflecting bool
+	// claimedDone records that the previous turn ended with the done
+	// sentinel and was asked to show its work instead of being believed.
+	// Only a second claim, in answer to that question, ends the loop.
+	claimedDone bool
 	// answeredStop records that a reply during the checkpoint turn said
 	// loopStopSentinel. The turn's final text may not be that reply: a
 	// Stop hook can send the agent back to work after it, and a prompt
@@ -130,8 +147,12 @@ func loopDecide(st loopState, rc notify.RunComplete) (loopStop, bool) {
 		return loopStopHalted, false
 	case rc.Error != "":
 		return loopStopError, false
-	case loopReportedDone(rc.Text):
+	case loopReportedDone(rc.Text) && st.claimedDone:
 		return loopStopDone, false
+	case loopReportedDone(rc.Text):
+		// Claimed once, not yet shown. The turn is continued with the
+		// question below, and only a second claim ends the loop.
+		return "", true
 	case st.reflecting && (st.answeredStop || loopReportedStop(rc.Text)):
 		return loopStopJudged, false
 	case st.maxTurns > 0 && st.turns >= st.maxTurns:
@@ -248,10 +269,15 @@ func (m *UI) advanceLoop(rc notify.RunComplete) tea.Cmd {
 	if cont {
 		prompt := loopPrompt
 		m.loop.answeredStop = false
-		m.loop.reflecting = m.loop.turns > 0 && m.loop.turns%loopReflectEvery == 0
-		if m.loop.reflecting {
+		claimed := loopReportedDone(rc.Text)
+		m.loop.reflecting = !claimed && m.loop.turns > 0 && m.loop.turns%loopReflectEvery == 0
+		switch {
+		case claimed:
+			prompt = loopDonePrompt
+		case m.loop.reflecting:
 			prompt = loopReflectionPrompt(m.loop.turns)
 		}
+		m.loop.claimedDone = claimed
 		m.loop.turns++
 		return m.sendMessageInternal(prompt, true)
 	}

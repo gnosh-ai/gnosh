@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,11 +26,28 @@ func TestLoopDecide_ContinuesOnAPlainTurn(t *testing.T) {
 	require.Empty(t, string(stop))
 }
 
+// The done sentinel is not taken at its word the first time: the loop asks
+// the agent to show what it produced, and only a second claim ends it. A
+// model under pressure says the word to get out of a hard step — on the AI
+// box gpt-oss wrote "Given time, I'll output LOOP_DONE" and did, twice,
+// with nothing rendered.
 func TestLoopDecide_StopsOnSentinel(t *testing.T) {
 	t.Parallel()
-	stop, cont := loopDecide(running(), notify.RunComplete{SessionID: "s1", Text: "all finished\nLOOP_DONE"})
-	require.False(t, cont)
+	done := notify.RunComplete{SessionID: "s1", Text: "all finished\nLOOP_DONE"}
+
+	stop, cont := loopDecide(running(), done)
+	require.True(t, cont, "the first claim is questioned, not believed")
+	require.Empty(t, string(stop))
+
+	asked := running()
+	asked.claimedDone = true
+	stop, cont = loopDecide(asked, done)
+	require.False(t, cont, "claimed again, having been asked to show the work")
 	require.Equal(t, loopStopDone, stop)
+
+	stop, cont = loopDecide(asked, notify.RunComplete{SessionID: "s1", Text: "Actually v7 is not rendered yet; carrying on."})
+	require.True(t, cont, "and taking it back keeps the loop running")
+	require.Empty(t, string(stop))
 }
 
 func TestLoopDecide_StopsOnCancelAndError(t *testing.T) {
@@ -179,7 +197,9 @@ func loopStartProbe(t *testing.T, cmd tea.Cmd) loopStartProbeMsg {
 func TestAdvanceLoop_StopsAndClearsWhenTheModelReportsDone(t *testing.T) {
 	t.Parallel()
 
-	m := &UI{loop: loopState{active: true, sessionID: "s1", turns: 5}}
+	// Second claim: the first was already questioned (claimedDone), so
+	// this one ends the loop.
+	m := &UI{loop: loopState{active: true, sessionID: "s1", turns: 5, claimedDone: true}}
 	cmd := m.advanceLoop(notify.RunComplete{SessionID: "s1", Text: "finished\nLOOP_DONE"})
 
 	require.NotNil(t, cmd, "the user is told the loop ended")
@@ -288,9 +308,17 @@ func TestAdvanceLoop_SendsNothingOnceTheModelIsDone(t *testing.T) {
 	u, ws := newPlanUI(t, "sess-1")
 	ws.agentReady = true
 	u.loop = loopState{active: true, sessionID: "sess-1", turns: 3}
+	done := notify.RunComplete{SessionID: "sess-1", Text: "all three files exist\nLOOP_DONE"}
 
-	drainCmd(u.advanceLoop(notify.RunComplete{SessionID: "sess-1", Text: "all three files exist\nLOOP_DONE"}))
+	// The first claim is questioned, so one more turn goes out: the
+	// question itself.
+	drainCmd(u.advanceLoop(done))
+	require.Equal(t, []string{loopDonePrompt}, ws.runPrompts, "the claim is asked to show its work")
+	require.True(t, u.loop.active)
 
+	// Claimed again in answer to it, the loop ends and sends nothing more.
+	ws.runPrompts = nil
+	drainCmd(u.advanceLoop(done))
 	require.Empty(t, ws.runPrompts, "a finished task must not be given another turn")
 	require.False(t, u.loop.active)
 }
@@ -485,4 +513,34 @@ func TestNoteLoopReply_IgnoresAReplyStillStreaming(t *testing.T) {
 		message.TextContent{Text: "No reason to stop.\n" + loopStopSentinel},
 	}})
 	require.False(t, m.loop.answeredStop)
+}
+
+// After a claim the next prompt asks for the work, not the ordinary
+// continue prompt, and the claim is remembered so the next one counts.
+func TestAdvanceLoop_AsksTheClaimToShowItsWork(t *testing.T) {
+	pinTTLs(t)
+	u := newTestUI()
+	u.com.Workspace = startWorkspace{}
+	u.session = &session.Session{ID: "s1"}
+	u.loop = running()
+
+	cmd := u.advanceLoop(notify.RunComplete{SessionID: "s1", Text: "done here\n" + loopDoneSentinel})
+	require.NotNil(t, cmd)
+	require.True(t, u.loop.claimedDone, "the claim is remembered")
+	require.False(t, u.loop.reflecting, "the checkpoint question is not asked over the top of it")
+
+	var sent []string
+	for _, msg := range msgsOf(cmd) {
+		if m, ok := msg.(agentRunSubmittedMsg); ok {
+			sent = append(sent, m.prompt)
+		}
+	}
+	require.Len(t, sent, 1)
+	require.Equal(t, loopDonePrompt, sent[0])
+	require.Contains(t, sent[0], "name what you actually produced")
+
+	// An ordinary turn after it clears the claim again.
+	u.loop.claimedDone = true
+	_ = u.advanceLoop(notify.RunComplete{SessionID: "s1", Text: "still working"})
+	require.False(t, u.loop.claimedDone)
 }
