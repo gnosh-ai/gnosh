@@ -233,8 +233,8 @@ github.com/getsentry/sentry-go v0.35.0 h1:+FJNlnjJsZMG3g0/rmmP7GiKjQoUF5EXfEtBwt
 github.com/getsentry/sentry-go v0.35.0/go.mod h1:C55omcY9ChRQIUcVcGcs+Zdy4ZpQGvNJ7JYHIoSWOtE=
 github.com/gnolang/gno v1.5.1-0.20260928125126-5cdbc25fcde0 h1:u5BMlrHR6LfwImy5yAhiyYvO8jNfcKXS+oC0QOXrqz4=
 github.com/gnolang/gno v1.5.1-0.20260928125126-5cdbc25fcde0/go.mod h1:Vby9oL4oRmmpg4W8+lVqiD9uQMf2GnPB8CtsMq0pD/c=
-github.com/gnolang/x402 v0.6.0 h1:LsGjJs5PcvNhdMGH94YVbPKzjaLab/MhJuPL2MxRamI=
-github.com/gnolang/x402 v0.6.0/go.mod h1:Yzg5UNk1bIlkbZbvEQ3YNok+uUvEGFUIRFJUnyu8qEo=
+github.com/gnolang/x402 v0.7.0 h1:xTZzi+j1LshyeHMpy7A6FGnrzZZjwk04NcnA7kGcrv0=
+github.com/gnolang/x402 v0.7.0/go.mod h1:Yzg5UNk1bIlkbZbvEQ3YNok+uUvEGFUIRFJUnyu8qEo=
 github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 h1:+zs/tPmkDkHx3U66DAb0lQFJrpS6731Oaa12ikc+DiI=
 github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376/go.mod h1:an3vInlBmSxCcxctByoQdvwPiA7DTK7jaaFDBTtu0ic=
 github.com/go-git/go-billy/v5 v5.9.0 h1:jItGXszUDRtR/AlferWPTMN4j38BQ88XnXKbilmmBPA=

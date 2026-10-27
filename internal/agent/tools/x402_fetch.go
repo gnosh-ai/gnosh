@@ -21,7 +21,6 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/question"
-	"github.com/charmbracelet/crush/internal/x402gno"
 	"github.com/gnolang/gno/tm2/pkg/amino"
 	"github.com/gnolang/gno/tm2/pkg/crypto"
 	"github.com/gnolang/gno/tm2/pkg/sdk/bank"
@@ -69,6 +68,11 @@ const x402Asset = "ugnot"
 // x402SignTimeout bounds gnokey's signing, which reads no network but may wait
 // on a Ledger's confirmation.
 const x402SignTimeout = 2 * time.Minute
+
+// x402ChainReadTimeout bounds the chain reads a payment makes before the user
+// is asked anything. Nothing is signed until they answer, so a read abandoned
+// costs nothing.
+var x402ChainReadTimeout = 15 * time.Second
 
 // x402Remotes are the public RPC endpoints of the chains klash pays on, for a
 // call that names no remote.
@@ -180,11 +184,11 @@ func NewX402FetchTool(permissions permission.Service, questions question.Service
 			if err != nil {
 				return fantasy.NewTextErrorResponse(err.Error()), nil
 			}
-			remote := cmp.Or(params.Remote, x402Remotes[chain])
+			remote := cmp.Or(strings.TrimSpace(params.Remote), x402Remotes[chain])
 			if remote == "" {
 				return fantasy.NewTextErrorResponse(fmt.Sprintf("the seller charges on chain %s, which has no public node klash knows; pass remote, a node on %s", chain, chain)), nil
 			}
-			node, err := x402gno.NewRPCNode(remote)
+			node, err := exact.NewRPCNode(remote)
 			if err != nil {
 				return fantasy.NewTextErrorResponse(err.Error()), nil
 			}
@@ -192,7 +196,9 @@ func NewX402FetchTool(permissions permission.Service, questions question.Service
 			// Build the payment and check it against the chain before the user is
 			// asked anything: an unfunded account or a node on the wrong chain is
 			// reported here, and the prompt shows the exact fee.
-			payment, err := exact.Prepare(ctx, node, signer.pub, master, offer, strconv.Itoa(x402MaxPrice))
+			readCtx, cancelRead := context.WithTimeout(ctx, x402ChainReadTimeout)
+			payment, err := exact.Prepare(readCtx, node, signer.pub, master, offer, strconv.Itoa(x402MaxPrice))
+			cancelRead()
 			if err != nil {
 				msg := err.Error()
 				switch {
@@ -206,7 +212,7 @@ func NewX402FetchTool(permissions permission.Service, questions question.Service
 				case errors.Is(err, exact.ErrExcessiveFee):
 					// The node, which the call named or klash knows, is the one
 					// that reported the price; it may be wrong, or not honest.
-					msg += fmt.Sprintf(". The node at %s reported that price; nothing was paid. Tell the user rather than trying another node", node.Endpoint())
+					msg += fmt.Sprintf(". The node at %s reported that price; nothing was paid. Tell the user rather than trying another node", remote)
 				}
 				return fantasy.NewTextErrorResponse(msg), nil
 			}

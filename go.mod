@@ -40,7 +40,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/gen2brain/beeep v0.11.2
 	github.com/gnolang/gno v1.5.1-0.20260928125126-5cdbc25fcde0
-	github.com/gnolang/x402 v0.6.0
+	github.com/gnolang/x402 v0.7.0
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/google/uuid v1.6.0
 	github.com/invopop/jsonschema v0.14.0
