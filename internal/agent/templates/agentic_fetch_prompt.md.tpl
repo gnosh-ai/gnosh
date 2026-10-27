@@ -50,6 +50,8 @@ Only include URLs that actually contributed information to your answer. Include 
 <env>
 Working directory: {{.WorkingDir}}
 Platform: {{.Platform}}
+Machine: {{.Machine}} (the file tools, and bash without a host, act here as this user)
+
 Today's date: {{.Date}}
 </env>
 

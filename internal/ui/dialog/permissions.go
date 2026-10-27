@@ -482,8 +482,12 @@ func (p *Permissions) renderHeader(contentWidth int) string {
 	switch p.permission.ToolName {
 	case tools.BashToolName, tools.GnokeyToolName:
 		if params, ok := p.permission.Params.(tools.BashPermissionsParams); ok {
+			if params.Host != "" {
+				lines = append(lines, p.renderKeyValue("Host", params.Host, contentWidth))
+			}
 			lines = append(lines, p.renderKeyValue("Desc", params.Description, contentWidth))
 		}
+
 	case tools.DownloadToolName:
 		if params, ok := p.permission.Params.(tools.DownloadPermissionsParams); ok {
 			lines = append(lines, p.renderKeyValue("URL", params.URL, contentWidth))

@@ -78,6 +78,10 @@
           "$ref": "#/$defs/LSPs",
           "description": "Language Server Protocol configurations"
         },
+        "hosts": {
+          "$ref": "#/$defs/Hosts",
+          "description": "Other machines the bash tool can run a command on by name; each is reached through ssh"
+        },
         "options": {
           "$ref": "#/$defs/Options",
           "description": "General application options"
@@ -136,6 +140,36 @@
       "required": [
         "command"
       ]
+    },
+    "HostConfig": {
+      "properties": {
+        "ssh": {
+          "type": "string",
+          "description": "Where ssh connects: user@address or a Host alias from ~/.ssh/config",
+          "examples": [
+            "root@203.0.113.10",
+            "render"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "description": "What the machine is for; the model reads it when choosing where a command runs",
+          "examples": [
+            "renders the videos (ffmpeg); outputs in /root/renders"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "ssh"
+      ]
+    },
+    "Hosts": {
+      "additionalProperties": {
+        "$ref": "#/$defs/HostConfig"
+      },
+      "type": "object"
     },
     "LSPConfig": {
       "properties": {

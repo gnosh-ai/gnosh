@@ -720,9 +720,38 @@ For other sessionless servers, mark them explicitly with
 tradeoff is that a sessionless server won't push live
 tool/prompt/resource list-changed notifications.
 
+### Hosts
+
+A command runs on the machine Klash is on unless the call names another
+one. Declare the other machines once, and the model runs commands on them
+by name, through ssh, with every result stamped with where it ran:
+
+```json
+{
+  "hosts": {
+    "render": {
+      "ssh": "root@203.0.113.10",
+      "description": "renders the videos (ffmpeg); outputs in /root/renders"
+    }
+  }
+}
+```
+
+or, in the rc file, `host add render --ssh root@203.0.113.10 --description "..."`.
+`ssh` is `user@address` or a `Host` from `~/.ssh/config`, so jump hosts and
+keys are ssh's business. ssh runs in batch mode (it never stops to ask),
+and takes a machine's first host key but refuses a changed one.
+
+Where a command runs is then a fact of the call, never something hidden in
+a script: `ssh` and `scp` stay banned in commands, and without a declared
+host the model is told to ask for one. A command on a host always asks for
+permission (the safe-command shortcut is for this machine only), and
+"allow for session" there covers that host, not a local directory.
+
 ### Hooks
 
-Klash has preliminary support for hooks. For details, see
+Klash has preliminary support for hooks.
+ For details, see
 [the hook guide](./docs/hooks/).
 
 ### Sharing a workspace across clients

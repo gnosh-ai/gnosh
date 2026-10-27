@@ -47,6 +47,8 @@ func buildKlashInfo(cfg *config.ConfigStore, lspManager *lsp.Manager, allSkills 
 	writeProviders(&b, cfg)
 	writeLSP(&b, lspManager, cfg)
 	writeMCP(&b, mcp.GetStates(), cfg)
+	writeHosts(&b, cfg)
+
 	writeSkills(&b, allSkills, activeSkills, skillTracker, cfg)
 	writeHooks(&b, cfg)
 	writePermissions(&b, cfg)
@@ -501,4 +503,19 @@ func lspStateString(state lsp.ServerState) string {
 	default:
 		return "unknown"
 	}
+}
+
+// writeHosts lists the machines the bash tool can run a command on: this
+// one, by the name the tool knows it by, and the declared hosts.
+func writeHosts(b *strings.Builder, cfg *config.ConfigStore) {
+	b.WriteString("[hosts]\n")
+	fmt.Fprintf(b, "%s = %s\n", config.LocalHostName, config.LocalMachine())
+	for _, h := range cfg.Config().Hosts.Sorted() {
+		if h.Host.Description != "" {
+			fmt.Fprintf(b, "%s = %s (%s)\n", h.Name, h.Host.SSH, h.Host.Description)
+		} else {
+			fmt.Fprintf(b, "%s = %s\n", h.Name, h.Host.SSH)
+		}
+	}
+	b.WriteString("\n")
 }

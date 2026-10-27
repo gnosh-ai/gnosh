@@ -1803,6 +1803,9 @@ func (c *Config) Validate() error {
 	if err := c.ValidateTools(); err != nil {
 		return fmt.Errorf("invalid tool configuration: %w", err)
 	}
+	if err := c.ValidateHosts(); err != nil {
+		return fmt.Errorf("invalid host configuration: %w", err)
+	}
 	return nil
 }
 

@@ -27,6 +27,7 @@ import (
 type BashParams struct {
 	Description         string `json:"description" description:"A brief description of what the command does, try to keep it under 30 characters or so"`
 	Command             string `json:"command" description:"The command to execute"`
+	Host                string `json:"host,omitempty" description:"Run on another declared machine, by its name from <hosts>; omit (or \"local\") for this machine. A path belongs to the machine it was seen on."`
 	WorkingDir          string `json:"working_dir,omitempty" description:"The working directory to execute the command in (defaults to current directory)"`
 	RunInBackground     bool   `json:"run_in_background,omitempty" description:"Set to true (boolean) to run this command in the background. Use job_output to read the output later."`
 	AutoBackgroundAfter int    `json:"auto_background_after,omitempty" description:"Seconds to wait before automatically moving the command to a background job (default: 120)"`
@@ -90,6 +91,7 @@ func maxOutputLength() int {
 type BashPermissionsParams struct {
 	Description         string `json:"description"`
 	Command             string `json:"command"`
+	Host                string `json:"host"`
 	WorkingDir          string `json:"working_dir"`
 	RunInBackground     bool   `json:"run_in_background"`
 	AutoBackgroundAfter int    `json:"auto_background_after"`
@@ -104,6 +106,12 @@ type BashResponseMetadata struct {
 	WorkingDirectory string `json:"working_directory"`
 	Background       bool   `json:"background,omitempty"`
 	ShellID          string `json:"shell_id,omitempty"`
+	// Host names the machine the command ran on ("local" for this one)
+	// and Machine identifies it (user@hostname, or the host's ssh
+	// destination), so the stored call is the whole tuple: where, in
+	// what directory, what, and how it ended.
+	Host    string `json:"host,omitempty"`
+	Machine string `json:"machine,omitempty"`
 	// ExitCode is the command's exit status once it has finished; the
 	// output text says it too ("Exit code N"), but readers such as the
 	// --verbose trace should not have to parse that.
@@ -136,6 +144,8 @@ type bashDescriptionData struct {
 	ModelID         string
 	RgAvailable     bool
 	GhAvailable     bool
+	LocalHost       string
+	Hosts           []config.Host
 	// Notified is set when the agent is told a background command's end,
 	// and so may not start a command with a long sleep (BlockedSleep).
 	Notified     bool
@@ -215,7 +225,7 @@ var bannedCommands = []string{
 	"ufw",
 }
 
-func bashDescription(attribution *config.Attribution, modelID string, denyRules []string, notified bool) string {
+func bashDescription(attribution *config.Attribution, modelID string, denyRules []string, notified bool, hosts config.Hosts) string {
 	bannedCommandsStr := strings.Join(bannedCommands, ", ")
 	var out bytes.Buffer
 	if err := bashDescriptionTpl.Execute(&out, bashDescriptionData{
@@ -228,6 +238,8 @@ func bashDescription(attribution *config.Attribution, modelID string, denyRules 
 		ModelID:         modelID,
 		RgAvailable:     getRg() != "",
 		GhAvailable:     ghAvailable,
+		LocalHost:       config.LocalMachine(),
+		Hosts:           hosts.Sorted(),
 		Notified:        notified,
 		BlockedSleep:    blockedSleep,
 	}); err != nil {
@@ -295,11 +307,11 @@ type BackgroundWatcher func(ctx context.Context, job *shell.BackgroundShell)
 // NewBashTool runs shell commands. onBackground, when not nil, is told of
 // each command that becomes a background job, and the result then says
 // the agent will be told when it ends.
-func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, modelID string, maxBackgroundJobs int, denyRules, allowRules []string, onBackground BackgroundWatcher) fantasy.AgentTool {
+func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, modelID string, maxBackgroundJobs int, denyRules, allowRules []string, onBackground BackgroundWatcher, hosts config.Hosts) fantasy.AgentTool {
 	allowed := commandRules(allowRules)
 	return fantasy.NewAgentTool(
 		BashToolName,
-		string(bashDescription(attribution, modelID, denyRules, onBackground != nil)),
+		string(bashDescription(attribution, modelID, denyRules, onBackground != nil, hosts)),
 		func(ctx context.Context, params BashParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			if params.Command == "" {
 				return fantasy.NewTextErrorResponse("missing command"), nil
@@ -313,26 +325,71 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				}
 			}
 
-			// Determine working directory
+			host, remote, err := resolveHost(hosts, params.Host)
+			if err != nil {
+				return fantasy.NewTextErrorResponse(err.Error()), nil
+			}
+
+			// Where the command runs: this machine's shell, in the working
+			// directory, or ssh to the host. The local shell then runs
+			// only the ssh line built here, so the block list (ssh
+			// included) does not apply to it; what runs on the other
+			// machine is gated by the user's deny rules, their declaration
+			// of the host, and a permission prompt that names it, never by
+			// the read-only shortcut or an allow rule, which are this
+			// machine's.
 			execWorkingDir := cmp.Or(params.WorkingDir, workingDir)
+			command := params.Command
+			blocks := blockFuncs(denyRules)
+			hostName, machine := config.LocalHostName, config.LocalMachine()
+			jobDescription := params.Description
+			if remote {
+				if rule := hostDenied(params.Command, denyRules); rule != "" {
+					return fantasy.NewTextErrorResponse(fmt.Sprintf("command is not allowed for security reasons: a Bash(%s) deny rule matches it", rule)), nil
+				}
+				command, err = hostCommand(host.SSH, params.WorkingDir, params.Command)
+				if err != nil {
+					return fantasy.NewTextErrorResponse(err.Error()), nil
+				}
+				execWorkingDir = workingDir
+				blocks = nil
+				hostName, machine = params.Host, host.SSH
+				// The job tools show a job's description, not its host.
+				jobDescription = params.Host + ": " + cmp.Or(params.Description, params.Command)
+			}
+			// Where the command ended up: this machine's shell keeps its
+			// directory across cd; another machine's is known only when
+			// the call set it.
+			cwdOf := func(job *shell.BackgroundShell) string {
+				if remote {
+					return params.WorkingDir
+				}
+				return job.WorkingDir
+			}
 
 			dirs := workDirs{start: execWorkingDir, project: workingDir}
-			isSafeReadOnly := readOnlyCommand(params.Command, dirs) || allowedCommand(params.Command, dirs, allowed)
+			isSafeReadOnly := !remote && (readOnlyCommand(params.Command, dirs) || allowedCommand(params.Command, dirs, allowed))
 
 			sessionID := GetSessionFromContext(ctx)
 			if sessionID == "" {
 				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for executing shell command")
 			}
 			if !isSafeReadOnly {
+				description := fmt.Sprintf("Execute command: %s", params.Command)
+				permissionPath := execWorkingDir
+				if remote {
+					description = fmt.Sprintf("Execute on %s (%s): %s", params.Host, host.SSH, params.Command)
+					permissionPath = hostPermissionPath(host.SSH, params.WorkingDir)
+				}
 				p, err := permissions.Request(
 					ctx,
 					permission.CreatePermissionRequest{
 						SessionID:   sessionID,
-						Path:        execWorkingDir,
+						Path:        permissionPath,
 						ToolCallID:  call.ID,
 						ToolName:    BashToolName,
 						Action:      "execute",
-						Description: fmt.Sprintf("Execute command: %s", params.Command),
+						Description: description,
 						Params:      BashPermissionsParams(params),
 					},
 				)
@@ -349,7 +406,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				startTime := time.Now()
 				bgManager := shell.GetBackgroundShellManager()
 				// Use background context so it continues after tool returns
-				bgShell, err := bgManager.StartAfter(context.Background(), execWorkingDir, blockFuncs(denyRules), sessionEnvSetup(ctx), params.Command, params.Description, maxBackgroundJobs)
+				bgShell, err := bgManager.StartAfter(context.Background(), execWorkingDir, blocks, sessionEnvSetup(ctx), command, jobDescription, maxBackgroundJobs)
 				if err != nil {
 					return fantasy.ToolResponse{}, fmt.Errorf("error starting background shell: %w", err)
 				}
@@ -376,13 +433,16 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 						Output:           stdout,
 						Description:      params.Description,
 						Background:       params.RunInBackground,
-						WorkingDirectory: bgShell.WorkingDir,
+						WorkingDirectory: cwdOf(bgShell),
+						Host:             hostName,
+						Machine:          machine,
 						ExitCode:         exitCode,
 					}
+					tags := resultTags(hostName, machine, cwdOf(bgShell))
 					if stdout == "" {
-						return fantasy.WithResponseMetadata(fantasy.NewTextResponse(BashNoOutput), metadata), nil
+						return fantasy.WithResponseMetadata(fantasy.NewTextResponse(BashNoOutput+tags), metadata), nil
 					}
-					stdout += fmt.Sprintf("\n\n<cwd>%s</cwd>", normalizeWorkingDir(bgShell.WorkingDir))
+					stdout += tags
 					return fantasy.WithResponseMetadata(fantasy.NewTextResponse(stdout), metadata), nil
 				}
 
@@ -391,9 +451,11 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 					StartTime:        startTime.UnixMilli(),
 					EndTime:          time.Now().UnixMilli(),
 					Description:      params.Description,
-					WorkingDirectory: bgShell.WorkingDir,
+					WorkingDirectory: cwdOf(bgShell),
 					Background:       true,
 					ShellID:          bgShell.ID,
+					Host:             hostName,
+					Machine:          machine,
 				}
 				response := fmt.Sprintf("Background shell started with ID: %s\n\n%s", bgShell.ID, backgrounded(ctx, bgShell, onBackground))
 				return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil
@@ -404,7 +466,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 
 			// Start with detached context so it can survive if moved to background
 			bgManager := shell.GetBackgroundShellManager()
-			bgShell, err := bgManager.StartAfter(context.Background(), execWorkingDir, blockFuncs(denyRules), sessionEnvSetup(ctx), params.Command, params.Description, maxBackgroundJobs)
+			bgShell, err := bgManager.StartAfter(context.Background(), execWorkingDir, blocks, sessionEnvSetup(ctx), command, jobDescription, maxBackgroundJobs)
 			if err != nil {
 				return fantasy.ToolResponse{}, fmt.Errorf("error starting shell: %w", err)
 			}
@@ -460,13 +522,16 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 					Output:           stdout,
 					Description:      params.Description,
 					Background:       params.RunInBackground,
-					WorkingDirectory: bgShell.WorkingDir,
+					WorkingDirectory: cwdOf(bgShell),
+					Host:             hostName,
+					Machine:          machine,
 					ExitCode:         exitCode,
 				}
+				tags := resultTags(hostName, machine, cwdOf(bgShell))
 				if stdout == "" {
-					return fantasy.WithResponseMetadata(fantasy.NewTextResponse(BashNoOutput), metadata), nil
+					return fantasy.WithResponseMetadata(fantasy.NewTextResponse(BashNoOutput+tags), metadata), nil
 				}
-				stdout += fmt.Sprintf("\n\n<cwd>%s</cwd>", normalizeWorkingDir(bgShell.WorkingDir))
+				stdout += tags
 				return fantasy.WithResponseMetadata(fantasy.NewTextResponse(stdout), metadata), nil
 			}
 
@@ -475,10 +540,13 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 				StartTime:        startTime.UnixMilli(),
 				EndTime:          time.Now().UnixMilli(),
 				Description:      params.Description,
-				WorkingDirectory: bgShell.WorkingDir,
+				WorkingDirectory: cwdOf(bgShell),
 				Background:       true,
 				ShellID:          bgShell.ID,
+				Host:             hostName,
+				Machine:          machine,
 			}
+
 			// In Claude Code's words, with how long it waited, so the model
 			// knows what timeout to ask for to keep such a command in the
 			// foreground.

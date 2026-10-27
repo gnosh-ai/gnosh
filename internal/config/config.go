@@ -1063,6 +1063,8 @@ type Config struct {
 
 	LSP LSPs `json:"lsp,omitempty" jsonschema:"description=Language Server Protocol configurations"`
 
+	Hosts Hosts `json:"hosts,omitempty" jsonschema:"description=Other machines the bash tool can run a command on by name; each is reached through ssh"`
+
 	Options *Options `json:"options,omitempty" jsonschema:"description=General application options"`
 
 	Permissions *Permissions `json:"permissions,omitempty" jsonschema:"description=Permission settings for tool usage"`

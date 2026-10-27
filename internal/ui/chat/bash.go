@@ -8,6 +8,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -78,6 +79,9 @@ func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 
 	if meta.Background {
 		description := cmp.Or(meta.Description, params.Command)
+		if host := params.Host; host != "" && host != config.LocalHostName {
+			description = "@" + host + " " + description
+		}
 		content := "Command: " + params.Command + "\n" + opts.Result.Content
 		return renderJobTool(sty, opts, cappedWidth, "Start", meta.ShellID, description, content)
 	}
@@ -91,6 +95,11 @@ func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		cmd = highlighted
 	}
 	toolParams := []string{cmd}
+	if host := params.Host; host != "" && host != config.LocalHostName {
+		// Where it ran leads the line: the command alone would read as
+		// this machine's.
+		toolParams[0] = sty.Tool.JobToolName.Render("@"+host) + " " + cmd
+	}
 	if params.RunInBackground {
 		toolParams = append(toolParams, "background", "true")
 	}
@@ -113,7 +122,7 @@ func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 	}
 
 	output := meta.Output
-	if output == "" && opts.Result.Content != tools.BashNoOutput {
+	if output == "" && !strings.HasPrefix(opts.Result.Content, tools.BashNoOutput) {
 		output = opts.Result.Content
 	}
 	if output == "" {

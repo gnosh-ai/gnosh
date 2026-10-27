@@ -12,7 +12,7 @@ Common shell builtins and core utils available on Windows.
 3. Command Execution: Execute with proper quoting, capture output
 4. Auto-Background: Commands exceeding {{ .DefaultWait }} seconds (default, configurable via `auto_background_after` in seconds, or `timeout` in milliseconds, up to {{ .MaxTimeoutMs }}) automatically move to background and return shell ID
 5. Output Processing: Truncate if exceeds {{ .MaxOutputLength }} characters. The truncation marker names a file holding the complete output - read it with the view tool when the omitted middle matters
-6. Return Result: Include errors, metadata with <cwd></cwd> tags
+6. Return Result: Include errors, metadata with <host></host> and <cwd></cwd> tags
 </execution_steps>
 
 <usage_notes>
@@ -25,6 +25,21 @@ Common shell builtins and core utils available on Windows.
 - When a search has to run in the shell (piped into another command, say), use ripgrep (`rg`) rather than `grep`
 {{- end }}
 </usage_notes>
+
+<hosts>
+This machine is {{ .LocalHost }}: every file tool acts here, as this user, and so does a command without a host.
+{{- if .Hosts }}
+Other machines, for the host parameter:
+{{- range .Hosts }}
+- {{ .Name }} ({{ .Host.SSH }}){{ if .Host.Description }}: {{ .Host.Description }}{{ end }}
+{{- end }}
+A path belongs to the machine it was seen on: a file listed on one host is on that host and not here. The file tools reach only this machine; to read or change a file on another machine, use bash with its host. ssh and scp are banned commands: name the host instead.
+{{- else }}
+No other machine is declared. ssh and scp are banned commands, so when a task needs another machine, ask the user to declare it as a host (in the config) rather than reaching it some other way.
+{{- end }}
+Every result ends with a <host> tag saying where it ran.
+</hosts>
+
 
 <background_execution>
 - Set run_in_background=true to run commands in a separate background shell

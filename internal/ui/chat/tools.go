@@ -1349,6 +1349,9 @@ func (t *baseToolMessageItem) formatParametersForCopy() string {
 		if json.Unmarshal([]byte(t.toolCall.Input), &params) == nil {
 			cmd := strings.ReplaceAll(params.Command, "\n", " ")
 			cmd = strings.ReplaceAll(cmd, "\t", "    ")
+			if params.Host != "" {
+				return fmt.Sprintf("**Host:** %s\n**Command:** %s", params.Host, cmd)
+			}
 			return fmt.Sprintf("**Command:** %s", cmd)
 		}
 	case tools.ViewToolName:
@@ -1556,7 +1559,7 @@ func (t *baseToolMessageItem) formatBashResultForCopy() string {
 	}
 
 	output := meta.Output
-	if output == "" && t.result.Content != tools.BashNoOutput {
+	if output == "" && !strings.HasPrefix(t.result.Content, tools.BashNoOutput) {
 		output = t.result.Content
 	}
 

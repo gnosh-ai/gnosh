@@ -29,6 +29,8 @@ Additional working directories: {{range $i, $d := .AddedDirs}}{{if $i}}, {{end}}
 {{- end}}
 Is directory a git repo: {{if .IsGitRepo}} yes {{else}} no {{end}}
 Platform: {{.Platform}}
+Machine: {{.Machine}} (the file tools, and bash without a host, act here as this user)
+
 Today's date: {{.Date}}
 </env>
 
