@@ -1,3 +1,6 @@
+// Package x402gno reads a gno.land chain for klash's x402 payments. The
+// payment itself, built, checked and completed with a signature gnokey makes,
+// comes from github.com/gnolang/x402/client/exact.
 package x402gno
 
 import (
@@ -16,6 +19,7 @@ import (
 	"github.com/gnolang/gno/tm2/pkg/amino"
 	"github.com/gnolang/gno/tm2/pkg/crypto"
 	"github.com/gnolang/gno/tm2/pkg/std"
+	"github.com/gnolang/x402/client/exact"
 )
 
 // rpcTimeout bounds one call to a node. Every read comes before anything is
@@ -39,7 +43,7 @@ type RPCNode struct {
 	client   *http.Client
 }
 
-var _ Node = (*RPCNode)(nil)
+var _ exact.Node = (*RPCNode)(nil)
 
 // NewRPCNode returns the node at remote: a URL such as
 // https://rpc.onyx.testnets.gno.land:443, a tcp:// address as gnodev prints

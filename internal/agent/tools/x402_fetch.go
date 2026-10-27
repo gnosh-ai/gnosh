@@ -26,6 +26,7 @@ import (
 	"github.com/gnolang/gno/tm2/pkg/crypto"
 	"github.com/gnolang/gno/tm2/pkg/sdk/bank"
 	"github.com/gnolang/gno/tm2/pkg/std"
+	"github.com/gnolang/x402/client/exact"
 	x402 "github.com/x402-foundation/x402/go/v2"
 	x402http "github.com/x402-foundation/x402/go/v2/http"
 	"github.com/x402-foundation/x402/go/v2/types"
@@ -191,7 +192,7 @@ func NewX402FetchTool(permissions permission.Service, questions question.Service
 			// Build the payment and check it against the chain before the user is
 			// asked anything: an unfunded account or a node on the wrong chain is
 			// reported here, and the prompt shows the exact fee.
-			payment, err := x402gno.Prepare(ctx, node, signer.pub, master, offer, strconv.Itoa(x402MaxPrice))
+			payment, err := exact.Prepare(ctx, node, signer.pub, master, offer, strconv.Itoa(x402MaxPrice))
 			if err != nil {
 				msg := err.Error()
 				switch {
@@ -202,7 +203,7 @@ func NewX402FetchTool(permissions permission.Service, questions question.Service
 						// master it reads as an unfunded one.
 						msg += ". If the key is a session key, call again with master, the address of the account that registered it, which pays"
 					}
-				case errors.Is(err, x402gno.ErrExcessiveFee):
+				case errors.Is(err, exact.ErrExcessiveFee):
 					// The node, which the call named or klash knows, is the one
 					// that reported the price; it may be wrong, or not honest.
 					msg += fmt.Sprintf(". The node at %s reported that price; nothing was paid. Tell the user rather than trying another node", node.Endpoint())
@@ -385,7 +386,7 @@ func gnokeyKey(ctx context.Context, home, nameOrAddress string) (gnokeyEntry, er
 
 // askX402Password asks the user for the key's password in a masked prompt
 // that shows exactly what the signature pays.
-func askX402Password(ctx context.Context, questions question.Service, sessionID, callID string, params X402FetchParams, key gnokeyEntry, payment *x402gno.Payment) (string, error) {
+func askX402Password(ctx context.Context, questions question.Service, sessionID, callID string, params X402FetchParams, key gnokeyEntry, payment *exact.Payment) (string, error) {
 	send := payment.Tx.Msgs[0].(bank.MsgSend)
 	from := fmt.Sprintf("from %s (key %s)", send.FromAddress, key.name)
 	if !payment.SessionAddr.IsZero() {
@@ -443,7 +444,7 @@ func gnotAmount(coin std.Coin) string {
 // its own, the password on gnokey's standard input; gnokey writes the
 // signature alone to a second file, and the directory holding both is removed
 // afterwards. Neither file holds a secret.
-func gnokeySignPayment(ctx context.Context, home, name, password string, payment *x402gno.Payment) ([]byte, error) {
+func gnokeySignPayment(ctx context.Context, home, name, password string, payment *exact.Payment) ([]byte, error) {
 	dir, err := os.MkdirTemp("", "klash-x402-")
 	if err != nil {
 		return nil, err
@@ -502,7 +503,7 @@ type x402Codec interface {
 
 // x402Outcome reports what the paid request came back with: the resource and
 // the settlement that paid for it, or why nothing was paid.
-func x402Outcome(codec x402Codec, resp *http.Response, body []byte, format string, payment *x402gno.Payment) fantasy.ToolResponse {
+func x402Outcome(codec x402Codec, resp *http.Response, body []byte, format string, payment *exact.Payment) fantasy.ToolResponse {
 	headers := headerMap(resp.Header)
 	settled, _ := codec.GetPaymentSettleResponse(headers)
 	send := payment.Tx.Msgs[0].(bank.MsgSend)

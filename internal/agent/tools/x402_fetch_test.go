@@ -23,6 +23,7 @@ import (
 	"github.com/gnolang/gno/tm2/pkg/crypto/keys"
 	"github.com/gnolang/gno/tm2/pkg/sdk/bank"
 	"github.com/gnolang/gno/tm2/pkg/std"
+	"github.com/gnolang/x402/client/exact"
 	"github.com/stretchr/testify/require"
 	"github.com/x402-foundation/x402/go/v2/types"
 )
@@ -253,7 +254,7 @@ func signedFor(t *testing.T, chain *httptest.Server, key x402Key, master crypto.
 	t.Helper()
 	node, err := x402gno.NewRPCNode(chain.URL)
 	require.NoError(t, err)
-	payment, err := x402gno.Prepare(context.Background(), node, key.pub, master, offer, "")
+	payment, err := exact.Prepare(context.Background(), node, key.pub, master, offer, "")
 	require.NoError(t, err)
 	signBytes, err := payment.SignBytes()
 	require.NoError(t, err)
@@ -677,6 +678,29 @@ func TestX402Fetch_ALyingNodesFeeIsRefusedUnasked(t *testing.T) {
 
 	require.True(t, resp.IsError)
 	require.Contains(t, resp.Content, "network fee too high")
+	require.Contains(t, resp.Content, "The node at "+chain.URL+" reported that price; nothing was paid")
+	_, asked := questions.Pending()
+	require.False(t, asked)
+	require.Len(t, gnokey.runs(t), 1, "gnokey only listed the key")
+	require.Empty(t, seller.payments)
+}
+
+// TestX402Fetch_AFeeInAnotherCoinIsRefusedUnasked: a node whose gas price is
+// not in ugnot cannot price a fee klash pays, and the refusal names the coin
+// rather than an amount, before the user is asked and before anything is
+// signed.
+func TestX402Fetch_AFeeInAnotherCoinIsRefusedUnasked(t *testing.T) {
+	buyer := newX402Key(t, x402Mnemonic)
+	gnokey := fakeX402Gnokey(t, buyer.listLine("buyer"))
+	chain := stubX402ChainPricing(t, `{"gas": "1000", "price": "1uatom"}`)
+	seller := newStubSeller(t, x402Offer(), buyer.pub, 12, 7, served)
+	questions := question.NewService()
+	tool := NewX402FetchTool(allowingPermissions(), questions, t.TempDir(), nil)
+
+	resp := runX402Fetch(t, tool, X402FetchParams{URL: seller.URL, Key: "buyer", Remote: chain.URL})
+
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "is not in ugnot, the coin a payment pays its fee in")
 	require.Contains(t, resp.Content, "The node at "+chain.URL+" reported that price; nothing was paid")
 	_, asked := questions.Pending()
 	require.False(t, asked)

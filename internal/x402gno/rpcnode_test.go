@@ -16,6 +16,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The answers below hold the account of test1, gno's well-known test1 key, and
+// a session under it at payTo.
+const (
+	test1Address = "g1jg8mtutu9khhfwc4nxmuhcpftf0pajdhfvsqf5"
+	payTo        = "g1u7y667z64x2h7vc6fmpcprgey4ck233jaww9zq"
+)
+
 // The chain's answers, as gno.land writes them: amino JSON, indented. The gas
 // price is what onyx-1 answered on 2026-10-22.
 const (
