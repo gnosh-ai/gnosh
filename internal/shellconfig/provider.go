@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+
+	"github.com/charmbracelet/crush/internal/shell"
 )
 
 // handleProvider implements the `provider` builtin.
@@ -23,7 +25,7 @@ import (
 func handleProvider(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	b := configBuilderFromCtx(ctx)
 	if b == nil {
-		return nil
+		return shell.ErrNotABuiltinHere
 	}
 	if len(args) < 2 {
 		return usage(stderr, "usage: provider add <id> [flags] | provider remove <id>")

@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+
+	"github.com/charmbracelet/crush/internal/shell"
 )
 
 // handleHook implements the `hook` builtin.
@@ -23,7 +25,7 @@ import (
 func handleHook(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	b := configBuilderFromCtx(ctx)
 	if b == nil {
-		return nil
+		return shell.ErrNotABuiltinHere
 	}
 	if len(args) < 2 {
 		return usage(stderr, "usage: hook add <event> --command CMD [flags] | hook remove <event> [--name NAME]")

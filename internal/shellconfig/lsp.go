@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+
+	"github.com/charmbracelet/crush/internal/shell"
 )
 
 // handleLSP implements the `lsp` builtin.
@@ -22,7 +24,7 @@ import (
 func handleLSP(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	b := configBuilderFromCtx(ctx)
 	if b == nil {
-		return nil
+		return shell.ErrNotABuiltinHere
 	}
 	if len(args) < 2 {
 		return usage(stderr, "usage: lsp add <name> --command CMD [flags] | lsp remove <name>")

@@ -6,6 +6,8 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+
+	"github.com/charmbracelet/crush/internal/shell"
 )
 
 // handleModel implements the `model` builtin.
@@ -32,7 +34,7 @@ import (
 func handleModel(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	b := configBuilderFromCtx(ctx)
 	if b == nil {
-		return nil
+		return shell.ErrNotABuiltinHere
 	}
 	if len(args) < 2 {
 		return usage(stderr, "usage: model add|remove <provider>/<id> | model large|small [<provider>/<id>]")

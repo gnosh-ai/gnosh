@@ -3,6 +3,7 @@ package shell
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -325,7 +326,10 @@ func builtinHandler() execMiddleware {
 			}
 			if h, ok := builtins[args[0]]; ok {
 				hc := interp.HandlerCtx(ctx)
-				return h(ctx, args, hc.Stdin, hc.Stdout, hc.Stderr)
+				err := h(ctx, args, hc.Stdin, hc.Stdout, hc.Stderr)
+				if !errors.Is(err, ErrNotABuiltinHere) {
+					return err
+				}
 			}
 			return next(ctx, args)
 		}

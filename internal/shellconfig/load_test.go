@@ -522,14 +522,18 @@ func TestConfigBuilder_NoBuilderInContext(t *testing.T) {
 
 	dir := t.TempDir()
 
-	// "provider" without a ConfigBuilder should be a no-op (return nil),
-	// not an error. The builtins check for the builder and silently skip.
+	// "provider" without a ConfigBuilder is not the builtin: a config
+	// builtin outside a config file steps aside for the command of that
+	// name on the PATH (host, the DNS lookup, is one), so the command is
+	// looked for there and, with none, reported as not found rather than
+	// silently done.
 	err := shell.Run(t.Context(), shell.RunOptions{
 		Command: `provider add openai --api-key "test"`,
 		Cwd:     dir,
-		Env:     os.Environ(),
+		Env:     []string{"PATH=" + dir},
 	})
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Equal(t, 127, shell.ExitCode(err), "%v", err)
 }
 
 // TestLoadShellConfig_RespectsContextCancellation verifies that a hanging

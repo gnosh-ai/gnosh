@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+
+	"github.com/charmbracelet/crush/internal/shell"
 )
 
 // handleOption implements the `option` builtin.
@@ -39,7 +41,7 @@ import (
 func handleOption(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	b := configBuilderFromCtx(ctx)
 	if b == nil {
-		return nil
+		return shell.ErrNotABuiltinHere
 	}
 	if len(args) < 2 {
 		return usage(stderr, "usage: option <key> [value]")

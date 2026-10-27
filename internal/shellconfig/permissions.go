@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/tooldefs"
+
+	"github.com/charmbracelet/crush/internal/shell"
 )
 
 // handlePermissions implements the `permissions` builtin.
@@ -30,7 +32,7 @@ import (
 func handlePermissions(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	b := configBuilderFromCtx(ctx)
 	if b == nil {
-		return nil
+		return shell.ErrNotABuiltinHere
 	}
 	if len(args) < 2 {
 		return usage(stderr, "usage: permissions allow|deny <tool> [<tool> ...]")

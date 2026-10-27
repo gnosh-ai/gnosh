@@ -2,8 +2,15 @@ package shell
 
 import (
 	"context"
+	"errors"
 	"io"
 )
+
+// ErrNotABuiltinHere is returned by a builtin that does not apply where it
+// was called, a config builtin outside a config file, say. The command
+// then goes on to the PATH, found or reported missing as if the builtin
+// had never been registered, rather than being silently swallowed.
+var ErrNotABuiltinHere = errors.New("not a builtin here")
 
 // BuiltinHandler is a function that handles a shell builtin command.
 // It receives the full args slice (including the command name as args[0]),
