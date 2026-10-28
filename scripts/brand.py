@@ -5,7 +5,7 @@ The wordmark is the TUI's own: the half-block letterforms in
 internal/ui/logo/letterforms.go, where each terminal cell holds two square
 pixels. Drawing the same strings here keeps the banner on GitHub and the
 logo in the terminal the same shape. The colors are the TUI's too: Crush's
-purple and hot pink, a nebula, with green and gold at the ends of every fade.
+purple and hot pink, with green and gold at the ends of every fade.
 
     python3 scripts/brand.py
 
@@ -30,11 +30,10 @@ from string import Template
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "brand")
 
 # ── Palette ──────────────────────────────────────────────────────────────
-# Deep space and a nebula in Crush's purple and hot pink (Charmtone's
-# Charple and Dolly); gold and mint only as starlight.
+# Deep space in one flat color, Crush's purple and hot pink (Charmtone's
+# Charple and Dolly) in the word, and gold and mint only as starlight.
 VOID = "#07060D"
 NIGHT = "#0D0A1A"
-MIST = "#160F2B"
 RIM = "#2D2C36"
 HAZE = "#858392"
 MOON = "#ECEBF0"
@@ -42,8 +41,6 @@ STAR = "#FFFAF1"
 LAVENDER = "#C9C1FF"
 PURPLE = "#6B50FF"
 PINK = "#FF60FF"
-MAGENTA = "#C337E0"
-DEEP = "#4A30D9"
 GOLD = "#FED835"
 AMBER = "#FEA408"
 MINT = "#68FFD6"
@@ -142,17 +139,6 @@ def svg_open(w, h, label, extra=""):
     )
 
 
-def sky_defs():
-    """Gradients for the sky and the nebula's clouds."""
-    return f"""
-<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{VOID}"/><stop offset=".62" stop-color="{NIGHT}"/><stop offset="1" stop-color="{MIST}"/></linearGradient>
-<radialGradient id="neb1"><stop offset="0" stop-color="{PURPLE}" stop-opacity=".20"/><stop offset="1" stop-color="{PURPLE}" stop-opacity="0"/></radialGradient>
-<radialGradient id="neb2"><stop offset="0" stop-color="{PINK}" stop-opacity=".13"/><stop offset="1" stop-color="{PINK}" stop-opacity="0"/></radialGradient>
-<radialGradient id="neb3"><stop offset="0" stop-color="{MAGENTA}" stop-opacity=".13"/><stop offset="1" stop-color="{MAGENTA}" stop-opacity="0"/></radialGradient>
-<radialGradient id="neb4"><stop offset="0" stop-color="{DEEP}" stop-opacity=".17"/><stop offset="1" stop-color="{DEEP}" stop-opacity="0"/></radialGradient>
-"""
-
-
 def make_stars(rng, n, w, ymax, keepout):
     """Mostly white and lavender; gold and mint only among the brightest."""
     stars = []
@@ -186,16 +172,9 @@ def sparkle(x, y, s, col, attrs=""):
 
 
 def sky(rng, w, h, keepout, n_stars, twinkle):
-    """Deep space, edge to edge: faint nebula clouds and crisp stars. There
-    is no planet or horizon under the word; it floats in space."""
-    o = [f'<rect width="{w}" height="{h}" fill="url(#sky)"/>']
-    o.append('<g class="aur">')
-    o.append(f'<ellipse cx="{w * .26:.0f}" cy="{h * .30:.0f}" rx="{w * .40:.0f}" ry="{h * .32:.0f}" fill="url(#neb1)" transform="rotate(-12 {w * .26:.0f} {h * .30:.0f})"/>')
-    o.append(f'<ellipse cx="{w * .74:.0f}" cy="{h * .26:.0f}" rx="{w * .36:.0f}" ry="{h * .26:.0f}" fill="url(#neb2)" transform="rotate(9 {w * .74:.0f} {h * .26:.0f})"/>')
-    o.append(f'<ellipse cx="{w * .52:.0f}" cy="{h * .14:.0f}" rx="{w * .44:.0f}" ry="{h * .20:.0f}" fill="url(#neb3)"/>')
-    o.append(f'<ellipse cx="{w * .12:.0f}" cy="{h * .70:.0f}" rx="{w * .30:.0f}" ry="{h * .22:.0f}" fill="url(#neb4)"/>')
-    o.append(f'<ellipse cx="{w * .90:.0f}" cy="{h * .66:.0f}" rx="{w * .26:.0f}" ry="{h * .20:.0f}" fill="url(#neb4)"/>')
-    o.append("</g>")
+    """Deep space, edge to edge: one flat color and crisp stars. No clouds,
+    haze or planet; the word floats in space."""
+    o = [f'<rect width="{w}" height="{h}" fill="{NIGHT}"/>']
     for x, y, rad, col, op in make_stars(rng, n_stars, w, h - 8, keepout):
         if rad > 1.5 and rng.random() < 0.6:
             attrs = f' class="tw" style="animation-delay:-{rng.uniform(0, 4):.2f}s"' if twinkle else ""
@@ -236,13 +215,13 @@ def word_defs(x0, y0, word_w, word_h, stops=NEBULA, gid="word"):
 
 
 def word_layers(on, x0, y0, p, bevel=True):
-    """Face and a lit top edge for a pixel word, with crisp edges: no glow
-    and no drop shadow. The word floats in space, with nothing behind it."""
-    face = runs_path(on, x0, y0, p)
-    o = [f'<path d="{face}" fill="url(#word)"/>']
+    """Face and a lit top edge for a pixel word, with crisp edges: no glow,
+    no drop shadow and no light sweeping across it. The word floats in
+    space, with nothing behind it."""
+    o = [f'<path d="{runs_path(on, x0, y0, p)}" fill="url(#word)"/>']
     if bevel:
         o.append(f'<path d="{runs_path(top_edges(on), x0, y0, p, h=min(3, max(1.5, p / 8)))}" fill="#fff" opacity=".38"/>')
-    return face, "".join(o)
+    return "".join(o)
 
 
 def field_gradient(gid, x1, x2, peak=".55"):
@@ -253,27 +232,20 @@ def field_gradient(gid, x1, x2, peak=".55"):
     )
 
 
-def anim(sweep=None):
-    """Twinkling stars and a breathing nebula; with sweep=(from, to), also a
-    band of light crossing the word. All of it stops for reduced motion."""
+def anim():
+    """Twinkling stars, which hold still for reduced motion."""
     css = [
         "@keyframes tw{0%,100%{opacity:.15}50%{opacity:1}}",
-        "@keyframes breathe{0%,100%{opacity:.75}50%{opacity:1}}",
         ".tw{animation:tw 4s ease-in-out infinite}",
-        ".aur{animation:breathe 9s ease-in-out infinite}",
+        "@media (prefers-reduced-motion:reduce){.tw{animation:none}}",
     ]
-    if sweep:
-        a, b = sweep
-        css.append(f"@keyframes sweep{{0%{{transform:translateX({a}px)}}50%,100%{{transform:translateX({b}px)}}}}")
-        css.append(".shine{animation:sweep 8s cubic-bezier(.45,0,.2,1) infinite}")
-    css.append("@media (prefers-reduced-motion:reduce){.tw,.aur,.shine{animation:none}.shine{opacity:0}}")
     return "<style>\n" + "\n".join(css) + "\n</style>"
 
 
 # ── Images ───────────────────────────────────────────────────────────────
 
 def banner(W=1280, H=520, p=24):
-    """The README's banner: the wordmark floating in a nebula."""
+    """The README's banner: the wordmark floating in space."""
     rng = random.Random(7)
     cw, ch = p, 2 * p
     rows = word_rows()
@@ -282,21 +254,18 @@ def banner(W=1280, H=520, p=24):
     x0, y0 = round((W - word_w) / 2), 130
     meta_y = y0 + 3 * ch  # the TUI puts its meta row one cell under the word
 
-    face, layers = word_layers(on, x0, y0, p)
+    layers = word_layers(on, x0, y0, p)
     keep = (x0 - 40, y0 - 24, x0 + word_w + 40, meta_y + ch + 16)
     lx0 = x0 - 2 * cw - cw * math.ceil(x0 / cw)
     left = diagonals(lx0, x0 - cw, y0, 4, cw, ch)
     right = diagonals(x0 + word_w + cw, W + cw, y0, 4, cw, ch)
 
     o = [svg_open(W, H, "Klash, a security-first harness for coding agents")]
-    o.append(anim(sweep=(x0 - 360, x0 + word_w + 120)))
+    o.append(anim())
     o.append("<defs>")
-    o.append(sky_defs())
     o.append(word_defs(x0, y0, word_w, word_h))
     o.append(field_gradient("field", 0, W))
-    o.append('<linearGradient id="shineg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>')
     o.append(f'<clipPath id="frame"><rect width="{W}" height="{H}" rx="22"/></clipPath>')
-    o.append(f'<clipPath id="wordclip"><path d="{face}"/></clipPath>')
     o.append("</defs>")
     o.append('<g clip-path="url(#frame)">')
     o.append(sky(rng, W, H, keep, 165, twinkle=True))
@@ -305,8 +274,6 @@ def banner(W=1280, H=520, p=24):
     o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="{MONO}" font-size="21" fill="{GOLD}">klash.pro</text>')
     o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="{MONO}" font-size="21" fill="{HAZE}">security-first agent harness</text>')
     o.append(layers)
-    # A slanted band of light that crosses the word now and then.
-    o.append(f'<g clip-path="url(#wordclip)"><g class="shine" transform="translate({x0 - 360} 0)"><rect y="{y0 - 40}" width="170" height="{word_h + 80}" fill="url(#shineg)" opacity=".85" transform="skewX(-24)"/></g></g>')
     o.append("</g>")
     o.append(f'<rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="22" fill="none" stroke="{RIM}"/>')
     o.append("</svg>")
@@ -343,7 +310,6 @@ def signoff(W=1280, H=260, p=10):
     o = [svg_open(W, H, "Klash")]
     o.append(anim())
     o.append("<defs>")
-    o.append(sky_defs())
     o.append(word_defs(x0, y0, word_w, word_h))
     o.append(f'<linearGradient id="field" gradientUnits="userSpaceOnUse" x1="{x0}" y1="0" x2="{x0 + word_w}" y2="0"><stop offset="0" stop-color="{PINK}" stop-opacity=".75"/><stop offset="1" stop-color="{PURPLE}" stop-opacity=".75"/></linearGradient>')
     o.append(f'<clipPath id="frame"><rect width="{W}" height="{H}" rx="22"/></clipPath>')
@@ -352,7 +318,7 @@ def signoff(W=1280, H=260, p=10):
     o.append(sky(rng, W, H, keep, 90, twinkle=True))
     o.append(f'<path d="{fields}" stroke="url(#field)" stroke-width="1.4" fill="none"/>')
     o.append(f'<text x="{x0}" y="{fmt(meta_y + ch * 0.72)}" font-family="{MONO}" font-size="13" fill="{GOLD}">klash.pro</text>')
-    o.append(word_layers(on, x0, y0, p)[1])
+    o.append(word_layers(on, x0, y0, p))
     o.append("</g>")
     o.append(f'<rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="22" fill="none" stroke="{RIM}"/>')
     o.append("</svg>")
@@ -360,7 +326,7 @@ def signoff(W=1280, H=260, p=10):
 
 
 def avatar(S=512, p=60):
-    """The organisation's picture: the wordmark's K in the nebula."""
+    """The organisation's picture: the wordmark's K in space."""
     rng = random.Random(3)
     rows = letter_rows("K")
     on = pixels(rows)
@@ -371,11 +337,10 @@ def avatar(S=512, p=60):
 
     o = [svg_open(S, S, "Klash")]
     o.append("<defs>")
-    o.append(sky_defs())
     o.append(word_defs(x0, y0, word_w, word_h))
     o.append("</defs>")
     o.append(sky(rng, S, S, keep, 75, twinkle=False))
-    o.append(word_layers(on, x0, y0, p)[1])
+    o.append(word_layers(on, x0, y0, p))
     o.append(sparkle(x0 + word_w + 34, y0 + 18, 15, GOLD))
     o.append("</svg>")
     return "\n".join(o)
@@ -438,7 +403,6 @@ def og_svg(W=1280, H=640, p=28):
 
     o = [svg_open(W, H, "Klash")]
     o.append("<defs>")
-    o.append(sky_defs())
     o.append(word_defs(x0, y0, word_w, word_h))
     o.append(field_gradient("field", 0, W))
     o.append("</defs>")
@@ -447,7 +411,7 @@ def og_svg(W=1280, H=640, p=28):
     ty = meta_y + ch * 0.66
     o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="JetBrains Mono,{MONO}" font-weight="500" font-size="24" fill="{GOLD}">klash.pro</text>')
     o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="JetBrains Mono,{MONO}" font-size="24" fill="{HAZE}">github.com/klash-pro/klash</text>')
-    o.append(word_layers(on, x0, y0, p)[1])
+    o.append(word_layers(on, x0, y0, p))
     o.append("</svg>")
     return "\n".join(o)
 
