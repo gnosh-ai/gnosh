@@ -143,16 +143,14 @@ def svg_open(w, h, label, extra=""):
 
 
 def sky_defs():
-    """Gradients for the sky and the nebula, and the blur for its filaments."""
+    """Gradients for the sky and the nebula's clouds."""
     return f"""
 <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{VOID}"/><stop offset=".62" stop-color="{NIGHT}"/><stop offset="1" stop-color="{MIST}"/></linearGradient>
-<radialGradient id="neb1"><stop offset="0" stop-color="{PURPLE}" stop-opacity=".40"/><stop offset="1" stop-color="{PURPLE}" stop-opacity="0"/></radialGradient>
-<radialGradient id="neb2"><stop offset="0" stop-color="{PINK}" stop-opacity=".26"/><stop offset="1" stop-color="{PINK}" stop-opacity="0"/></radialGradient>
-<radialGradient id="neb3"><stop offset="0" stop-color="{MAGENTA}" stop-opacity=".26"/><stop offset="1" stop-color="{MAGENTA}" stop-opacity="0"/></radialGradient>
-<radialGradient id="neb4"><stop offset="0" stop-color="{DEEP}" stop-opacity=".34"/><stop offset="1" stop-color="{DEEP}" stop-opacity="0"/></radialGradient>
-<linearGradient id="ray1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{PURPLE}" stop-opacity="0"/><stop offset=".55" stop-color="{PURPLE}" stop-opacity=".9"/><stop offset="1" stop-color="{PURPLE}" stop-opacity="0"/></linearGradient>
-<linearGradient id="ray2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{PINK}" stop-opacity="0"/><stop offset=".55" stop-color="{PINK}" stop-opacity=".9"/><stop offset="1" stop-color="{PINK}" stop-opacity="0"/></linearGradient>
-<filter id="hblur" x="-20%" y="-5%" width="140%" height="110%"><feGaussianBlur stdDeviation="5 0"/></filter>"""
+<radialGradient id="neb1"><stop offset="0" stop-color="{PURPLE}" stop-opacity=".20"/><stop offset="1" stop-color="{PURPLE}" stop-opacity="0"/></radialGradient>
+<radialGradient id="neb2"><stop offset="0" stop-color="{PINK}" stop-opacity=".13"/><stop offset="1" stop-color="{PINK}" stop-opacity="0"/></radialGradient>
+<radialGradient id="neb3"><stop offset="0" stop-color="{MAGENTA}" stop-opacity=".13"/><stop offset="1" stop-color="{MAGENTA}" stop-opacity="0"/></radialGradient>
+<radialGradient id="neb4"><stop offset="0" stop-color="{DEEP}" stop-opacity=".17"/><stop offset="1" stop-color="{DEEP}" stop-opacity="0"/></radialGradient>
+"""
 
 
 def make_stars(rng, n, w, ymax, keepout):
@@ -187,9 +185,9 @@ def sparkle(x, y, s, col, attrs=""):
     )
 
 
-def sky(rng, w, h, keepout, n_stars, twinkle, rays=True):
-    """Deep space, edge to edge: a nebula, its filaments and stars. There is
-    no planet or horizon under the word; it floats in space."""
+def sky(rng, w, h, keepout, n_stars, twinkle):
+    """Deep space, edge to edge: faint nebula clouds and crisp stars. There
+    is no planet or horizon under the word; it floats in space."""
     o = [f'<rect width="{w}" height="{h}" fill="url(#sky)"/>']
     o.append('<g class="aur">')
     o.append(f'<ellipse cx="{w * .26:.0f}" cy="{h * .30:.0f}" rx="{w * .40:.0f}" ry="{h * .32:.0f}" fill="url(#neb1)" transform="rotate(-12 {w * .26:.0f} {h * .30:.0f})"/>')
@@ -198,17 +196,6 @@ def sky(rng, w, h, keepout, n_stars, twinkle, rays=True):
     o.append(f'<ellipse cx="{w * .12:.0f}" cy="{h * .70:.0f}" rx="{w * .30:.0f}" ry="{h * .22:.0f}" fill="url(#neb4)"/>')
     o.append(f'<ellipse cx="{w * .90:.0f}" cy="{h * .66:.0f}" rx="{w * .26:.0f}" ry="{h * .20:.0f}" fill="url(#neb4)"/>')
     o.append("</g>")
-    if rays:
-        # Nebula filaments: thin streaks along a gentle wave, purple and pink.
-        r, n = [], 70
-        for i in range(n):
-            x = w * 0.03 + i * (w * 0.94) / n + rng.uniform(-6, 6)
-            base = h * 0.40 + h * 0.075 * math.sin(i / n * 2 * math.pi * 1.3 + 0.6)
-            hgt = rng.uniform(h * 0.17, h * 0.36)
-            op = rng.uniform(0.05, 0.15) * (1 - abs(i - n / 2) / (n * 0.86))
-            grad = "ray2" if rng.random() < 0.4 else "ray1"
-            r.append(f'<rect x="{x:.1f}" y="{base - hgt:.1f}" width="{rng.uniform(4, 11):.1f}" height="{hgt:.1f}" fill="url(#{grad})" opacity="{op:.3f}"/>')
-        o.append(f'<g filter="url(#hblur)">{"".join(r)}</g>')
     for x, y, rad, col, op in make_stars(rng, n_stars, w, h - 8, keepout):
         if rad > 1.5 and rng.random() < 0.6:
             attrs = f' class="tw" style="animation-delay:-{rng.uniform(0, 4):.2f}s"' if twinkle else ""
@@ -248,14 +235,11 @@ def word_defs(x0, y0, word_w, word_h, stops=NEBULA, gid="word"):
     )
 
 
-def word_layers(on, x0, y0, p, glow=True, bevel=True):
-    """Glow, face and a lit top edge for a pixel word. No drop shadow: the
-    word floats in space, with nothing behind it to cast one on."""
+def word_layers(on, x0, y0, p, bevel=True):
+    """Face and a lit top edge for a pixel word, with crisp edges: no glow
+    and no drop shadow. The word floats in space, with nothing behind it."""
     face = runs_path(on, x0, y0, p)
-    o = []
-    if glow:
-        o.append(f'<path d="{face}" fill="url(#word)" filter="url(#glow)" opacity=".6"/>')
-    o.append(f'<path d="{face}" fill="url(#word)"/>')
+    o = [f'<path d="{face}" fill="url(#word)"/>']
     if bevel:
         o.append(f'<path d="{runs_path(top_edges(on), x0, y0, p, h=min(3, max(1.5, p / 8)))}" fill="#fff" opacity=".38"/>')
     return face, "".join(o)
@@ -311,7 +295,6 @@ def banner(W=1280, H=520, p=24):
     o.append(word_defs(x0, y0, word_w, word_h))
     o.append(field_gradient("field", 0, W))
     o.append('<linearGradient id="shineg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>')
-    o.append('<filter id="glow" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="14"/></filter>')
     o.append(f'<clipPath id="frame"><rect width="{W}" height="{H}" rx="22"/></clipPath>')
     o.append(f'<clipPath id="wordclip"><path d="{face}"/></clipPath>')
     o.append("</defs>")
@@ -363,11 +346,10 @@ def signoff(W=1280, H=260, p=10):
     o.append(sky_defs())
     o.append(word_defs(x0, y0, word_w, word_h))
     o.append(f'<linearGradient id="field" gradientUnits="userSpaceOnUse" x1="{x0}" y1="0" x2="{x0 + word_w}" y2="0"><stop offset="0" stop-color="{PINK}" stop-opacity=".75"/><stop offset="1" stop-color="{PURPLE}" stop-opacity=".75"/></linearGradient>')
-    o.append('<filter id="glow" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="8"/></filter>')
     o.append(f'<clipPath id="frame"><rect width="{W}" height="{H}" rx="22"/></clipPath>')
     o.append("</defs>")
     o.append('<g clip-path="url(#frame)">')
-    o.append(sky(rng, W, H, keep, 90, twinkle=True, rays=False))
+    o.append(sky(rng, W, H, keep, 90, twinkle=True))
     o.append(f'<path d="{fields}" stroke="url(#field)" stroke-width="1.4" fill="none"/>')
     o.append(f'<text x="{x0}" y="{fmt(meta_y + ch * 0.72)}" font-family="{MONO}" font-size="13" fill="{GOLD}">klash.pro</text>')
     o.append(word_layers(on, x0, y0, p)[1])
@@ -391,7 +373,6 @@ def avatar(S=512, p=60):
     o.append("<defs>")
     o.append(sky_defs())
     o.append(word_defs(x0, y0, word_w, word_h))
-    o.append('<filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="22"/></filter>')
     o.append("</defs>")
     o.append(sky(rng, S, S, keep, 75, twinkle=False))
     o.append(word_layers(on, x0, y0, p)[1])
@@ -460,7 +441,6 @@ def og_svg(W=1280, H=640, p=28):
     o.append(sky_defs())
     o.append(word_defs(x0, y0, word_w, word_h))
     o.append(field_gradient("field", 0, W))
-    o.append('<filter id="glow" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="16"/></filter>')
     o.append("</defs>")
     o.append(sky(rng, W, H, keep, 145, twinkle=False))
     o.append(f'<path d="{left}{right}" stroke="url(#field)" stroke-width="2.2" fill="none"/>')
