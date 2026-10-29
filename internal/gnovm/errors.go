@@ -67,6 +67,24 @@ type runError struct {
 func (e *runError) Error() string { return e.err.Error() }
 func (e *runError) Unwrap() error { return e.err }
 
+// brokenError is a VM whose journal cannot be read or replayed: it runs
+// nothing until it is repaired or deleted.
+type brokenError struct {
+	vm    string
+	cause error
+	msg   string // when it came over the wire
+}
+
+func (e *brokenError) Error() string {
+	if e.msg != "" {
+		return e.msg
+	}
+	return fmt.Sprintf("VM %s is broken: %v. Repair it with /goals repair %s (it keeps the entries before the damage), or delete it with gnovm_drop",
+		e.vm, e.cause, e.vm)
+}
+
+func (e *brokenError) Unwrap() error { return e.cause }
+
 // classifyTrip turns a meter trip into a limitError.
 func classifyTrip(err error) error {
 	switch {

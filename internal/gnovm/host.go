@@ -230,20 +230,26 @@ func (h *Host) Close() error {
 	defer h.mu.Unlock()
 	for key, s := range h.vms {
 		s.res = nil
-		if !s.persistent() {
-			_ = os.RemoveAll(s.dir)
-		}
 		delete(h.vms, key)
 	}
-	for project := range h.swept {
-		_ = os.RemoveAll(h.ephemeralRoot(project))
-	}
+	// Memory-only VMs end with the klash process, which holds the client
+	// lock: a worker's host leaves them for the next worker, and the
+	// client deletes them when it closes (deleteEphemeral).
 	if h.release != nil {
+		deleteEphemeral(h.opts.Dir, h.opts.Client)
 		h.release()
 		_ = os.Remove(h.clientLock(h.opts.Client))
 		h.release = nil
 	}
 	return nil
+}
+
+// deleteEphemeral deletes a client's memory-only VMs, in every project.
+func deleteEphemeral(dir, client string) {
+	matches, _ := filepath.Glob(filepath.Join(dir, "*", ".ephemeral", client))
+	for _, m := range matches {
+		_ = os.RemoveAll(m)
+	}
 }
 
 // projectKey names a project's directory: its path, made safe, and a hash of
@@ -530,7 +536,7 @@ func (h *Host) sync(ctx context.Context, s *vmState) error {
 // call makes progress without holding the host for long.
 func (h *Host) resident(ctx context.Context, s *vmState, budget time.Duration) (*vm, []string, error) {
 	if s.broken != nil {
-		return nil, nil, fmt.Errorf("VM %s is broken: %v", s.name, s.broken)
+		return nil, nil, &brokenError{vm: s.name, cause: s.broken}
 	}
 	var notes []string
 	if s.res != nil && s.res.unusable {
@@ -669,8 +675,9 @@ type RunResult struct {
 	// was thrown away after.
 	Program bool
 	Notes   []string
-	// Err is the run's failure; nothing from the call was kept.
-	Err error
+	// Err is the run's failure; nothing from the call was kept. (The wire
+	// carries it apart, keeping its kind; see wireRun.)
+	Err error `json:"-"`
 }
 
 // Run runs code in a VM. The error is for calls that could not be run at

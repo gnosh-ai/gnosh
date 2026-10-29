@@ -1,0 +1,636 @@
+// Copyright (C) 2026 Jae Kwon
+//
+// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// the GNO Network General Public License, version 6, or any later version
+// that the Licensor has publicly accepted as the proxy under section 14 of
+// that License, with the Additional Terms (Strong Attribution); see
+// internal/gnovm/LICENSE.md.
+
+package gnovm
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/charmbracelet/crush/internal/lock"
+)
+
+const (
+	// silenceKill is how long a worker running a request may send nothing
+	// (no heartbeat, no reply) before the client kills it.
+	silenceKill = 10 * time.Second
+	// overdueKill is how far past its deadline a request may run before
+	// the client kills the worker. The longest call is a 10 min run after
+	// a replay slice; heartbeats are the real liveness check.
+	overdueKill = 30 * time.Second
+	// requestDeadline bounds any one request.
+	requestDeadline = 15 * time.Minute
+	// workerLogMax is how big the worker's stderr log grows before it is
+	// rotated (one old copy is kept).
+	workerLogMax = 1 << 20
+)
+
+// ClientOptions configures the process's client.
+type ClientOptions struct {
+	// Options are the host's: data directory, budget, defaults. Client is
+	// filled in by Acquire if empty.
+	Options
+	// InProcess runs the VMs in this process rather than in a worker
+	// (tests; and Windows, which cannot hand a child the protocol's pipes).
+	InProcess bool
+	// Binary is the worker's program: "" means this process's own. Under
+	// go test it must be named, and must not be the test binary itself.
+	Binary string
+}
+
+// Client is a klash process's way to its VMs: a worker it spawns on first
+// use (and again if the worker dies), or a host of its own in-process. It
+// is shared by the process (server mode has one App per workspace) and
+// counted: the last Release closes it.
+type Client struct {
+	opts    ClientOptions
+	mu      sync.Mutex
+	refs    int
+	host    *Host
+	conn    *workerConn
+	release func()
+	// deaths records why workers ended, newest last, for gnovm_list.
+	deaths []string
+}
+
+var (
+	clientMu sync.Mutex
+	client   *Client
+)
+
+// Acquire returns the process's client, making it on first use. Each Acquire
+// is matched by a Release.
+func Acquire(opts ClientOptions) (*Client, error) {
+	clientMu.Lock()
+	defer clientMu.Unlock()
+	if client != nil {
+		client.refs++
+		return client, nil
+	}
+	if opts.Dir == "" {
+		return nil, errors.New("gnovm: a data directory is required")
+	}
+	if opts.Client == "" {
+		opts.Client = NewClientID()
+	}
+	if runtime.GOOS == "windows" {
+		opts.InProcess = true
+	}
+	c := &Client{opts: opts, refs: 1}
+	// The client lock marks this process's memory-only VMs as alive, for
+	// as long as the process lives, whatever happens to its workers.
+	if err := mkdirSync(filepath.Join(opts.Dir, ".clients")); err != nil {
+		return nil, err
+	}
+	release, err := lock.TryFile(filepath.Join(opts.Dir, ".clients", opts.Client+".lock"))
+	if err != nil {
+		return nil, fmt.Errorf("gnovm: client lock: %w", err)
+	}
+	c.release = release
+	client = c
+	return c, nil
+}
+
+// Release gives back one Acquire; the last one closes the client: its
+// worker is stopped, and its memory-only VMs are deleted.
+func (c *Client) Release() {
+	clientMu.Lock()
+	defer clientMu.Unlock()
+	c.refs--
+	if c.refs > 0 {
+		return
+	}
+	if client == c {
+		client = nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.conn != nil {
+		c.conn.close()
+		c.conn = nil
+	}
+	if c.host != nil {
+		_ = c.host.Close()
+		c.host = nil
+	}
+	deleteEphemeral(c.opts.Dir, c.opts.Client)
+	if c.release != nil {
+		c.release()
+		_ = os.Remove(filepath.Join(c.opts.Dir, ".clients", c.opts.Client+".lock"))
+		c.release = nil
+	}
+}
+
+// Deaths reports why this client's workers ended, newest last.
+func (c *Client) Deaths() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]string(nil), c.deaths...)
+}
+
+// Run runs code in a VM; see Host.Run.
+func (c *Client) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
+	if h, err := c.inProcess(); h != nil || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		return h.Run(ctx, req)
+	}
+	body, err := c.call(ctx, msgRun, req)
+	if err != nil {
+		return nil, err
+	}
+	var wr wireRun
+	if err := json.Unmarshal(body, &wr); err != nil {
+		return nil, err
+	}
+	res := wr.RunResult
+	res.Err = fromWire(wr.Err)
+	return &res, nil
+}
+
+// New makes or changes a VM; see Host.New.
+func (c *Client) New(ctx context.Context, req NewRequest) (VMInfo, bool, error) {
+	if h, err := c.inProcess(); h != nil || err != nil {
+		if err != nil {
+			return VMInfo{}, false, err
+		}
+		return h.New(ctx, req)
+	}
+	body, err := c.call(ctx, msgNew, req)
+	if err != nil {
+		return VMInfo{}, false, err
+	}
+	var r newResp
+	err = json.Unmarshal(body, &r)
+	return r.Info, r.Created, err
+}
+
+// List describes the host and a project's VMs; see Host.List.
+func (c *Client) List(ctx context.Context, project string) (ListResult, error) {
+	if h, err := c.inProcess(); h != nil || err != nil {
+		if err != nil {
+			return ListResult{}, err
+		}
+		return h.List(project)
+	}
+	body, err := c.call(ctx, msgList, listReq{Project: project})
+	if err != nil {
+		return ListResult{}, err
+	}
+	var r ListResult
+	err = json.Unmarshal(body, &r)
+	return r, err
+}
+
+// Drop evicts or deletes a VM; see Host.Drop.
+func (c *Client) Drop(ctx context.Context, project, name, action string) error {
+	if h, err := c.inProcess(); h != nil || err != nil {
+		if err != nil {
+			return err
+		}
+		return h.Drop(ctx, project, name, action)
+	}
+	_, err := c.call(ctx, msgDrop, dropReq{Project: project, Name: name, Action: action})
+	return err
+}
+
+// Kept reports whether the call with request id req was kept; see
+// Host.Kept. A run whose worker died before replying is resolved with it.
+func (c *Client) Kept(ctx context.Context, project, name, req string) (bool, error) {
+	if h, err := c.inProcess(); h != nil || err != nil {
+		if err != nil {
+			return false, err
+		}
+		return h.Kept(project, name, req)
+	}
+	body, err := c.call(ctx, msgKept, keptReq{Project: project, Name: name, Req: req})
+	if err != nil {
+		return false, err
+	}
+	var kept bool
+	err = json.Unmarshal(body, &kept)
+	return kept, err
+}
+
+// Repair repairs a broken VM; see Host.Repair.
+func (c *Client) Repair(ctx context.Context, project, name string) (int, int, error) {
+	if h, err := c.inProcess(); h != nil || err != nil {
+		if err != nil {
+			return 0, 0, err
+		}
+		return h.Repair(ctx, project, name)
+	}
+	body, err := c.call(ctx, msgRepair, repairReq{Project: project, Name: name})
+	if err != nil {
+		return 0, 0, err
+	}
+	var r repairResp
+	err = json.Unmarshal(body, &r)
+	return r.Kept, r.Cut, err
+}
+
+// inProcess returns the client's own host when it runs VMs in-process, made
+// on first use, or nil when it uses a worker.
+func (c *Client) inProcess() (*Host, error) {
+	if !c.opts.InProcess {
+		return nil, nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.host == nil {
+		h, err := NewHost(c.opts.Options)
+		if err != nil {
+			return nil, err
+		}
+		c.host = h
+	}
+	return c.host, nil
+}
+
+// workerDied is a request whose worker ended before it replied. For a run,
+// whether the call was kept is not known until the next worker is asked.
+type workerDied struct{ cause string }
+
+func (e *workerDied) Error() string {
+	return "the VM worker ended before it replied (" + e.cause + "); the outcome is unknown until it is asked again"
+}
+
+// call sends a request to the worker, spawning one if there is none, and
+// waits for its reply.
+func (c *Client) call(ctx context.Context, typ string, body any) (json.RawMessage, error) {
+	conn, err := c.worker()
+	if err != nil {
+		return nil, err
+	}
+	f, err := conn.request(ctx, typ, mustJSON(body))
+	if err != nil {
+		return nil, err
+	}
+	if f.Err != nil {
+		return nil, fromWire(f.Err)
+	}
+	return f.Body, nil
+}
+
+// worker returns the live worker connection, spawning a worker if need be.
+func (c *Client) worker() (*workerConn, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.conn != nil {
+		select {
+		case <-c.conn.dead:
+			c.deaths = append(c.deaths, c.conn.cause())
+			if len(c.deaths) > 8 {
+				c.deaths = c.deaths[len(c.deaths)-8:]
+			}
+			c.conn = nil
+		default:
+			return c.conn, nil
+		}
+	}
+	conn, err := spawnWorker(c.opts)
+	if err != nil {
+		return nil, err
+	}
+	c.conn = conn
+	return conn, nil
+}
+
+// workerConn is one running worker.
+type workerConn struct {
+	cmd    *exec.Cmd
+	reqW   *os.File
+	repR   *os.File
+	logF   *os.File
+	wmu    sync.Mutex
+	nextID atomic.Uint64
+
+	mu      sync.Mutex
+	pending map[uint64]*pendingReq
+	last    atomic.Int64 // unix nanos of the last frame from the worker
+	dead    chan struct{}
+	why     string
+	killed  string // set when the client killed it, and why
+}
+
+type pendingReq struct {
+	done     chan *frame
+	deadline time.Time
+}
+
+// spawnWorker starts a worker and shakes hands with it.
+func spawnWorker(opts ClientOptions) (*workerConn, error) {
+	bin, err := workerBinary(opts.Binary)
+	if err != nil {
+		return nil, err
+	}
+	if err := mkdirSync(opts.Dir); err != nil {
+		return nil, err
+	}
+	reqR, reqW, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	repR, repW, err := os.Pipe()
+	if err != nil {
+		reqR.Close()
+		reqW.Close()
+		return nil, err
+	}
+	logF, err := openWorkerLog(filepath.Join(opts.Dir, "worker.log"))
+	if err != nil {
+		reqR.Close()
+		reqW.Close()
+		repR.Close()
+		repW.Close()
+		return nil, err
+	}
+	cmd := exec.Command(bin, "gnovm-worker")
+	cmd.ExtraFiles = []*os.File{reqR, repW} // fds 3 and 4
+	// Not the project directory: klash loads a .env from its working
+	// directory before main runs, and the project's is agent-writable.
+	cmd.Dir = opts.Dir
+	cmd.Env = workerEnv()
+	cmd.Stdout = nil
+	cmd.Stderr = logF
+	setWorkerProcAttr(cmd)
+	if err := cmd.Start(); err != nil {
+		for _, f := range []*os.File{reqR, reqW, repR, repW, logF} {
+			f.Close()
+		}
+		return nil, fmt.Errorf("gnovm: starting the worker: %w", err)
+	}
+	reqR.Close()
+	repW.Close()
+	conn := &workerConn{cmd: cmd, reqW: reqW, repR: repR, logF: logF, pending: map[uint64]*pendingReq{}, dead: make(chan struct{})}
+	conn.last.Store(time.Now().UnixNano())
+	go conn.reap()
+
+	// Handshake.
+	h := myHello()
+	h.Dir, h.Client = opts.Dir, opts.Client
+	h.BudgetBytes, h.DefaultMemoryMB, h.DefaultGas, h.NsPerGas = opts.BudgetBytes, opts.DefaultMemoryMB, opts.DefaultGas, opts.NsPerGas
+	if err := writeFrame(reqW, &frame{Type: msgHello, Body: mustJSON(h)}); err != nil {
+		conn.kill("handshake: " + err.Error())
+		return nil, fmt.Errorf("gnovm: worker handshake: %w", err)
+	}
+	type hres struct {
+		f   *frame
+		err error
+	}
+	ch := make(chan hres, 1)
+	go func() { f, err := readFrame(repR); ch <- hres{f, err} }()
+	select {
+	case r := <-ch:
+		if r.err != nil {
+			conn.kill("handshake: " + r.err.Error())
+			return nil, fmt.Errorf("gnovm: worker handshake: %w", r.err)
+		}
+		if r.f.Err != nil {
+			conn.kill("handshake refused")
+			return nil, fmt.Errorf("gnovm: worker refused: %w", fromWire(r.f.Err))
+		}
+	case <-time.After(10 * time.Second):
+		conn.kill("no handshake in 10 s")
+		return nil, errors.New("gnovm: the worker did not answer its handshake")
+	}
+	go conn.readLoop()
+	go conn.watchdog()
+	return conn, nil
+}
+
+// reap waits for the worker to exit, records why, and fails what was
+// waiting on it.
+func (c *workerConn) reap() {
+	err := c.cmd.Wait()
+	c.mu.Lock()
+	why := c.killed
+	if why == "" {
+		why = "exited"
+		if err != nil {
+			why = err.Error()
+		}
+	}
+	c.why = why
+	pend := c.pending
+	c.pending = map[uint64]*pendingReq{}
+	c.mu.Unlock()
+	close(c.dead)
+	for _, p := range pend {
+		close(p.done)
+	}
+	c.wmu.Lock()
+	c.reqW.Close()
+	c.wmu.Unlock()
+	c.repR.Close()
+	c.logF.Close()
+}
+
+// workerBinary picks the worker's program. Under go test the client never
+// spawns its own binary, which is the test binary: a test that re-ran
+// itself caused a fork bomb on the AI box in October.
+func workerBinary(named string) (string, error) {
+	self, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	if testing.Testing() {
+		if named == "" {
+			return "", errors.New("gnovm: tests run VMs in-process (ClientOptions.InProcess), or name a worker binary")
+		}
+		if sameFile(named, self) {
+			return "", errors.New("gnovm: a test may not use its own binary as the worker")
+		}
+		return named, nil
+	}
+	if named != "" {
+		return named, nil
+	}
+	// On Linux, /proc/self/exe is this program even after a deploy
+	// replaced the file, so the worker matches the client's build.
+	if runtime.GOOS == "linux" {
+		return "/proc/self/exe", nil
+	}
+	return self, nil
+}
+
+func sameFile(a, b string) bool {
+	sa, err1 := os.Stat(a)
+	sb, err2 := os.Stat(b)
+	return err1 == nil && err2 == nil && os.SameFile(sa, sb)
+}
+
+// workerEnv is the client's environment without the profiling switch:
+// two processes cannot serve pprof on one port.
+func workerEnv() []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "KLASH_PROFILE=") || strings.HasPrefix(kv, "CRUSH_PROFILE=") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	return env
+}
+
+// openWorkerLog opens the worker's stderr log, keeping one old copy once it
+// passes workerLogMax.
+func openWorkerLog(path string) (*os.File, error) {
+	if st, err := os.Stat(path); err == nil && st.Size() > workerLogMax {
+		_ = os.Rename(path, path+".old")
+	}
+	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+}
+
+// request sends one request and waits for its reply. If ctx ends first, it
+// tells the worker to cancel and returns; the late reply is dropped.
+func (c *workerConn) request(ctx context.Context, typ string, body json.RawMessage) (*frame, error) {
+	id := c.nextID.Add(1)
+	p := &pendingReq{done: make(chan *frame, 1), deadline: time.Now().Add(requestDeadline)}
+	c.mu.Lock()
+	select {
+	case <-c.dead:
+		c.mu.Unlock()
+		return nil, &workerDied{cause: c.cause()}
+	default:
+	}
+	c.pending[id] = p
+	c.mu.Unlock()
+	// An idle worker sends nothing; its silence counts from now.
+	c.last.Store(time.Now().UnixNano())
+	if err := c.send(&frame{ID: id, Type: typ, Body: body}); err != nil {
+		c.forget(id)
+		return nil, err
+	}
+	select {
+	case f, ok := <-p.done:
+		if !ok {
+			return nil, &workerDied{cause: c.cause()}
+		}
+		return f, nil
+	case <-ctx.Done():
+		_ = c.send(&frame{ID: id, Type: msgCancel})
+		c.forget(id)
+		return nil, ctx.Err()
+	}
+}
+
+func (c *workerConn) forget(id uint64) {
+	c.mu.Lock()
+	delete(c.pending, id)
+	c.mu.Unlock()
+}
+
+func (c *workerConn) send(f *frame) error {
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
+	return writeFrame(c.reqW, f)
+}
+
+// readLoop takes the worker's frames: replies to whoever waits, and every
+// frame, heartbeats included, as a sign of life.
+func (c *workerConn) readLoop() {
+	for {
+		f, err := readFrame(c.repR)
+		if err != nil {
+			return
+		}
+		c.last.Store(time.Now().UnixNano())
+		if f.Type != msgResult {
+			continue
+		}
+		c.mu.Lock()
+		p := c.pending[f.ID]
+		delete(c.pending, f.ID)
+		c.mu.Unlock()
+		if p != nil {
+			p.done <- f
+		}
+	}
+}
+
+// watchdog kills a worker that is running a request and has sent nothing
+// for silenceKill, or whose request is overdueKill past its deadline.
+func (c *workerConn) watchdog() {
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-c.dead:
+			return
+		case <-t.C:
+		}
+		if why := c.verdict(time.Now()); why != "" {
+			c.kill(why)
+		}
+	}
+}
+
+// verdict says why the worker should be killed at now, or "" if it should
+// not: it is running a request and has sent nothing for silenceKill, or a
+// request is overdueKill past its deadline.
+func (c *workerConn) verdict(now time.Time) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.pending) == 0 {
+		return ""
+	}
+	if silent := now.Sub(time.Unix(0, c.last.Load())); silent > silenceKill {
+		return fmt.Sprintf("killed by klash: no heartbeat for %s", silent.Round(time.Second))
+	}
+	for _, p := range c.pending {
+		if now.After(p.deadline.Add(overdueKill)) {
+			return "killed by klash: a request ran past its deadline"
+		}
+	}
+	return ""
+}
+
+// kill ends the worker, recording why.
+func (c *workerConn) kill(why string) {
+	c.mu.Lock()
+	if c.killed == "" {
+		c.killed = why
+	}
+	c.mu.Unlock()
+	if c.cmd.Process != nil {
+		_ = c.cmd.Process.Kill()
+	}
+}
+
+// close stops the worker: its request pipe closes, so it finishes what it
+// is doing and exits; after 3 s it is killed.
+func (c *workerConn) close() {
+	c.wmu.Lock()
+	_ = c.reqW.Close()
+	c.wmu.Unlock()
+	select {
+	case <-c.dead:
+	case <-time.After(3 * time.Second):
+		c.kill("killed by klash at close: did not exit in 3 s")
+		<-c.dead
+	}
+}
+
+func (c *workerConn) cause() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.why
+}

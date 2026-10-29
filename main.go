@@ -6,15 +6,22 @@ import (
 	"net"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/cmd"
 	_ "github.com/charmbracelet/crush/internal/dns"
 	"github.com/charmbracelet/crush/internal/env"
+	"github.com/charmbracelet/crush/internal/gnovm"
 	_ "github.com/joho/godotenv/autoload"
 )
 
 func main() {
+	// The GnoVM worker klash spawns for its VMs (internal/gnovm), before
+	// anything else: it does nothing without its client's handshake.
+	if len(os.Args) > 1 && os.Args[1] == "gnovm-worker" {
+		os.Exit(gnovm.WorkerMain())
+	}
 	if setting := env.Getenv("KLASH_PROFILE"); setting != "" {
 		go servePprof(setting)
 	}
