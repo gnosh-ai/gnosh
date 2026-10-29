@@ -1,0 +1,134 @@
+// Copyright (C) 2026 Jae Kwon
+//
+// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// the GNO Network General Public License, version 6, or any later version
+// that the Licensor has publicly accepted as the proxy under section 14 of
+// that License, with the Additional Terms (Strong Attribution); see
+// internal/gnovm/LICENSE.md.
+
+package gnovm
+
+import (
+	"embed"
+	"fmt"
+	"io/fs"
+	"path"
+	"sort"
+	"strings"
+
+	gno "github.com/gnolang/gno/gnovm/pkg/gnolang"
+	"github.com/gnolang/gno/tm2/pkg/std"
+)
+
+//go:generate go run ./internal/syncstdlibs
+
+// stdlibFS holds the Gno standard library sources, copied from the gno
+// version in go.mod by internal/syncstdlibs. A deployed klash has no GNOROOT,
+// and go:embed cannot reach the module cache.
+//
+//go:embed stdlibs
+var stdlibFS embed.FS
+
+// klashlibFS holds the libraries klash adds for its VMs: fmt (gno's ufmt,
+// renamed by internal/syncstdlibs, since gno has no fmt) and klash's own
+// packages under klash/.
+//
+//go:embed klashlibs
+var klashlibFS embed.FS
+
+// stdlibVersion is the gno version the embedded sources were copied from.
+func stdlibVersion() string {
+	b, err := stdlibFS.ReadFile("stdlibs/VERSION")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// stdlibMemPackage builds the production MemPackage for a stdlib path from the
+// embedded sources, as gno's ReadMemPackageFromList does for a directory: its
+// non-test .gno files, under one package name, sorted. It returns nil, nil
+// when no stdlib has that path.
+func stdlibMemPackage(pkgPath string) (*std.MemPackage, error) {
+	return embeddedMemPackage(stdlibFS, "stdlibs", pkgPath)
+}
+
+// libraryMemPackage is stdlibMemPackage over both klash's libraries and the
+// standard library; klash's come first.
+func libraryMemPackage(pkgPath string) (*std.MemPackage, error) {
+	mpkg, err := embeddedMemPackage(klashlibFS, "klashlibs", pkgPath)
+	if mpkg != nil || err != nil {
+		return mpkg, err
+	}
+	return stdlibMemPackage(pkgPath)
+}
+
+func embeddedMemPackage(fsys embed.FS, root, pkgPath string) (*std.MemPackage, error) {
+	if pkgPath == "" || pkgPath != path.Clean(pkgPath) || strings.HasPrefix(pkgPath, ".") {
+		return nil, nil
+	}
+	dir := path.Join(root, pkgPath)
+	entries, err := fs.ReadDir(fsys, dir)
+	if err != nil {
+		return nil, nil
+	}
+	mpkg := &std.MemPackage{Type: gno.MPStdlibProd, Path: pkgPath}
+	var name gno.Name
+	for _, e := range entries {
+		fname := e.Name()
+		if e.IsDir() || !isProdGno(fname) {
+			continue
+		}
+		body, err := fs.ReadFile(fsys, path.Join(dir, fname))
+		if err != nil {
+			return nil, err
+		}
+		pname, err := gno.PackageNameFromFileBody(path.Join(pkgPath, fname), string(body))
+		if err != nil {
+			return nil, err
+		}
+		switch {
+		case name == "":
+			name = pname
+		case pname != name:
+			return nil, fmt.Errorf("library %s: %s is package %q, want %q", pkgPath, fname, pname, name)
+		}
+		mpkg.Files = append(mpkg.Files, &std.MemFile{Name: fname, Body: string(body)})
+	}
+	if len(mpkg.Files) == 0 {
+		return nil, nil
+	}
+	mpkg.Name = string(name)
+	mpkg.Sort()
+	return mpkg, nil
+}
+
+// libraryPaths lists every package path a VM can import, sorted.
+func libraryPaths() []string {
+	seen := map[string]bool{}
+	for _, lib := range []struct {
+		fsys embed.FS
+		root string
+	}{{stdlibFS, "stdlibs"}, {klashlibFS, "klashlibs"}} {
+		_ = fs.WalkDir(lib.fsys, lib.root, func(p string, d fs.DirEntry, err error) error {
+			if err == nil && !d.IsDir() && isProdGno(d.Name()) {
+				seen[strings.TrimPrefix(path.Dir(p), lib.root+"/")] = true
+			}
+			return nil
+		})
+	}
+	out := make([]string, 0, len(seen))
+	for p := range seen {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// isProdGno reports whether a file belongs in a production stdlib package:
+// Gno source that is not a test or a filetest.
+func isProdGno(name string) bool {
+	return strings.HasSuffix(name, ".gno") &&
+		!strings.HasSuffix(name, "_test.gno") &&
+		!strings.HasSuffix(name, "_filetest.gno")
+}

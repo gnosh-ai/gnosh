@@ -108,6 +108,7 @@ require (
 	github.com/aws/smithy-go v1.28.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
+	github.com/bits-and-blooms/bitset v1.24.6 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.5.0 // indirect
 	github.com/btcsuite/btcd/btcutil v1.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
@@ -116,11 +117,14 @@ require (
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
+	github.com/consensys/gnark-crypto v0.20.1 // indirect
 	github.com/cosmos/gogoproto v1.7.0 // indirect
 	github.com/cosmos/ics23/go v0.11.0 // indirect
 	github.com/cosmos/ledger-cosmos-go v1.0.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
+	github.com/dgraph-io/ristretto/v2 v2.4.0 // indirect
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
 	github.com/ebitengine/purego v0.11.0-alpha.9 // indirect
 	github.com/emicklei/dot v1.11.0 // indirect
@@ -175,6 +179,7 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.29 // indirect
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
@@ -222,6 +227,7 @@ require (
 	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
+	golang.org/x/tools v0.51.0 // indirect
 	google.golang.org/api v0.294.0 // indirect
 	google.golang.org/genai v1.70.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260825221802-da73d73af1c5 // indirect
