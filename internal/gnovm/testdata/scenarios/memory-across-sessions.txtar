@@ -1,0 +1,12 @@
+Memory: facts told in one session must be found in a new session, which has
+none of the first one's conversation, only what the model stored.
+
+-- prompt --
+Please remember these for later, so that a future session of yours can find them without this conversation: the staging database is db-stg-7, and the release manager is Priya Raman.
+-- prompt-new --
+Which database is the staging one, and who is the release manager?
+-- check --
+vm-persist >= 1
+vm-dump contains db-stg-7
+answer last contains db-stg-7
+answer last contains Priya

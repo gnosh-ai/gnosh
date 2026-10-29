@@ -1,0 +1,20 @@
+Resume: plan four jobs as a checklist, do two, then finish the rest from a
+new session that knows only what the checklist kept.
+
+-- project/README.md --
+# demo
+
+A small demo repository.
+-- prompt --
+In this repo we need four things: (1) a LICENSE file with the MIT license for "Demo Authors", (2) a .gitignore for Go projects, (3) a Makefile with a `test` target that runs `go test ./...`, and (4) a CONTRIBUTING.md with three short rules. Set this up as a checklist, then do only items 1 and 2 now; we will continue later, in another session.
+-- prompt-new --
+Continue the work from before on this repo: finish whatever is left.
+-- check --
+after 1 file LICENSE exists
+after 1 file Makefile absent
+file LICENSE contains MIT
+file .gitignore exists
+file Makefile contains go test
+file CONTRIBUTING.md exists
+turn 2 tool gnovm_run >= 1
+vm-persist >= 1

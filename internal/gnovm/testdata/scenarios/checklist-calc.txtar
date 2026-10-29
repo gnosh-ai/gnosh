@@ -1,0 +1,58 @@
+A task checklist: implement four functions one at a time, keeping track of
+which are done in a Gno machine, until the tests pass.
+
+-- project/go.mod --
+module calc
+
+go 1.22
+-- project/calc.go --
+package calc
+
+// Add returns a+b.
+func Add(a, b int) int {
+	panic("TODO")
+}
+
+// Sub returns a-b.
+func Sub(a, b int) int {
+	panic("TODO")
+}
+
+// Mul returns a*b.
+func Mul(a, b int) int {
+	panic("TODO")
+}
+
+// Div returns a/b, and false when b is zero.
+func Div(a, b int) (int, bool) {
+	panic("TODO")
+}
+-- project/calc_test.go --
+package calc
+
+import "testing"
+
+func TestCalc(t *testing.T) {
+	if Add(2, 3) != 5 {
+		t.Fatal("Add")
+	}
+	if Sub(5, 3) != 2 {
+		t.Fatal("Sub")
+	}
+	if Mul(4, 3) != 12 {
+		t.Fatal("Mul")
+	}
+	if q, ok := Div(12, 4); q != 3 || !ok {
+		t.Fatal("Div")
+	}
+	if _, ok := Div(1, 0); ok {
+		t.Fatal("Div by zero")
+	}
+}
+-- prompt --
+Implement the four TODO functions in calc.go so that `go test ./...` passes. Work through them one at a time, and keep track of which ones are done.
+-- check --
+cmd go test ./...
+tool gnovm_run >= 2
+vm-persist >= 1
+vm-dump contains Div

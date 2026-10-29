@@ -1,0 +1,582 @@
+// Copyright (C) 2026 Jae Kwon
+//
+// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// the GNO Network General Public License, version 6, as published by
+// NewTendermint, LLC or its successor, or any later version of that License
+// that the Licensor accepts as the proxy under its section 14, by a statement
+// published in the canonical copy of internal/gnovm/LICENSE.md; together with
+// the Additional Terms (Strong Attribution) in that file.
+
+package gnovm
+
+import (
+	"bufio"
+	"bytes"
+	"cmp"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+// TestScenarios runs the use cases in testdata/scenarios against a real
+// klash and a real model, with each prompt variant in testdata/prompts
+// appended to klash's system prompt (and "v0", none), and writes what
+// happened: each turn's tool calls and answer, each check, and what the
+// persistent Gno machines hold at the end.
+//
+// It is skipped unless GNOVM_SCENARIO_KLASH names the klash to run. Every
+// run gets its own config and data directories (copied from
+// GNOVM_SCENARIO_HOME, default $HOME: the crushrc and the files that keep
+// first-run questions away), so it never touches the user's settings.
+//
+//	GNOVM_SCENARIO_KLASH     the klash to run (required)
+//	GNOVM_SCENARIO_HOME      whose config to copy (default $HOME)
+//	GNOVM_SCENARIO_OUT       where runs and reports go (default a temp dir)
+//	GNOVM_SCENARIO_VARIANTS  comma-separated, e.g. "v0,v1-hint" (default all)
+//	GNOVM_SCENARIO_ONLY      a regexp on scenario names
+//	GNOVM_SCENARIO_MODEL     a model for klash run -m
+//	GNOVM_SCENARIO_STRICT=1  fail the test when a check fails (by default
+//	                         the checks are reported: the scenarios measure
+//	                         the model and the prompt as much as klash)
+//
+// Run it with -test.parallel to match the model server's lanes.
+func TestScenarios(t *testing.T) {
+	klash := os.Getenv("GNOVM_SCENARIO_KLASH")
+	if klash == "" {
+		t.Skip("set GNOVM_SCENARIO_KLASH to a klash binary to run the real-model scenarios")
+	}
+	home := cmp.Or(os.Getenv("GNOVM_SCENARIO_HOME"), os.Getenv("HOME"))
+	out := cmp.Or(os.Getenv("GNOVM_SCENARIO_OUT"), t.TempDir())
+	variants := []string{"v0"}
+	prompts, _ := filepath.Glob("testdata/prompts/*.md")
+	for _, p := range prompts {
+		variants = append(variants, strings.TrimSuffix(filepath.Base(p), ".md"))
+	}
+	if v := os.Getenv("GNOVM_SCENARIO_VARIANTS"); v != "" {
+		variants = strings.Split(v, ",")
+	}
+	only := regexp.MustCompile(cmp.Or(os.Getenv("GNOVM_SCENARIO_ONLY"), "."))
+	files, err := filepath.Glob("testdata/scenarios/*.txtar")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no scenarios: %v", err)
+	}
+	stamp := time.Now().UTC().Format("20060102-150405")
+	var mu sync.Mutex
+	var results []*scenarioRun
+	t.Cleanup(func() { writeSummary(t, filepath.Join(out, "summary-"+stamp+".md"), results) })
+	for _, file := range files {
+		name := strings.TrimSuffix(filepath.Base(file), ".txtar")
+		if !only.MatchString(name) {
+			continue
+		}
+		sc, err := parseScenario(file)
+		if err != nil {
+			t.Fatalf("%s: %v", file, err)
+		}
+		for _, variant := range variants {
+			t.Run(name+"/"+variant, func(t *testing.T) {
+				t.Parallel()
+				r := &scenarioRun{scenario: name, variant: variant, dir: filepath.Join(out, name+"-"+variant+"-"+stamp)}
+				mu.Lock()
+				results = append(results, r)
+				mu.Unlock()
+				r.run(t, sc, klash, home)
+				for _, c := range r.checks {
+					if !c.ok && os.Getenv("GNOVM_SCENARIO_STRICT") == "1" {
+						t.Errorf("check failed: %s (%s)", c.line, c.got)
+					}
+				}
+			})
+		}
+	}
+}
+
+// scenario is a parsed testdata/scenarios file (txtar): a description, then
+// sections. "prompt" continues the session, "prompt-new" starts a new one,
+// "project/<path>" is a file in the project, "check" holds the checks.
+type scenario struct {
+	about  string
+	turns  []turnSpec
+	files  map[string]string
+	checks []string
+}
+
+type turnSpec struct {
+	prompt string
+	fresh  bool
+}
+
+var sectionRe = regexp.MustCompile(`(?m)^-- (.+?) --$`)
+
+func parseScenario(path string) (*scenario, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	data := string(b)
+	locs := sectionRe.FindAllStringSubmatchIndex(data, -1)
+	sc := &scenario{files: map[string]string{}}
+	if len(locs) == 0 {
+		return nil, fmt.Errorf("no sections")
+	}
+	sc.about = strings.TrimSpace(data[:locs[0][0]])
+	for i, loc := range locs {
+		name := data[loc[2]:loc[3]]
+		start := loc[1] + 1
+		end := len(data)
+		if i+1 < len(locs) {
+			end = locs[i+1][0]
+		}
+		body := ""
+		if start <= end {
+			body = data[start:end]
+		}
+		switch {
+		case name == "prompt" || name == "prompt-new":
+			sc.turns = append(sc.turns, turnSpec{prompt: strings.TrimSpace(body), fresh: name == "prompt-new" || len(sc.turns) == 0})
+		case name == "check":
+			for _, line := range strings.Split(body, "\n") {
+				if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+					sc.checks = append(sc.checks, line)
+				}
+			}
+		case strings.HasPrefix(name, "project/"):
+			sc.files[strings.TrimPrefix(name, "project/")] = body
+		default:
+			return nil, fmt.Errorf("unknown section %q", name)
+		}
+	}
+	return sc, nil
+}
+
+// scenarioRun is one scenario under one prompt variant.
+type scenarioRun struct {
+	scenario, variant, dir string
+	turns                  []turnResult
+	after                  []map[string]bool // project files after each turn
+	vms                    map[string]string // persistent VM name -> dump
+	checks                 []checkResult
+	err                    error
+	took                   time.Duration
+}
+
+type turnResult struct {
+	prompt  string
+	session string
+	calls   []toolCall
+	answer  string
+	isError bool
+	took    time.Duration
+}
+
+type toolCall struct {
+	name, input, result string
+	isError             bool
+}
+
+type checkResult struct {
+	line, got string
+	ok        bool
+}
+
+func (r *scenarioRun) run(t *testing.T, sc *scenario, klash, home string) {
+	start := time.Now()
+	defer func() { r.took = time.Since(start) }()
+	project := filepath.Join(r.dir, "project")
+	cfg, data := filepath.Join(r.dir, "config"), filepath.Join(r.dir, "data")
+	for _, d := range []string{filepath.Join(cfg, "crush"), filepath.Join(data, "crush"), project, filepath.Join(r.dir, "tmp")} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	copyIfThere(t, filepath.Join(home, ".config", "crush", "crushrc"), filepath.Join(cfg, "crush", "crushrc"))
+	for _, f := range []string{"providers.json", "metrics-consent.json", "crush.json"} {
+		copyIfThere(t, filepath.Join(home, ".local", "share", "crush", f), filepath.Join(data, "crush", f))
+	}
+	for name, body := range sc.files {
+		path := filepath.Join(project, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var appendPrompt string
+	if r.variant != "v0" {
+		p, err := filepath.Abs(filepath.Join("testdata", "prompts", r.variant+".md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		appendPrompt = p
+	}
+	env := append(os.Environ(), "XDG_CONFIG_HOME="+cfg, "XDG_DATA_HOME="+data, "TMPDIR="+filepath.Join(r.dir, "tmp"))
+	session := ""
+	for i, ts := range sc.turns {
+		args := []string{"run", "--output-format", "stream-json", "-q", "-c", project}
+		if model := os.Getenv("GNOVM_SCENARIO_MODEL"); model != "" {
+			args = append(args, "-m", model)
+		}
+		if !ts.fresh && session != "" {
+			args = append(args, "--session", session)
+		}
+		if appendPrompt != "" {
+			args = append(args, "--append-system-prompt-file", appendPrompt)
+		}
+		args = append(args, ts.prompt)
+		turnStart := time.Now()
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Minute)
+		cmd := exec.CommandContext(ctx, klash, args...)
+		cmd.Dir, cmd.Env = project, env
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		err := cmd.Run()
+		cancel()
+		_ = os.WriteFile(filepath.Join(r.dir, fmt.Sprintf("turn-%d.jsonl", i+1)), stdout.Bytes(), 0o600)
+		_ = os.WriteFile(filepath.Join(r.dir, fmt.Sprintf("turn-%d.stderr", i+1)), stderr.Bytes(), 0o600)
+		tr := parseStream(&stdout)
+		tr.prompt, tr.took = ts.prompt, time.Since(turnStart)
+		if err != nil && tr.answer == "" {
+			tr.answer = fmt.Sprintf("(klash failed: %v; %s)", err, lastLine(stderr.String()))
+			tr.isError = true
+		}
+		session = cmp.Or(tr.session, session)
+		r.turns = append(r.turns, tr)
+		r.after = append(r.after, listFiles(project))
+		t.Logf("turn %d: %d tool calls, %s: %s", i+1, len(tr.calls), tr.took.Round(time.Second), truncate(tr.answer, 200))
+	}
+	r.vms = dumpPersistentVMs(t, filepath.Join(data, "crush", "gnovm"), project)
+	for _, line := range sc.checks {
+		r.checks = append(r.checks, r.check(line, project, env))
+	}
+	writeReport(t, r, sc)
+}
+
+func copyIfThere(t *testing.T, from, to string) {
+	b, err := os.ReadFile(from)
+	if err != nil {
+		return
+	}
+	if err := os.WriteFile(to, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// parseStream reads klash run's stream-json output: the session id, each
+// tool call with its result, and the final answer.
+func parseStream(r io.Reader) turnResult {
+	var tr turnResult
+	byID := map[string]int{}
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 1<<20), 64<<20)
+	for sc.Scan() {
+		var ev struct {
+			Type      string `json:"type"`
+			SessionID string `json:"session_id"`
+			Result    string `json:"result"`
+			IsError   bool   `json:"is_error"`
+			Message   struct {
+				Content []struct {
+					Type      string          `json:"type"`
+					ID        string          `json:"id"`
+					Name      string          `json:"name"`
+					Input     json.RawMessage `json:"input"`
+					ToolUseID string          `json:"tool_use_id"`
+					Content   json.RawMessage `json:"content"`
+					IsError   bool            `json:"is_error"`
+					Text      string          `json:"text"`
+				} `json:"content"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(sc.Bytes(), &ev) != nil {
+			continue
+		}
+		tr.session = cmp.Or(tr.session, ev.SessionID)
+		switch ev.Type {
+		case "assistant":
+			for _, c := range ev.Message.Content {
+				if c.Type == "tool_use" {
+					byID[c.ID] = len(tr.calls)
+					tr.calls = append(tr.calls, toolCall{name: c.Name, input: string(c.Input)})
+				}
+			}
+		case "user":
+			for _, c := range ev.Message.Content {
+				if i, ok := byID[c.ToolUseID]; ok && c.Type == "tool_result" {
+					var s string
+					if json.Unmarshal(c.Content, &s) != nil {
+						s = string(c.Content)
+					}
+					tr.calls[i].result, tr.calls[i].isError = s, c.IsError
+				}
+			}
+		case "result":
+			tr.answer, tr.isError = ev.Result, ev.IsError
+		}
+	}
+	return tr
+}
+
+func listFiles(dir string) map[string]bool {
+	files := map[string]bool{}
+	_ = filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			rel, _ := filepath.Rel(dir, p)
+			files[filepath.ToSlash(rel)] = true
+		}
+		return nil
+	})
+	return files
+}
+
+// dumpPersistentVMs opens the run's VMs as klash left them and renders every
+// package-level value of each persistent one.
+func dumpPersistentVMs(t *testing.T, gnovmDir, project string) map[string]string {
+	dumps := map[string]string{}
+	if _, err := os.Stat(gnovmDir); err != nil {
+		return dumps
+	}
+	h, err := NewHost(Options{Dir: gnovmDir, Client: NewClientID()})
+	if err != nil {
+		t.Logf("opening the VMs: %v", err)
+		return dumps
+	}
+	defer h.Close()
+	list, err := h.List(project)
+	if err != nil {
+		t.Logf("listing the VMs: %v", err)
+		return dumps
+	}
+	for _, vm := range list.VMs {
+		if !vm.Options.Persist {
+			continue
+		}
+		res, err := h.Run(context.Background(), RunRequest{Project: project, Name: vm.Name, Code: "0"})
+		if err != nil || res.Err != nil {
+			dumps[vm.Name] = fmt.Sprintf("(could not rebuild: %v %v)", err, res.Err)
+			continue
+		}
+		s := h.vms[projectKey(project)+"/"+vm.Name]
+		dumps[vm.Name] = fmt.Sprintf("%d entries\n%s", vm.Entries, dumpGlobals(t, s.res))
+	}
+	return dumps
+}
+
+var opRe = regexp.MustCompile(`^(>=|<=|==|>|<)$`)
+
+// check evaluates one check line; see the scenario files for the forms.
+func (r *scenarioRun) check(line, project string, env []string) checkResult {
+	f := strings.Fields(line)
+	res := checkResult{line: line}
+	turn := -1 // all turns
+	if len(f) > 2 && f[0] == "turn" {
+		n, err := strconv.Atoi(f[1])
+		if err != nil || n < 1 || n > len(r.turns) {
+			res.got = "no such turn"
+			return res
+		}
+		turn, f = n-1, f[2:]
+	}
+	countOK := func(n int, op, want string) bool {
+		w, err := strconv.Atoi(want)
+		if err != nil || !opRe.MatchString(op) {
+			return false
+		}
+		switch op {
+		case ">=":
+			return n >= w
+		case "<=":
+			return n <= w
+		case "==":
+			return n == w
+		case ">":
+			return n > w
+		}
+		return n < w
+	}
+	switch {
+	case len(f) == 4 && f[0] == "tool":
+		n := 0
+		for i, tr := range r.turns {
+			if turn >= 0 && i != turn {
+				continue
+			}
+			for _, c := range tr.calls {
+				if c.name == f[1] {
+					n++
+				}
+			}
+		}
+		res.got, res.ok = fmt.Sprintf("%d calls", n), countOK(n, f[2], f[3])
+	case len(f) >= 4 && f[0] == "answer":
+		idx := len(r.turns) - 1
+		if f[1] != "last" {
+			n, err := strconv.Atoi(f[1])
+			if err != nil || n < 1 || n > len(r.turns) {
+				res.got = "no such turn"
+				return res
+			}
+			idx = n - 1
+		}
+		if idx < 0 {
+			res.got = "no turns"
+			return res
+		}
+		answer := r.turns[idx].answer
+		want := strings.Join(f[3:], " ")
+		res.got = truncate(answer, 160)
+		switch f[2] {
+		case "contains":
+			res.ok = strings.Contains(strings.ToLower(answer), strings.ToLower(want))
+		case "matches":
+			re, err := regexp.Compile(want)
+			res.ok = err == nil && re.MatchString(answer)
+		}
+	case len(f) >= 3 && (f[0] == "file" || f[0] == "after"):
+		files := listFiles(project)
+		if f[0] == "after" {
+			n, err := strconv.Atoi(f[1])
+			if err != nil || n < 1 || n > len(r.after) || len(f) < 5 {
+				res.got = "bad after"
+				return res
+			}
+			files, f = r.after[n-1], f[2:]
+		}
+		path := f[1]
+		switch f[2] {
+		case "exists":
+			res.ok, res.got = files[path], fmt.Sprint(files[path])
+		case "absent":
+			res.ok, res.got = !files[path], fmt.Sprint(files[path])
+		case "contains":
+			b, err := os.ReadFile(filepath.Join(project, path))
+			want := strings.Join(f[3:], " ")
+			res.ok = err == nil && strings.Contains(string(b), want)
+			res.got = truncate(string(b), 120)
+		}
+	case len(f) >= 2 && f[0] == "cmd":
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "bash", "-lc", strings.Join(f[1:], " "))
+		cmd.Dir, cmd.Env = project, env
+		b, err := cmd.CombinedOutput()
+		res.ok, res.got = err == nil, truncate(strings.TrimSpace(string(b)), 200)
+	case len(f) == 3 && f[0] == "vm-persist":
+		res.got, res.ok = fmt.Sprintf("%d persistent", len(r.vms)), countOK(len(r.vms), f[1], f[2])
+	case len(f) >= 3 && f[0] == "vm-dump" && f[1] == "contains":
+		want := strings.ToLower(strings.Join(f[2:], " "))
+		for name, d := range r.vms {
+			if strings.Contains(strings.ToLower(d), want) {
+				res.ok, res.got = true, "in "+name
+			}
+		}
+		if !res.ok {
+			res.got = fmt.Sprintf("not in %d persistent VMs", len(r.vms))
+		}
+	default:
+		res.got = "unknown check"
+	}
+	return res
+}
+
+func lastLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.LastIndexByte(s, '\n'); i >= 0 {
+		return s[i+1:]
+	}
+	return s
+}
+
+// writeReport writes what a run did, for a person to read.
+func writeReport(t *testing.T, r *scenarioRun, sc *scenario) {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s / %s\n\n%s\n\n", r.scenario, r.variant, sc.about)
+	for i, tr := range r.turns {
+		kind := "same session"
+		if sc.turns[i].fresh {
+			kind = "new session"
+		}
+		fmt.Fprintf(&b, "## Turn %d (%s, %s)\n\n**Prompt:** %s\n\n", i+1, kind, tr.took.Round(time.Second), tr.prompt)
+		for _, c := range tr.calls {
+			mark := ""
+			if c.isError {
+				mark = " (error)"
+			}
+			fmt.Fprintf(&b, "- `%s`%s %s\n  → %s\n", c.name, mark, truncate(c.input, 400), truncate(strings.ReplaceAll(c.result, "\n", " ⏎ "), 300))
+		}
+		fmt.Fprintf(&b, "\n**Answer:** %s\n\n", tr.answer)
+	}
+	b.WriteString("## Checks\n\n")
+	for _, c := range r.checks {
+		mark := "FAIL"
+		if c.ok {
+			mark = "ok"
+		}
+		fmt.Fprintf(&b, "- %s: `%s` (%s)\n", mark, c.line, c.got)
+	}
+	b.WriteString("\n## Persistent Gno machines at the end\n\n")
+	names := make([]string, 0, len(r.vms))
+	for n := range r.vms {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	if len(names) == 0 {
+		b.WriteString("(none)\n")
+	}
+	for _, n := range names {
+		fmt.Fprintf(&b, "### %s\n\n```\n%s\n```\n\n", n, truncate(r.vms[n], 4000))
+	}
+	if err := os.WriteFile(filepath.Join(r.dir, "report.md"), []byte(b.String()), 0o600); err != nil {
+		t.Logf("writing the report: %v", err)
+	}
+}
+
+// writeSummary writes a table of every run's checks.
+func writeSummary(t *testing.T, path string, runs []*scenarioRun) {
+	if len(runs) == 0 {
+		return
+	}
+	sort.Slice(runs, func(i, j int) bool {
+		if runs[i].scenario != runs[j].scenario {
+			return runs[i].scenario < runs[j].scenario
+		}
+		return runs[i].variant < runs[j].variant
+	})
+	var b strings.Builder
+	b.WriteString("| scenario | variant | checks passed | gnovm calls | other calls | time | report |\n|---|---|---|---|---|---|---|\n")
+	for _, r := range runs {
+		passed := 0
+		for _, c := range r.checks {
+			if c.ok {
+				passed++
+			}
+		}
+		gn, other := 0, 0
+		for _, tr := range r.turns {
+			for _, c := range tr.calls {
+				if strings.HasPrefix(c.name, "gnovm_") {
+					gn++
+				} else {
+					other++
+				}
+			}
+		}
+		fmt.Fprintf(&b, "| %s | %s | %d/%d | %d | %d | %s | %s |\n", r.scenario, r.variant, passed, len(r.checks), gn, other,
+			r.took.Round(time.Second), filepath.Join(r.dir, "report.md"))
+	}
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		t.Logf("writing the summary: %v", err)
+	}
+	t.Logf("summary (%s):\n%s", path, b.String())
+}
