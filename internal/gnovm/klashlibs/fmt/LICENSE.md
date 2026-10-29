@@ -1,7 +1,8 @@
 The files in this directory are gno's ufmt package
 (examples/gno.land/p/nt/ufmt/v0) from github.com/gnolang/gno v1.5.1-0.20260928125126-5cdbc25fcde0,
 copied by internal/gnovm/internal/syncstdlibs with the package renamed to fmt
-and ufmt.gno renamed to fmt.gno; nothing else is changed. They are copyright
+and ufmt.gno renamed to fmt.gno, and a dated notice of that change added to
+each file; nothing else is changed. They are copyright
 NewTendermint, LLC, under the license below, including its Additional Terms
 (Strong Attribution).
 

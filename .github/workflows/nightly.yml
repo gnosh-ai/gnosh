@@ -7,6 +7,9 @@ on:
 
 jobs:
   check:
+    # Upstream's nightly. klash publishes no binaries while the licence of
+    # internal/gnovm in a combined binary is unsettled (internal/gnovm/LICENSE.md).
+    if: github.repository == 'charmbracelet/crush'
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}

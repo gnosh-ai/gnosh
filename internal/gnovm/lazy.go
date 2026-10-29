@@ -1,14 +1,20 @@
 // Copyright (C) 2026 Jae Kwon
 //
 // This file is part of klash's GnoVM machine subsystem. It is licensed under
-// the GNO Network General Public License, version 6, or any later version
-// that the Licensor has publicly accepted as the proxy under section 14 of
-// that License, with the Additional Terms (Strong Attribution); see
-// internal/gnovm/LICENSE.md.
+// the GNO Network General Public License, version 6, as published by
+// NewTendermint, LLC or its successor, or any later version of that License
+// that the Licensor accepts as the proxy under its section 14, by a statement
+// published in the canonical copy of internal/gnovm/LICENSE.md; together with
+// the Additional Terms (Strong Attribution) in that file.
 
 package gnovm
 
 import "sync"
+
+// AttributionNotice is the notice klash shows wherever it names itself
+// (--version, gnovm_list): NewTendermint's for the GnoVM, which klash
+// includes, and this subsystem's own Designation (LICENSE.md).
+const AttributionNotice = "Built on gno.land (https://gno.land) · GnoVM machines built on klash (https://klash.pro)"
 
 // Lazy is an App's hold on the process's client: it acquires it on first use,
 // so a klash that never runs a VM never starts a worker, and releases it on

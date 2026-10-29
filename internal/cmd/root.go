@@ -34,6 +34,7 @@ import (
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/env"
 	"github.com/charmbracelet/crush/internal/event"
+	"github.com/charmbracelet/crush/internal/gnovm"
 	"github.com/charmbracelet/crush/internal/lock"
 	crushlog "github.com/charmbracelet/crush/internal/log"
 	"github.com/charmbracelet/crush/internal/projects"
@@ -266,7 +267,7 @@ func printSessionResume(model *ui.UI, banner config.ExitBanner) {
 
 // copied from cobra:
 const defaultVersionTemplate = `{{with .DisplayName}}{{printf "%s " .}}{{end}}{{printf "version %s" .Version}}
-`
+` + gnovm.AttributionNotice + "\n"
 
 // printAsRun maps Claude Code's way of asking one question without the
 // TUI, -p/--print, onto klash run: `klash -p "question"`, with any flags

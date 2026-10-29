@@ -1,10 +1,11 @@
 // Copyright (C) 2026 Jae Kwon
 //
 // This file is part of klash's GnoVM machine subsystem. It is licensed under
-// the GNO Network General Public License, version 6, or any later version
-// that the Licensor has publicly accepted as the proxy under section 14 of
-// that License, with the Additional Terms (Strong Attribution); see
-// internal/gnovm/LICENSE.md.
+// the GNO Network General Public License, version 6, as published by
+// NewTendermint, LLC or its successor, or any later version of that License
+// that the Licensor accepts as the proxy under its section 14, by a statement
+// published in the canonical copy of internal/gnovm/LICENSE.md; together with
+// the Additional Terms (Strong Attribution) in that file.
 
 package gnovm
 
@@ -39,6 +40,54 @@ type op struct {
 	// Line is the input line File or Stmts began on, so errors point at
 	// the model's own lines.
 	Line int `json:"line,omitempty"`
+}
+
+// declBytes is the source an op keeps in memory once it has run: a file's
+// declarations, and the function literals in statements or an evaluation (a
+// stored closure keeps its syntax tree; other statements keep nothing). The
+// budget charges it (vmCharge) and the limits cap it (checkLimits).
+func (o op) declBytes() int64 {
+	switch {
+	case o.File != "":
+		return int64(len(o.File))
+	case o.Stmts != "":
+		return funcLitBytes(o.Stmts, true)
+	case o.Eval != "":
+		return funcLitBytes(o.Eval, false)
+	}
+	return 0
+}
+
+// funcLitBytes sums the source of the outermost function literals in
+// statements (stmts) or an expression.
+func funcLitBytes(src string, stmts bool) int64 {
+	if !strings.Contains(src, "func") {
+		return 0
+	}
+	fset := token.NewFileSet()
+	var root ast.Node
+	if stmts {
+		f, err := parser.ParseFile(fset, "", "package p;func _(){"+src+"\n}", parser.SkipObjectResolution)
+		if err != nil {
+			return int64(len(src)) // cannot tell: count it all
+		}
+		root = f
+	} else {
+		x, err := parser.ParseExpr(src)
+		if err != nil {
+			return int64(len(src))
+		}
+		root = x
+	}
+	var n int64
+	ast.Inspect(root, func(node ast.Node) bool {
+		if fl, ok := node.(*ast.FuncLit); ok {
+			n += int64(fl.End() - fl.Pos())
+			return false
+		}
+		return true
+	})
+	return n
 }
 
 type importOp struct {
@@ -155,13 +204,21 @@ func normalize(code string, seq int64, existing map[string]bool) (*program, erro
 		if !ok {
 			continue
 		}
-		fresh := true
+		var newNames, oldNames []string
 		for _, n := range names {
-			if n != "_" && (existing[n] || declared[n]) {
-				fresh = false
+			switch {
+			case n == "_":
+			case existing[n] || declared[n]:
+				oldNames = append(oldNames, n)
+			default:
+				newNames = append(newNames, n)
 			}
 		}
-		if !fresh {
+		if len(newNames) > 0 && len(oldNames) > 0 {
+			return nil, &refusal{fmt.Sprintf("this := declares %s and assigns %s, which the VM cannot keep apart: declare %s with var first, then assign them all with =",
+				strings.Join(newNames, ", "), strings.Join(oldNames, ", "), strings.Join(newNames, ", "))}
+		}
+		if len(newNames) == 0 {
 			continue
 		}
 		for _, n := range names {

@@ -131,18 +131,25 @@ for this subsystem; the details and conflicts will be worked out later.
 
 - **The klash binary is a combined work, and its licenses conflict.** Most of
   klash is derived from Charm's Crush and is under the Functional Source License
-  (FSL-1.1-MIT), whose Competing Use clause restricts use. A binary that
-  includes GNO Network GPL code must be conveyed under that License as a whole
-  (sections 5(c) and 6) with no further restrictions (section 10), which the
-  Competing Use clause is. This already holds today: klash's x402_fetch tool
-  links the GnoVM through github.com/gnolang/x402 → gno.land/pkg/gnoclient →
-  sdk/vm. This subsystem runs its VMs in a separate worker process to isolate
-  faults; that does not separate the licenses, because the worker is the same
-  klash binary. Ways out include a linking exception from NewTendermint, LLC
-  (for the GnoVM) and from the Licensor (for this subsystem); removing the
-  link; or time: each Crush version's FSL becomes MIT two years after Charm
-  released it, and MIT code can be conveyed under this License. Changing the
-  license of Charm's code is not the Licensor's to do.
+  (FSL-1.1-MIT), whose Competing Use clause restricts use. This subsystem links
+  the GnoVM into the klash binary, and embeds the Gno standard library in it;
+  the worker that runs the VMs is the same binary. A binary that includes GNO
+  Network GPL code must be conveyed under that License as a whole (sections 5(c)
+  and 6) with no further restrictions (section 10), which the Competing Use
+  clause is. Before this subsystem, klash did not link the GnoVM: its x402
+  client used only tm2 (Apache-2.0) and gno.land's small `ugnot` package. No
+  klash binary has been released since; none should be until this is settled.
+  The ways out are:
+  (a) keep one binary, with a linking exception from NewTendermint, LLC for the
+  GnoVM and an additional permission from the Licensor for this subsystem; or
+  wait until each Crush version's FSL becomes MIT, two years after Charm
+  released it, since MIT code can be conveyed under this License;
+  (b) build the worker as a separate program (`klash-gnovm-worker`) that holds
+  everything that links gno, keep klash's own binary free of it, and have the
+  two speak the worker protocol; the Licensor can grant a section 7 additional
+  permission for any glue of his in the FSL binary. This needs nobody's
+  consent but the Licensor's.
+  Changing the license of Charm's code is not the Licensor's to do.
 - **Contributions.** CONTRIBUTING.md makes `internal/gnovm/` an exception:
   contributions to it are under this License, and its separate grants to
   Charmbracelet, Inc. do not extend to them; the grants to the Maintainer do.
@@ -154,8 +161,8 @@ for this subsystem; the details and conflicts will be worked out later.
 - **The GnoVM's own terms.** The GnoVM and the standard library this subsystem
   embeds are under the GNO Network GPL v6 with NewTendermint, LLC's Additional
   Terms (Strong Attribution). Those terms apply independently of this file:
-  klash's interface must also carry NewTendermint's attribution notice, which
-  the x402 link already requires.
+  since klash now includes the GnoVM, its interface must carry NewTendermint's
+  attribution notice too.
 - **Other licenses in the dependency tree.** The tm2 packages used here are
   Apache-2.0 (github.com/gnolang/gno/tm2/LICENSE). Files in `stdlibs/` that came
   from Go are under Go's BSD license (`stdlibs/LICENSE-GO`).

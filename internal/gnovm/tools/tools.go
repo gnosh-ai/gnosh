@@ -1,10 +1,11 @@
 // Copyright (C) 2026 Jae Kwon
 //
 // This file is part of klash's GnoVM machine subsystem. It is licensed under
-// the GNO Network General Public License, version 6, or any later version
-// that the Licensor has publicly accepted as the proxy under section 14 of
-// that License, with the Additional Terms (Strong Attribution); see
-// internal/gnovm/LICENSE.md.
+// the GNO Network General Public License, version 6, as published by
+// NewTendermint, LLC or its successor, or any later version of that License
+// that the Licensor accepts as the proxy under its section 14, by a statement
+// published in the canonical copy of internal/gnovm/LICENSE.md; together with
+// the Additional Terms (Strong Attribution) in that file.
 
 // Package gnovmtools is the agent's tools for GnoVM machines: gnovm_run,
 // gnovm_new, gnovm_list and gnovm_drop. The machines themselves are package
@@ -134,7 +135,7 @@ func gasParam(g float64) (int64, error) {
 // worker is asked whether the call was kept.
 func unknownOutcome(ctx context.Context, c *gnovm.Client, project, session string, p RunParams, req string, err error) string {
 	name := p.Name
-	if name == "" {
+	if name == "" || name == "scratch" {
 		name = gnovm.ScratchName(session)
 	}
 	kept, kerr := c.Kept(ctx, project, name, req)

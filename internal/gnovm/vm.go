@@ -1,10 +1,11 @@
 // Copyright (C) 2026 Jae Kwon
 //
 // This file is part of klash's GnoVM machine subsystem. It is licensed under
-// the GNO Network General Public License, version 6, or any later version
-// that the Licensor has publicly accepted as the proxy under section 14 of
-// that License, with the Additional Terms (Strong Attribution); see
-// internal/gnovm/LICENSE.md.
+// the GNO Network General Public License, version 6, as published by
+// NewTendermint, LLC or its successor, or any later version of that License
+// that the Licensor accepts as the proxy under its section 14, by a statement
+// published in the canonical copy of internal/gnovm/LICENSE.md; together with
+// the Additional Terms (Strong Attribution) in that file.
 
 package gnovm
 
@@ -324,9 +325,6 @@ func (v *vm) run(parsed []parsedOp, render bool) (value string, err error) {
 					v.methods[declNames(d)[0]] = true
 				}
 			}
-			// Statements keep nothing once run; declarations keep
-			// their syntax trees (see vmCharge).
-			v.declBytes += int64(len(p.op.File))
 			v.declFiles++
 		case p.stmts != nil:
 			for _, s := range p.stmts {
@@ -338,6 +336,9 @@ func (v *vm) run(parsed []parsedOp, render bool) (value string, err error) {
 				value = renderValues(tvs)
 			}
 		}
+		// Declarations and stored closures keep their syntax trees
+		// (see vmCharge); other statements keep nothing.
+		v.declBytes += p.op.declBytes()
 	}
 	return value, nil
 }

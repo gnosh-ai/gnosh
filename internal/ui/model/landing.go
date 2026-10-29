@@ -33,7 +33,7 @@ func (m *UI) landingView() string {
 		cwd,
 	}
 
-	parts = append(parts, "", m.modelInfo(width))
+	parts = append(parts, "", m.modelInfo(width), "", m.attributionLine(width))
 	infoSection := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	var remainingHeightArea image.Rectangle
@@ -57,4 +57,13 @@ func (m *UI) landingView() string {
 		Render(
 			lipgloss.JoinVertical(lipgloss.Left, infoSection, "", content),
 		)
+}
+
+// attributionLine is the notice the GnoVM's licence and that of klash's
+// GnoVM machines ask for (internal/gnovm/LICENSE.md), with links.
+func (m *UI) attributionLine(width int) string {
+	link := m.com.Styles.Dialog.OAuth.Link
+	return lipgloss.NewStyle().Width(width).Render(
+		"Built on " + link.Hyperlink("https://gno.land", "id=gnoland").Render("gno.land") +
+			" · GnoVM machines built on " + link.Hyperlink("https://klash.pro", "id=klashpro").Render("klash"))
 }

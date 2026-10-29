@@ -444,12 +444,17 @@ but not raise it, and cannot set `in_process`. Lands with the worker (phase
   palette item).
 - **Known interactions**, stated plainly in LICENSE.md: the klash binary is a
   combined work, and the GNGPL admits no further restrictions, which the FSL's
-  Competing Use clause is; this is already true through x402's link to the
-  GnoVM, and the worker (same binary) does not change it. The ways out are
-  linking exceptions (NewTendermint for the GnoVM, the Licensor for this
-  subsystem), removing the link, or time (each Crush version's FSL becomes MIT
-  two years after release); changing Charm's licence is not the Licensor's to
-  do. CONTRIBUTING.md, the README's Contributing and License sections, the
+  Competing Use clause is. This subsystem is what put the GnoVM (and its
+  embedded standard library) into the klash binary: before it, klash's x402
+  client used only tm2 and gno.land's small `ugnot` package (round 4 corrected
+  an earlier claim that x402 already linked the GnoVM). The worker, being the
+  same binary, does not change that. The ways out (§18) are (a) one binary,
+  with linking exceptions (NewTendermint for the GnoVM, the Licensor for this
+  subsystem) or time (each Crush version's FSL becomes MIT two years after
+  release); or (b) a separate `klash-gnovm-worker` program holding everything
+  that links gno, with klash's own binary free of it. Changing Charm's licence
+  is not the Licensor's to do. No klash binary is released meanwhile (the
+  nightly workflow is gated to upstream). CONTRIBUTING.md, the README's Contributing and License sections, the
   CLA bot text and the release archive (`LICENSE-gnovm*.md`) match the
   `internal/gnovm/` exception. GNGPL §13 binds klash's own remote interfaces,
   so server mode and channels link the source.
@@ -457,8 +462,9 @@ but not raise it, and cannot set `in_process`. Lands with the worker (phase
   header and the sidebar footer (OSC 8 links); `klash --version` and `klash run
   --help`; a **License** item in the command palette (GNGPL §5(d) Appropriate
   Legal Notices); the README and klash.pro pages that promote klash. Each says
-  "built on gno.land" (NewTendermint's, owed already through x402) and gives this
-  subsystem's Designation. When the tools are usable, the README opens with
+  "built on gno.land" (NewTendermint's, owed since klash includes the GnoVM)
+  and gives this subsystem's Designation. Landed so far: `klash --version`, the
+  landing screen and `gnovm_list`. When the tools are usable, the README opens with
   Jae's line: "Yo dawg, I heard you like Go, so I put Go in your Go and slapped
   it onto Qwen, so it can run Go while it writes Go."
 - **Timing**: kept private while it was built, then published at Jae's word on
@@ -563,7 +569,11 @@ but not raise it, and cannot set `in_process`. Lands with the worker (phase
 - The attribution designation for this subsystem (placeholder: https://klash.pro,
   "built on klash"), and NewTendermint's for the GnoVM notice (assumed
   https://gno.land, "built on gno.land").
-- The binary-level licence conflict (§14), and which way out to take.
+- The binary-level licence conflict (§14), and which way out to take: (a) one
+  binary, with NewTendermint's linking exception (or waiting for FSL→MIT); or
+  (b) a separate `klash-gnovm-worker` binary, which needs nobody's consent but
+  the Licensor's and also ends the self-re-exec hazard that §3's spawn rules
+  guard against.
 - (Answered: the work went public on 29 October 2026.)
 
 ---
@@ -633,8 +643,9 @@ conclusions: `x := 1` does persist; gno's `Eval` wrapper had shadowed `x`.
 | G9 | The library upgrade path cannot be carried out | design | accepted: `state.json` after every operation; upgrade, repair and compaction rebase from it in phase 3 (§12) |
 | G10 | A project config can raise the budget or set `in_process`; float decoding; three switches | yes: config/load.go:989-1007 | accepted (§13) |
 
-Not adopted: a separate worker binary (it buys no licence separation while
-x402 links the GnoVM into klash anyway, §14); a cross-process memory ledger
+Not adopted: a separate worker binary (on the premise that x402 already linked
+the GnoVM into klash, which round 4 found false: it is an open choice again,
+§18); a cross-process memory ledger
 (phase 6, as in round 1).
 
 ## Appendix C. Review round 3: findings and dispositions
@@ -681,3 +692,30 @@ it is named.
 
 Not adopted: nothing in round 3. Deferred as before: the LLM judge on close,
 re-arming `/goal`, a cross-process ledger and a worker pool (phase 6).
+
+## Appendix D. Review round 4: findings and dispositions
+
+Two fresh reviewers read revision 4 and the phase-1 code; the systems
+reviewer backed each finding with a failing probe test, and the probes are now
+regression tests (`round4_test.go`).
+
+| # | Finding | Disposition |
+|---|---|---|
+| S1 | **Blocker**: VM names reach paths (`./goals`, `../../<project>/vms/x`) | fixed: names checked in `lookup`, every entry point (`TestRound4NamesAreNotPaths`, `TestRound4VMNameTraversal`) |
+| S2 | `chain.Emit` holds Go heap outside the cap | fixed: `chain.emit` is a no-op native; growth now bounded by Go's GC pacing (+85 MB at 1e10 gas, was 1.33 GB) |
+| S3 | Closures in statements keep syntax trees, uncharged | fixed: function literals count as declaration bytes, for the charge and the caps |
+| S4 | The replay limit is bypassed by a trailing expression | fixed: limits apply to anything the call keeps |
+| S5 | A builtin shadowed in the same input | fixed: purity rechecked after the run |
+| S6 | Persistence read from machine.json, not location | fixed: location decides; machine.json written before the move |
+| S7 | A second, stale repair cuts new entries | fixed: repair syncs first; the break point is tied to its generation |
+| S8 | Mixed `:=` still reaches gno's panic | fixed: refused with how to write it |
+| S9 | Budget not enforced as VMs grow | fixed: LRU eviction after each kept call |
+| S10 | A replay wall timeout marks the VM broken | fixed: treated as "call again" |
+| S11 | Wait bound understated | stated; one deadline per call is a follow-up |
+| S12 | A full journal refuses pure reads | fixed |
+| S13 | Small items (imports count, temp dirs, .bak fsync, empty-cgroup budget, lookup order) | fixed; tiny declarations measured at ~420× (charge 400×) noted |
+| G1 | The licence record's central fact is false: klash did not link the GnoVM before | fixed in LICENSE.md and §14; the choice is put to Jae (§18); nightly gated; notice in `--version` and on the landing screen |
+| G2 | Goals export in Gno costs seconds per op; the store can wedge at its caps | accepted for phase 3: snapshots produced in Go by walking the VM's values; bounded state; fixed goals-VM options; `/goals compact` |
+| G3 | Test (B) can pass without the goal being met | accepted: pass needs the script's check met in ≥2 of 3 runs, one a fresh-session resume, and an improvement over the control |
+| G4–G16 | Keying by worktree root; G10 hash rule; `/goal` record rules; snapshot-failure variant; block size; channel notices; `.env` moving the root; call sites; `/goal` refusal; tool alias; headers; attribution coverage; stale status | the alias, headers and status fixed now; the rest carried into phase 3–4 work |
+
