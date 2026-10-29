@@ -49,8 +49,10 @@ type vm struct {
 	out   capWriter
 
 	capBytes int64
-	// seq is the last journal entry applied.
-	seq int64
+	// seq is the last journal entry applied, and offset where its line
+	// ends in the journal (0 before any).
+	seq    int64
+	offset int64
 	// imports maps each import name in the package to its path.
 	imports map[string]string
 	// methods holds "T.M" for every method declared, which the package

@@ -252,15 +252,28 @@ type tailEntry struct {
 // readFrom reads the entries after the end this process last saw: another
 // process's appends, to catch up with. A torn tail is reported as torn.
 func (j *journal) readFrom() (tail []tailEntry, torn bool, err error) {
-	data, err := os.ReadFile(j.path)
+	return readEntries(j.path, j.size, j.seq)
+}
+
+// readEntries reads a journal's entries after byte offset off, where the
+// entry before them has sequence number seq; off 0 means from the start,
+// past the header. Replay reads from where its VM stopped, so a replay in
+// slices does not read the whole journal for each slice.
+func readEntries(path string, off, seq int64) (tail []tailEntry, torn bool, err error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, false, err
 	}
-	if int64(len(data)) < j.size {
+	if off == 0 {
+		nl := bytes.IndexByte(data, '\n')
+		if nl < 0 {
+			return nil, false, fmt.Errorf("%w: no header", errBrokenJournal)
+		}
+		off = int64(nl) + 1
+	}
+	if int64(len(data)) < off {
 		return nil, false, fmt.Errorf("%w: shrank", errBrokenJournal)
 	}
-	off := j.size
-	seq := j.seq
 	for off < int64(len(data)) {
 		nl := bytes.IndexByte(data[off:], '\n')
 		if nl < 0 {

@@ -1,11 +1,13 @@
-# GnoVM machines in klash — design and plan (v3)
+# GnoVM machines in klash — design and plan (v4)
 
-Status: revision 3 (2026-10-29), after review rounds 1 and 2. Licensed with the
-rest of `internal/gnovm/` under the GNO Network GPL v6 (or later as accepted by
-the Licensor's proxy) with the Additional Terms in [LICENSE.md](LICENSE.md).
-Appendix A and Appendix B record every review finding and what was done with
-it. In prose, "VM" means a Gno virtual machine; "machine" already means an ssh
-host in klash.
+Status: revision 4 (2026-10-29), after review rounds 1–3. Phase 1 (the core
+host) is implemented and tested in this directory, and the code follows this
+text. The work is private: Jae asked that nothing be pushed or landed yet.
+Licensed with the rest of `internal/gnovm/` under the GNO Network GPL v6 (or a
+later version the Licensor accepts as proxy), with the Additional Terms in
+[LICENSE.md](LICENSE.md). Appendices A–C record every review finding and what
+was done with it. In prose, "VM" means a Gno virtual machine; "machine"
+already means an ssh host in klash.
 
 ## 1. What Jae asked for
 
@@ -19,327 +21,389 @@ convergence, and tested on long goals. The code is published under the GNO
 Network GPL with a standing temporary strong attribution clause in Jae's
 favour (§14).
 
-## 2. Evidence (devbox spikes, gno pinned at 5cdbc25fcde0)
+## 2. Evidence (devbox, gno pinned at 5cdbc25fcde0)
 
 | Measurement | Result |
 |---|---|
 | Empty VM | 43 KB, 0.1–2.3 ms |
-| Gas vs wall | 0.35–1.3 ns/gas across workloads — "1 gas ≈ 1 ns" within ~3× for *metered* work |
+| Gas vs wall | 0.35–1.3 ns/gas for executed code; **15–41 ns/gas for 120–250 KB declaration inputs** (preprocessing is mostly unmetered) |
 | 1 MB cap, 20 MB garbage / 8 MB live | GC collects / `allocation limit exceeded` |
 | Per-call gas limit; 200 ms deadline | both stop a `for {}` exactly |
-| One store per VM, import strings+strconv+time | **~88 MB, ~1 s per VM** |
-| Shared base + transaction overlay per VM | **345 KB, 8 ms per VM** (lazy decoding grows it with use) |
-| All 50 stdlibs into a base | 1.8 s, +149 MB; `regexp` on demand 1.2 s then 1.4 ms per VM |
-| 800 VMs created and dropped | heap flat (no leak) |
-| Replay into a fresh VM | identical on the probes tried; 2,001 entries in 59 ms |
-| `noEvictStore`, 10,000 calls at 2 MB cap (315 GCs) | heap flat; `io.EOF` identity held |
-| `x := 1` then evaluate `x` | persists; **gno's `Eval` wraps in `func(x interface{})` and shadows a user `x`**, so klash uses its own parameterless wrapper |
-| One input: `main` before `helper`; mutual recursion; method before type; `const (iota)` | all work when declarations run as a file through `RunFiles` |
-| Redeclaring a `func` (both `RunDeclaration` and `RunFiles`) | **silently keeps the first body** — klash refuses redeclaration itself |
-| `fmt` shim (gno `ufmt` v0 renamed) | `Println`, `Errorf` work; `%v` of a slice prints `%!v(unhandled)`; floats print `%f` style |
+| One store per VM vs shared base + overlay | ~88 MB, ~1 s per VM vs **345 KB, 8 ms** |
+| All 50 stdlibs into a base | 1.8 s, +149 MB; decoded copies per VM ≤ 0.2 MB per package |
+| 800 VMs created and dropped; `noEvictStore` at 315 GCs | heap flat |
+| `x := 1` then `x` | persists; gno's `Eval` wrapper shadows `x`, so klash wraps itself |
+| Declarations in one file: `main` first, mutual recursion, method before type, `const (iota)` | all work through `RunFiles` |
+| An import inside a file | **visible only in that file**: imports are bound package-wide instead (§6) |
+| A file's `var y = x + 1` after a top-level `x := 1` | **gno panics** (`*AssignStmt is not Decl`); a `var` from `RunDeclaration` is refused too ("unsatisfied deps"); a `var` in a file works, so `x := …` of new names becomes `var x = …` (§6) |
+| Redeclaring a `func` across files | silently keeps the first body; klash refuses redeclaration itself |
+| Heap kept per declaration | **291–375× its source** (measured 291× in klash's test); statements keep nothing; ~1 KB of the VM's cap per declaration input |
+| Replay cost | statements linear (50,000 in 0.72 s); **declarations quadratic** (0.13 ms per file at 300 files, 17 ms at 20,000; 20,000 inputs 151 s): bounded by limits (§7) |
+| GC stack | 0.5–1.1 B per byte of cap (64 MB chain: +64 MB stack, 195 MB RSS) |
 | A panicking statement | VM unusable (`m.Exception` set, stacks half-run) |
 
 ## 3. Architecture
 
 ```
-klash process ── refcounted process-wide vmhost client (lazy spawn) ──┐
-   │                         fds 3/4 via ExtraFiles: length-prefixed JSON
-   ▼                                                                   ▼
-gnovm worker = klash binary run as `klash gnovm-worker` (child)        heartbeats
-   └── gnovm.Host   one VM operation at a time; a reader goroutine handles cancel
+klash process ── refcounted process-wide client (lazy spawn) ─────────┐
+   │   holds .clients/<client>.lock for its life                      │ fds 3/4 (ExtraFiles):
+   ▼                                                                  │ length-prefixed JSON
+gnovm worker = the klash binary as `klash gnovm-worker` (child) ◄──────┘ + heartbeats
+   └── gnovm.Host   one VM operation at a time; a reader goroutine takes cancels
        ├── base            shared gno store; stdlibs + klashlibs loaded on demand
-       ├── vms[project][name]   on-disk journal (+ resident VM when admitted)
+       ├── vms             journal on disk (+ resident VM when admitted)
        ├── budget          host probe, accounting, LRU eviction
-       └── per-VM file locks   cross-process journal safety
-klash reads goals summary.json directly for injection (never the worker or a lock)
+       └── per-VM locks    cross-process safety for persistent VMs
+klash reads the goals snapshots directly for injection, checking them against the journal (§12)
 ```
 
-- **Why a worker**: it isolates what the VM can do to a process — a Go *fatal*
-  (deep GC recursion, a gno bug), heap the allocator does not count (AST,
-  types, decoded imports), and the OOM killer's choice of victim (the AI box
-  lost llama-server twice in October). The worker sets `oom_score_adj=1000`,
-  `debug.SetMemoryLimit`, and an RSS watchdog. All journals are on disk (§7),
-  so a restarted worker loses nothing; it replays on demand. IPC adds ~0.1 ms
-  per call. The worker is the *same binary*, so this is fault isolation, not
-  licence separation (§14).
+- **Why a worker**: it isolates what the VM can do to a process — a Go
+  *fatal* (deep GC recursion, a gno bug), heap the allocator does not count,
+  and the OOM killer's choice of victim (the AI box lost llama-server twice in
+  October). The worker sets `oom_score_adj=1000`, `debug.SetMemoryLimit` and an
+  RSS watchdog. Every journal is on disk (§7), so a restarted worker loses
+  nothing. IPC adds ~0.1 ms per call. The worker is the *same binary*, so this
+  is fault isolation, not licence separation (§14).
 - **Spawn safety** (the October fork bomb came from a test re-exec'ing its own
-  binary, and the self-improvement loop runs these tests on the box):
-  - the spawner refuses when `testing.Testing()` (precedent:
-    `config/load.go:1200`, `tools/rg.go:17`) unless it is handed an explicit
-    non-test binary — an env-var guard would not survive `testenv`, which
-    unsets every `KLASH_*`;
+  binary; the self-improvement loop runs these tests on the box):
+  - the spawner refuses under `testing.Testing()` (precedents:
+    `config/load.go:1200`, `db/connect.go:38`) unless handed an explicit binary,
+    and refuses that binary too if it is `os.Executable()` itself (same inode);
   - `gnovm-worker` is dispatched first in `main()`, before cobra/fang; it exits
-    at once unless it receives a handshake (magic + versions) on fd 3 within
-    2 s, so neither a stray invocation nor a test binary given that argument
-    does anything;
-  - App-level tests run the `Host` in-process (`in_process`), and a test
-    asserts that `go test` cannot spawn a worker.
+    at once unless a handshake (magic + versions) arrives on fd 3 within 2 s;
+  - App-level tests use `in_process`, and a test asserts that `go test` cannot
+    spawn a worker.
 - **Worker hygiene**: exec `/proc/self/exe` on Linux (survives a deploy that
   replaced the binary); the handshake compares protocol, klash, gno and stdlib
-  versions; `Setpgid`, SIGINT/SIGHUP ignored (Ctrl-C in `klash run` must not
-  kill it mid-append); exits on EOF of fd 3; reaped with `cmd.Wait`;
-  `KLASH_PROFILE` dropped from its environment.
-- **Liveness**: a reader goroutine acknowledges a cancel at once and the meter
-  stops the run within ~1 ms of gas; during unmetered phases (base loads, fsync)
-  the worker sends heartbeats every 500 ms; the client kills it only after 10 s
-  without any frame. Requests queue FIFO; a cancelled queued request is
-  dropped. A request whose outcome is unknown after a kill (e.g. killed during
-  fsync) is resolved after restart by asking whether its request id is in the
-  journal; the tool says "kept" or "not kept" accordingly.
+  versions; `Setpgid`, SIGINT/SIGHUP ignored; exits on EOF of fd 3; reaped with
+  `cmd.Wait`; `KLASH_PROFILE` dropped; **`cmd.Dir` is the gnovm data directory**
+  (`godotenv/autoload` in `main.go` loads `.env` from the working directory
+  before main dispatches, and the project's `.env` is agent-writable);
+  **stdout to `/dev/null`, stderr to a bounded log** (`worker.log`, 1 MB,
+  one old copy), so a Go fatal's dump never lands on the TUI. Windows has no
+  `ExtraFiles`: there the Host runs in-process.
+- **Liveness**: a reader goroutine acknowledges a cancel at once, and the meter
+  stops the run within ~1 ms of gas. **A ticker sends a heartbeat with a
+  progress counter every 500 ms for the whole life of every request**, metered
+  or not. The client kills the worker only after 10 s without any frame, or 30
+  s past a request's deadline. A request whose outcome is unknown after a kill
+  is resolved after restart by its request id (`Host.Kept`): "kept" or "not
+  kept".
 - **One operation at a time** keeps the GnoVM single-threaded (its stores and
   shared stdlib nodes are not safe for concurrent use). One agent's tool calls
-  are already sequential, so only *different sessions* in one klash (server
-  mode, channels) wait on each other; the default wall limit is 5 s, a queued
-  call's own budget starts when it runs, and its result says how long it
-  waited. A pool of workers is phase 6.
+  are sequential, so only *different sessions* in one klash (server mode,
+  channels) wait on each other. The wait is bounded by the running call's wall
+  limit (default 5 s; up to 10 min only when a session asks for high gas) plus
+  one replay slice (§7). In server mode, per-request wall is clamped to 60 s
+  until the phase-6 worker pool. A queued call's own budget starts when it
+  runs, and its result says how long it waited.
 - **Lifecycle**: the client is refcounted per process (server mode has one App
   per workspace); each App acquires it lazily on first VM use and releases it in
   `Shutdown` right after `Messages.FlushAll`, cancelling only that App's
-  requests and dropping its sessions' scratch VMs. The worker is closed (cancel,
-  3 s, kill) at refcount zero.
+  requests. The worker is closed (cancel, 3 s, kill) at refcount zero; the
+  client then deletes its memory-only VMs and drops its client lock.
 
 ## 4. Shared base store
 
 - In the worker, lazily: `memdb` → `dbadapter` → `gno.NewStore(nil, kv, kv)`,
-  `SetNativeResolver(stdlibs.NativeResolver)`, `SetPackageGetter(loadLibrary)`.
-- `loadLibrary` serves `stdlibs/` (gno's stdlib, synced from go.mod's gno; the
-  VERSION and byte-for-byte reader tests pass) and `klashlibs/`: `fmt` (gno's
-  `ufmt` v0 renamed — description notes its `%v` and float limits) and
-  `klash/goals/v1` (§12).
+  `SetNativeResolver(stdlibs.NativeResolver)`, a package getter serving the
+  embedded `stdlibs/` (synced from go.mod's gno by `go generate`; VERSION and
+  byte-for-byte reader tests) and `klashlibs/`: `fmt` (gno's `ufmt` v0, renamed,
+  with a dated modification notice; its `%v` and float limits are in the tool
+  description) and `klash/goals/v1` (§12).
 - **On demand**: the imports of an input — or of a whole journal before replay —
-  are loaded into the base first with `base.GetPackage(path, true)` (required:
-  the overlay's cache KV caches misses). The heap delta of each base load is
-  measured (single-threaded worker, so it is clean) and charged (§8).
+  are loaded into the base first (`base.ensure`; required: an overlay's cache
+  remembers a miss). The heap delta of each load is measured (single-threaded,
+  so clean) and charged (§8).
+- **Refused imports**, with what to do instead: `os`, `net/http` and kin (no
+  files, network or processes), `sync`, `context` (one goroutine),
+  `encoding/json` (build strings; csv, hex, base64 exist), `slices`, `maps`,
+  `reflect`, `testing`, and `chain/banker`, `chain/params`, `sys/params` (VMs
+  run on no chain, so there are no coins or chain parameters).
 
 ## 5. A VM
 
 - **Name** `^[a-z][a-z0-9_-]{0,31}$`; reserved: `goals`, `scratch-*`.
-- **Options**: `memory_mb` (default 16, clamp 1–64), `gas` per call (default
-  1e9, max 1e11), `ns_per_gas` (default 1, clamp 0.1–100), `persist`,
-  `pinned`, `description`.
+- **Options** (`machine.json`): `memory_mb` (default 16, 1–64; may only grow),
+  `gas` per call (default 1e9, max 1e11), `ns_per_gas` (default 1, 0.1–100),
+  `persist` (may only go false→true), `pinned`, `description`.
 - **Resident form**: overlay `tx := base.BeginTransaction(kv, kv, nil, meter)`
   over `cache.New(baseKV)`, `tx.SetPackageGetter(nil)`; the machine sees
-  `noEvictStore{tx}` (no-op `GarbageCollectObjectCache`); package `repl`
-  registered before `NewMachineWithOptions{Store, Alloc: NewAllocator(cap),
-  GasMeter: meter, Context, BoundedPanicRender: true}`. Never `m.Release()` a
-  kept VM.
-- **Every operation that touches the VM** (parse, pre-scan, run, render, each
-  replayed entry) runs between `meter.begin`/`meter.end` with a **fresh**
-  preprocess allocator: `pa := NewAllocator(cap); pa.SetGasMeter(meter);
-  tx.SetPreprocessAllocator(pa)`, reset to nil after (it never collects, so it
-  is per entry, not per replay).
+  `noEvictStore{tx}`; package `repl` registered before
+  `NewMachineWithOptions{Store, Alloc: NewAllocator(cap), GasMeter: meter,
+  Context, BoundedPanicRender: true}`. `repl` is a stdlib-shaped path, so gno
+  skips its own duplicate check for it: klash checks names itself (§6). Never
+  `m.Release()` a kept VM; a changed `memory_mb` rebuilds the VM (an
+  allocator's cap is fixed).
+- **Every entry** (live or replayed) runs between `meter.begin` and
+  `meter.end`, with a **fresh** preprocess allocator capped at the VM's cap and
+  charged to its meter (it never collects).
 - **ExecContext** per entry: ChainID `klash`, Height = seq, Timestamp from the
-  entry's recorded time; `Banker` and `Params` are stubs that fail with "not
-  available in klash VMs"; `EventLogger` is a fresh `sdk.NewEventLogger()` per
-  entry whose events are dropped (it is a concrete type, not an interface);
-  `SessionAccount` is nil.
-- **Evaluation** uses klash's own wrapper, `func() any { return (<expr>) }()`,
-  never gno's `Eval` wrapper (which shadows `x`); a call expression is evaluated
-  as is.
+  entry's recorded time (so `time.Now` replays identically); Banker and Params
+  nil (their packages cannot be imported); a fresh `sdk.NewEventLogger()`.
+- **Evaluation** uses klash's own wrapper, `func() any { return (<expr>) }()`; a
+  call expression is evaluated as is.
 
 ## 6. Running code (`gnovm_run`)
 
-1. **Normalise** (meter armed; input ≤ 256 KB): drop a leading `package`
-   clause; split at depth 0 with `go/scanner` into declaration groups (`import`,
-   `func`, `type`, `var`/`const` — `var(...)`/`const(...)` kept whole for
-   `iota`; `func (` is a method declaration only when followed by a receiver and
-   a name, otherwise a statement) and statement runs; a lone trailing expression
-   is an evaluation.
-2. **Pre-scan** every import into the base.
-   (Step 4's `main` renaming renames every identifier `main` in the input, so
-   a call to `main()` in the same input still works.)
-3. **Parse everything first** (declaration groups with `ParseFile`, statements
-   with `ParseStmts`); a parse error reports and nothing has run (no rebuild).
-4. **Refuse redeclaration**: each group's names (`GetDeclNames`) against the
-   package's existing names — "`helper` is already declared in this VM; assign
-   to a variable with `=`, or use a new name; to start over, use a fresh VM".
-   If the input declares `func main()`, it is renamed `main_<seq>` and called
-   after the declarations, so several programs can run in one VM.
-5. **Run in order**: each declaration group as a new file through `RunFiles`
-   (forward references and mutual recursion work); statements through
-   `RunStatement`; the evaluation last.
-6. **Journal the normalised operations**, not the raw text:
-   `{"ops":[{"file":…},{"stmts":…},{"call":"main_7"},{"eval":…}]}` — replay
-   re-executes these, independent of later changes to normalisation.
-   Declarations and statements are always journaled; an evaluation only if it
-   contains a non-builtin call (a conversion to a user type counts) or a
-   function literal.
-7. **Render**: `gno.BoundedSprintTV(tv, nil, 16 KB)` — structure only, no user
-   methods; `print` output to a writer that keeps 64 KB and returns
-   `len(p), nil`. (Panic messages still call a user `Error()`; metered, capped,
-   and the VM is discarded, so harmless.)
-8. **Success** = the meter is not tripped (trips are sticky), then append
-   (§7), then report. **Failure** (anything after parsing): nothing journaled,
-   VM discarded and rebuilt on next use.
-9. **Errors** start `ERROR — nothing from this call was kept:` and end with the
-   next step: parse/preprocess first line; `panic: <bounded>` + bounded gno
-   stack; "out of gas after N (≈T at X ns/gas) — raise gas"; "memory cap
-   exceeded (M MB) — raise memory_mb (max 64) or keep less"; wall/cancel
-   reason; for unavailable packages (`os`, `sync`, `encoding/json`, `slices`)
-   what gno offers instead.
+1. **Choose the VM.** With no `name`: code with a `package` clause runs as a
+   **program**, in a fresh VM thrown away after (as `go run` would: a program
+   is a whole, and running it again after a fix must not meet its own earlier
+   declarations); other code runs in the session's scratch VM. `reset: true`
+   starts a memory-only VM over (refused for a persistent one).
+2. **Check syntax** (pure, before any rebuild): input ≤ 256 KB; tokenise with
+   `go/scanner`.
+3. **Bring the VM up to date** (§7: lock, sync, admission, replay in slices).
+4. **Normalise** at depth 0, with the VM's names in hand:
+   - a leading `package` clause is dropped (positions kept);
+   - imports are collected and become **import ops bound package-wide** with
+     `RunDeclaration` (gno scopes a file's import to that file); the name is
+     the alias or the package's own name; an import the VM has is skipped; a
+     name bound to another path is refused; dot imports are refused; `_`
+     imports only load;
+   - consecutive declarations (`func`, `type`, `var`, `const`, and a method
+     only when a name and `(` follow its receiver) become **one file**, so they
+     may refer to each other in any order; consecutive statements become one
+     statement run; separators are kept so line numbers match the input;
+   - a top-level `a, b := …` whose names are all new (to the VM and to the
+     input so far) becomes `var a, b = …`, a declaration (§2); one that reuses
+     a name stays a statement, which gno runs as an assignment;
+   - a `func main` is renamed `main_<seq>` (every identifier `main` not after a
+     `.`) and called after everything else, so one VM can run many programs;
+   - a trailing lone expression becomes an **eval**, whose value is shown.
+5. **Load imports** into the base; **parse everything** with the meter armed
+   (gno charges parsing per token); a parse error means nothing ran.
+6. **Refuse redeclaration** before anything runs: each file's names, methods as
+   `T.M`, imports, and names a `:=` declares earlier in the input, against the
+   package's names and each other — "`helper` is already declared in this VM;
+   assign with `=`, use a new name, or pass reset: true".
+7. **Check limits** before running (§7).
+8. **Run in order**: import ops with `RunDeclaration`, files with `RunFiles`
+   (named `in<seq>_<k>.gno`: unique, and the same on replay), statements with
+   `RunStatement`, the eval last.
+9. **Journal the ops**, not the text: `{"import":{"name","path"}}`,
+   `{"file":…,"line":n}`, `{"stmts":…,"line":n}`, `{"call":"main_7"}`,
+   `{"eval":…}`. An eval is left out only if it is **pure** — it calls nothing
+   but `len`, `cap`, `min`, `max`, `real`, `imag`, `complex`, `new`, `make` and
+   conversions to builtin types, receives from no channel, holds no function
+   literal — and the VM redeclares none of those names (`delete`, `append`,
+   `copy`, `clear` and `close` change state).
+10. **Render** by structure only, never running user methods: strings quoted,
+    one pointer followed (`&P{…}`), a struct's type named, `BoundedSprintTV`
+    otherwise (16 KB); printed output keeps 64 KB.
+11. **Outcome**: success = no meter trip (trips are sticky), then append (§7).
+    A failure after code ran journals nothing and the VM is rebuilt on next
+    use, except that an input that is only an expression and fails to compile
+    ran nothing (gno preprocesses an expression before pushing anything), so
+    a typo costs no rebuild.
+12. **Errors** say that nothing from the call was kept and name the next step,
+    with the exact call where there is one ("memory cap exceeded (16 MB): raise
+    it with `gnovm_new{name: "scratch-1a2b3c4d", memory_mb: 32}`"); `panic:` +
+    the bounded gno stack; out of gas after N (≈T at X ns/gas, with the
+    measured wall time); wall or cancel; refused packages with what to use.
 
 ## 7. Persistence and durability
 
-- **Every VM's journal is on disk**, in the global data dir (a cloned repo
-  cannot ship VMs or goals, and the agent-writable project `.klash` stays out):
-  `<XDG data>/klash/gnovm/<project-key>/` with `vms/<name>/`
-  (`machine.json`, `journal.jsonl`, and for `goals` `summary.json`,
-  `state.json`), `locks/<name>.lock` (outside the VM directory),
-  `.ephemeral/<klash pid>-<start time>/` for non-persistent VMs (keyed by the
-  klash process, not the worker, so they survive a worker restart; deleted at
-  klash exit; directories whose process is gone are swept at start), `.trash/`.
+- **Layout**, all under `<XDG data>/klash/gnovm/` (a cloned repo cannot ship
+  VMs or goals; the agent-writable project `.klash` stays out):
+  - `.clients/<client>.lock`: held by each klash process for its life; client
+    = `<pid>-<8 random hex>`;
+  - `<project-key>/vms/<name>/`: a persistent VM's `machine.json`,
+    `journal.jsonl` (and for `goals`, `summary.json` and `state.json`);
+  - `<project-key>/.ephemeral/<client>/<name>/`: a memory-only VM's files,
+    keyed by the klash process so they survive a worker restart; deleted when
+    the client closes, or swept by any host whose client lock is found free or
+    missing;
+  - `<project-key>/locks/<name>.lock`: persistent VMs only, outside the VM's
+    directory and never unlinked, so a path always names the same inode (the
+    lock API gives no descriptor, so no inode check is needed or possible);
+    the holder writes its pid into it, for "busy — in use by klash process N";
+  - `<project-key>/.trash/`: deleted persistent VMs.
   The project key is the sanitised path plus 8 hex of its hash.
-- **Generation**: `machine.json` and the journal's header line carry a
-  generation id (new on create, repair, compaction). A resident VM remembers
-  `(generation, seq, offset, hash of the last line)`.
-- **Run on a VM** (persistent or not):
-  1. `lock.TryFile(locks/<name>.lock)`; if held, answer "busy — VM held by pid
-     N" with backoff up to the call's wall budget (no blocking inside the
-     worker);
-  2. check `fstat(lock fd)` equals `stat(path)`, then the generation and
-     last-line hash; any mismatch drops the resident VM and rebuilds;
-  3. truncate a torn tail left by a crashed process;
-  4. catch up: replay entries past the resident seq (written by another klash),
-     with replay limits;
-  5. run; if the run raised the VM's largest cap, persist it to `machine.json`
-     first;
-  6. append: note the size, write one line (with the request id and the run's
-     `wall_ns`), `fdatasync`; on a write error truncate back and fsync; on an
-     fsync error reopen and mark broken;
-  7. unlock.
-- **Atomic files**: `machine.json`, `summary.json`, `state.json` via temp,
-  fsync, rename, fsync of the directory; new directories fsync their parent.
-- **Load** holds the VM lock across reading and replay: `json.Decoder` (lines
-  can exceed 64 KB), seq continuity, the header's generation; a torn last line
-  is truncated with a warning; any other bad line marks the VM **broken**.
-- **Replay**: pre-scan all imports; largest cap ever used; fresh preprocess
-  allocator per entry; no per-call gas limit (semantics unchanged); budget =
-  Σ recorded `wall_ns` × 3 + 2 s. Over budget → "busy, retry" and the partial
-  VM stays resident, so a retry resumes. Never compare replay gas with recorded
-  gas.
-- **Replaying marker** `{pid, boot id, start}` is written before replay and
-  removed after, and on cancel and busy. A stale marker marks the VM broken only
-  if its pid died unexplained — the client records the kills it made.
+- **Creation** builds the VM in a temporary directory and renames it into
+  place: no half VM after a crash, and two processes making the same
+  persistent VM cannot both succeed.
+- **Journal**: a header line (format, generation, created, gno version), then
+  one line per kept call (seq, request id, time, `wall_ns`, gas, ops). The
+  generation is new on create, repair and compaction.
+- **A call on a VM**:
+  1. lock: `TryFile` with 50 ms backoff, up to the call's wall budget, never
+     blocking the worker;
+  2. sync: re-read `machine.json` (deleted → refused; cap or creation time
+     changed → rebuild); check the journal's generation and last line against
+     what this host saw (rewritten → rebuild; appended → catch up); cut a torn
+     tail left by a crashed writer;
+  3. resident: admit (§8) and replay in slices (below);
+  4. normalise, limits, run (§6);
+  5. append: write at the known end, `fsync`; on a write error truncate back;
+     on a sync error mark the VM broken (nothing is known about the disk);
+  6. unlock.
+- **Replay**: per entry, a fresh preprocess allocator, no gas limit (meaning
+  must not change), and a safety deadline of 10× its recorded wall time + 5 s.
+  **Slices**: at least one entry per call, then stop between entries once the
+  elapsed time plus 3× the next entry's recorded time passes the caller's
+  budget; the partial VM stays resident and the call answers "VM x is being
+  rebuilt (N of M entries); call again", so every call makes progress. A replay
+  that fails other than by cancellation marks the VM broken at that seq. A
+  different gno version than the journal's is noted.
+- **Limits** that bound replay cost and memory, checked **before** a call runs:
+  ≤ 256 KB per journaled entry (encoded); declarations ≤ 32 KB per call,
+  ≤ 256 KB and ≤ 2,000 declaration inputs per VM; once a VM's kept calls have
+  run 120 s in all, it keeps nothing more (it still answers pure expressions).
+  After a call: one that ran over 30 s is shown but not kept (the VM is
+  rebuilt). Journal ≤ 8 MB; 64 named VMs per project (scratch VMs exempt).
+- **No replaying marker.** A worker death during a replay says nothing about
+  the journal: the OOM killer picks the worker first by design. A journal that
+  kills every replay shows itself by that; repeated worker deaths on one VM are
+  reported to the model and in `gnovm_list`, never turned into "broken".
 - **Broken VMs** are listed with the error; runs are refused until `/goals
-  repair` (or `gnovm_drop delete`). Repair cuts to the last good entry, keeps a
-  `.bak`, and starts a new generation.
-- **Delete** renames `vms/<name>` into `.trash/<name>-<ts>`; the lock stays in
-  `locks/`.
-- **Limits**: 64 named VMs per project (scratch VMs exempt: evicted LRU like
-  any VM, and their journals deleted after 24 h idle or at klash exit); 8 MB
-  journal (refuse with "compact or delete"; `goals` compacts itself, §12);
-  256 KB per entry.
+  repair <vm>` (cut to the last good entry, keep `.bak`, new generation) or
+  `gnovm_drop delete`.
+- **Outcome by request id**: `Host.Kept(project, name, req)`.
 
 ## 8. Memory: probe, budget, eviction
 
-- **Probe**: Linux `MemAvailable` bounded by the tightest cgroup v2
-  `memory.max − memory.current` (and `memory.high`) up to the root; macOS free
-  + speculative + file-backed pages; failure → a fixed 256 MB budget.
-- **Budget**: `options.gnovm.memory_budget_mb` (global config only, §13) or
-  `min(1 GB, 10% of available)`, never above half of current availability.
-- **Accounting** (charged while resident):
-  - base: the measured heap delta of each base load (§4);
-  - each resident VM: cap + 64 × declaration-source bytes (retained AST) +
-    0.3 MB per imported package (decoded copies) + 1 MB;
-  - ephemeral journals: their size;
-  - one transient reserve of 3 × the largest admitted cap (GC's recursion uses
-    about 1.3 B of Go stack per byte of cap — ~128–192 MB at 64 MB, an 11×
-    margin under Go's 1 GB stack limit — plus transient copies).
+- **Probe**: Linux `MemAvailable` bounded by the tightest cgroup v2 headroom up
+  to the root, where a level's limit is the lower of `memory.max` and
+  `memory.high`, and its usage is `memory.current` less `inactive_file` from
+  `memory.stat` (reclaimable cache; counting it would leave a busy lane no
+  room). macOS: free + speculative + file-backed pages. Failure: 256 MB.
+- **Budget**: `memory_budget_mb` (global config only, §13), or min(1 GB, 10% of
+  what the host could give), never above half of that; "could give" adds what
+  the VMs already use to what is available, so the budget does not shrink as
+  they grow.
+- **Accounting**: the base, by its measured heap; each resident VM, cap +
+  **400×** its declaration bytes (291× measured; a test holds the factor to
+  the measure) + 0.3 MB per imported package + 1 MB; plus a reserve of 3× the
+  largest resident cap for the GC's stack and copies.
 - **Admission** before a VM becomes resident: evict LRU unpinned resident VMs,
-  never the one being admitted; else refuse with the numbers and the pinned VMs.
-- **Worker self-protection**: `debug.SetMemoryLimit(budget + base)`, RSS
-  watchdog exiting above 2 × (budget + base), `oom_score_adj=1000`.
-  Recommended on the box (ops): lanes under `systemd-run --scope -p
+  never the one admitted; otherwise refuse with the numbers and the pinned VMs.
+- **Worker self-protection**: `debug.SetMemoryLimit(budget + base)`, an RSS
+  watchdog that exits above 2 × (budget + base) and records why,
+  `oom_score_adj=1000`. Ops on the box: lanes under `systemd-run --scope -p
   MemoryMax=…`.
 
 ## 9. Gas
 
-- `callMeter` (meter.go, to be updated): tm2's basicGasMeter rules; refunds
-  never below the call's start; per-call limit; polls the wall deadline and the
-  context every 1M gas; **trips are sticky** (`tryEvalStatic` and
-  `boundedUserSprint` swallow panics; a user `recover()` cannot, since only
-  `*Exception` is recoverable).
-- Gas counts CPU ops, allocation (calibrated to Go's malloc), object loads and
-  stores (the overlay's meter), and preprocessing (the preprocess allocator).
-  GC charges after its walk; parsing is charged; base loads and fsync are not
-  (they heartbeat instead).
-- `ns_per_gas` sets the estimate and the wall limit `clamp(3 × gas ×
-  ns_per_gas, 5 s, 10 min)`; results show gas used/limit/estimate; wall and
-  host ns/gas go to metadata.
+- `callMeter`: tm2's basicGasMeter rules (negative amounts panic; refunds are
+  capped at what this call used, so `used()` never goes negative); per-call
+  limit; polls the wall deadline and the context every 1M gas; **trips are
+  sticky** until the next call (gno swallows some panics itself:
+  `tryEvalStatic`, `boundedUserSprint`).
+- Gas counts CPU ops (gno's table: 1 gas ≈ 1 ns on its reference machine),
+  allocation, object loads and stores, parsing (per token) and preprocessing's
+  allocations; preprocessing work itself is largely unmetered, which is why big
+  declaration inputs run at 15–41 ns/gas. Results show the measured wall time
+  beside gas, and declaration inputs are capped (§7).
+- `ns_per_gas` sets the estimate and the wall limit clamp(3 × gas ×
+  ns_per_gas, 5 s, 10 min).
 
 ## 10. Tools
 
 | Tool | Parameters | Notes |
 |---|---|---|
-| `gnovm_run` | `code`, `name?`, `gas?` | no `name`: the session's `scratch-<first 8 hex of SHA-256(session id)>`, created on demand (its first result says "new scratch VM, memory only: it ends with this klash process"); refuses `goals` ("use the goals tool") |
-| `gnovm_new` | `name`, `memory_mb?`, `gas?`, `ns_per_gas?`, `persist?`, `pinned?`, `description?` | idempotent: given options must equal, omitted ones match; `persist` may go false→true |
-| `gnovm_list` | — | host memory, budget/use, base, every VM (state, cap/use, lifetime gas, entries, persisted, last use), attribution notices |
+| `gnovm_run` | `code`, `name?`, `gas?`, `reset?` | no `name`: a program VM for code with a package clause, else the session's `scratch-<8 hex of SHA-256(session)>`, created on demand ("new scratch VM: memory only; name a VM with gnovm_new to keep state"); refuses `goals` |
+| `gnovm_new` | `name`, `memory_mb?`, `gas?`, `ns_per_gas?`, `persist?`, `pinned?`, `description?` | creates, or updates the given options: `memory_mb` only up, `persist` only false→true; the calling session may name its own scratch VM (or `scratch`) |
+| `gnovm_list` | — | host memory and source, budget and use, base, every VM (resident, cap and use, charge, lifetime gas, entries, journal size, persist, pinned, last use, broken), the importable packages, the attribution notices |
 | `gnovm_drop` | `name`, `action: evict\|delete` | delete asks permission before any lock; refused for `goals` |
-| `goals_list` | — | read-only; also the plan agent's |
-| `goals` | `action: add\|fact\|note\|check\|close`, then per action: add `id,title,success,check?`; fact `id,key,value`; note `id,text`; check `id`; close `id,status: met\|dropped` | errors name the missing field; one description line on goals vs todos vs `/goal` |
+| `goals_list` | — | read-only; the plan agent's too |
+| `goals` | `action: add\|fact\|note\|check\|close\|adopt`, then per action: add `id,title,success,check?`; fact `id,key,value`; note `id,text`; check `id`; close `id,status: met\|dropped`; adopt `id` | errors name the missing field; one description line on goals vs todos vs `/goal` |
 
-## 11. Tool results and registration
+## 11. Tool results, registration and where the code lives
 
-- Numbers decode as JSON numbers (a model's `1e9` works); results: value or
-  output first, then `ok · 1.2M gas (≈1.2 ms) · mem 0.3/16 MB · journaled`;
-  capped at 30,000 characters with the rest in a file; descriptions ≈1.2 KB in
-  total (purpose, mixed input, `fmt` works with its limits, no os/sync/json/
-  goroutines, a failed call keeps nothing, gas ≈ ns).
-- Built with `fantasy.NewAgentTool` (calls run one at a time, in order).
-  Registered in `tooldefs.names` and the two pinned fixtures; plan agent:
-  `goals_list`, `gnovm_list`; task sub-agent: none. A renderer shows code and
-  result (phase 4).
+- Numbers decode as JSON numbers (a model's `1e9` works). A result is the value
+  or output first, then one line such as `ok · 1.2M gas (≈1.2 ms, ran 1.4 ms) ·
+  mem 0.3/16 MB · kept`; capped at 30,000 characters with the rest in a file;
+  descriptions ≈1.2 KB in all.
+- Built with `fantasy.NewAgentTool` (calls run one at a time, in order);
+  registered in `tooldefs.names` and the two pinned fixtures; the plan agent
+  gets `goals_list` and `gnovm_list`; the task sub-agent gets none.
+- **All of the feature's logic lives under `internal/gnovm/`** (GNGPL):
+  `gnovm` (host), `gnovm/tools` (tools, descriptions, renderer data),
+  `gnovm/goals` (library glue, check language, rendering, snapshots,
+  injection decisions), `gnovm/client` (worker client) and
+  `gnovm.WorkerMain`. The FSL files hold only call sites, listed in §14.
 
 ## 12. Goals
 
 - **Library** `klash/goals/v1` (embedded, versioned, immutable). The `goals`
   VM's journal begins `import goals "klash/goals/v1"; var G = goals.New()`;
-  later entries are calls on `G` generated by the `goals` tool with
-  `strconv.Quote` escaping; each goal records its **owners** (the session that
-  added it). Ownership only decides how the goal is shown (below); any session
-  may update any goal. `App.BranchSession` adds the branch as an owner of the
-  source session's open goals (`G.Branch(child, parent)`, journaled, only when
-  the `goals` VM has such goals), since a branch carries on that conversation.
-- **Checks**: a goal's `check` is an expression in a small language parsed with
-  `go/parser.ParseExpr` and allowed only if it uses `facts["k"]`, string /
-  number / bool literals, comparisons, `&&` `||` `!`, parentheses, `has("k")`,
-  `num(facts["k"])`, `len(facts["k"])`. The `goals` tool evaluates it **in Go**
-  — no model text ever becomes Gno code — and journals the boolean with
-  `G.RecordCheck(id, true|false)`. `Fact` clears the recorded result.
-- **Closing**: `met` requires a check evaluated fresh in the same call, if the
-  goal has one; a goal without a check closes on the model's word. **Every
-  close** (any status) shows a TUI notice; `/goals reopen <id>` undoes it.
-  Facts whose key begins `klash.` are reserved for the harness. (An LLM judge
-  on close is deferred to phase 6: on the box a judge request outside the prompt
-  cache takes the parent's slot and costs minutes — `agent.go:1136-1140`.)
-- **Snapshots**: after every successful `goals` operation the worker writes,
-  under the VM lock, `summary.json` (owner, status, title, success, facts,
-  notes, check and result, updated) and `state.json` (`G.Export()`). Upgrade,
-  repair and compaction start a fresh journal (new generation) with `var G =
-  goals.Import(<state.json>)`; `goals` compacts itself past 4 MB.
-- **Injection** (inert when there are no open goals — the cassettes stay
-  valid; off when `options.gnovm.goals` is false):
-  - a separate `call.goalsBlock`, appended after the hook block as a hidden
-    part in both `createUserMessage` and the live turn (`ToAIMessage` re-renders
-    hidden parts in order);
-  - a per-session "given" mark on the coordinator, beside `sessionStarts`,
-    checked and set atomically at the three `createUserMessage` sites and by
-    compaction; `queueContinuation` clears `goalsBlock`; `/rewind` clears the
-    mark when it cuts the message that carried the block (record its id, as
-    `subdirectoryGiven` does);
-  - given (a) at a session's first prompt in this process, (b) in the
-    restored-context message after any compaction, (c) on the next typed prompt
-    when *this session's* rendered block differs from what it last received
-    (hash refreshed after the session's own goals calls);
-  - rendering by klash from `summary.json`: `<goals as-of="…">`, this session's
-    goals in full (open first, newest first) up to 1.5 KB then "…and N more
-    (goals_list)", other sessions' open goals and unowned ones (deleted
-    sessions) as one count line; `</goals>` in model text escaped; notes and
-    fact values labelled "recorded claims", titles and conditions not
-    (they are the goals).
-  - The goals tool description, plus two lines in `coder.md.tpl` behind a
-    template flag (off in the cassette config), tell the model goals exist.
-- **`/goals`** TUI command: list, `close <id> --force`, `reopen <id>`, `repair`.
+  later entries are calls on `G` with literal arguments, generated by the
+  goals operations in the worker. **Replay of the goals VM accepts only those
+  shapes** (the prelude, `G.<Method>(<literals>)`, and an `Import` of a state
+  literal); anything else marks it broken.
+- **Ownership** decides only how a goal is shown: owners are the sessions that
+  added it, adopted it (`goals adopt`, `/goals adopt`), or wrote to it (a fact,
+  note, check or close adds the writer); `App.BranchSession` adds a branch to
+  its source's open goals. Goals whose owners are all deleted are **unowned**
+  and shown in full everywhere.
+- **Fields and caps**: ids and fact keys `[a-z0-9_.-]{1,64}` (the `klash.`
+  prefix is the harness's); title ≤ 200 B, success ≤ 500 B, check ≤ 512 B, fact
+  value and note ≤ 1 KB; per goal, the latest 64 facts and notes (older dropped
+  with a count); at most 100 open goals; goals closed over 7 days move to
+  `closed.jsonl` (`G.Archive`).
+- **Checks** are expressions in a small language, parsed with
+  `go/parser.ParseExpr` and evaluated **in Go**, so no model text becomes Gno
+  code: `facts["k"]` (a string), `num(facts["k"])` (a number; an error if not
+  one), `has("k")`, `len(facts["k"])`, string, number and bool literals, unary
+  minus, comparisons, `&&`, `||`, `!`, parentheses. **A missing fact is an
+  evaluation error**: `has` is the only way to test absence. A check is
+  type-checked when added, must refer to at least one fact, and is refused if
+  it already passes ("record facts that make it false first"), so a goal
+  cannot be met by its own wording.
+- **One locked operation**: evaluating a check, recording the result
+  (`G.RecordCheck`) and closing (`G.Close`) happen in the worker, in one entry
+  under the goals VM's lock, against the VM's own facts: another session's
+  `Fact` cannot slip between them. `Fact` clears the recorded result; closing as
+  `met` needs a check that passes in that same operation, if the goal has a
+  check.
+- **Snapshots**: after every goals operation the worker writes `summary.json`
+  (what klash renders) and `state.json` (`G.Export()`), both stamped with the
+  journal's generation, seq and last-line hash. Upgrade, repair and compaction
+  rebuild from `state.json` only if its stamp matches the journal's last good
+  entry; otherwise they replay and export afresh. The worker refreshes stale
+  snapshots whenever it loads the VM. Compaction runs when the journal passes
+  4 MB and `state.json` is under 1 MB; a large state is imported in chunks of
+  ≤ 128 KB, under the per-entry cap.
+- **Injection** (inert while no goal has ever been open, so the test cassettes
+  stay valid; off when `options.gnovm.goals` is false):
+  - a separate `call.goalsBlock`, a hidden part after the hook block, in both
+    `createUserMessage` and the live turn (re-rendered identically,
+    `message/content.go:613-629`);
+  - before rendering, klash compares the snapshot's stamp with the journal's
+    header and last line (read without the lock); if they differ it renders
+    "(may be stale: goals_list shows the current state)" and asks the worker to
+    refresh;
+  - given (a) at a session's first prompt in this process, typed or hidden;
+    (b) in the restored-context message after a compaction, which is created
+    even when the block is its only part; (c) on any prompt, typed or hidden
+    (`/loop` and `/goal` send hidden ones), when this session's rendered block,
+    without its `as-of`, differs from what it last received; after the
+    session's own goals call the hash is recomputed from the new snapshot, so a
+    concurrent change by another session still fires; (d) once, a "no open
+    goals" block when the last open goal closes;
+  - never to sub-agent sessions (as `remindOfTodos`); the "given" mark is set
+    only after the message is stored; `queueContinuation` clears the block;
+    `/rewind` clears the mark when it cuts the message that carried it;
+  - rendering: this session's goals in full (open first, newest first), then
+    unowned open goals, then a count line for other sessions' goals ("3 open
+    goals of other sessions: goals_list"), within 1.5 KB; per goal the latest 5
+    facts and 3 notes with counts; goals closed in the last 24 h as one line
+    each; `</goals>` escaped regardless of case and spacing; titles and
+    conditions shown as the goals, labelled by source ("added by the agent in
+    session S" or "added by the user"), and facts and notes labelled "recorded
+    claims".
+- **Notices**: every add and close is announced — a TUI notice; on stderr in
+  `klash run` (as hook warnings are); in a channel's reply — and recent closes
+  are in the injected block, so an unattended lane leaves a trace.
+- **`/goals`**: list, `adopt <id>`, `close <id> --force`, `reopen <id>`,
+  `repair [vm]`. `/goal` refuses a condition whose first word is a `/goals`
+  subcommand ("did you mean /goals …?"). Setting `/goal X` also adds a
+  user-sourced goal (no check), which clearing or meeting the `/goal` closes:
+  the record survives a restart (re-arming `/goal` itself is phase 6).
+- **Protection**: the gnovm data root is a protected path (edit tools always
+  ask); the replay shape check above limits what a hand-edited goals journal
+  can do.
 
 ## 13. Configuration
 
@@ -347,134 +411,159 @@ klash reads goals summary.json directly for injection (never the worker or a loc
 `option ui`): `memory_budget_mb` (0 = auto), `default_memory_mb` (16),
 `default_gas` (1e9), `ns_per_gas` (1), `goals` (true: the goals tools, the
 injection and the template flag together), `in_process` (false). Numbers are
-float64. `memory_budget_mb` and `in_process` are honoured only from the global
-config; a project config may lower the budget, not raise it. The worker starts
-lazily. `schema.json`, `docs/config/README.md` and the klash-config skill are
-updated.
+float64. `memory_budget_mb` and `in_process` are honoured only from the
+global config (`GlobalConfig()`, its rc siblings, `GlobalConfigData()`); a
+project or workspace file (`.klash/klash.json` included) may lower the budget
+but not raise it, and cannot set `in_process`. Lands with the worker (phase
+2); `schema.json`, `docs/config/README.md` and the klash-config skill follow.
 
 ## 14. Licensing and attribution
 
-- `LICENSE.md`: GNGPL v6 as published by NewTendermint, LLC or its successor,
-  or any later version the Licensor, as the proxy under §14 of the License,
-  publicly accepts; copyright Jae Kwon; a standing temporary Strong
-  Attribution clause with "Licensor" defined (Jae Kwon, his written designee, or
-  his successors), one change mechanism (a dated Designation in the canonical
-  copy in github.com/klash-pro/klash, applying to versions the Licensor first
-  publishes after it), the "conclusively govern" sentence tied to the
-  Designation in the recipient's copy, and a severability sentence for the parts
-  that reach beyond §7(g). Every new source file's header repeats the proxy
-  wording.
-- **Known interactions**, stated plainly: the klash binary is a combined work
-  and the GNGPL admits no further restrictions, which the FSL's Competing Use
-  clause is — already true today through x402's link to gnovm; the worker is the
-  same binary, so it gives fault isolation, not licence separation;
-  CONTRIBUTING.md has an `internal/gnovm/` exception (contributions under this
-  license; the separate grants to Charm do not extend to it, the Maintainer's
-  do); tm2 is Apache-2.0; Go's BSD code ships with `stdlibs/LICENSE-GO`; GNGPL
-  §13 asks that remote users of a modified version (server mode, channels) be
-  offered the source, so klash's remote interfaces link
-  github.com/klash-pro/klash (phase 4, with the notices).
-- **Attribution notices**: in the TUI itself (sidebar footer, OSC 8 links), in
-  `klash --version`, in the README and on klash.pro's pages that promote klash
-  (both clauses cover promotional material): "built on gno.land"
-  (NewTendermint's, already owed via x402) and this subsystem's Designation.
-- **Timing**: landing phase 1 pushes main to the public repository, which
-  publishes the code under these terms. Jae has said to prioritise the GNGPL
-  and settle conflicts later, so it lands under them; the report to him names
-  the conflict and the options (linking exceptions from NewTendermint and the
-  Licensor, a change to klash's license, or removing the link).
+- **`LICENSE.md`** (round-3 fixes applied): GNGPL v6 as published by
+  NewTendermint, LLC or its successor, or any later version the Licensor, as
+  §14 proxy, accepts by a statement in the canonical copy; copyright Jae Kwon.
+  The standing temporary Strong Attribution clause defines "Licensor" (Jae
+  Kwon, a designee named in the canonical copy, or his successors), the
+  canonical copy, and "version" (each commit or tag published there). It
+  changes only by a dated change to the canonical copy, binding only versions
+  first published after it. The Attribution URL and words are those in the
+  Designation that came with the version received, and the Licensor's
+  reasonable interpretation cannot ask for others. It adds severability for
+  anything beyond §7(g), and reserves the right to offer this program and
+  contributions licensed to the Maintainer under other terms. Every source file
+  carries the proxy wording, `.gno` files included.
+- **The boundary**: the FSL files hold only these call sites, each one line or
+  a few: `main.go` (worker dispatch), `tooldefs` (names), `coordinator.go`
+  (`buildTools`, `Rewound`, `Branched`), `agent.go` (the three
+  `createUserMessage` sites, the live turn, compaction's restored-context
+  message, `queueContinuation`), `config.go` (the options field and the plan
+  agent's tools), `app.go` (client acquire and release), `app/branch.go`,
+  `cmd/run.go` (stderr notices), `permission` (the protected path), and the UI
+  (`/goals`, `/goal`'s refusal, the notices, the attribution line, the License
+  palette item).
+- **Known interactions**, stated plainly in LICENSE.md: the klash binary is a
+  combined work, and the GNGPL admits no further restrictions, which the FSL's
+  Competing Use clause is; this is already true through x402's link to the
+  GnoVM, and the worker (same binary) does not change it. The ways out are
+  linking exceptions (NewTendermint for the GnoVM, the Licensor for this
+  subsystem), removing the link, or time (each Crush version's FSL becomes MIT
+  two years after release); changing Charm's licence is not the Licensor's to
+  do. CONTRIBUTING.md, the README's Contributing and License sections, the
+  CLA bot text and the release archive (`LICENSE-gnovm*.md`) match the
+  `internal/gnovm/` exception. GNGPL §13 binds klash's own remote interfaces,
+  so server mode and channels link the source.
+- **Attribution notices**, in every layout: the landing screen, the compact
+  header and the sidebar footer (OSC 8 links); `klash --version` and `klash run
+  --help`; a **License** item in the command palette (GNGPL §5(d) Appropriate
+  Legal Notices); the README and klash.pro pages that promote klash. Each says
+  "built on gno.land" (NewTendermint's, owed already through x402) and gives this
+  subsystem's Designation. When the tools are usable, the README opens with
+  Jae's line: "Yo dawg, I heard you like Go, so I put Go in your Go and slapped
+  it onto Qwen, so it can run Go while it writes Go."
+- **Timing**: Jae has said the work stays private for now; nothing is pushed to
+  GitHub or landed on the box (whose landing pushes to GitHub) until he says.
 
 ## 15. Failure modes
 
 | Risk | Mitigation |
 |---|---|
-| Go fatal in the VM | worker isolation; caps ≤ 64 MB bound GC depth (11× margin) |
-| A test spawns a worker (fork bomb) | `testing.Testing()` refusal; fd-3 handshake; in-process tests; a test that proves it |
-| Constant-folding blowup | fresh capped, metered preprocess allocator per entry |
-| Heap beyond the caps | accounting incl. AST and imports, transient reserve, worker memory limit, RSS watchdog, `oom_score_adj` |
-| OOM killer picks llama-server | `oom_score_adj=1000`; systemd `MemoryMax` for lanes (ops) |
-| Two klash on one VM; delete/repair/compaction races | TryFile lock outside the VM dir, inode check, generation + last-line hash, torn-tail truncation, catch-up |
-| Worker killed (cancel, watchdog, OOM, deploy) | journals on disk; replay on demand; outcome resolved by request id |
-| Killed mid-replay | marker with pid/boot/start; broken only on unexplained death; resume on retry |
-| GC re-decodes live stdlib objects | `noEvictStore` |
-| Rendering runs user code | `BoundedSprintTV(…, nil, …)` |
+| Go fatal in the VM | worker isolation; caps ≤ 64 MB bound GC depth (measured 0.5–1.1 B/B) |
+| A test spawns a worker (fork bomb) | `testing.Testing()` refusal, own-binary refusal, fd-3 handshake, in-process tests, a test that proves it |
+| `.env` or a fatal dump from the worker | `cmd.Dir` = data dir; stderr to a bounded log |
+| Constant folding blowup | fresh capped, metered preprocess allocator per entry |
+| Heap beyond the caps | accounting at 400× declarations, imports, reserve; worker memory limit; RSS watchdog; `oom_score_adj` |
+| Replay too slow or quadratic | limits before running; slices within the caller's budget; resident partial VM |
+| Long calls starve other sessions | wall limits; heartbeats for every request; per-request clamp in server mode |
+| Two klash on one VM; delete, repair, recreate | per-VM lock outside the VM dir; generation + last-line hash; machine.json re-read; torn tail cut |
+| Worker killed (cancel, watchdog, OOM, deploy) | journals on disk; replay on demand; outcome by request id |
+| Import scope, `:=` deps, redeclaration | imports bound package-wide; `:=` of new names becomes `var`; names checked before running |
+| A state-changing eval not kept | only provably pure evals are left out; shadowed builtins counted |
+| Rendering runs user code | structural rendering only |
 | Swallowed meter trips | sticky trips |
-| `x` shadowed by gno's `Eval` | klash's own wrapper |
-| Silent redeclaration | explicit refusal |
-| Prelude/library upgrade | versioned path; `state.json` rebase |
-| Check strings as code injection | whitelisted check language evaluated in Go; `gnovm_run` refuses `goals` |
-| Goals as an injection channel | global dir; fenced, scoped, labelled, capped |
-| Server mode: one App closes the shared worker | refcounted client |
-| One long run blocks other sessions | per-request wall cap; queue with cancel; "busy" answers, never a blocking lock in the worker |
-| Version skew after deploy | `/proc/self/exe`; handshake versions |
-| Ctrl-C kills the worker mid-append | `Setpgid`, SIGINT ignored |
-| Stale embedded stdlibs | VERSION test |
+| Goals: forged close, stale check, stale snapshot | Go-evaluated check language; one locked operation; stamped snapshots; shape-checked replay; protected path |
+| Goals: premature close in an unattended lane | notices on stderr and in channels; recent closes in the block; `/goals reopen` |
+| Goals injected where unwanted | ownership, count lines for others, inert without goals, a switch |
+| Version skew after deploy | `/proc/self/exe`; handshake versions; gno version in each journal |
 
 ## 16. Tests
 
-- **Unit on `Host` in-process**: meter (limits, deadline, cancel, sticky,
-  refund floor); journal (append, truncate-back, torn tail, seq gap, generation,
-  corrupt line, marker semantics); normalisation (package clause, mixed chunks,
-  `main` first, mutual recursion, method before type, `const (iota)`, `func (`
-  disambiguation, second `package main`, redeclaration refused, `x := 1` then
-  `x`); the journaling rule; structural rendering; import errors; rebuild after
-  every failure kind; preprocess cap (bigint squaring, string-constant
-  doubling); budget, eviction, pinned, refusal, base charging; host probe
-  fixtures; catch-up with two `Host`s on one dir, including the other repairing,
-  deleting and recreating, or leaving a torn tail; a 50,000-entry journal
-  replayed at a 1 MB cap; an over-budget replay resuming on retry.
-- **Differential**: random workloads at 1–2 MB caps comparing
-  `BoundedSprintTV(nil)` dumps of every repl global live vs replayed, including
-  rebuilds midway.
-- **Goals**: library (add, fact, check, close, refusals, export/import);
-  check-language whitelist (hostile inputs rejected); stale check after `fact`;
-  ownership; summary and state snapshots; compaction rebase.
-- **IPC and lifecycle**: protocol over an in-process pipe pair (no exec); cancel
-  ack; heartbeat timeout; outcome resolution by request id; two Apps sharing a
-  client, one App's Shutdown not killing the worker; **`go test` cannot spawn a
-  worker**.
-- **Worker integration (devbox, explicit, `systemd-run --scope -p
-  TasksMax=64`)**: build klash; a kill during fdatasync reported as kept; an
-  ephemeral VM surviving a worker restart; a cancel-kill mid-replay not marking
-  broken; a 64 MB `&q` chain under GC with RSS measured; the long-goal script of
-  (A) run once through the real worker.
-- **Agent**: no injection without goals (cassettes unchanged); injection at (a),
-  (b), (c), never twice, on hidden prompts, cleared by continuations, restored
-  after `/rewind`; the stored message for turn N is byte-identical in request
-  N+1 to what was sent live; queued prompts.
-- **Long-goal end to end**:
-  - (A) deterministic, in CI: a scripted model works a multi-step goal with a
-    check over many turns; stale and hostile checks; a premature close refused;
-    a second session's goals shown as a count; a second `Host` changing goals
-    triggers (c); compaction; then **the client singleton is closed and the App
-    rebuilt**, and the test asserts that a replay happened and the summary is
-    injected.
-  - (B) real model on the AI box (isolated XDG and project, quiet time), at
-    least three runs: a multi-batch task interrupted by `/compact` and a klash
-    restart, with a neutral "continue" after the restart; recorded: tool-call
-    errors, check parse failures, refusals, whether the goal is resumed and
-    closed as met.
+- **Phase 1, on `Host` in-process (37 tests, `-race` clean)**: the meter
+  (limits, deadline, cancel, sticky trips, refund floor); scratch state, mixed
+  input, forward references, a second `main`, `x` not shadowed, redeclaration
+  refused and `reset`, programs run fresh, a failed call keeps nothing, gas and
+  memory caps; persistence across a new Host, `time.Now` replayed, two Hosts
+  catching up, a deletion noticed, a torn tail cut, LRU eviction, unavailable
+  packages; and round 3's cases: imports seen everywhere, `var` depending on
+  `:=`, mutating builtins kept across a rebuild, a shadowed builtin, a compile
+  error in an expression keeping the VM, the declaration charge holding the
+  measured heap, the per-call declaration limit, resumable replay, and the
+  replay-cost limits.
+- **Still to add in phase 1**: a differential test (random workloads at 1–2 MB
+  caps, every global dumped live vs replayed, with rebuilds midway); journal
+  unit tests (sequence gap, corrupt middle line, generation change, header
+  version); a 50,000-statement replay; repair.
+- **Phase 2 (worker)**: protocol over an in-process pipe pair; cancel ack;
+  heartbeats during a 15 s metered run and a 15 s replay (neither killed); the
+  client's kill rules; outcome by request id with a failpoint between the write
+  and the `fsync`; two Apps sharing a client; `go test` cannot spawn a worker,
+  nor can a test hand over its own binary; on the devbox, under `systemd-run
+  --scope -p TasksMax=64`, a real worker: a memory-only VM surviving a worker
+  restart, a 64 MB `&q` chain with RSS measured.
+- **Phase 3 (goals)**: the library (each method, refusals, export/import fuzzed
+  with control characters, invalid UTF-8, U+2028 and `</goals>`); the check
+  language (whitelist, missing facts, types, a check that already passes
+  refused, hostile inputs); the locked check-and-close; snapshot staleness;
+  ownership, adoption, branches; injection (a)–(d), never twice, hidden
+  prompts, continuations, rewind, sub-agents excluded, the stored message for
+  turn N byte-identical in request N+1.
+- **Long-goal end to end (A), deterministic, in CI**: a scripted model works a
+  multi-step goal with a check over many turns, including a stale and a hostile
+  check and a premature close refused; a second Host changes a goal (trigger
+  c); a compaction (the block in the restored-context message, not repeated on
+  the next prompt); then **the client is closed and the App rebuilt**, and the
+  scripted model **reads the goal id and the next missing fact from the
+  injected block**, records it and closes the goal as met — which succeeds only
+  because the replayed VM kept the earlier facts and the check. The injected
+  block must equal a rendering of the replayed state. A variant fails the
+  snapshot write after the append; the restarted injection must still match
+  the journal. Run once more through a real worker on the devbox.
+- **Real model (B)** on the AI box, isolated XDG and project, quiet time:
+  - a fixed task with a script-checked outcome (N functions with tests in a
+    scratch repo), split over batches;
+  - pinned model, reasoning level and context size;
+  - a scripted `/compact` at batch k and a SIGKILL of klash and the worker at
+    batch m;
+  - at least 3 runs with goals on, at least 1 resumed in a fresh session (via
+    `goals adopt` or an unowned goal), and at least 1 control with goals off.
+  - Pass when no goal is re-added or duplicated, the goal closes as met only
+    when the script's check passes, there is no premature close, and the
+    tool-error rate stays under 10%.
+  - Recorded per run: tool calls and their errors, check failures, refusals,
+    turns to completion, versus the control.
 
 ## 17. Phases
 
-1. Core `Host` (base and libraries, VM, normalisation, meter, journal and
-   durability, budget, locks); unit and differential tests.
-2. Worker, IPC, refcounted client, shutdown wiring; IPC tests; worker
-   integration test.
-3. Tools, goals library and tools, summary/state snapshots, injection, `/goals`;
-   agent tests.
-4. Licensing files (CONTRIBUTING exception, headers), TUI attribution footer,
-   `--version`, README, config, docs, schema, renderer.
-5. End to end (A) and (B); land on box main; deploy; memory notes.
-6. LLM judge on close via a cache-friendly request; re-arm `/goal` after a
-   restart; a cross-process budget ledger.
+1. **Done** (private commits): core Host (base and libraries, VM,
+   normalisation, meter, journal and durability, limits, budget, locks),
+   licensing files, tests. Still to do: the phase-1 test additions in §16.
+2. Worker, IPC, refcounted client, lifecycle wiring, config (`in_process`,
+   `memory_budget_mb`); tests.
+3. Tools, goals library, goals operations, snapshots, injection, `/goals`, the
+   `/goal` record, notices, the protected path; tests.
+4. Attribution in every layout, the License palette item, the README (and its
+   opening line), docs, schema, the renderer.
+5. End to end (A) and (B); then a landing on box main and deployment **only
+   when Jae says**; memory notes.
+6. An LLM judge on close via a cache-friendly request; re-arming `/goal` after a
+   restart; a cross-process memory ledger; a worker pool.
 
 ## 18. Open questions for Jae
 
 - The attribution designation for this subsystem (placeholder: https://klash.pro,
-  "built on klash") and NewTendermint's for the GnoVM notice (assumed
+  "built on klash"), and NewTendermint's for the GnoVM notice (assumed
   https://gno.land, "built on gno.land").
-- The binary-level licence conflict (§14), named before the first landing.
+- The binary-level licence conflict (§14), and which way out to take.
+- When the work may go public.
 
 ---
 
@@ -546,3 +635,48 @@ conclusions: `x := 1` does persist; gno's `Eval` wrapper had shadowed `x`.
 Not adopted: a separate worker binary (it buys no licence separation while
 x402 links the GnoVM into klash anyway, §14); a cross-process memory ledger
 (phase 6, as in round 1).
+
+## Appendix C. Review round 3: findings and dispositions
+
+Two fresh reviewers read revision 3. The systems reviewer ran experiments on
+the devbox; phase 1 had meanwhile been implemented, so its findings were
+checked against the code as well. Where a fix is in code, the test that holds
+it is named.
+
+| # | Finding | Verified | Disposition |
+|---|---|---|---|
+| S1 | **Blocker**: an import in a file is visible only in that file | yes (measured; preprocess.go:483-510) | fixed: imports are bound package-wide with `RunDeclaration` (§6; `TestImportIsSeenEverywhere`) |
+| S2 | A file's var initializer depending on a `:=` name panics gno | yes (measured; preprocess.go:6368-6372); `RunDeclaration` vars are refused too ("unsatisfied deps") | fixed: `:=` of new names becomes `var` in a file (§6; `TestVarDependsOnShortDeclaration`) |
+| S3 | Builtins change state in "pure" evals (`delete`, `append`, `copy`, …); a redeclared `len` | yes | fixed: only provably pure evals are left out, and shadowing is checked (§6; `TestMutatingBuiltinsAreJournaled`, `TestShadowedBuiltinIsJournaled`) |
+| S4 | Declarations keep ~300–375× their source, not 64× | yes (measured 291×) | fixed: 400× charged, a calibration test, per-call and per-VM caps (§7, §8; `TestDeclarationChargeCoversHeap`) |
+| S5 | A run or replay over 10 s gets the worker killed | design | accepted: heartbeats for every request's whole life; kill rules (§3) |
+| S6 | Replay unbounded and quadratic; the wait is not "5 s" | yes (measured) | fixed: limits before running, replay in slices, honest wait bound, server-mode clamp (§3, §7; `TestReplayIsResumable`, `TestReplayCostLimits`) |
+| S7 | Redeclaration check narrower than gno's gaps; the `func (` rule | yes | fixed: names accumulated across the input incl. `:=` and imports; the rule needs a name and `(` (§6) |
+| S8 | File names must be unique and the same on replay | yes | fixed: `in<seq>_<k>.gno` (§6) |
+| S9 | The replaying marker misfires across processes | design | resolved by removing the marker (§7) |
+| S10 | Worker hygiene: stderr, `.env`, Windows, own-binary hatch | yes (main.go:14) | accepted (§3) |
+| S11 | Lock API gives no fd; ephemeral VMs need no locks | yes (lock.go:56-71) | accepted: no inode check (locks never unlinked), pid in the lock file, memory-only VMs unlocked (§7) |
+| S12 | Durability edges: encoded size, append failure, replay failure, atomic create, stale snapshots, gno version | yes | fixed in code (size checked first, VM rebuilt on append failure, broken on replay failure, temp-dir create, gno version in the header); snapshots stamped (§12) |
+| S13 | Probe counts page cache; `memory.high` missing | yes | fixed (§8; `TestCgroupHeadroom`) |
+| S14 | Preprocessing runs at 15–41 ns/gas | yes (measured) | accepted: stated; wall time shown beside gas; declarations capped (§9) |
+| S15 | §16 tests would have caught none of S1–S6 | — | accepted: those tests now exist; the rest are planned (§16) |
+| G1 | The Designation can still change retroactively ("until …", "as the Licensor interprets it") | yes | fixed in LICENSE.md: binds only the versions carrying it; interpretation limited to the Designation's words; "version" defined; designees and §14 acceptances published in the canonical copy; reservation narrowed |
+| G2 | The licence boundary is undrawn; feature logic would land under FSL | yes | accepted: everything under `internal/gnovm/`; FSL call sites listed (§11, §14) |
+| G3 | Goals snapshots are not tied to the journal | yes | accepted: stamped snapshots, staleness checked before injection, rebase only from a current `state.json` (§12) |
+| G4 | No session can adopt a goal | yes | accepted: writes adopt, `goals adopt`, `/goals adopt`, unowned goals in full (§12) |
+| G5 | The close safeguards exist only in the TUI | yes (cmd/run.go) | accepted: stderr and channel notices; recent closes in the block (§12) |
+| G6 | The tools cannot raise `memory_mb` as their error says | yes | fixed in code: `gnovm_new` updates an existing VM (memory up, persist false→true); the session's own scratch VM allowed (§10) |
+| G7 | Test (A) can pass without goals surviving | yes | accepted: the model reads the next fact from the injected block after a rebuild; block = rendering of replayed state; a snapshot-failure variant (§16) |
+| G8 | Test (B) cannot fail | yes | accepted: script-checked task, pinned model, compact and kill, fresh-session resume, control run, pass criteria (§16) |
+| G9 | Check language semantics; evaluation races | yes | accepted: missing fact is an error, type-checked, must use a fact, refused if already passing, unary minus, caps, one locked operation (§12) |
+| G10 | Injection edge cases (as-of in the hash, hidden prompts, last goal closing, own-call hash, sub-agents, mark timing, hidden first prompt) | yes | accepted, all seven (§12) |
+| G11 | Goals files can be forged; adds are silent | yes | accepted: protected path, shape-checked replay, add notices, source labels (§12) |
+| G12 | Size limits and growth | yes | accepted: field caps, latest facts and notes, archive, chunked import, compaction rule, fuzzing (§12, §16) |
+| G13 | `/goal` vs `/goals`; repair takes no VM; `/goal` not recorded | yes (ui/model/goal.go) | accepted (§12) |
+| G14 | The workspace `.klash/klash.json` must not raise the budget either | yes (config/load.go) | accepted (§13) |
+| G15 | CONTRIBUTING, README and CLA bot text do not match the exception | yes | fixed: all three, plus the date and mixed contributions |
+| G16 | Attribution missing in compact layouts and `klash run`; legal notices; `.gno` headers; release archive; §13 wording; "change klash's licence" | yes | fixed: dated notice in `klashlibs/fmt`, release archive, §13 and ways-out wording; the rest planned for phase 4 (§14) |
+| G17 | Phase order (licence files, config) | yes | accepted (§17) |
+
+Not adopted: nothing in round 3. Deferred as before: the LLM judge on close,
+re-arming `/goal`, a cross-process ledger and a worker pool (phase 6).

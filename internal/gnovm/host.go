@@ -13,6 +13,7 @@
 package gnovm
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -137,6 +138,8 @@ type vmState struct {
 	lastUse int64
 	used    time.Time
 	broken  error
+	// brokenAt is the entry a replay failed at, if that is why it broke.
+	brokenAt int64
 	// cost sums the journal's entries.
 	cost journalCost
 }
@@ -546,18 +549,18 @@ func (h *Host) resident(ctx context.Context, s *vmState, budget time.Duration) (
 	if s.res.seq == s.j.seq {
 		return s.res, notes, nil
 	}
-	_, entries, _, err := readJournal(s.j.path)
+	tail, _, err := readEntries(s.j.path, s.res.offset, s.res.seq)
 	if err != nil {
 		return nil, notes, err
 	}
-	var todo []entry
+	var todo []tailEntry
 	var paths []string
-	for _, e := range entries {
-		if e.Seq <= s.res.seq || e.Seq > s.j.seq {
-			continue
+	for _, t := range tail {
+		if t.Seq > s.j.seq {
+			break
 		}
-		todo = append(todo, e)
-		for _, o := range e.Ops {
+		todo = append(todo, t)
+		for _, o := range t.Ops {
 			if o.Import != nil {
 				paths = append(paths, o.Import.Path)
 			}
@@ -579,7 +582,7 @@ func (h *Host) resident(ctx context.Context, s *vmState, budget time.Duration) (
 				"VM %s is being rebuilt from its journal (%d of %d entries done in %s); call again to continue",
 				s.name, i, len(todo), time.Since(start).Round(time.Millisecond))}
 		}
-		if err := h.replayEntry(ctx, s, &todo[i]); err != nil {
+		if err := h.replayEntry(ctx, s, &todo[i].entry); err != nil {
 			var lim *limitError
 			if errors.As(err, &lim) && lim.kind == "cancelled" {
 				// The entry cut short left the VM unusable.
@@ -587,9 +590,11 @@ func (h *Host) resident(ctx context.Context, s *vmState, budget time.Duration) (
 				return nil, notes, err
 			}
 			s.broken = fmt.Errorf("replaying entry %d: %v", todo[i].Seq, err)
+			s.brokenAt = todo[i].Seq
 			s.res = nil
 			return nil, notes, s.broken
 		}
+		s.res.offset = todo[i].end
 	}
 	if len(todo) > 0 {
 		notes = append(notes, fmt.Sprintf("rebuilt VM %s from %d journal entries in %s", s.name, len(todo), time.Since(start).Round(time.Millisecond)))
@@ -812,7 +817,7 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 		res.Err = fmt.Errorf("the call ran, but saving it failed, so it was not kept: %w", err)
 		return res, nil
 	}
-	v.seq = e.Seq
+	v.seq, v.offset = e.Seq, s.j.size
 	imports := map[string]bool{}
 	for _, path := range v.imports {
 		imports[path] = true
@@ -943,7 +948,10 @@ func (h *Host) defaultOptions() VMOptions {
 // NewRequest makes a VM, or changes one. Nil fields are left as they are, or
 // take the defaults for a new VM.
 type NewRequest struct {
-	Project     string
+	Project string
+	// Session is the calling session: it may name its own scratch VM, as
+	// "scratch" or by its full name, to change its settings.
+	Session     string
 	Name        string
 	MemoryMB    *int
 	Gas         *int64
@@ -974,11 +982,19 @@ type VMInfo struct {
 func (h *Host) New(ctx context.Context, req NewRequest) (VMInfo, bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if !nameRe.MatchString(req.Name) {
-		return VMInfo{}, false, &refusal{"a VM name is a lowercase letter, then up to 31 lowercase letters, digits, - or _"}
-	}
-	if req.Name == GoalsVM || strings.HasPrefix(req.Name, scratchPrefix) {
-		return VMInfo{}, false, &refusal{fmt.Sprintf("the name %s is reserved", req.Name)}
+	scratch := req.Session != "" && (req.Name == "scratch" || req.Name == ScratchName(req.Session))
+	if scratch {
+		req.Name = ScratchName(req.Session)
+		if req.Persist != nil && *req.Persist {
+			return VMInfo{}, false, &refusal{"a scratch VM cannot be persistent; make a named VM with gnovm_new to keep state"}
+		}
+	} else {
+		if !nameRe.MatchString(req.Name) {
+			return VMInfo{}, false, &refusal{"a VM name is a lowercase letter, then up to 31 lowercase letters, digits, - or _"}
+		}
+		if req.Name == GoalsVM || strings.HasPrefix(req.Name, scratchPrefix) {
+			return VMInfo{}, false, &refusal{fmt.Sprintf("the name %s is reserved", req.Name)}
+		}
 	}
 	if req.MemoryMB != nil && (*req.MemoryMB < 1 || *req.MemoryMB > maxMemoryMB) {
 		return VMInfo{}, false, &refusal{fmt.Sprintf("memory_mb must be between 1 and %d", maxMemoryMB)}
@@ -997,7 +1013,7 @@ func (h *Host) New(ctx context.Context, req NewRequest) (VMInfo, bool, error) {
 	if s == nil {
 		if n, err := h.countNamed(project); err != nil {
 			return VMInfo{}, false, err
-		} else if n >= maxNamedVMs {
+		} else if n >= maxNamedVMs && !scratch {
 			return VMInfo{}, false, &refusal{fmt.Sprintf("this project has %d VMs, the most it may have; delete one with gnovm_drop", n)}
 		}
 		opts := h.defaultOptions()
@@ -1258,4 +1274,79 @@ func (h *Host) Kept(projectPath, name, req string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// Repair makes a broken VM usable again: it cuts the journal before the
+// first entry that cannot be read or replayed, keeps the old journal beside
+// it as a .bak, and starts a new generation, so other klash processes
+// rebuild rather than catch up. It reports how many entries it kept and
+// cut.
+func (h *Host) Repair(ctx context.Context, projectPath, name string) (kept, cut int, err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	s, err := h.lookup(projectKey(projectPath), name)
+	if err != nil {
+		return 0, 0, err
+	}
+	if s == nil {
+		return 0, 0, &refusal{fmt.Sprintf("there is no VM named %s", name)}
+	}
+	lockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	release, err := h.lockVM(lockCtx, s)
+	cancel()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer release()
+	if s.broken == nil {
+		if err := h.sync(ctx, s); err == nil && s.broken == nil {
+			return 0, 0, &refusal{fmt.Sprintf("VM %s is not broken", name)}
+		}
+	}
+	path := filepath.Join(s.dir, "journal.jsonl")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, 0, err
+	}
+	lines := bytes.SplitAfter(data, []byte("\n"))
+	var hdr journalHeader
+	if len(lines) == 0 || json.Unmarshal(lines[0], &hdr) != nil || hdr.Generation == "" {
+		return 0, 0, &refusal{fmt.Sprintf("VM %s's journal header cannot be read, so it cannot be repaired; delete the VM", name)}
+	}
+	var good [][]byte
+	total := 0
+	seq := int64(0)
+	for _, line := range lines[1:] {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		total++
+		var e entry
+		if len(good) < total-1 || !bytes.HasSuffix(line, []byte("\n")) ||
+			json.Unmarshal(line, &e) != nil || e.Seq != seq+1 ||
+			(s.brokenAt > 0 && e.Seq >= s.brokenAt) {
+			continue
+		}
+		seq = e.Seq
+		good = append(good, line)
+	}
+	hdr.Generation = newGeneration()
+	hdr.Gno = stdlibVersion()
+	head, err := json.Marshal(hdr)
+	if err != nil {
+		return 0, 0, err
+	}
+	out := append(head, '\n')
+	for _, line := range good {
+		out = append(out, line...)
+	}
+	bak := fmt.Sprintf("%s.bak-%s", path, h.opts.Now().UTC().Format("20060102T150405"))
+	if err := os.WriteFile(bak, data, 0o600); err != nil {
+		return 0, 0, err
+	}
+	if err := writeFileSync(path, out); err != nil {
+		return 0, 0, err
+	}
+	s.j, s.res, s.broken, s.brokenAt = nil, nil, nil, 0
+	return len(good), total - len(good), nil
 }
