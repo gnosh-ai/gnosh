@@ -1,8 +1,9 @@
 # GnoVM machines in klash — design and plan (v4)
 
-Status: revision 4 (2026-10-29), after review rounds 1–3. Phase 1 (the core
-host) is implemented and tested in this directory, and the code follows this
-text. The work is private: Jae asked that nothing be pushed or landed yet.
+Status: revision 4 (2026-10-29), after review rounds 1–3. Phases 1 (the core
+host) and 2 (the worker, its protocol and the client) are implemented and
+tested in this directory, and the code follows this text; Jae had it published
+on 29 October 2026.
 Licensed with the rest of `internal/gnovm/` under the GNO Network GPL v6 (or a
 later version the Licensor accepts as proxy), with the Additional Terms in
 [LICENSE.md](LICENSE.md). Appendices A–C record every review finding and what
@@ -460,8 +461,8 @@ but not raise it, and cannot set `in_process`. Lands with the worker (phase
   subsystem's Designation. When the tools are usable, the README opens with
   Jae's line: "Yo dawg, I heard you like Go, so I put Go in your Go and slapped
   it onto Qwen, so it can run Go while it writes Go."
-- **Timing**: Jae has said the work stays private for now; nothing is pushed to
-  GitHub or landed on the box (whose landing pushes to GitHub) until he says.
+- **Timing**: kept private while it was built, then published at Jae's word on
+  29 October 2026, with phases 1 and 2.
 
 ## 15. Failure modes
 
@@ -552,8 +553,7 @@ but not raise it, and cannot set `in_process`. Lands with the worker (phase
    `/goal` record, notices, the protected path; tests.
 4. Attribution in every layout, the License palette item, the README (and its
    opening line), docs, schema, the renderer.
-5. End to end (A) and (B); then a landing on box main and deployment **only
-   when Jae says**; memory notes.
+5. End to end (A) and (B); landing and deployment; memory notes.
 6. An LLM judge on close via a cache-friendly request; re-arming `/goal` after a
    restart; a cross-process memory ledger; a worker pool.
 
@@ -563,7 +563,7 @@ but not raise it, and cannot set `in_process`. Lands with the worker (phase
   "built on klash"), and NewTendermint's for the GnoVM notice (assumed
   https://gno.land, "built on gno.land").
 - The binary-level licence conflict (§14), and which way out to take.
-- When the work may go public.
+- (Answered: the work went public on 29 October 2026.)
 
 ---
 

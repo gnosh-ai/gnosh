@@ -1,3 +1,5 @@
+<p align="center"><em>Yo dawg, I heard you like Go, so I put Go in your Go and slapped it onto Qwen, so it can run Go while it writes Go.</em></p>
+
 <p align="center">
   <a href="https://klash.pro"><img src="docs/brand/banner.svg" width="100%" alt="Klash: a security-first harness for coding agents, in your terminal"></a>
 </p>
@@ -17,6 +19,7 @@ A fork of Charm's <a href="https://github.com/charmbracelet/crush">Crush</a> tha
   <a href="#coming-from-claude-code">Coming from Claude Code</a> ·
   <a href="#what-else-changed-from-crush">What else changed</a> ·
   <a href="#built-for-gnoland">Built for gno.land</a> ·
+  <a href="#go-in-your-go-gnovm-machines">Go in your Go</a> ·
   <a href="#installation">Installation</a>
 </p>
 
@@ -44,6 +47,9 @@ from a hosted API to one running on your own machine. On top of that:
 - **Knows Gno and gno.land.** Every signature waits for you to type the key's
   password, which the model never sees, and a session key caps what even a
   transaction you approved can spend.
+- **Runs Go in Go.** The GnoVM, gno.land's interpreter, runs inside Klash:
+  named machines with memory caps, gas (1 gas is about 1 ns) and optional
+  persistence, in a worker process of their own.
 
 ## Security first
 
@@ -386,6 +392,42 @@ It adds tools for reading realms, packages, accounts and history. Its own
 safety rules confine its writes to local and test chains, keep mainnet
 read-only, and never hand it your key: to act as you, it proposes a session
 that you sign with gnokey yourself.
+
+### Go in your Go: GnoVM machines
+
+Klash carries the GnoVM, gno.land's interpreter for its Go dialect, and runs
+named virtual machines in it for the agent:
+
+- **Machines with limits.** Each has a name, a memory cap (1 to 64 MB), a gas
+  limit per call and its own nanoseconds per gas. Gas follows gno's
+  calibration, where 1 gas is about 1 ns of work, and a call that runs out of
+  gas, memory or time is stopped and keeps nothing.
+- **State that stays.** Declare, assign and evaluate across calls, as in a
+  REPL. Go-shaped input works as written, from a one-line expression to a
+  whole program; a program with `package main` and `func main` runs fresh each
+  time, like `go run`.
+- **Persistence when you want it.** A persistent machine keeps its state on
+  disk across restarts of Klash, as a journal of the calls that succeeded,
+  which another Klash on the same project catches up with. Other machines last
+  as long as the Klash process.
+- **Memory, managed.** Klash reads how much memory the host can give, cgroup
+  limits included, keeps the machines within a budget, and evicts the least
+  recently used to make room for a large task, rebuilding them from their
+  journals when they are next used.
+- **Out of harm's way.** The machines run in a worker process of their own,
+  which the out-of-memory killer takes first, and which Klash restarts if it
+  dies.
+
+Coming next are the tools that hand these machines to the model (`gnovm_run`,
+`gnovm_new`, `gnovm_list`, `gnovm_drop`), and goals. With goals, the harness
+keeps track of long-standing goals and their success conditions in a machine
+of their own, so they survive compaction and restarts. The design, and every
+review of it, is in [internal/gnovm/DESIGN.md](internal/gnovm/DESIGN.md).
+
+This part of Klash is under the GNO Network General Public License, with
+Additional Terms (Strong Attribution): see
+[internal/gnovm/LICENSE.md](internal/gnovm/LICENSE.md). Built on
+[gno.land](https://gno.land).
 
 ## Installation
 
