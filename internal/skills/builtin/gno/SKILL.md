@@ -222,9 +222,9 @@ one payment.
 - A refused payment names its reason, such as
   `invalid_exact_gno_transaction_simulation_failed` when the account cannot
   cover the price and the fee.
-- Selling something takes jaekwon/x402 (https://github.com/jaekwon/x402),
-  which has the seller middleware and the facilitator beside the Go client
-  klash pays with.
+- Selling something takes gnolang/x402 (https://github.com/gnolang/x402),
+  which has the seller's gno scheme for x402's middleware and the
+  facilitator, beside the Go client klash pays with.
 
 ## More
 

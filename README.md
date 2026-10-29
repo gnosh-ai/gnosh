@@ -369,7 +369,7 @@ unaudited, testnet-only work, so mainnet is refused. Pay from a session key and
 the chain caps what it can spend as well. Nothing is paid without you at the
 prompt: a run with nobody there to type has no paying tool. Klash signs these
 payments with the Go x402 client from
-[jaekwon/x402](https://github.com/jaekwon/x402).
+[gnolang/x402](https://github.com/gnolang/x402).
 
 **gnopls.** Install the [Gno language server](https://github.com/gnoverse/gnopls)
 and Klash starts it for `.gno` files on its own, as it does gopls for Go.

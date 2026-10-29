@@ -17,12 +17,12 @@ import (
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/question"
-	"github.com/charmbracelet/crush/internal/x402gno"
 	"github.com/gnolang/gno/tm2/pkg/amino"
 	"github.com/gnolang/gno/tm2/pkg/crypto"
 	"github.com/gnolang/gno/tm2/pkg/crypto/keys"
 	"github.com/gnolang/gno/tm2/pkg/sdk/bank"
 	"github.com/gnolang/gno/tm2/pkg/std"
+	"github.com/gnolang/x402/client/exact"
 	"github.com/stretchr/testify/require"
 	"github.com/x402-foundation/x402/go/v2/types"
 )
@@ -144,7 +144,7 @@ func stubX402ChainPricing(t *testing.T, gasPrice string) *httptest.Server {
 		"auth/gasprice":              gasPrice,
 		"auth/accounts/" + x402Buyer: `{"BaseAccount": {"address": "` + x402Buyer + `", "coins": "", "public_key": null, "account_number": "12", "sequence": "7"}}`,
 		"auth/accounts/" + x402Buyer + "/session/" + session: `{"BaseSessionAccount": {"BaseAccount": {"address": "` + session +
-			`", "coins": "", "public_key": null, "account_number": "34", "sequence": "3"}}}`,
+			`", "coins": "", "public_key": null, "account_number": "34", "sequence": "3"}, "master_address": "` + x402Buyer + `", "expires_at": "0"}}`,
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -251,9 +251,9 @@ func served(w http.ResponseWriter, tx std.Tx) {
 // against the stub chain, with master set when key is a session of master.
 func signedFor(t *testing.T, chain *httptest.Server, key x402Key, master crypto.Address, offer types.PaymentRequirements) string {
 	t.Helper()
-	node, err := x402gno.NewRPCNode(chain.URL)
+	node, err := exact.NewRPCNode(chain.URL)
 	require.NoError(t, err)
-	payment, err := x402gno.Prepare(context.Background(), node, key.pub, master, offer, "")
+	payment, err := exact.Prepare(context.Background(), node, key.pub, master, offer, "")
 	require.NoError(t, err)
 	signBytes, err := payment.SignBytes()
 	require.NoError(t, err)
@@ -677,6 +677,88 @@ func TestX402Fetch_ALyingNodesFeeIsRefusedUnasked(t *testing.T) {
 
 	require.True(t, resp.IsError)
 	require.Contains(t, resp.Content, "network fee too high")
+	require.Contains(t, resp.Content, "The node at "+chain.URL+" reported that price; nothing was paid")
+	_, asked := questions.Pending()
+	require.False(t, asked)
+	require.Len(t, gnokey.runs(t), 1, "gnokey only listed the key")
+	require.Empty(t, seller.payments)
+}
+
+// TestX402Fetch_ANodeWithNoAnswerIsNotAnUnfundedAccount: a node, or a proxy in
+// front of it, that answers a query with no result has said nothing about the
+// account. Klash reports that, rather than tell the user to fund an address,
+// and asks nothing.
+func TestX402Fetch_ANodeWithNoAnswerIsNotAnUnfundedAccount(t *testing.T) {
+	buyer := newX402Key(t, x402Mnemonic)
+	gnokey := fakeX402Gnokey(t, buyer.listLine("buyer"))
+	chain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/status" {
+			fmt.Fprint(w, `{"jsonrpc":"2.0","id":"","result":{"node_info":{"network":"dev"}}}`)
+			return
+		}
+		fmt.Fprint(w, `{"jsonrpc":"2.0","id":"","result":null}`)
+	}))
+	t.Cleanup(chain.Close)
+	seller := newStubSeller(t, x402Offer(), buyer.pub, 12, 7, served)
+	questions := question.NewService()
+	tool := NewX402FetchTool(allowingPermissions(), questions, t.TempDir(), nil)
+
+	resp := runX402Fetch(t, tool, X402FetchParams{URL: seller.URL, Key: "buyer", Remote: chain.URL})
+
+	require.True(t, resp.IsError)
+	require.NotContains(t, resp.Content, "fund")
+	require.Contains(t, resp.Content, "holds no result")
+	_, asked := questions.Pending()
+	require.False(t, asked)
+	require.Len(t, gnokey.runs(t), 1, "gnokey only listed the key")
+	require.Empty(t, seller.payments)
+}
+
+// TestX402Fetch_ANodeThatNeverAnswersIsGivenUp: the chain is read before the
+// user is asked anything, so a node that hangs is given up after
+// x402ChainReadTimeout instead of holding the turn, and nothing is signed.
+func TestX402Fetch_ANodeThatNeverAnswersIsGivenUp(t *testing.T) {
+	orig := x402ChainReadTimeout
+	x402ChainReadTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { x402ChainReadTimeout = orig })
+	buyer := newX402Key(t, x402Mnemonic)
+	gnokey := fakeX402Gnokey(t, buyer.listLine("buyer"))
+	chain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	t.Cleanup(chain.Close)
+	seller := newStubSeller(t, x402Offer(), buyer.pub, 12, 7, served)
+	questions := question.NewService()
+	tool := NewX402FetchTool(allowingPermissions(), questions, t.TempDir(), nil)
+
+	start := time.Now()
+	resp := runX402Fetch(t, tool, X402FetchParams{URL: seller.URL, Key: "buyer", Remote: chain.URL})
+
+	require.Less(t, time.Since(start), 10*time.Second, "given up after x402ChainReadTimeout, not the node client's own timeout")
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "deadline exceeded")
+	_, asked := questions.Pending()
+	require.False(t, asked)
+	require.Len(t, gnokey.runs(t), 1, "gnokey only listed the key")
+	require.Empty(t, seller.payments)
+}
+
+// TestX402Fetch_AFeeInAnotherCoinIsRefusedUnasked: a node whose gas price is
+// not in ugnot cannot price a fee klash pays, and the refusal names the coin
+// rather than an amount, before the user is asked and before anything is
+// signed.
+func TestX402Fetch_AFeeInAnotherCoinIsRefusedUnasked(t *testing.T) {
+	buyer := newX402Key(t, x402Mnemonic)
+	gnokey := fakeX402Gnokey(t, buyer.listLine("buyer"))
+	chain := stubX402ChainPricing(t, `{"gas": "1000", "price": "1uatom"}`)
+	seller := newStubSeller(t, x402Offer(), buyer.pub, 12, 7, served)
+	questions := question.NewService()
+	tool := NewX402FetchTool(allowingPermissions(), questions, t.TempDir(), nil)
+
+	resp := runX402Fetch(t, tool, X402FetchParams{URL: seller.URL, Key: "buyer", Remote: " " + chain.URL + "\n"})
+
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "is not in ugnot, the coin a payment pays its fee in")
 	require.Contains(t, resp.Content, "The node at "+chain.URL+" reported that price; nothing was paid")
 	_, asked := questions.Pending()
 	require.False(t, asked)
