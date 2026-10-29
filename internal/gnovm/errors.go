@@ -85,6 +85,26 @@ func (e *brokenError) Error() string {
 
 func (e *brokenError) Unwrap() error { return e.cause }
 
+// ErrorStack returns the GnoVM stack an error from running code carries, or
+// "".
+func ErrorStack(err error) string {
+	var rerr *runError
+	if errors.As(err, &rerr) {
+		return rerr.stack
+	}
+	return ""
+}
+
+// LimitKind names the limit that stopped a run ("gas", "memory", "wall",
+// "cancelled"), or "" if it was not one.
+func LimitKind(err error) string {
+	var lim *limitError
+	if errors.As(err, &lim) {
+		return lim.kind
+	}
+	return ""
+}
+
 // classifyTrip turns a meter trip into a limitError.
 func classifyTrip(err error) error {
 	switch {

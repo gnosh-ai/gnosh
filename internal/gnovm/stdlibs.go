@@ -125,6 +125,20 @@ func libraryPaths() []string {
 	return out
 }
 
+// ImportablePackages lists the packages a VM may import, besides fmt: the
+// standard library less what VMs refuse (see unavailablePackage) and the
+// internal packages.
+func ImportablePackages() []string {
+	var out []string
+	for _, p := range libraryPaths() {
+		if p == "fmt" || strings.HasPrefix(p, "klash/") || strings.Contains(p, "internal") || unavailablePackage(p) != "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
 // isProdGno reports whether a file belongs in a production stdlib package:
 // Gno source that is not a test or a filetest.
 func isProdGno(name string) bool {

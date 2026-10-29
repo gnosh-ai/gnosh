@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/charmbracelet/crush/internal/event"
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/format"
+	"github.com/charmbracelet/crush/internal/gnovm"
 	"github.com/charmbracelet/crush/internal/herdr"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/hooks"
@@ -55,6 +57,10 @@ type UpdateAvailableMsg struct {
 }
 
 type App struct {
+	// gnovms is this App's hold on the GnoVM machines (internal/gnovm):
+	// made with the coder agent, released in Shutdown.
+	gnovms *gnovm.Lazy
+
 	Sessions    session.Service
 	Messages    message.Service
 	History     history.Service
@@ -1237,6 +1243,11 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 	if coderAgentCfg.ID == "" {
 		return fmt.Errorf("coder agent configuration is missing")
 	}
+	if app.gnovms == nil {
+		app.gnovms = gnovm.NewLazy(gnovm.ClientOptions{Options: gnovm.Options{
+			Dir: filepath.Join(filepath.Dir(config.GlobalConfigData()), "gnovm"),
+		}})
+	}
 	var err error
 	app.AgentCoordinator, err = agent.NewCoordinator(ctx, agent.CoordinatorOptions{
 		Config:      app.config,
@@ -1251,6 +1262,7 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 		RunComplete: app.runCompletions,
 		Skills:      app.Skills,
 		Interactive: interactive,
+		GnoVMs:      app.gnovms,
 	})
 	if err != nil {
 		slog.Error("Failed to create coder agent", "err", err)
@@ -1339,6 +1351,11 @@ func (app *App) Shutdown() {
 		if err := app.Messages.FlushAll(shutdownCtx); err != nil {
 			slog.Error("Failed to flush pending message updates on shutdown", "error", err)
 		}
+	}
+	// Release this App's hold on the GnoVM machines: the last App in the
+	// process stops the worker and deletes its memory-only machines.
+	if app.gnovms != nil {
+		app.gnovms.Close()
 	}
 
 	// Now run remaining cleanup tasks in parallel.

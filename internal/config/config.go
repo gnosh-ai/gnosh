@@ -1338,6 +1338,7 @@ func planToolNames() []string {
 	return []string{
 		"agent",
 		"glob",
+		"gnovm_list",
 		"grep",
 		"ls",
 		"lsp_call_hierarchy",

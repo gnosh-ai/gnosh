@@ -418,11 +418,21 @@ named virtual machines in it for the agent:
   which the out-of-memory killer takes first, and which Klash restarts if it
   dies.
 
-Coming next are the tools that hand these machines to the model (`gnovm_run`,
-`gnovm_new`, `gnovm_list`, `gnovm_drop`), and goals. With goals, the harness
-keeps track of long-standing goals and their success conditions in a machine
-of their own, so they survive compaction and restarts. The design, and every
-review of it, is in [internal/gnovm/DESIGN.md](internal/gnovm/DESIGN.md).
+The agent has four tools for them:
+
+- **`gnovm_run`** runs code and shows its value and output. With no name it
+  uses the session's own scratch machine.
+- **`gnovm_new`** makes a machine or changes its settings: memory, gas, ns per
+  gas, persistence, pinning, a description.
+- **`gnovm_list`** shows the host's memory, the budget, every machine, and the
+  packages a machine can import. The plan agent has it too.
+- **`gnovm_drop`** evicts a machine from memory, or deletes it after asking
+  you.
+
+Coming next are goals: the harness keeps track of long-standing goals and
+their success conditions in a machine of their own, so they survive
+compaction and restarts. The design, and every review of it, is in
+[internal/gnovm/DESIGN.md](internal/gnovm/DESIGN.md).
 
 This part of Klash is under the GNO Network General Public License, with
 Additional Terms (Strong Attribution): see

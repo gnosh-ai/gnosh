@@ -32,6 +32,8 @@ import (
 	"github.com/charmbracelet/crush/internal/discover"
 	"github.com/charmbracelet/crush/internal/event"
 	"github.com/charmbracelet/crush/internal/filetracker"
+	"github.com/charmbracelet/crush/internal/gnovm"
+	gnovmtools "github.com/charmbracelet/crush/internal/gnovm/tools"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/log"
@@ -198,6 +200,9 @@ type coordinator struct {
 	notify      pubsub.Publisher[notify.Notification]
 	runComplete pubsub.Publisher[notify.RunComplete]
 	interactive bool
+	// gnovms is the App's hold on the GnoVM machines; nil gives no gnovm
+	// tools.
+	gnovms *gnovm.Lazy
 	// named is the files each session has been told changed since it read
 	// them, shared across buildTools calls so a coordinator rebuild does
 	// not reset the dedup state.
@@ -268,6 +273,9 @@ type CoordinatorOptions struct {
 	RunComplete pubsub.Publisher[notify.RunComplete]
 	Skills      *skills.Manager
 	Interactive bool
+	// GnoVMs is the App's hold on the GnoVM machines (internal/gnovm),
+	// or nil for none.
+	GnoVMs *gnovm.Lazy
 }
 
 func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, error) {
@@ -295,6 +303,7 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		lspManager:         opts.LSPManager,
 		notify:             opts.Notify,
 		runComplete:        opts.RunComplete,
+		gnovms:             opts.GnoVMs,
 		agents:             make(map[string]SessionAgent),
 		sessionStarts:      newSessionStartState(),
 		instructionsLoaded: newInstructionsLoadedState(),
@@ -1193,6 +1202,16 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 			wrap(tools.NewGnokeyTool(c.permissions, c.questions, c.cfg.WorkingDir())),
 			wrap(tools.NewX402FetchTool(c.permissions, c.questions, c.cfg.WorkingDir(), nil)),
 			wrap(tools.NewArtifactTool()),
+		)
+	}
+
+	// The GnoVM machines' tools (internal/gnovm/tools).
+	if c.gnovms != nil {
+		allTools = append(allTools,
+			wrap(gnovmtools.NewRunTool(c.gnovms, c.cfg.WorkingDir())),
+			wrap(gnovmtools.NewNewTool(c.gnovms, c.cfg.WorkingDir())),
+			wrap(gnovmtools.NewListTool(c.gnovms, c.cfg.WorkingDir())),
+			wrap(gnovmtools.NewDropTool(c.gnovms, c.cfg.WorkingDir(), c.permissions)),
 		)
 	}
 
