@@ -723,6 +723,14 @@
             200
           ]
         },
+        "artifact_server": {
+          "type": "string",
+          "description": "Where recorded artifacts (see the artifact tool) are served so the user can open them from another machine. Unset listens on every interface at port 7777; off serves none. Only files the agent recorded are served, each behind an unguessable token.",
+          "examples": [
+            "127.0.0.1:7777",
+            "off"
+          ]
+        },
         "loop_max_turns": {
           "type": "integer",
           "description": "An optional hard cap on how many turns /loop may drive. Unset (or 0 or negative) means no cap: every 25 turns the agent is asked whether it has a genuine reason to stop and otherwise keeps going.",

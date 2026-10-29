@@ -21,6 +21,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
+	"github.com/charmbracelet/crush/internal/artifacts"
 	"github.com/charmbracelet/crush/internal/clipboard"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/db"
@@ -71,6 +72,12 @@ type App struct {
 	AgentCoordinator agent.Coordinator
 
 	LSPManager *lsp.Manager
+
+	// artifacts serves the deliverables the agent records with the
+	// artifact tool, so the user can open one from the machine they are
+	// sitting at. Nil when nothing is served (a non-interactive run, or
+	// artifact_server "off"), and then an artifact is a path.
+	artifacts *artifacts.Server
 
 	Skills *skills.Manager
 
@@ -1238,6 +1245,16 @@ func (app *App) InitCoderAgentNonInteractive(ctx context.Context) error {
 	return app.initCoderAgent(ctx, false)
 }
 
+// artifactServerFor serves the deliverables the agent records, for a
+// session that has a sidebar to show them in. A run has none and serves
+// nothing: its agent is given no artifact tool either.
+func artifactServerFor(interactive bool, opts *config.Options) *artifacts.Server {
+	if !interactive {
+		return nil
+	}
+	return artifacts.Start(opts.ArtifactServer, opts.DataDirectory)
+}
+
 func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 	coderAgentCfg := app.config.Config().Agents[config.AgentCoder]
 	if coderAgentCfg.ID == "" {
@@ -1247,6 +1264,14 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 		app.gnovms = gnovm.NewLazy(gnovm.ClientOptions{Options: gnovm.Options{
 			Dir: filepath.Join(filepath.Dir(config.GlobalConfigData()), "gnovm"),
 		}})
+	}
+	if app.artifacts == nil {
+		app.artifacts = artifactServerFor(interactive, app.config.Config().Options)
+		if app.artifacts != nil {
+			app.cleanupFuncs = append(app.cleanupFuncs, func(context.Context) error {
+				return app.artifacts.Close()
+			})
+		}
 	}
 	var err error
 	app.AgentCoordinator, err = agent.NewCoordinator(ctx, agent.CoordinatorOptions{
@@ -1263,6 +1288,7 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 		Skills:      app.Skills,
 		Interactive: interactive,
 		GnoVMs:      app.gnovms,
+		Artifacts:   app.artifacts,
 	})
 	if err != nil {
 		slog.Error("Failed to create coder agent", "err", err)

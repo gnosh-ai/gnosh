@@ -534,7 +534,14 @@ func (m *Chat) HasLiveSpinner() bool {
 }
 
 // hasVisibleAnimation reports whether any item in the viewport is spinning.
-func (m *Chat) hasVisibleAnimation() bool {
+// elsewhere says whether something outside the chat list needs the
+// shared clock: the sidebar's pending artifacts, which animate while the
+// agent makes what it named. The UI passes it in rather than the Chat
+// reaching for it, so there is no hook for a caller to forget to set.
+func (m *Chat) hasVisibleAnimation(elsewhere bool) bool {
+	if elsewhere {
+		return true
+	}
 	if m.list.Len() == 0 {
 		return false
 	}
@@ -565,7 +572,7 @@ func (m *Chat) SetAnimationsAllowed(allowed bool) {
 // every message so any change that puts a spinner on screen (new message,
 // tool update, scroll, session load) starts the clock without per-call-site
 // wiring. It is the only place a tick is armed apart from Tick itself.
-func (m *Chat) EnsureAnimating() tea.Cmd {
+func (m *Chat) EnsureAnimating(elsewhere bool) tea.Cmd {
 	if !m.animAllowed {
 		m.animRunning = false
 		return nil
@@ -573,7 +580,7 @@ func (m *Chat) EnsureAnimating() tea.Cmd {
 	if m.animRunning && m.now().Sub(m.animArmedAt) < animClockLostAfter {
 		return nil
 	}
-	if !m.hasVisibleAnimation() {
+	if !m.hasVisibleAnimation(elsewhere) {
 		m.animRunning = false
 		return nil
 	}
@@ -613,13 +620,16 @@ func (m *Chat) stopAnimating(msg animTickMsg) {
 // visible item is still spinning; when none is, the clock stops and no
 // command is returned. Ticks from a superseded clock generation are
 // ignored so they cannot re-arm a second clock.
-func (m *Chat) Tick(msg animTickMsg) (changed bool, cmd tea.Cmd) {
+func (m *Chat) Tick(msg animTickMsg, elsewhere bool) (changed bool, cmd tea.Cmd) {
 	if msg.gen != m.animGen {
 		return false, nil
 	}
 	m.animRunning = false
 	if m.list.Len() == 0 {
-		return false, nil
+		if !elsewhere {
+			return false, nil
+		}
+		return false, m.armAnimClock()
 	}
 	spinning := false
 	startIdx, endIdx := m.list.VisibleItemIndices()
@@ -633,7 +643,7 @@ func (m *Chat) Tick(msg animTickMsg) (changed bool, cmd tea.Cmd) {
 			changed = true
 		}
 	}
-	if !spinning {
+	if !spinning && !elsewhere {
 		return changed, nil
 	}
 	return changed, m.armAnimClock()

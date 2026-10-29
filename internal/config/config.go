@@ -604,7 +604,16 @@ type Options struct {
 	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=klash-config"`
 	RequestTimeout            *int         `json:"request_timeout,omitempty" jsonschema:"description=Timeout in seconds for each LLM API request. Streaming responses are aborted only after this much inactivity\\, so slow but active streams are never killed. 0 disables it\\, negative values are invalid.,default=60,example=120,example=300,example=0"`
 	MaxBackgroundJobs         *int         `json:"max_background_jobs,omitempty" jsonschema:"description=How many background shell jobs may run at once. Jobs that have finished never count against it. 0 or negative restores the default.,default=50,example=10,example=200"`
-	LoopMaxTurns              *int         `json:"loop_max_turns,omitempty" jsonschema:"description=An optional hard cap on how many turns /loop may drive. Unset (or 0 or negative) means no cap: every 25 turns the agent is asked whether it has a genuine reason to stop and otherwise keeps going.,example=200"`
+	// ArtifactServer is where Klash serves the deliverables the agent
+	// records with the artifact tool, so the user can open one from the
+	// machine they are sitting at rather than being handed a path on the
+	// machine Klash runs on. Unset listens on every interface at port
+	// 7777 (a port already taken falls back to a free one); an address of
+	// its own narrows it, as "127.0.0.1:7777" does; "off" serves none,
+	// and an artifact is then recorded as its path. Only a file the agent
+	// recorded is served, each behind an unguessable token.
+	ArtifactServer string `json:"artifact_server,omitempty" jsonschema:"description=Where recorded artifacts (see the artifact tool) are served so the user can open them from another machine. Unset listens on every interface at port 7777; off serves none. Only files the agent recorded are served\\, each behind an unguessable token.,example=127.0.0.1:7777,example=off"`
+	LoopMaxTurns   *int   `json:"loop_max_turns,omitempty" jsonschema:"description=An optional hard cap on how many turns /loop may drive. Unset (or 0 or negative) means no cap: every 25 turns the agent is asked whether it has a genuine reason to stop and otherwise keeps going.,example=200"`
 }
 
 // DefaultMaxBackgroundJobs is how many background shell jobs may run at once

@@ -564,7 +564,7 @@ func TestSetSessionMessagesGatesAnimationsOnBusy(t *testing.T) {
 	cmd := m.setSessionMessages(msgs)
 	require.Nil(t, cmd, "setSessionMessages must not start animations when agent is idle")
 	require.False(t, m.chat.animAllowed, "an idle session reload must freeze the animation clock")
-	require.Nil(t, m.chat.EnsureAnimating(), "a frozen clock must not arm while idle")
+	require.Nil(t, m.chat.EnsureAnimating(false), "a frozen clock must not arm while idle")
 	require.False(t, m.chat.animRunning)
 
 	// When the agent is busy, the clock may run for the same message.
@@ -572,7 +572,7 @@ func TestSetSessionMessagesGatesAnimationsOnBusy(t *testing.T) {
 	cmd = m.setSessionMessages(msgs)
 	require.Nil(t, cmd, "setSessionMessages must not arm the clock itself")
 	require.True(t, m.chat.animAllowed, "setSessionMessages must allow animations when agent is busy")
-	require.NotNil(t, m.chat.EnsureAnimating(), "a visible spinning message must arm the clock")
+	require.NotNil(t, m.chat.EnsureAnimating(false), "a visible spinning message must arm the clock")
 	require.True(t, m.chat.animRunning)
 }
 
@@ -606,14 +606,14 @@ func TestBusyProbeReEnablesFrozenAnimationClock(t *testing.T) {
 	cmd := m.setSessionMessages(msgs)
 	require.Nil(t, cmd)
 	require.False(t, m.chat.animAllowed, "the boot reload must freeze the clock off the unpopulated cache")
-	require.Nil(t, m.chat.EnsureAnimating(), "the frozen clock must not arm")
+	require.Nil(t, m.chat.EnsureAnimating(false), "the frozen clock must not arm")
 	require.False(t, m.chat.animRunning)
 
 	// The authoritative probe lands: the agent is busy. The gate must
 	// re-open so the visible spinner ticks.
 	m.applyBusyState(busyStateMsg{gen: m.busyFetchGen, ready: true, agentBusy: true})
 	require.True(t, m.chat.animAllowed, "a busy probe must re-enable the animation gate")
-	require.NotNil(t, m.chat.EnsureAnimating(), "a visible spinning item must arm the clock once allowed")
+	require.NotNil(t, m.chat.EnsureAnimating(false), "a visible spinning item must arm the clock once allowed")
 	require.True(t, m.chat.animRunning)
 
 	// An idle probe must not re-freeze the clock on its own: the ghost

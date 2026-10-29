@@ -48,6 +48,7 @@ import (
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/stringext"
+	"github.com/charmbracelet/crush/internal/ui/anim"
 	"github.com/charmbracelet/crush/internal/ui/attachments"
 	"github.com/charmbracelet/crush/internal/ui/chat"
 	"github.com/charmbracelet/crush/internal/ui/common"
@@ -217,6 +218,10 @@ type UI struct {
 	session          *session.Session
 	sessionFiles     []SessionFile
 	sessionArtifacts []SessionArtifact
+	// artifactAnims is the animation shown in place of each pending
+	// artifact's target, by label. Made on first sight and dropped when
+	// the deliverable arrives (see advancePendingArtifacts).
+	artifactAnims map[string]*anim.Anim
 
 	// keeps track of read files while we don't have a session id
 	sessionFileReads []string
@@ -1961,7 +1966,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// sole place the clock is armed so a tick never sits inside a caller's
 	// tea.Sequence.
 	if m.state == uiChat {
-		if cmd := m.chat.EnsureAnimating(); cmd != nil {
+		if cmd := m.chat.EnsureAnimating(m.hasPendingArtifact()); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 		// Same for the chat scrollbar's auto-hide: a scroll may be applied
@@ -1987,8 +1992,12 @@ func (m *UI) handleAnimTick(msg animTickMsg) tea.Cmd {
 		m.markScrollOnly()
 		return nil
 	}
-	changed, cmd := m.chat.Tick(msg)
-	if !changed {
+	// The sidebar's pending artifacts ride the same clock; a frame of
+	// theirs is a change, so the sidebar is drawn again rather than
+	// served from the frame cache.
+	moved := m.advancePendingArtifacts()
+	changed, cmd := m.chat.Tick(msg, m.hasPendingArtifact())
+	if !changed && !moved {
 		m.markScrollOnly()
 		return cmd
 	}

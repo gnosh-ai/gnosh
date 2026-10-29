@@ -202,7 +202,8 @@ type coordinator struct {
 	interactive bool
 	// gnovms is the App's hold on the GnoVM machines; nil gives no gnovm
 	// tools.
-	gnovms *gnovm.Lazy
+	gnovms    *gnovm.Lazy
+	artifacts tools.ArtifactPublisher
 	// named is the files each session has been told changed since it read
 	// them, shared across buildTools calls so a coordinator rebuild does
 	// not reset the dedup state.
@@ -276,6 +277,10 @@ type CoordinatorOptions struct {
 	// GnoVMs is the App's hold on the GnoVM machines (internal/gnovm),
 	// or nil for none.
 	GnoVMs *gnovm.Lazy
+	// Artifacts serves the deliverables the agent records with the
+	// artifact tool, so the user can open one from the machine they are
+	// at. Nil records them as paths.
+	Artifacts tools.ArtifactPublisher
 }
 
 func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, error) {
@@ -312,6 +317,7 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		activeSkills:       activeSkills,
 		skillTracker:       skillTracker,
 		interactive:        opts.Interactive,
+		artifacts:          opts.Artifacts,
 		named:              newNamedChanges(),
 
 		subdirectoryGiven: map[string]string{},
@@ -1201,7 +1207,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 			wrap(tools.NewQuestionTool(c.questions)),
 			wrap(tools.NewGnokeyTool(c.permissions, c.questions, c.cfg.WorkingDir())),
 			wrap(tools.NewX402FetchTool(c.permissions, c.questions, c.cfg.WorkingDir(), nil)),
-			wrap(tools.NewArtifactTool()),
+			wrap(tools.NewArtifactTool(c.artifacts, c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Hosts)),
 		)
 	}
 
@@ -1894,10 +1900,11 @@ func (c *coordinator) planSystemPrompt() (*prompt.Prompt, error) {
 func (c *coordinator) coderSystemPrompt() (*prompt.Prompt, error) {
 	overrides := c.cfg.Overrides()
 	appended := prompt.WithTextAfter(overrides.AppendSystemPrompt)
+	interactive := prompt.WithInteractive(c.interactive)
 	if overrides.SystemPrompt != "" {
-		return coderPromptReplacing(overrides.SystemPrompt, prompt.WithWorkingDir(c.cfg.WorkingDir()), appended)
+		return coderPromptReplacing(overrides.SystemPrompt, prompt.WithWorkingDir(c.cfg.WorkingDir()), interactive, appended)
 	}
-	return coderPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()), appended)
+	return coderPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()), interactive, appended)
 }
 
 // ContextUsage estimates what fills sessionID's context window, as Claude

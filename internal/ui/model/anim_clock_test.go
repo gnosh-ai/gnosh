@@ -159,11 +159,11 @@ func TestAnimClock_ReArmsIfTickWasLost(t *testing.T) {
 
 	// Still within the grace window: no second clock.
 	now = now.Add(animClockLostAfter / 2)
-	require.Nil(t, u.chat.EnsureAnimating())
+	require.Nil(t, u.chat.EnsureAnimating(false))
 
 	// The tick never came back; a new clock must be armed.
 	now = now.Add(animClockLostAfter)
-	require.NotNil(t, u.chat.EnsureAnimating(), "a lost tick must not freeze spinners forever")
+	require.NotNil(t, u.chat.EnsureAnimating(false), "a lost tick must not freeze spinners forever")
 	require.True(t, u.chat.animRunning)
 }
 
@@ -240,4 +240,84 @@ func TestAnimClock_UnchangedFrameIsScrollOnlyButKeepsClock(t *testing.T) {
 	_, _ = u.Update(animTickMsg{gen: u.chat.animGen})
 	u.View()
 	require.Equal(t, 1, u.frames.hits, "a changed frame must redraw")
+}
+
+// A pending artifact animates in the sidebar while the agent makes what
+// it named, so the clock has to run for it even when nothing in the
+// conversation is spinning — which is the whole time between the claim
+// and the deliverable.
+func TestAnimClock_RunsForAPendingArtifactAlone(t *testing.T) {
+	t.Parallel()
+	u, top, bottom := newAnimTestUI(t)
+	top.spinning, bottom.spinning = false, false
+	_, _ = u.Update(neutralMsg{})
+	require.False(t, u.chat.animRunning, "nothing to animate yet")
+
+	u.sessionArtifacts = []SessionArtifact{{Label: "hebrew ad video", Pending: true}}
+	_, _ = u.Update(neutralMsg{})
+	require.True(t, u.chat.animRunning, "a pending artifact must arm the clock")
+
+	_, cmd := u.Update(animTickMsg{gen: u.chat.animGen})
+	require.NotNil(t, cmd, "the clock keeps running while the artifact is pending")
+	require.Len(t, u.artifactAnims, 1)
+
+	u.sessionArtifacts[0] = SessionArtifact{Label: "hebrew ad video", Target: "/renders/v7.mp4"}
+	_, _ = u.Update(animTickMsg{gen: u.chat.animGen})
+	require.False(t, u.chat.animRunning, "the deliverable arrived; the clock stops")
+	require.Empty(t, u.artifactAnims)
+}
+
+// A tick that moved a pending artifact must redraw: the sidebar is part
+// of the frame, so serving the memoized one would freeze the animation.
+func TestAnimClock_APendingArtifactTickRedraws(t *testing.T) {
+	t.Parallel()
+	u, top, bottom := newAnimTestUI(t)
+	top.spinning, bottom.spinning = false, false
+	u.sessionArtifacts = []SessionArtifact{{Label: "hebrew ad video", Pending: true}}
+	_, _ = u.Update(neutralMsg{})
+	u.View()
+	require.Equal(t, 1, u.frames.Len())
+
+	_, _ = u.Update(animTickMsg{gen: u.chat.animGen})
+	u.View()
+	require.Equal(t, 0, u.frames.hits, "the frame must be drawn again, not served from memory")
+}
+
+// The pending artifact's glyphs actually scramble: a clock that ticks
+// without advancing the animation would leave the sidebar showing one
+// frozen frame for the whole render, which reads as a hang.
+func TestAnimClock_APendingArtifactFrameMoves(t *testing.T) {
+	t.Parallel()
+	u, top, bottom := newAnimTestUI(t)
+	top.spinning, bottom.spinning = false, false
+	u.sessionArtifacts = []SessionArtifact{{Label: "hebrew ad video", Pending: true}}
+	_, _ = u.Update(neutralMsg{})
+
+	first := u.pendingArtifactFrame("hebrew ad video")
+	require.NotEmpty(t, first)
+	moved := false
+	for range 30 {
+		_, _ = u.Update(animTickMsg{gen: u.chat.animGen})
+		if u.pendingArtifactFrame("hebrew ad video") != first {
+			moved = true
+			break
+		}
+	}
+	require.True(t, moved, "the pending artifact's glyphs must keep moving while the work runs")
+}
+
+// Tick itself keeps the clock alive for the sidebar. The Update tail would
+// re-arm it anyway, so this asks Tick directly: the contract is that a
+// tick with something animating elsewhere returns the next tick, whether
+// or not the chat list has a spinner in view.
+func TestAnimClock_TickKeepsTheClockForTheSidebar(t *testing.T) {
+	t.Parallel()
+	u, top, bottom := newAnimTestUI(t)
+	top.spinning, bottom.spinning = false, false
+
+	_, cmd := u.chat.Tick(animTickMsg{gen: u.chat.animGen}, false)
+	require.Nil(t, cmd, "nothing animates anywhere; the clock stops")
+
+	_, cmd = u.chat.Tick(animTickMsg{gen: u.chat.animGen}, true)
+	require.NotNil(t, cmd, "the sidebar still needs frames")
 }

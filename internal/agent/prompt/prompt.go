@@ -31,6 +31,8 @@ type Prompt struct {
 	workingDir string
 	before     string
 	after      string
+
+	interactive bool
 }
 
 type PromptDat struct {
@@ -51,6 +53,10 @@ type PromptDat struct {
 	Skills []*skills.Skill
 	// AddedDirs are the directories added with --add-dir.
 	AddedDirs []string
+	// Interactive is whether a user is at a terminal, and so whether the
+	// tools only a TUI can answer — question, artifact — are in the
+	// toolset. A prompt must not ask for a tool the agent was not given.
+	Interactive bool
 }
 
 // ContextFile is a context file and what it was loaded as: its path and
@@ -87,6 +93,14 @@ func WithWorkingDir(workingDir string) Option {
 
 // WithTextBefore puts text, as written, before what the template builds;
 // it is not read as a template.
+// WithInteractive tells the prompt that a user is at a terminal, so it
+// may ask for the tools only a TUI can answer (question, artifact).
+func WithInteractive(interactive bool) Option {
+	return func(p *Prompt) {
+		p.interactive = interactive
+	}
+}
+
 func WithTextBefore(text string) Option {
 	return func(p *Prompt) {
 		p.before = text
@@ -528,6 +542,7 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 	data.ContextFiles = contextFiles
 	data.GlobalContextFiles = globalContextFiles
 	data.AddedDirs = store.AddedDirs()
+	data.Interactive = p.interactive
 	return data, nil
 }
 
