@@ -57,8 +57,10 @@ type vm struct {
 	// block's names do not include.
 	methods map[string]bool
 	// declBytes is the source size of the declarations the VM holds; their
-	// syntax trees stay in memory (see budget.go).
+	// syntax trees stay in memory (see budget.go). declFiles counts the
+	// files they ran as: each makes later declarations slower to add.
 	declBytes int64
+	declFiles int
 	// unusable is set once an operation that ran code failed.
 	unusable bool
 }
@@ -138,13 +140,13 @@ func (v *vm) parse(seq int64, ops []op) (parsed []parsedOp, err error) {
 			src := "package " + replPath + ";" + strings.Repeat("\n", max(o.Line-1, 0)) + o.File
 			fn, err := v.m.ParseFile(name, src)
 			if err != nil {
-				return nil, err
+				return nil, &parseError{err}
 			}
 			p.file = fn
 		case o.Stmts != "":
 			stmts, err := v.m.ParseStmts(strings.Repeat("\n", max(o.Line-1, 0)) + o.Stmts)
 			if err != nil {
-				return nil, err
+				return nil, &parseError{err}
 			}
 			p.stmts = stmts
 		case o.Call != "":
@@ -156,7 +158,7 @@ func (v *vm) parse(seq int64, ops []op) (parsed []parsedOp, err error) {
 		case o.Eval != "":
 			x, err := v.m.ParseExpr(o.Eval)
 			if err != nil {
-				return nil, err
+				return nil, &parseError{err}
 			}
 			if _, isCall := x.(*gno.CallExpr); !isCall {
 				// Not gno's Eval wrapper: it binds its value to a
@@ -209,6 +211,17 @@ func (v *vm) checkNames(parsed []parsedOp) error {
 					have[name] = true
 				}
 			}
+		case p.stmts != nil:
+			// A := earlier in the input declares names too.
+			for _, s := range p.stmts {
+				if as, ok := s.(*gno.AssignStmt); ok && as.Op == gno.DEFINE {
+					for _, x := range as.Lhs {
+						if nx, ok := x.(*gno.NameExpr); ok && nx.Name != "_" {
+							have[string(nx.Name)] = true
+						}
+					}
+				}
+			}
 		}
 	}
 	return nil
@@ -240,6 +253,27 @@ func declNames(d gno.Decl) []string {
 	return out
 }
 
+// names returns the names the VM's package has.
+func (v *vm) names() map[string]bool {
+	have := map[string]bool{}
+	for _, n := range v.pn.GetBlockNames() {
+		have[string(n)] = true
+	}
+	return have
+}
+
+// shadowsBuiltin reports whether the package declares a name that
+// normalize takes for a pure builtin, so an evaluation that calls it may
+// change state after all.
+func (v *vm) shadowsBuiltin() bool {
+	for _, n := range v.pn.GetBlockNames() {
+		if pureBuiltins[string(n)] {
+			return true
+		}
+	}
+	return false
+}
+
 func receiverName(x gno.Expr) string {
 	if s, ok := x.(*gno.StarExpr); ok {
 		x = s.X
@@ -251,12 +285,19 @@ func receiverName(x gno.Expr) string {
 }
 
 // run runs parsed ops in order, and returns the rendered value of an eval
-// op if render is set. If it fails, the VM is unusable.
+// op if render is set. If it fails, the VM is unusable, with one exception:
+// an input that is only an expression and fails to compile ran nothing (gno
+// preprocesses an expression before it pushes anything to run it), so a
+// typo does not cost a rebuild.
 func (v *vm) run(parsed []parsedOp, render bool) (value string, err error) {
+	evalOnly := len(parsed) == 1 && parsed[0].expr != nil
 	defer func() {
 		if r := recover(); r != nil {
-			v.unusable = true
 			err = panicError(r, v.meter)
+			var cerr *compileError
+			if !evalOnly || !errors.As(err, &cerr) {
+				v.unusable = true
+			}
 			if st := v.stacktrace(); st != "" {
 				err = &runError{err: err, stack: st}
 			}
@@ -281,12 +322,14 @@ func (v *vm) run(parsed []parsedOp, render bool) (value string, err error) {
 					v.methods[declNames(d)[0]] = true
 				}
 			}
+			// Statements keep nothing once run; declarations keep
+			// their syntax trees (see vmCharge).
 			v.declBytes += int64(len(p.op.File))
+			v.declFiles++
 		case p.stmts != nil:
 			for _, s := range p.stmts {
 				v.m.RunStatement(gno.StageRun, s)
 			}
-			v.declBytes += int64(len(p.op.Stmts))
 		case p.expr != nil:
 			tvs := v.m.Eval(p.expr)
 			if render {
@@ -372,15 +415,31 @@ func renderValues(tvs []gno.TypedValue) string {
 	return strings.Join(parts, ", ")
 }
 
-func renderValue(tv gno.TypedValue) string {
-	if tv.T != nil && tv.T.Kind() == gno.StringKind {
+func renderValue(tv gno.TypedValue) string { return renderAt(tv, 0) }
+
+// renderAt follows one pointer, so &P{1, 2} shows as that rather than as a
+// bare pointer kind, and names a struct's declared type.
+func renderAt(tv gno.TypedValue, depth int) string {
+	if tv.T == nil {
+		return gno.BoundedSprintTV(tv, nil, maxValue)
+	}
+	switch tv.T.Kind() {
+	case gno.StringKind:
 		s := tv.GetString()
 		if len(s) > maxValue {
 			return strconv.Quote(s[:maxValue]) + fmt.Sprintf("… (%d bytes)", len(s))
 		}
 		return strconv.Quote(s)
+	case gno.PointerKind:
+		if pv, ok := tv.V.(gno.PointerValue); ok && pv.TV != nil && depth == 0 {
+			return "&" + renderAt(pv.Deref(), depth+1)
+		}
 	}
-	return gno.BoundedSprintTV(tv, nil, maxValue)
+	s := gno.BoundedSprintTV(tv, nil, maxValue)
+	if dt, ok := tv.T.(*gno.DeclaredType); ok && tv.T.Kind() == gno.StructKind {
+		return string(dt.Name) + s
+	}
+	return s
 }
 
 // capWriter keeps the first max bytes written to it and counts the rest. It

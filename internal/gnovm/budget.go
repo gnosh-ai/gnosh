@@ -25,14 +25,21 @@ const (
 	autoBudgetMax = 1 << 30
 )
 
+// declHeapFactor is the Go heap a declaration keeps per byte of its source:
+// its syntax tree, preprocessed, with attributes and a map on every node.
+// Measured at 300 to 375 across shapes from one function per file to 300,
+// and bodies of up to 200 statements (review round 3); statements keep
+// nothing once run. TestDeclarationChargeCoversHeap holds the factor to the
+// measure.
+const declHeapFactor = 400
+
 // vmCharge is what a resident VM is counted as using. A VM's allocator cap
 // bounds only the values it holds; the heap also keeps the syntax trees of
-// its declarations (about 64 times their source: every node carries
-// attributes and a map), its own decoded copies of the standard library
-// objects it touched (about 0.3 MB per imported package), and the machine
-// itself (1 MB).
+// its declarations, its own decoded copies of the standard library objects
+// it touched (at most 0.2 MB per imported package, measured; 0.3 charged),
+// and the machine itself (1 MB).
 func vmCharge(capBytes, declBytes int64, imports int) int64 {
-	return capBytes + 64*declBytes + int64(imports)*(300<<10) + 1<<20
+	return capBytes + declHeapFactor*declBytes + int64(imports)*(300<<10) + 1<<20
 }
 
 func (h *Host) charge(s *vmState) int64 {
@@ -62,7 +69,7 @@ func (h *Host) usedWith(s *vmState) int64 {
 		}
 	}
 	if s != nil {
-		used += vmCharge(int64(s.opts.MemoryMB)<<20, s.replayDecl, s.replayImports)
+		used += vmCharge(int64(s.opts.MemoryMB)<<20, s.cost.declBytes, s.cost.imports)
 		largest = max(largest, int64(s.opts.MemoryMB)<<20)
 	}
 	return used + 3*largest
@@ -120,7 +127,7 @@ func (h *Host) noRoom(s *vmState, budget int64) error {
 		}
 	}
 	msg := fmt.Sprintf("not enough memory for VM %s: it needs about %d MB; the VMs' budget is %d MB and %d MB of it is in use",
-		s.name, vmCharge(int64(s.opts.MemoryMB)<<20, s.replayDecl, s.replayImports)>>20, budget>>20, h.usedBytes()>>20)
+		s.name, vmCharge(int64(s.opts.MemoryMB)<<20, s.cost.declBytes, s.cost.imports)>>20, budget>>20, h.usedBytes()>>20)
 	if len(pinned) > 0 {
 		msg += " (pinned: " + strings.Join(pinned, ", ") + ")"
 	}

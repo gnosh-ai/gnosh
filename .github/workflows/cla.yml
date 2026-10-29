@@ -41,6 +41,6 @@ jobs:
           branch: "main"
           allowlist: dependabot[bot],Copilot
           custom-pr-sign-comment: "I have read the Contributor Licence Agreement (CLA) and hereby sign the CLA."
-          custom-notsigned-prcomment: "Thank you for your submission! Before we can accept it, we ask that you agree to the [Contributor Licence Agreement](https://github.com/${{ github.repository }}/blob/main/CONTRIBUTING.md#contributor-licence-agreement). It licenses your contribution to this project's maintainer and to Charmbracelet, the authors of upstream Crush, so that work done here can go upstream without coming back to you for permission. You keep every right to your own work. Sign by posting a pull request comment in the format below."
+          custom-notsigned-prcomment: "Thank you for your submission! Before we can accept it, we ask that you agree to the [Contributor Licence Agreement](https://github.com/${{ github.repository }}/blob/main/CONTRIBUTING.md#contributor-licence-agreement). It licenses your contribution to this project's maintainer and to Charmbracelet, the authors of upstream Crush, so that work done here can go upstream without coming back to you for permission; the parts under internal/gnovm/ are licensed to the maintainer only. You keep every right to your own work. Sign by posting a pull request comment in the format below."
           lock-pullrequest-aftermerge: false
           signed-commit-message: "chore(legal): @$contributorName has signed the CLA"

@@ -131,7 +131,12 @@ func run() error {
 			return fmt.Errorf("%s: no package ufmt clause to rename", e.Name())
 		}
 		name := strings.Replace(e.Name(), "ufmt", "fmt", 1)
-		if err := os.WriteFile(filepath.Join(fmtDst, name), renamed, 0o644); err != nil {
+		// The license (section 5(a)) asks a modified file to say so, with
+		// a date. The change, and so the date, is the same every run.
+		notice := "// Modified by klash on 29 October 2026: the package is renamed from ufmt to\n" +
+			"// fmt (and ufmt.gno to fmt.gno). The original is gno's\n" +
+			"// examples/gno.land/p/nt/ufmt/v0; see LICENSE.md in this directory.\n\n"
+		if err := os.WriteFile(filepath.Join(fmtDst, name), append([]byte(notice), renamed...), 0o644); err != nil {
 			return err
 		}
 	}

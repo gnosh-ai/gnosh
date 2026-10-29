@@ -81,10 +81,16 @@ type program struct {
 //   - consecutive statements become one statement run;
 //   - a trailing lone expression becomes an eval, whose value is shown;
 //   - a func main is renamed main_<seq> and called after everything else,
-//     so one VM can run many programs.
+//     so one VM can run many programs;
+//   - a top-level x, y := ... whose names are all new becomes var x, y = ...,
+//     a declaration: a file's var initializer that depends on a name a :=
+//     statement declared makes the GnoVM panic, and data := ... followed by
+//     var r = f(data) is ordinary code. A := that reuses a name stays a
+//     statement, which gno runs as an assignment.
 //
-// seq is the journal sequence number the input will have.
-func normalize(code string, seq int64) (*program, error) {
+// seq is the journal sequence number the input will have, and existing the
+// names the VM's package already has.
+func normalize(code string, seq int64, existing map[string]bool) (*program, error) {
 	if len(code) > maxInput {
 		return nil, &refusal{fmt.Sprintf("the input is %d bytes; the most a call takes is %d", len(code), maxInput)}
 	}
@@ -138,6 +144,40 @@ func normalize(code string, seq int64) (*program, error) {
 	}
 	line := func(off int) int { return file.Line(file.Pos(off)) }
 
+	// Short declarations of new names become var declarations.
+	declared := map[string]bool{}
+	for i := range stmts {
+		st := &stmts[i]
+		if st.kind != kindStmt {
+			continue
+		}
+		names, define, ok := shortDecl(toks, st.first)
+		if !ok {
+			continue
+		}
+		fresh := true
+		for _, n := range names {
+			if n != "_" && (existing[n] || declared[n]) {
+				fresh = false
+			}
+		}
+		if !fresh {
+			continue
+		}
+		for _, n := range names {
+			declared[n] = true
+		}
+		st.kind = kindDecl
+		st.rewrite = "var " + text(st.from, toks[define].off) + "=" + text(toks[define].off+len(":="), st.to)
+	}
+	// stmtText is a statement's text, as rewritten if it was.
+	stmtText := func(st topStmt) string {
+		if st.rewrite != "" {
+			return st.rewrite
+		}
+		return text(st.from, st.to)
+	}
+
 	for i := 0; i < len(stmts); {
 		st := stmts[i]
 		switch st.kind {
@@ -149,17 +189,21 @@ func normalize(code string, seq int64) (*program, error) {
 			p.imports = append(p.imports, specs...)
 			i++
 		case kindDecl, kindStmt:
-			// Take the run of statements of the same kind.
-			j := i + 1
-			for j < len(stmts) && stmts[j].kind == st.kind {
-				j++
+			// Take the run of statements of the same kind, keeping
+			// what lies between them, so lines stay where they were.
+			var body strings.Builder
+			j := i
+			for ; j < len(stmts) && stmts[j].kind == st.kind; j++ {
+				if j > i {
+					body.Write(src[stmts[j-1].to:stmts[j].from])
+				}
+				body.WriteString(stmtText(stmts[j]))
 			}
 			o := op{Line: line(st.from)}
-			body := text(st.from, stmts[j-1].to)
 			if st.kind == kindDecl {
-				o.File = body
+				o.File = body.String()
 			} else {
-				o.Stmts = body
+				o.Stmts = body.String()
 			}
 			p.ops = append(p.ops, o)
 			i = j
@@ -207,6 +251,25 @@ type topStmt struct {
 	kind     stmtKind
 	from, to int
 	first    int // index of its first token
+	// rewrite replaces the statement's text, if set.
+	rewrite string
+}
+
+// shortDecl recognises a top-level a, b := ... starting at token i, and
+// returns its names and the index of its := token.
+func shortDecl(toks []tok, i int) (names []string, define int, ok bool) {
+	for j := i; j < len(toks); j++ {
+		switch {
+		case (j-i)%2 == 0 && toks[j].t == token.IDENT:
+			names = append(names, toks[j].lit)
+		case (j-i)%2 == 1 && toks[j].t == token.COMMA:
+		case (j-i)%2 == 1 && toks[j].t == token.DEFINE:
+			return names, j, len(names) > 0
+		default:
+			return nil, 0, false
+		}
+	}
+	return nil, 0, false
 }
 
 // isMain reports whether a declaration is func main().

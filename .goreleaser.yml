@@ -95,6 +95,14 @@ archives:
     files:
       - README*
       - LICENSE*
+      - src: internal/gnovm/LICENSE.md
+        dst: LICENSE-gnovm.md
+      - src: internal/gnovm/stdlibs/LICENSE.md
+        dst: LICENSE-gnovm-stdlibs.md
+      - src: internal/gnovm/stdlibs/LICENSE-GO
+        dst: LICENSE-gnovm-stdlibs-GO
+      - src: internal/gnovm/klashlibs/fmt/LICENSE.md
+        dst: LICENSE-gnovm-fmt.md
       - manpages/*
       - completions/*
     format_overrides:

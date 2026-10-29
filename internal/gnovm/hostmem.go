@@ -67,20 +67,31 @@ func cgroupV2Path(data []byte) string {
 }
 
 // cgroupHeadroom walks from the process's cgroup up to the root of a cgroup v2
-// hierarchy mounted at root, and returns the smallest memory.max −
-// memory.current found and the memory.max it came from. ok is false when no
-// level sets a limit.
+// hierarchy mounted at root, and returns the smallest headroom found and the
+// limit it came from. At each level the limit is the lower of memory.max and
+// memory.high (past memory.high the kernel throttles and reclaims), and the
+// usage is memory.current less the inactive page cache in memory.stat, which
+// the kernel takes back before it runs out: counting the cache as used would
+// leave a busy lane with no room at all. ok is false when no level sets a
+// limit.
 func cgroupHeadroom(root, cgPath string) (limit, headroom uint64, ok bool) {
 	dir := filepath.Join(root, filepath.FromSlash(cgPath))
 	for {
-		if max, err := readCgroupUint(filepath.Join(dir, "memory.max")); err == nil {
+		lim, err := readCgroupUint(filepath.Join(dir, "memory.max"))
+		if high, herr := readCgroupUint(filepath.Join(dir, "memory.high")); herr == nil && (err != nil || high < lim) {
+			lim, err = high, nil
+		}
+		if err == nil {
 			cur, _ := readCgroupUint(filepath.Join(dir, "memory.current"))
+			if cache, cerr := readCgroupStat(filepath.Join(dir, "memory.stat"), "inactive_file"); cerr == nil {
+				cur -= min(cache, cur)
+			}
 			h := uint64(0)
-			if max > cur {
-				h = max - cur
+			if lim > cur {
+				h = lim - cur
 			}
 			if !ok || h < headroom {
-				limit, headroom, ok = max, h, true
+				limit, headroom, ok = lim, h, true
 			}
 		}
 		if dir == root || !strings.HasPrefix(dir, root) {
@@ -89,6 +100,21 @@ func cgroupHeadroom(root, cgPath string) (limit, headroom uint64, ok bool) {
 		dir = filepath.Dir(dir)
 	}
 	return limit, headroom, ok
+}
+
+// readCgroupStat reads one key of a cgroup "key value" file such as
+// memory.stat.
+func readCgroupStat(path, key string) (uint64, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	for line := range strings.SplitSeq(string(b), "\n") {
+		if v, found := strings.CutPrefix(line, key+" "); found {
+			return strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+		}
+	}
+	return 0, os.ErrNotExist
 }
 
 // readCgroupUint reads a cgroup file holding one number. A "max" (no limit)

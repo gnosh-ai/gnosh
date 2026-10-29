@@ -64,4 +64,22 @@ func TestCgroupHeadroom(t *testing.T) {
 
 	_, _, ok = cgroupHeadroom(root, "/nolimits")
 	require.False(t, ok)
+
+	// Inactive page cache is reclaimable, so it is not counted as used.
+	write("cached", "memory.max", "1000\n")
+	write("cached", "memory.current", "900\n")
+	write("cached", "memory.stat", "anon 100\nfile 800\ninactive_file 700\nactive_file 100\n")
+	limit, headroom, ok = cgroupHeadroom(root, "/cached")
+	require.True(t, ok)
+	require.Equal(t, uint64(1000), limit)
+	require.Equal(t, uint64(1000-(900-700)), headroom)
+
+	// memory.high, when lower than memory.max (or alone), is the limit.
+	write("high", "memory.max", "max\n")
+	write("high", "memory.high", "500\n")
+	write("high", "memory.current", "100\n")
+	limit, headroom, ok = cgroupHeadroom(root, "/high")
+	require.True(t, ok)
+	require.Equal(t, uint64(500), limit)
+	require.Equal(t, uint64(400), headroom)
 }

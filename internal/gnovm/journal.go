@@ -34,6 +34,9 @@ type journalHeader struct {
 	Version    int       `json:"klash_gnovm_journal"`
 	Generation string    `json:"generation"`
 	Created    time.Time `json:"created"`
+	// Gno is the gno version the journal was written under; a replay
+	// under another may not give the same state.
+	Gno string `json:"gno,omitempty"`
 }
 
 // entry is one successful call: the ops it ran, in order.
@@ -58,6 +61,7 @@ type entry struct {
 type journal struct {
 	path       string
 	generation string
+	gno        string
 	size       int64
 	lastHash   string
 	seq        int64
@@ -76,7 +80,7 @@ func lineHash(line []byte) string {
 
 // createJournal writes a new journal holding only its header, durably.
 func createJournal(path string, now time.Time) (*journal, error) {
-	hdr := journalHeader{Version: journalVersion, Generation: newGeneration(), Created: now.UTC()}
+	hdr := journalHeader{Version: journalVersion, Generation: newGeneration(), Created: now.UTC(), Gno: stdlibVersion()}
 	line, err := json.Marshal(hdr)
 	if err != nil {
 		return nil, err
@@ -85,7 +89,7 @@ func createJournal(path string, now time.Time) (*journal, error) {
 	if err := writeFileSync(path, line); err != nil {
 		return nil, err
 	}
-	return &journal{path: path, generation: hdr.Generation, size: int64(len(line)), lastHash: lineHash(line)}, nil
+	return &journal{path: path, generation: hdr.Generation, gno: hdr.Gno, size: int64(len(line)), lastHash: lineHash(line)}, nil
 }
 
 // errBrokenJournal marks a journal that cannot be read past some line.
@@ -122,7 +126,7 @@ func parseJournal(path string, data []byte) (j *journal, entries []entry, torn b
 			if hdr.Version != journalVersion {
 				return nil, nil, false, fmt.Errorf("%w: format %d, want %d", errBrokenJournal, hdr.Version, journalVersion)
 			}
-			j.generation = hdr.Generation
+			j.generation, j.gno = hdr.Generation, hdr.Gno
 		} else {
 			var e entry
 			if err := json.Unmarshal(line, &e); err != nil {

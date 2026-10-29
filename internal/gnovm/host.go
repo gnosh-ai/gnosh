@@ -45,6 +45,12 @@ const (
 	// maxJournal is the largest journal a VM may grow to.
 	maxJournal = 8 << 20
 
+	// Declarations keep their syntax trees in memory and make each later
+	// declaration slower to add, so they are capped per call and per VM.
+	maxDeclPerEntry = 32 << 10
+	maxDeclPerVM    = 256 << 10
+	maxDeclFiles    = 2000
+
 	defaultMemoryMB = 16
 	maxMemoryMB     = 64
 	defaultGas      = 1_000_000_000
@@ -52,6 +58,16 @@ const (
 )
 
 var nameRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+
+// A VM is rebuilt by replaying its journal, on one thread that every session
+// shares, so what a journal may hold is bounded by what it costs to replay
+// as well as by its size: a call that ran longer than maxEntryWall is not
+// kept, and a VM whose kept calls ran for maxReplayWall in all keeps no more.
+// (Variables only so tests can shorten them.)
+var (
+	maxEntryWall  = 30 * time.Second
+	maxReplayWall = 120 * time.Second
+)
 
 // Options configures a Host.
 type Options struct {
@@ -121,12 +137,43 @@ type vmState struct {
 	lastUse int64
 	used    time.Time
 	broken  error
-	// lifetimeGas is the gas of the journal's entries.
-	lifetimeGas int64
-	// replayDecl and replayImports estimate what replaying the journal
-	// keeps in memory (see charge).
-	replayDecl    int64
-	replayImports int
+	// cost sums the journal's entries.
+	cost journalCost
+}
+
+// journalCost is what a journal's entries add up to: the gas and wall time
+// they ran for, and the declarations and packages a replay of them keeps in
+// memory.
+type journalCost struct {
+	gas       int64
+	wall      time.Duration
+	declBytes int64
+	declFiles int
+	imports   int
+}
+
+func (c *journalCost) add(e *entry, imports map[string]bool) {
+	c.gas += e.Gas
+	c.wall += time.Duration(e.WallNS)
+	for _, o := range e.Ops {
+		if o.File != "" {
+			c.declBytes += int64(len(o.File))
+			c.declFiles++
+		}
+		if o.Import != nil {
+			imports[o.Import.Path] = true
+		}
+	}
+	c.imports = len(imports)
+}
+
+func journalStats(entries []entry) journalCost {
+	var c journalCost
+	imports := map[string]bool{}
+	for i := range entries {
+		c.add(&entries[i], imports)
+	}
+	return c
 }
 
 func (s *vmState) persistent() bool { return s.opts.Persist }
@@ -313,7 +360,9 @@ func (s *vmState) writeMachineFile() error {
 }
 
 // create makes a VM on disk: its directory, machine.json and an empty
-// journal.
+// journal, built in a temporary directory and renamed into place, so a
+// crash never leaves half a VM, and two processes making the same
+// persistent VM at once cannot both succeed.
 func (h *Host) create(project, name string, opts VMOptions) (*vmState, error) {
 	s := &vmState{key: project + "/" + name, project: project, name: name, opts: opts, created: h.opts.Now().UTC()}
 	if opts.Persist {
@@ -321,17 +370,38 @@ func (h *Host) create(project, name string, opts VMOptions) (*vmState, error) {
 	} else {
 		s.dir = filepath.Join(h.ephemeralRoot(project), name)
 	}
-	if err := mkdirSync(s.dir); err != nil {
+	parent := filepath.Dir(s.dir)
+	if err := mkdirSync(parent); err != nil {
 		return nil, err
 	}
-	j, err := createJournal(filepath.Join(s.dir, "journal.jsonl"), h.opts.Now())
+	tmp, err := os.MkdirTemp(parent, ".new-"+name+"-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmp)
+	final := s.dir
+	s.dir = tmp
+	if _, err := createJournal(filepath.Join(tmp, "journal.jsonl"), h.opts.Now()); err != nil {
+		return nil, err
+	}
+	if err := s.writeMachineFile(); err != nil {
+		return nil, err
+	}
+	if err := os.Rename(tmp, final); err != nil {
+		if _, statErr := os.Stat(final); statErr == nil {
+			return nil, &refusal{fmt.Sprintf("another klash process made a VM named %s just now; use it, or pick another name", name)}
+		}
+		return nil, err
+	}
+	if err := syncDir(parent); err != nil {
+		return nil, err
+	}
+	s.dir = final
+	j, _, _, err := readJournal(filepath.Join(final, "journal.jsonl"))
 	if err != nil {
 		return nil, err
 	}
 	s.j = j
-	if err := s.writeMachineFile(); err != nil {
-		return nil, err
-	}
 	h.vms[s.key] = s
 	return s, nil
 }
@@ -408,7 +478,7 @@ func (h *Host) sync(ctx context.Context, s *vmState) error {
 			}
 		}
 		s.j, s.broken = j, nil
-		s.lifetimeGas, s.replayDecl, s.replayImports = journalStats(entries)
+		s.cost = journalStats(entries)
 		s.res = nil
 		return nil
 	}
@@ -431,42 +501,31 @@ func (h *Host) sync(ctx context.Context, s *vmState) error {
 		s.broken = err
 		return err
 	}
-	for _, t := range tail {
-		s.lifetimeGas += t.Gas
-		if s.res != nil && s.res.seq == t.Seq-1 {
-			if _, err := h.replayEntry(ctx, s, &t.entry, time.Time{}); err != nil {
-				s.res = nil
-			}
+	imports := map[string]bool{}
+	if s.res != nil {
+		for _, path := range s.res.imports {
+			imports[path] = true
 		}
+	}
+	for _, t := range tail {
+		s.cost.add(&t.entry, imports)
 		s.j.saw(t)
 	}
+	// The resident VM, if any, catches up in resident(), within the
+	// caller's budget like any replay.
 	if torn {
 		return s.j.cutTail()
 	}
 	return nil
 }
 
-// journalStats sums what a journal's entries cost: their gas, the source of
-// their declarations and statements, and the packages they import.
-func journalStats(entries []entry) (gas, decl int64, imports int) {
-	paths := map[string]bool{}
-	for _, e := range entries {
-		gas += e.Gas
-		for _, o := range e.Ops {
-			decl += int64(len(o.File) + len(o.Stmts))
-			if o.Import != nil {
-				paths[o.Import.Path] = true
-			}
-		}
-	}
-	return gas, decl, len(paths)
-}
-
-// resident returns the VM in memory, rebuilt from its journal if it is not:
-// admitted to the budget first, evicting others if need be, then replayed.
-// A replay that runs past its budget keeps what it built, so the next call
-// carries on from there.
-func (h *Host) resident(ctx context.Context, s *vmState) (*vm, []string, error) {
+// resident returns the VM in memory, brought up to its journal's end: made
+// and admitted to the budget first if it is not resident (evicting others
+// if need be), then replayed. A replay runs in slices: it stops between
+// entries once the caller's budget is spent, after at least one entry, and
+// keeps what it built, so the next call carries on from there and every
+// call makes progress without holding the host for long.
+func (h *Host) resident(ctx context.Context, s *vmState, budget time.Duration) (*vm, []string, error) {
 	if s.broken != nil {
 		return nil, nil, fmt.Errorf("VM %s is broken: %v", s.name, s.broken)
 	}
@@ -492,14 +551,12 @@ func (h *Host) resident(ctx context.Context, s *vmState) (*vm, []string, error) 
 		return nil, notes, err
 	}
 	var todo []entry
-	var budget time.Duration
 	var paths []string
 	for _, e := range entries {
 		if e.Seq <= s.res.seq || e.Seq > s.j.seq {
 			continue
 		}
 		todo = append(todo, e)
-		budget += time.Duration(e.WallNS) * 3
 		for _, o := range e.Ops {
 			if o.Import != nil {
 				paths = append(paths, o.Import.Path)
@@ -511,20 +568,23 @@ func (h *Host) resident(ctx context.Context, s *vmState) (*vm, []string, error) 
 		s.res = nil
 		return nil, notes, s.broken
 	}
+	if s.res.seq == 0 && s.j.gno != "" && s.j.gno != stdlibVersion() {
+		notes = append(notes, fmt.Sprintf("VM %s's journal was written under gno %s and is replayed under gno %s; if its state looks wrong, rebuild it in a new VM",
+			s.name, s.j.gno, stdlibVersion()))
+	}
 	start := time.Now()
-	deadline := start.Add(budget + 2*time.Second)
 	for i := range todo {
-		if _, err := h.replayEntry(ctx, s, &todo[i], deadline); err != nil {
+		if i > 0 && time.Since(start)+3*time.Duration(todo[i].WallNS) > budget {
+			return nil, notes, &busyError{fmt.Sprintf(
+				"VM %s is being rebuilt from its journal (%d of %d entries done in %s); call again to continue",
+				s.name, i, len(todo), time.Since(start).Round(time.Millisecond))}
+		}
+		if err := h.replayEntry(ctx, s, &todo[i]); err != nil {
 			var lim *limitError
-			if errors.As(err, &lim) && (lim.kind == "wall" || lim.kind == "cancelled") {
-				// Keep what was built; the next call resumes. The
-				// entry that was cut short left the VM unusable,
-				// so rebuild from the last entry that finished.
-				done := s.res.seq
+			if errors.As(err, &lim) && lim.kind == "cancelled" {
+				// The entry cut short left the VM unusable.
 				s.res = nil
-				return nil, notes, &busyError{fmt.Sprintf(
-					"rebuilding VM %s from its journal took longer than its budget (%d of %d entries done); call again to continue",
-					s.name, done, len(todo))}
+				return nil, notes, err
 			}
 			s.broken = fmt.Errorf("replaying entry %d: %v", todo[i].Seq, err)
 			s.res = nil
@@ -539,14 +599,15 @@ func (h *Host) resident(ctx context.Context, s *vmState) (*vm, []string, error) 
 
 // replayEntry applies one journaled entry to the resident VM, without a gas
 // limit: it ran within one when it was journaled, and its meaning must not
-// change.
-func (h *Host) replayEntry(ctx context.Context, s *vmState, e *entry, deadline time.Time) (int64, error) {
-	_, used, err := s.res.apply(ctx, e, math.MaxInt64/4, deadline, false)
-	if err != nil {
-		return used, err
+// change. Its wall-clock limit is ten times what it took then, and 5 s
+// more, only to stop a replay that has somehow stopped matching the run.
+func (h *Host) replayEntry(ctx context.Context, s *vmState, e *entry) error {
+	deadline := time.Now().Add(10*time.Duration(e.WallNS) + 5*time.Second)
+	if _, _, err := s.res.apply(ctx, e, math.MaxInt64/4, deadline, false); err != nil {
+		return err
 	}
 	s.res.seq = e.Seq
-	return used, nil
+	return nil
 }
 
 func (h *Host) touch(s *vmState) {
@@ -622,7 +683,7 @@ func (h *Host) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	name := req.Name
 	scratch := name == ""
 	if scratch {
-		prog, err := normalize(req.Code, 1)
+		prog, err := normalize(req.Code, 1, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -684,18 +745,29 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 	if s.j.size >= maxJournal {
 		return nil, &refusal{fmt.Sprintf("VM %s's journal is full (%d MB); make a new VM, or delete this one", s.name, maxJournal>>20)}
 	}
-	prog, err := normalize(req.Code, s.j.seq+1)
-	if err != nil {
+	// Syntax errors are found before the VM is rebuilt, if it must be;
+	// the real split needs the VM's names (see normalize).
+	if _, err := normalize(req.Code, s.j.seq+1, nil); err != nil {
 		return nil, err
 	}
-	v, rnotes, err := h.resident(ctx, s)
+	v, rnotes, err := h.resident(ctx, s, wall)
 	notes = append(notes, rnotes...)
 	if err != nil {
 		return nil, err
 	}
 	h.touch(s)
+	prog, err := normalize(req.Code, s.j.seq+1, v.names())
+	if err != nil {
+		return nil, err
+	}
 	ops, err := h.importOps(v, prog)
 	if err != nil {
+		return nil, err
+	}
+	// A pure evaluation changes nothing, unless the VM has redeclared
+	// one of the builtins that made it look pure.
+	pure := prog.evalPure && !v.shadowsBuiltin()
+	if err := h.checkLimits(s, ops, pure); err != nil {
 		return nil, err
 	}
 	res := &RunResult{VM: s.name, GasLimit: gas, NsPerGas: s.opts.NsPerGas, Notes: notes}
@@ -719,8 +791,16 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 		return res, nil
 	}
 	e.WallNS, e.Gas = int64(res.Wall), used
-	e.Ops = journaledOps(ops, prog.evalPure)
+	e.Ops = journaledOps(ops, pure)
 	if len(e.Ops) == 0 {
+		return res, nil
+	}
+	if res.Wall > maxEntryWall {
+		// Its effects are in the VM but cannot be kept: rebuild.
+		s.res = nil
+		res.Err = &refusal{fmt.Sprintf("this call ran for %s, and calls over %s are not kept in a VM, which would have to run them again to rebuild; "+
+			"nothing from it was kept. Run long computations as a program (with a package clause), and keep only their results in a VM",
+			res.Wall.Round(time.Millisecond), maxEntryWall)}
 		return res, nil
 	}
 	if err := s.j.append(e); err != nil {
@@ -733,13 +813,49 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 		return res, nil
 	}
 	v.seq = e.Seq
-	s.lifetimeGas += used
-	for _, o := range e.Ops {
-		s.replayDecl += int64(len(o.File) + len(o.Stmts))
+	imports := map[string]bool{}
+	for _, path := range v.imports {
+		imports[path] = true
 	}
-	s.replayImports = len(v.imports)
+	s.cost.add(e, imports)
 	res.Journaled, res.Seq = true, e.Seq
 	return res, nil
+}
+
+// checkLimits refuses, before it runs, a call the VM's journal could not
+// keep: one too big to journal, one that would take the VM past its
+// declaration limits, or any call that changes state once the VM's kept
+// calls have run for maxReplayWall in all.
+func (h *Host) checkLimits(s *vmState, ops []op, pure bool) error {
+	b, err := json.Marshal(ops)
+	if err != nil {
+		return err
+	}
+	if len(b) > maxEntry-1024 {
+		return &refusal{fmt.Sprintf("this call is %d bytes once journaled; the most one call may be is %d", len(b), maxEntry-1024)}
+	}
+	var decl int64
+	files := 0
+	for _, o := range ops {
+		if o.File != "" {
+			decl += int64(len(o.File))
+			files++
+		}
+	}
+	switch {
+	case decl > maxDeclPerEntry:
+		return &refusal{fmt.Sprintf("this call declares %d KB of functions, types and variables; the most one call may declare is %d KB. Split it up",
+			decl>>10, maxDeclPerEntry>>10)}
+	case s.cost.declBytes+decl > maxDeclPerVM:
+		return &refusal{fmt.Sprintf("VM %s holds %d KB of declarations, and this call would take it past its %d KB limit; use a new VM",
+			s.name, s.cost.declBytes>>10, maxDeclPerVM>>10)}
+	case s.cost.declFiles+files > maxDeclFiles:
+		return &refusal{fmt.Sprintf("VM %s has had %d inputs with declarations, its limit; use a new VM", s.name, maxDeclFiles)}
+	case !pure && s.cost.wall >= maxReplayWall:
+		return &refusal{fmt.Sprintf("VM %s's kept calls have run for %s in all, its limit (it must run them all again to rebuild); "+
+			"it still answers expressions, but keeps nothing more. Use a new VM", s.name, s.cost.wall.Round(time.Second))}
+	}
+	return nil
 }
 
 // importOps prepends the input's imports to its ops, as import ops bound
@@ -795,7 +911,7 @@ func (h *Host) runProgram(ctx context.Context, req RunRequest) (*RunResult, erro
 	if _, err := h.admit(s); err != nil {
 		return nil, err
 	}
-	prog, err := normalize(req.Code, 1)
+	prog, err := normalize(req.Code, 1, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1089,7 +1205,7 @@ func (h *Host) List(projectPath string) (ListResult, error) {
 			if s.j == nil && s.broken == nil {
 				if j, entries, _, err := readJournal(filepath.Join(s.dir, "journal.jsonl")); err == nil {
 					s.j = j
-					s.lifetimeGas, s.replayDecl, s.replayImports = journalStats(entries)
+					s.cost = journalStats(entries)
 				} else {
 					s.broken = err
 				}
@@ -1107,7 +1223,7 @@ func (h *Host) info(s *vmState) VMInfo {
 		Options:     s.opts,
 		Scratch:     strings.HasPrefix(s.name, scratchPrefix),
 		Resident:    s.res != nil,
-		LifetimeGas: s.lifetimeGas,
+		LifetimeGas: s.cost.gas,
 		LastUsed:    s.used,
 		Charge:      h.charge(s),
 	}

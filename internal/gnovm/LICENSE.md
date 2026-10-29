@@ -6,8 +6,9 @@ The following copyright notice covers all of the files in this directory
   LLC), its license and its own Additional Terms (Strong Attribution), in
   `stdlibs/LICENSE.md`. Files in it that came from Go keep Go's BSD license, in
   `stdlibs/LICENSE-GO`.
-- `klashlibs/fmt` is gno's `ufmt` package (examples/gno.land/p/nt/ufmt),
-  renamed. It keeps the same notices as `stdlibs/`.
+- `klashlibs/fmt` is gno's `ufmt` package (examples/gno.land/p/nt/ufmt/v0),
+  modified by klash on 29 October 2026: its package is renamed to fmt, and
+  ufmt.gno to fmt.gno. It keeps the same notices as `stdlibs/`.
 
 The rest of klash is licensed separately; see "Known license interactions"
 below.
@@ -20,8 +21,9 @@ This program is free software: you can redistribute it and/or modify it under
 the terms of the GNO Network General Public License, version 6, as published by
 NewTendermint, LLC or its successor, or (at your option) any later version of
 that License that the Licensor (defined below), as the proxy named for this
-purpose under section 14 of the License, has publicly accepted for this
-program; in either case together with the Additional Terms below.
+purpose under section 14 of the License, has accepted for this program by a
+statement published in the canonical copy (defined below); in either case
+together with the Additional Terms below.
 
 This program is distributed in the hope that it will be useful, but is provided
 as-is and WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -38,10 +40,13 @@ Attached below are the terms of the GNO Network General Public License, Version
 # Additional Terms (Strong Attribution): standing temporary clause
 
 **Definitions.** In this clause, "Licensor" means Jae Kwon, a person or entity
-he designates in writing, or his successors in interest. The "canonical copy"
-of this file is `internal/gnovm/LICENSE.md` on the `main` branch of
+he designates by a statement published in the canonical copy, or his
+successors in interest. The "canonical copy" of this file is
+`internal/gnovm/LICENSE.md` on the `main` branch of
 <https://github.com/klash-pro/klash>, or at another location the Licensor
-names in that copy. The "Designation" is the last section of this clause; it is
+names in that copy. A "version" of the Covered Work is each commit or tag the
+Licensor publishes in the repository that holds the canonical copy, with every
+copy made from it. The "Designation" is the last section of this clause; it is
 also the Licensor's "Attribution Policy".
 
 **Status.** This clause is standing and temporary. It applies to every version
@@ -66,11 +71,12 @@ The Attribution Notice must be in a manner readily visible to users and must be
 at least as conspicuous as other legal notices or credits in the same
 interface. If there are no other notices or credits it is sufficient for the
 Attribution Notice to appear prominently in the header or footer of the
-interface. The Attribution URL, the Designation and the related attribution
-terms described herein are determined exclusively by the Licensor. In cases of
-ambiguity, forks, or disputes regarding attribution, the Designation in the
-copy of this file that came with the version you received, as the Licensor
-interprets it, shall conclusively govern.
+interface. The Attribution URL and words are those stated in the Designation
+in the copy of this file that came with the version you received; the Licensor
+alone sets them, for each version it publishes. In cases of ambiguity, forks,
+or disputes regarding attribution, that Designation governs: the Licensor's
+reasonable interpretation of it resolves any ambiguity, but cannot require a
+URL or words other than those it states.
 
 This attribution requirement remains in force for twelve (12) years from the
 date the Covered Work is first publicly released under this License, or twelve
@@ -104,13 +110,14 @@ only use the Covered Work, and on promotional material, are severable from the
 requirements on the Covered Work's own user interfaces.
 
 **Reservation of rights.** The copyright holder reserves all rights not
-expressly granted by this License, including the right to offer the Covered
-Work under other terms.
+expressly granted by this License, including the right to offer this program,
+and contributions licensed to the Maintainer under CONTRIBUTING.md, under
+other terms.
 
 ## Designation (Attribution Policy)
 
-Dated 29 October 2026, until the Licensor dates a new one in the canonical
-copy:
+Dated 29 October 2026. It governs every version that carries it; a later
+Designation governs only versions first published after it (see Status).
 
 - Attribution URL: <https://klash.pro>
 - Words: "built on klash"
@@ -132,15 +139,18 @@ for this subsystem; the details and conflicts will be worked out later.
   sdk/vm. This subsystem runs its VMs in a separate worker process to isolate
   faults; that does not separate the licenses, because the worker is the same
   klash binary. Ways out include a linking exception from NewTendermint, LLC
-  (for the GnoVM) and from the Licensor (for this subsystem), a change to
-  klash's license, or removing the link.
+  (for the GnoVM) and from the Licensor (for this subsystem); removing the
+  link; or time: each Crush version's FSL becomes MIT two years after Charm
+  released it, and MIT code can be conveyed under this License. Changing the
+  license of Charm's code is not the Licensor's to do.
 - **Contributions.** CONTRIBUTING.md makes `internal/gnovm/` an exception:
   contributions to it are under this License, and its separate grants to
   Charmbracelet, Inc. do not extend to them; the grants to the Maintainer do.
-- **Remote users.** If you modify this subsystem and people interact with your
-  version remotely (for instance through klash's server mode or its channels),
-  section 13 of the License requires offering them its Corresponding Source;
-  klash's remote interfaces should link to it.
+- **Remote users.** Section 13 of the License asks that whoever modifies the
+  Program, and lets people use the modified version remotely (for instance
+  through klash's server mode or its channels), offer them its Corresponding
+  Source. That binds klash's own remote interfaces too, since klash already
+  includes the GnoVM: they should link to klash's source.
 - **The GnoVM's own terms.** The GnoVM and the standard library this subsystem
   embeds are under the GNO Network GPL v6 with NewTendermint, LLC's Additional
   Terms (Strong Attribution). Those terms apply independently of this file:

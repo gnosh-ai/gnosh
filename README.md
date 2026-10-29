@@ -1343,12 +1343,16 @@ Installing an extra tool might be needed on Unix-like environments.
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md). A contribution is licensed to this
 fork's maintainer and to Charm, so that work done here can go upstream to
-Crush without coming back to you. You keep every right to your own work.
+Crush without coming back to you; contributions under `internal/gnovm/` are
+licensed to the maintainer only. You keep every right to your own work.
 
 ## License
 
 [FSL-1.1-MIT](./LICENSE.md), the same licence as upstream Crush. Each version
-becomes MIT two years after Charm released it.
+becomes MIT two years after Charm released it. The exception is
+`internal/gnovm/`, the GnoVM machines, which is under the GNO Network General
+Public License with Additional Terms (Strong Attribution): see
+[internal/gnovm/LICENSE.md](./internal/gnovm/LICENSE.md).
 
 Klash is a fork of [Crush](https://github.com/charmbracelet/crush) by
 [Charm](https://charm.land). Crush and Charm are Charmbracelet's names; this

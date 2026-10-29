@@ -52,10 +52,13 @@ your Contribution upstream. The purpose of granting Charm the same rights
 is so that work done here can flow back to Crush without having to come
 back to you for permission.
 
-**Exception for `internal/gnovm/`.** For a Contribution to
-`internal/gnovm/`, you make only the grants to the Maintainer, in this
-section and in section 2; the separate grants to Charm do not extend to it.
-That subsystem is not part of Crush and is licensed under different terms.
+**Exception for `internal/gnovm/`.** For the parts of a Contribution under
+`internal/gnovm/` submitted on or after 29 October 2026, you make only the
+grants to the Maintainer, in this section and in section 2; the separate
+grants to Charm do not extend to them, whatever an earlier agreement under
+this file said. The rest of a Contribution that also changes other files is
+under the usual terms. That subsystem is not part of Crush and is licensed
+under different terms.
 
 ### 2. Patent licence
 
@@ -112,6 +115,7 @@ to.
   trade names or product names.
 - Charm runs its own contributor process for the upstream project. This
   agreement means Charm already holds the rights it would need to accept
-  work that originated here; it does not oblige Charm to accept anything,
+  work that originated here, except work under `internal/gnovm/` (see
+  section 1); it does not oblige Charm to accept anything,
   or replace any signature Charm asks for in its own repository. Charm's
   own agreement is at [CLA.md](./CLA.md).

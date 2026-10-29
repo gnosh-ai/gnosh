@@ -30,7 +30,7 @@ func probeHostMemory() (HostMemory, error) {
 			if limit, headroom, ok := cgroupHeadroom("/sys/fs/cgroup", p); ok {
 				hm.CgroupLimit = limit
 				if headroom < hm.Available {
-					hm.Available, hm.Source = headroom, "cgroup memory.max - memory.current"
+					hm.Available, hm.Source = headroom, "cgroup limit less its usage net of reclaimable cache"
 				}
 			}
 		}
