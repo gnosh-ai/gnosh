@@ -1,9 +1,9 @@
 # GnoVM machines in klash — design and plan (v4)
 
 Status: revision 4 (2026-10-29), after review rounds 1–3. Phases 1 (the core
-host) and 2 (the worker, its protocol and the client) are implemented and
-tested in this directory, and the code follows this text; Jae had it published
-on 29 October 2026.
+host) and 2 (the worker, its protocol and the client), and the four `gnovm_*`
+tools of phase 3, are implemented and tested, and the code follows this text;
+Jae had it published on 29 October 2026. Goals (the rest of phase 3) are next.
 Licensed with the rest of `internal/gnovm/` under the GNO Network GPL v6 (or a
 later version the Licensor accepts as proxy), with the Additional Terms in
 [LICENSE.md](LICENSE.md). Appendices A–C record every review finding and what
@@ -549,8 +549,9 @@ but not raise it, and cannot set `in_process`. Lands with the worker (phase
    licensing files, tests. Still to do: the phase-1 test additions in §16.
 2. Worker, IPC, refcounted client, lifecycle wiring, config (`in_process`,
    `memory_budget_mb`); tests.
-3. Tools, goals library, goals operations, snapshots, injection, `/goals`, the
-   `/goal` record, notices, the protected path; tests.
+3. The `gnovm_*` tools (**done**); the goals library, goals operations,
+   snapshots, injection, `/goals`, the `/goal` record, notices, the protected
+   path; tests.
 4. Attribution in every layout, the License palette item, the README (and its
    opening line), docs, schema, the renderer.
 5. End to end (A) and (B); landing and deployment; memory notes.
