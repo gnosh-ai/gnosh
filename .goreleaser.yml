@@ -18,7 +18,7 @@ notarize:
 
 metadata:
   mod_timestamp: "{{ .CommitTimestamp }}"
-  license: "FSL-1.1-MIT"
+  license: "LicenseRef-GNO-Network-GPL-6.0-with-Strong-Attribution"
   homepage: "https://charm.sh/crush"
   description: "A powerful terminal-based AI assistant for developers, providing intelligent coding assistance directly in your terminal."
   full_description: "A powerful terminal-based AI assistant for developers, providing intelligent coding assistance directly in your terminal."

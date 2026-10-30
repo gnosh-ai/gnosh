@@ -6,7 +6,7 @@
   <a href="#nothing-phones-home"><img alt="Telemetry: opt-in" src="https://img.shields.io/badge/telemetry-opt--in-6B50FF?style=flat-square&labelColor=201F26"></a>
   <a href="#local-models"><img alt="Models: hosted or local" src="https://img.shields.io/badge/models-hosted%20or%20local-FF60FF?style=flat-square&labelColor=201F26"></a>
   <a href="#coming-from-claude-code"><img alt="Speaks Claude Code" src="https://img.shields.io/badge/speaks-Claude%20Code-8B75FF?style=flat-square&labelColor=201F26"></a>
-  <a href="./LICENSE.md"><img alt="License: FSL-1.1-MIT" src="https://img.shields.io/badge/license-FSL--1.1--MIT-605F6B?style=flat-square&labelColor=201F26"></a>
+  <a href="./LICENSE.md"><img alt="License: GNO Network GPL v6" src="https://img.shields.io/badge/license-GNO%20Network%20GPL%20v6-605F6B?style=flat-square&labelColor=201F26"></a>
 </p>
 
 <p align="center"><strong>A security-first harness for coding agents, in your terminal.</strong><br>
@@ -1408,10 +1408,16 @@ licensed to the maintainer only. You keep every right to your own work.
 
 ## License
 
-[FSL-1.1-MIT](./LICENSE.md), the same licence as upstream Crush. Each version
-becomes MIT two years after Charm released it. The exception is
-`internal/gnovm/`, the GnoVM machines, which is under the GNO Network General
-Public License with Additional Terms (Strong Attribution): see
+Klash's primary licence is the [GNO Network General Public License, version
+6](./LICENSE.md), with Additional Terms (Strong Attribution) that run to
+NewTendermint, LLC. It covers the work written for this fork.
+
+It does not cover the files that came from Crush: those are Charmbracelet,
+Inc.'s, under FSL-1.1-MIT, and each becomes MIT two years after Charm released
+it. The two licences conflict in a combined binary, which is recorded in
+[LICENSE.md](./LICENSE.md) under "Known licence interactions" and is being
+worked out, not papered over. `internal/gnovm/`, the GnoVM machines, carries
+its own copy of the same License: see
 [internal/gnovm/LICENSE.md](./internal/gnovm/LICENSE.md).
 
 Klash is a fork of [Crush](https://github.com/charmbracelet/crush) by

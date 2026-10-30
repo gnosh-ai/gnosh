@@ -3,12 +3,13 @@
 Thanks for wanting to help.
 
 This project is a fork of [Crush](https://github.com/charmbracelet/crush) by
-Charmbracelet, Inc. It is distributed under the same licence as Crush,
-[FSL-1.1-MIT](./LICENSE.md), and so is every contribution to it, with one
-exception: `internal/gnovm/`, the GnoVM machine subsystem, is under the GNO
-Network General Public License with Additional Terms (Strong Attribution), in
-[internal/gnovm/LICENSE.md](./internal/gnovm/LICENSE.md), and so is every
-contribution to it.
+Charmbracelet, Inc. Its primary licence is the GNO Network General Public
+License, version 6, with Additional Terms (Strong Attribution), in
+[LICENSE.md](./LICENSE.md), and so is every contribution to it. The files that
+came from Crush remain Charmbracelet's, under FSL-1.1-MIT, reproduced at the
+end of that file; `internal/gnovm/`, the GnoVM machine subsystem, carries its
+own copy of the same License in
+[internal/gnovm/LICENSE.md](./internal/gnovm/LICENSE.md).
 
 ## Before you open a pull request
 
@@ -107,9 +108,11 @@ to.
 
 ## What this agreement does not do
 
-- It does not change the licence on the code. This project ships under
-  FSL-1.1-MIT, except `internal/gnovm/` (see above), and your Contribution
-  is distributed under the licence of the part it changes.
+- It does not change the licence on the code. This project's primary licence
+  is the GNO Network General Public License, version 6, with Additional Terms
+  (Strong Attribution); the files that came from Crush stay under
+  FSL-1.1-MIT; and your Contribution is distributed under the licence of the
+  part it changes.
 - It gives neither the Maintainer nor you any rights to Crush beyond what
   FSL-1.1-MIT already grants, and no rights at all to Charm's trademarks,
   trade names or product names.
