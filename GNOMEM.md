@@ -202,16 +202,18 @@ that waits on the expiry:
 A new session is given what mem has open, and what waits on you, along with
 its first prompt, so a check-in like this one brings the reminder back: "So:
 **rotate the staging API key today** — it expires 2026-10-30. Want me to take
-that step?" A session that starts on something else does that work and
-mentions the reminder beside it: "Done. PS: don't forget to rotate the staging
-API key before Friday."
+that step?" A session that starts on something else may do that work and
+mention the reminder beside it, as in one real run: "Done. PS: don't forget to
+rotate the staging API key before Friday."
 
 It is a reminder for the next session, not an alarm: nothing fires at a time
 of day. In real runs on 30 October 2026 with mem v2, the agent brought the
-reminder back on every check-in (3 of 3) and raised it unasked beside an
-unrelated task every time (4 of 4). With the earlier mem, whose recipe told
-the model to use mem only where the task at hand was part of it, it had never
-done that (0 of 7).
+reminder back on every check-in (3 of 3). Beside an unrelated task it raised
+it in 4 runs of 4 that morning, and in 5 of 9 on later builds: kept as a
+question for you, or as a fact, the reminder was raised every time; kept as a
+goal for later, the next session took it for ordinary open work and said
+nothing. With the earlier mem, whose recipe told the model to use mem only
+where the task at hand was part of it, it had never done that (0 of 7).
 
 A reminder can be for a day:
 

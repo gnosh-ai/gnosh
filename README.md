@@ -55,8 +55,8 @@ from a hosted API to one running on your own machine. On top of that:
 - **Remembers in Gno.** What it tried and found, what waits on you and the
   facts you told it stay in `mem`, kept in Gno on your disk. A new session
   starts with what is open and the newest facts, a reminder you asked for
-  comes back beside whatever you start on, and `/mem` shows you all of it,
-  with every change and who made it: [memory that runs](#memory-that-runs).
+  comes back when you next check in, and `/mem` shows you all of it, with
+  every change and who made it: [memory that runs](#memory-that-runs).
 - **Nothing phones home.** No usage metrics, no provider catalog fetch, no
   update check, unless you turn them on.
 - **Tool text can't pose as the conversation.** A model's control tokens in a
@@ -134,9 +134,9 @@ and what is sent.
 
 The reminder stays in mem as an open goal, and the next session is given what
 mem has open along with your first message. So "Morning! Anything I should
-know before I start?" brings it back, and so does a session that starts on
-something else: in a real run, the agent did the task it was given and added
-"PS: don't forget to rotate the staging API key before Friday." It is a
+know before I start?" brings it back, and a session that starts on something
+else may raise it too: in one real run, the agent did the task it was given
+and added "PS: don't forget to rotate the staging API key before Friday." It is a
 reminder for the next session, not an alarm: nothing fires at a time of day.
 [GNOMEM](GNOMEM.md#a-reminder-for-next-time) has the runs.
 
