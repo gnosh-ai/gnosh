@@ -121,17 +121,22 @@ its goal until you answer.
 >
 > *(next session)* **You:** Morning! Anything I should know before I start?
 
-The agent keeps the reminder in mem as an open item. A new session is told
-what mem has open along with its first prompt, so a check-in like this one
-brings the reminder back.
+The agent keeps the reminder in mem as an open goal; in one real run, a goal
+that waits on the expiry:
+`mem.Goal("rotate the staging API key").Steps("rotate the key").Wait("expires this week (2026-10-30)")`.
+A new session is given what mem has open, and what waits on you, along with
+its first prompt, so a check-in like this one brings the reminder back: "So:
+**rotate the staging API key today** — it expires 2026-10-30. Want me to take
+that step?" A session that starts on something else does that work and
+mentions the reminder beside it: "Done. PS: don't forget to rotate the staging
+API key before Friday."
 
-It is a reminder for the next session, not an alarm. Nothing fires at a time
-of day, and the model is told to use mem only where the task at hand is part
-of it, so a session that starts straight on something else gets on with that.
-In 14 real runs on 30 October 2026 the agent kept the reminder 13 times,
-brought it back on every check-in (7 of 7), and never raised it unasked when
-the next session began with an unrelated task (0 of 7), although it had said
-it would. Ask what is open, or say good morning, and it is there.
+It is a reminder for the next session, not an alarm: nothing fires at a time
+of day. In real runs on 30 October 2026 with mem v2, the agent brought the
+reminder back on every check-in (3 of 3) and raised it unasked beside an
+unrelated task every time (4 of 4). With the earlier mem, whose recipe told
+the model to use mem only where the task at hand was part of it, it had never
+done that (0 of 7).
 
 ## See it work
 

@@ -108,11 +108,13 @@ So a fact that changes is set again under the same name, not kept twice, and
 > **You:** Before we wrap up: remind me next time we talk to rotate the
 > staging API key. It expires this week.
 
-The reminder stays in mem as an open item, and the next session is told what
-is open along with your first message, so "Morning! Anything I should know
-before I start?" brings it back. It is a reminder for the next session, not
-an alarm: a session that starts straight on something else gets on with that.
-[GNOMEM](GNOMEM.md#a-reminder-for-next-time) has the numbers.
+The reminder stays in mem as an open goal, and the next session is given what
+mem has open along with your first message. So "Morning! Anything I should
+know before I start?" brings it back, and so does a session that starts on
+something else: in a real run, the agent did the task it was given and added
+"PS: don't forget to rotate the staging API key before Friday." It is a
+reminder for the next session, not an alarm: nothing fires at a time of day.
+[GNOMEM](GNOMEM.md#a-reminder-for-next-time) has the runs.
 
 ### What the agent runs
 
