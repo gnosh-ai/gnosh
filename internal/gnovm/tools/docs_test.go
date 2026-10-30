@@ -13,6 +13,7 @@ import (
 	"cmp"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -377,4 +378,44 @@ func TestDocScenarioPrompts(t *testing.T) {
 	require.Equal(t, []string{"first, said once.", "second", "third one"}, scenarioPrompts(
 		"A description.\n\n-- project/go.mod --\nmodule x\n-- prompt --\nfirst,\nsaid once.\n"+
 			"-- prompt-new --\nsecond\n-- check --\nanswer last contains x\n-- prompt-new --\nthird   one\n"))
+}
+
+// installLine is each shape of line README's Installation block may hold:
+// the build, and commands that write only under ~, which the test points at
+// a temporary directory. A line of any other shape fails the test rather
+// than run on the machine running it.
+var installLine = regexp.MustCompile(`^(go build -o gnosh \.|mkdir -p ~/[\w./-]+|install -m 755 gnosh ~/[\w./-]+)(\s+#.*)?$`)
+
+// TestDocInstallLinesRun runs README's install lines as written, in a home
+// with no ~/.local/bin, as a new machine often has none: install does not
+// make the directory it installs into. A file stands in for the build's
+// binary; every landing checks the build itself.
+func TestDocInstallLinesRun(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("needs bash")
+	}
+	readme, err := os.ReadFile(filepath.Join(repoRoot, "README.md"))
+	require.NoError(t, err)
+	_, after, _ := strings.Cut(string(readme), "\n## Installation\n")
+	_, after, _ = strings.Cut(after, "```bash\n")
+	block, _, _ := strings.Cut(after, "```")
+	require.Contains(t, block, "go build -o gnosh .", "README's Installation block")
+	for line := range strings.Lines(block) {
+		if line = strings.TrimSpace(line); line == "" {
+			continue
+		}
+		require.Regexp(t, installLine, line, "README's install block has a line this test cannot run safely")
+		require.NotContains(t, line, "..", "README's install block has a line this test cannot run safely")
+	}
+
+	dir, home := t.TempDir(), t.TempDir()
+	cmd := exec.Command(bash, "-e", "-c", strings.Replace(block, "go build -o gnosh .", "touch gnosh", 1))
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "HOME="+home)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "README's install lines, in a home with no ~/.local/bin:\n%s", out)
+	info, err := os.Stat(filepath.Join(home, ".local", "bin", "gnosh"))
+	require.NoError(t, err, "README's install lines leave gnosh in ~/.local/bin")
+	assert.NotZero(t, info.Mode()&0o111, "and it can be run")
 }

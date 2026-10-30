@@ -580,6 +580,7 @@ repository:
 
 ```bash
 go build -o gnosh .
+mkdir -p ~/.local/bin
 install -m 755 gnosh ~/.local/bin/gnosh   # or anywhere on your PATH
 ```
 
