@@ -1,0 +1,19 @@
+A goal called off and brought back: the user drops a planned migration, then
+changes their mind in a later session. The goal comes back with its steps,
+reopened rather than made again, so nothing of it is left dropped, and the
+answer lists the steps.
+
+-- mem --
+mem.Goal("migrate to postgres 16").Steps("dump the old database", "restore into postgres 16", "switch the app over")
+-- prompt --
+Let's drop the postgres 16 migration, we're not doing it this quarter.
+-- prompt-new --
+Change of plan: we are doing the postgres 16 migration after all. Bring it back, and tell me its steps.
+-- check --
+turn 1 tool gnovm_run >= 1
+cmd grep -q 'Drop(' "$(dirname "$(find "$XDG_DATA_HOME" -path '*/mem/status.json' | head -1)")/journal.jsonl"
+mem-count open >= 1
+mem-count dropped == 0
+answer last contains dump
+answer last contains restore
+answer last contains switch

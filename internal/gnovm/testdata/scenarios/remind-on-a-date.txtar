@@ -1,0 +1,13 @@
+A reminder for a day: "remind me on November 3". mem keeps it as a goal that
+waits until that day, written as a day of the right year, and a later
+session, still before the day, says what is coming up and when.
+
+-- prompt --
+Remind me on November 3 to renew the TLS certificate for api.acme.test.
+-- prompt-new --
+What have I asked you to remind me about, and when?
+-- check --
+turn 1 tool gnovm_run >= 1
+cmd grep -q '2026-11-03' "$(find "$XDG_DATA_HOME" -path '*/mem/status.json' | head -1)"
+answer last contains TLS
+answer last matches (?i)(nov(ember)?\.? ?0?3\b|2026-11-03|11/0?3\b|\b3(rd)? (of )?nov)
