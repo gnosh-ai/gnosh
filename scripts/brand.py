@@ -411,7 +411,7 @@ html,body{width:1280px;height:640px;overflow:hidden;background:$void}
 </style></head><body>
 <div class="bg">$svg</div>
 <div class="wrap">
-  <div class="tag">A coding agent that <b>thinks, plans, and remembers</b> in Gno.</div>
+  <div class="tag">An AI harness that <b>thinks, plans, and remembers</b> in Gno.</div>
   <div class="pts">
     <span><i style="background:$purple"></i>the Gno VM in the AI harness</span>
     <span><i style="background:$pink"></i>any model, hosted or local</span>
