@@ -94,14 +94,19 @@ step in progress, the steps done checked off.
 
 ### Facts, kept current
 
-> **You:** Remember for later sessions: we deploy with `make ship ENV=prod`,
-> and the staging database is `db-stg-4`.
+> **You:** Remember these for later sessions: the staging database is
+> db-stg-7, and the on-call engineer is Sam Okafor.
 >
-> *(a week later)* **You:** Staging's database moved to `db-stg-9`.
+> *(a week later)* **You:** An update for what you remember: the staging
+> database moved to db-stg-9.
+>
+> *(any later session)* **You:** Which staging database should I use, and who
+> is on call?
 
-A fact has a name, and every new session is told the names mem holds.
-So a fact that changes is set again under the same name, not kept twice, and
-"how do we deploy?", asked in any later session, is answered from mem.
+A fact has a name, and a new session is given the newest facts with your first
+message. So a fact that changes is set again under the same name, not kept
+twice, and in a real run the last session answered without a single call to
+mem: "Staging database: `db-stg-9`. On call: Sam Okafor."
 
 ### A reminder for next time
 
@@ -118,41 +123,58 @@ reminder for the next session, not an alarm: nothing fires at a time of day.
 
 ### What the agent runs
 
-These are mem's own calls as the agent makes them, and what each one
-shows it. A test runs this block against every change to Gnosh, so it stays
-true.
+These are the calls the agent made in the real runs above, replayed on a fresh
+project, with what each one shows it. A test replays them against every
+change to Gnosh, so they stay true. The goal, across its two sessions:
 
 ```
-gnovm_run {"name": "mem", "code": "mem.Goal(\"add Median\").Steps(\"write Median\", \"test it\", \"go test ./... passes\")"}
-  added goal `add-median` "add Median"
-  added `add-median/1` "write Median", `add-median/2` "test it", `add-median/3` "go test ./... passes"; next: `add-median/1` "write Median"
-gnovm_run {"name": "mem", "code": "mem.Done(\"add-median/1\", \"stats.go:31\")"}
-  done `add-median/1` "write Median" → stats.go:31; next: `add-median/2` "test it"
-gnovm_run {"name": "mem", "code": "mem.Fact(\"cmd/deploy\", \"make ship ENV=prod\")\nmem.Fact(\"staging/database\", \"db-stg-4\")"}
-  fact `cmd/deploy` is new
-  fact `staging/database` is new
-gnovm_run {"name": "mem", "code": "mem.Fact(\"staging/database\", \"db-stg-9\")"}
-  fact `staging/database` changed (was "db-stg-4")
 gnovm_run {"name": "mem", "code": "mem.Show()"}
-  mem: 1 goal open · 2 facts
+  mem is empty: mem.Goal("what to get done").Steps("…", "…") plans a task, and mem.Fact("cmd/test", "…") keeps a fact
+gnovm_run {"name": "mem", "code": "mem.Goal(\"add Median to stats\").Steps(\"implement Median\", \"write tests\", \"go test ./... passes\")"}
+  added goal `add-median-stats` "add Median to stats"
+  added `add-median-stats/1` "implement Median", `add-median-stats/2` "write tests", `add-median-stats/3` "go test ./... passes"; next: `add-median-stats/1` "implement Median"
+gnovm_run {"name": "mem", "code": "mem.Start(\"add-median-stats/1\")"}
+  started `add-median-stats/1` "implement Median"
+gnovm_run {"name": "mem", "code": "mem.Done(\"add-median-stats/1\", \"Median in stats.go:17; copies and sorts, no input mutation\")"}
+  done `add-median-stats/1` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation; next: `add-median-stats/2` "write tests"
+gnovm_run {"name": "mem", "code": "mem.Show()"}
+  mem: 1 goal open
   goals:
-    [ ] `add-median` "add Median" (1/3 done · this session · just now)
-      [x] `add-median/1` "write Median" → stats.go:31
-      [ ] `add-median/2` "test it"  ← next
-      [ ] `add-median/3` "go test ./... passes"
-  facts, newest first:
-    `staging/database` = db-stg-9
-    `cmd/deploy` = make ship ENV=prod
+    [ ] `add-median-stats` "add Median to stats" (1/3 done · this session · just now)
+      [x] `add-median-stats/1` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation
+      [ ] `add-median-stats/2` "write tests"  ← next
+      [ ] `add-median-stats/3` "go test ./... passes"
+gnovm_run {"name": "mem", "code": "mem.Done(\"add-median-stats/2\", \"stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates\")"}
+  done `add-median-stats/2` "write tests" → stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates; next: `add-median-stats/3` "go test ./... passes"
+gnovm_run {"name": "mem", "code": "mem.Done(\"add-median-stats/3\", \"go test ./... → ok stats 0.006s\")"}
+  done `add-median-stats/3` "go test ./... passes" → go test ./... → ok stats 0.006s; next: `add-median-stats` itself: mem.Done("add-median-stats", "…") once it holds
+gnovm_run {"name": "mem", "code": "mem.Done(\"add-median-stats\", \"Median in stats.go:17; tests in stats_test.go; go test ./... → ok\")"}
+  done `add-median-stats` "add Median to stats" → Median in stats.go:17; tests in stats_test.go; go test ./... → ok
 ```
 
-Everything in mem has a name, printed in backticks, which the agent types
-back exactly: a goal's name comes from its title, and its steps are numbered
-under it. Setting a fact again replaces it, so mem holds one staging database,
-the current one. Had the agent called `mem.Done("add-median")` while two of
-its steps were open, the call would have been refused, naming them, and
-nothing from it kept. A new session is told, with its first prompt, what mem
-holds: the rules you gave, what is due, what is open and next, and the newest
-facts.
+The first session looked at mem, planned the goal with the condition as a step
+of its own, and finished the first step. The fifth call is the second
+session's first look at mem; the first line of what it shows is what that
+session had already been given with your first message. The goal closed last:
+called while one of its steps was open, `mem.Done` on the goal is refused,
+naming the step, and nothing from the call is kept.
+
+The facts, across their three sessions:
+
+```
+gnovm_run {"name": "mem", "code": "mem.Fact(\"staging-db\", \"The staging database is db-stg-7.\")\nmem.Fact(\"on-call\", \"The on-call engineer is Sam Okafor.\")"}
+  fact `staging-db` is new
+  fact `on-call` is new
+gnovm_run {"name": "mem", "code": "mem.Fact(\"staging-db\", \"The staging database is db-stg-9.\")"}
+  fact `staging-db` changed (was "The staging database is db-stg-7.")
+```
+
+Setting a fact again replaces it, so mem holds one staging database, the
+current one. Everything in mem has a name, printed in backticks, which the
+agent types back exactly: a goal's name comes from its title, its steps are
+numbered under it, and a fact's name is any path the agent gives it. A new
+session is told, with its first prompt, what mem holds: the rules you gave,
+what is due, what is open and next, and the newest facts.
 
 ### Go in your Go: the machines underneath
 

@@ -40,8 +40,8 @@ var repoRoot = filepath.Join("..", "..", "..")
 // and the fewest gnovm_run examples each must hold: a parser that silently
 // found nothing would otherwise pass by checking nothing.
 var checkedDocs = map[string]int{
-	"GNOMEM.md": 11,
-	"README.md": 5,
+	"GNOMEM.md": 10,
+	"README.md": 10,
 }
 
 // docCall is one gnovm_run call in a document and what the document says it
@@ -324,6 +324,8 @@ var docPrompts = []struct{ doc, scenario string }{
 	{"README.md", "readme-goal.txtar"},
 	{"README.md", "remind-next-time.txtar"},
 	{"GNOMEM.md", "remind-next-time.txtar"},
+	{"README.md", "memory-update.txtar"},
+	{"GNOMEM.md", "recall-paraphrased.txtar"},
 }
 
 // quotedProse is a document's prose with block-quote markers, the **You:**

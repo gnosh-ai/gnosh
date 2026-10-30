@@ -84,35 +84,39 @@ what is next, so it knows where the goal stands without being told.
 
 ### A knowledge base
 
-> **You:** Remember for later sessions: staging's database is `db-stg-4`, the
-> on-call engineer is Dana, and we deploy with `make ship ENV=prod`.
+> **You:** Remember for later: our deploy command is make ship ENV=prod, and
+> Lin Wei does QA sign-off on every release.
 >
-> *(next week)* **You:** Staging moved to `db-stg-9`.
->
-> *(any later session)* **You:** Where's the staging database?
+> *(next session)* **You:** How do I push this to production, and who has to
+> check it first?
 
-Each fact has a name, any path you like (`staging/database`,
-`people/on-call`), and a new session is told the newest facts. So a fact that
-changes is set again under the name it already has, rather than added a
-second time to disagree with the first, and a question about one is answered
-by looking it up, by its name or by its words:
+Each fact has a name, any path you like, and a new session is given the newest
+facts with its first prompt. So in a real run the second session answered a
+question put in other words without a single call to mem, in three seconds:
+"Push with `make ship ENV=prod` (`cmd/ship`). **Lin Wei** has to check it
+first — she does QA sign-off on every release." These are the calls the first
+session made, and what each showed it:
 
 ```
-gnovm_run {"name": "mem", "code": "mem.Fact(\"staging/database\", \"db-stg-4\")\nmem.Fact(\"people/on-call\", \"Dana\")\nmem.Fact(\"cmd/deploy\", \"make ship ENV=prod\")"}
-  fact `staging/database` is new
-  fact `people/on-call` is new
-  fact `cmd/deploy` is new
-gnovm_run {"name": "mem", "code": "mem.Fact(\"staging/database\", \"db-stg-9\")"}
-  fact `staging/database` changed (was "db-stg-4")
-gnovm_run {"name": "mem", "code": "mem.Find(\"stg\")"}
-  fact `staging/database` = db-stg-9
-gnovm_run {"name": "mem", "code": "mem.Find(\"deploy\")"}
-  fact `cmd/deploy` = make ship ENV=prod
+gnovm_run {"name": "mem", "code": "mem.Fact(\"cmd/ship\", \"make ship ENV=prod\")\nmem.Fact(\"qa\", \"Lin Wei does QA sign-off on every release\")"}
+  fact `cmd/ship` is new
+  fact `qa` is new
 ```
 
-What the agent finds while it works is kept on the item it was working on,
-as notes, and a question for you is a step of its own (`mem.Ask`), which holds
-its goal until you answer.
+An older fact, no longer among the newest, is found by its words:
+
+```
+gnovm_run {"name": "mem", "code": "mem.Fact(\"cmd/ship\", \"make ship ENV=prod\")\nmem.Fact(\"qa\", \"Lin Wei does QA sign-off on every release\")"}
+  fact `cmd/ship` is new
+  fact `qa` is new
+gnovm_run {"name": "mem", "code": "mem.Find(\"sign-off\")"}
+  fact `qa` = Lin Wei does QA sign-off on every release
+```
+
+A fact that changes is set again under the name it already has, rather than
+added a second time to disagree with the first. What the agent finds while it
+works is kept on the item it was working on, as notes, and a question for you
+is a step of its own (`mem.Ask`), which holds its goal until you answer.
 
 ### A reminder for next time
 
