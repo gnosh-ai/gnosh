@@ -213,8 +213,8 @@ func parseScenario(path string) (*scenario, error) {
 type scenarioRun struct {
 	scenario, variant, dir string
 	turns                  []turnResult
-	after                  []map[string]bool // project files after each turn
-	vms                    map[string]string // persistent VM name -> dump
+	after                  []map[string]string // project files after each turn
+	vms                    map[string]string   // persistent VM name -> dump
 	checks                 []checkResult
 	took                   time.Duration
 }
@@ -320,8 +320,10 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, klash, home, reasoning str
 	writeReport(t, r, sc)
 }
 
-// setLargeModelReasoning sets the large model's reasoning level in a copied
-// crush.json (options.reasoning, keyed "provider/model").
+// setLargeModelReasoning sets the reasoning level of the model the runs use
+// in a copied crush.json (options.reasoning, keyed "provider/model"). It
+// fails the test when it cannot tell which model that is, rather than let
+// the runs go on with their reasoning left as it was.
 func setLargeModelReasoning(t *testing.T, path, level string) {
 	cfg := map[string]any{}
 	if b, err := os.ReadFile(path); err == nil {
@@ -329,13 +331,18 @@ func setLargeModelReasoning(t *testing.T, path, level string) {
 			t.Fatalf("%s: %v", path, err)
 		}
 	}
-	models, _ := cfg["models"].(map[string]any)
-	large, _ := models["large"].(map[string]any)
-	provider, _ := large["provider"].(string)
-	model, _ := large["model"].(string)
+	// The model the runs use: -m GNOVM_SCENARIO_MODEL, or the large model.
+	var provider, model string
+	if m := os.Getenv("GNOVM_SCENARIO_MODEL"); m != "" {
+		provider, model, _ = strings.Cut(m, "/")
+	} else {
+		models, _ := cfg["models"].(map[string]any)
+		large, _ := models["large"].(map[string]any)
+		provider, _ = large["provider"].(string)
+		model, _ = large["model"].(string)
+	}
 	if provider == "" || model == "" {
-		t.Logf("no large model in %s; reasoning left as it is", path)
-		return
+		t.Fatalf("GNOVM_SCENARIO_REASONING needs the model the runs use: set GNOVM_SCENARIO_MODEL to provider/model, or models.large in %s", path)
 	}
 	options, _ := cfg["options"].(map[string]any)
 	if options == nil {
@@ -422,12 +429,16 @@ func parseStream(r io.Reader) turnResult {
 	return tr
 }
 
-func listFiles(dir string) map[string]bool {
-	files := map[string]bool{}
+// listFiles reads the files under dir, by slash-separated path, so that a
+// check after a turn sees each file as that turn left it. A file over 1 MB
+// keeps only its first megabyte.
+func listFiles(dir string) map[string]string {
+	files := map[string]string{}
 	_ = filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 		if err == nil && !d.IsDir() {
 			rel, _ := filepath.Rel(dir, p)
-			files[filepath.ToSlash(rel)] = true
+			b, _ := os.ReadFile(p)
+			files[filepath.ToSlash(rel)] = string(b[:min(len(b), 1<<20)])
 		}
 		return nil
 	})
@@ -565,17 +576,15 @@ func (r *scenarioRun) check(line, project string, env []string) checkResult {
 			}
 			files, f = r.after[n-1], f[2:]
 		}
-		path := f[1]
+		content, exists := files[f[1]]
 		switch f[2] {
 		case "exists":
-			res.ok, res.got = files[path], fmt.Sprint(files[path])
+			res.ok, res.got = exists, fmt.Sprint(exists)
 		case "absent":
-			res.ok, res.got = !files[path], fmt.Sprint(files[path])
+			res.ok, res.got = !exists, fmt.Sprint(exists)
 		case "contains":
-			b, err := os.ReadFile(filepath.Join(project, path))
-			want := strings.Join(f[3:], " ")
-			res.ok = err == nil && strings.Contains(string(b), want)
-			res.got = truncate(string(b), 120)
+			res.ok = exists && strings.Contains(content, strings.Join(f[3:], " "))
+			res.got = truncate(content, 120)
 		}
 	case len(f) >= 2 && f[0] == "cmd":
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
