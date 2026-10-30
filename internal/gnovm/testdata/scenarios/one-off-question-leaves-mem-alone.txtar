@@ -1,0 +1,10 @@
+A one-off question leaves mem alone. The agent may work the answer out in a
+Gno machine, but the answer is not a fact about the project, so no fact is
+kept and no goal is left open for the next session to list. Since the mem
+line went on every prompt (e280abac), 3 of 6 such runs kept something.
+Whether the answer is right is compute-backoff's check, not this one's.
+
+-- prompt --
+A client retries a failed request with exponential backoff: it waits 200 ms before the first retry, doubles the wait each time, and never waits more than 30 s. How long after the first failure does the 10th retry go out?
+-- check --
+cmd f=$(find "$XDG_DATA_HOME" -path '*/mem/status.json' | head -1); test -z "$f" || ! grep -Eq '"(facts|open)":[1-9]' "$f"
