@@ -126,22 +126,58 @@ func (e *memEmbedder) embed(ctx context.Context, texts []string) ([][]int8, stri
 	return vecs, out.Model, nil
 }
 
-// query is the vectors of a search's words (memQueries), or nil when the
-// server does not answer within memEmbedWait.
-func (e *memEmbedder) query(ctx context.Context, words string) ([][]int8, string) {
-	ctx, cancel := context.WithTimeout(ctx, memEmbedWait)
-	defer cancel()
+// query is the vectors of a search's words (memQueries), or an error when
+// the server does not answer within memEmbedWait. A request that takes
+// longer is not cut: it goes on in the background, up to memFillWait, and
+// keeps its connection. Over a slow link, a tunnel where a request takes
+// 490-660 ms on a new connection and 220-300 on an open one, cutting it
+// closed the connection, so every next search paid for a new one, ran out
+// of time too, and none found by meaning (QA, 2026-10-30).
+func (e *memEmbedder) query(ctx context.Context, words string) ([][]int8, string, error) {
 	var texts []string
 	for _, q := range memQueries(words) {
 		texts = append(texts, memQuery+memCut(q, memQueryMax))
 	}
-	vecs, model, err := e.embed(ctx, texts)
-	if err != nil {
-		slog.Debug("mem searches by words alone", "error", err)
-		return nil, ""
+	type answer struct {
+		vecs  [][]int8
+		model string
+		err   error
 	}
-	return vecs, model
+	done := make(chan answer, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), memFillWait)
+		defer cancel()
+		vecs, model, err := e.embed(ctx, texts)
+		done <- answer{vecs, model, err}
+	}()
+	wait := time.NewTimer(memEmbedWait)
+	defer wait.Stop()
+	select {
+	case a := <-done:
+		memLate.Store(e.base, a.err != nil)
+		if a.err != nil {
+			slog.Debug("mem searches by words alone", "error", a.err)
+		}
+		return a.vecs, a.model, a.err
+	case <-wait.C:
+	case <-ctx.Done():
+	}
+	memLate.Store(e.base, true)
+	if _, warned := memLateWarned.LoadOrStore(e.base, true); !warned {
+		slog.Warn("mem's embedding server did not answer a search in time; mem searched by words alone, and the request goes on so its connection is kept",
+			"server", e.base, "wait", memEmbedWait)
+	}
+	return nil, "", errMemEmbedLate
 }
+
+// errMemEmbedLate is a search the embedding server did not answer within
+// memEmbedWait.
+var errMemEmbedLate = fmt.Errorf("the embedding server did not answer within %s", memEmbedWait)
+
+// memLate is, for each embedding server, whether its last search went
+// unanswered in time, which /mem says; memLateWarned, whether this process
+// has said so in its log, which it does once.
+var memLate, memLateWarned sync.Map
 
 // memWordEnd reports whether b can end a word before a sentence's dot.
 func memWordEnd(b byte) bool {
@@ -636,15 +672,15 @@ func (s memSnapshot) nearest(qs [][]int8, model string, least float64, kinds ...
 
 // finder answers the find native from the index x of journal j: the rows
 // holding all the words, then those closest in meaning, and, when neither
-// finds any, the rows holding one of the words; meaning is whether it
-// could look by meaning. An index that cannot answer finds nothing, and the
-// error is logged.
-func (h *memHost) finder(ctx context.Context, x *memIndex, j *journal) func(words string, max int) (names, kinds []string, meaning bool) {
-	return func(words string, max int) (names, kinds []string, meaning bool) {
+// finds any, the rows holding one of the words. how says how it looked
+// (see nearest). An index that cannot answer finds nothing, and the error
+// is logged.
+func (h *memHost) finder(ctx context.Context, x *memIndex, j *journal) func(words string, max int) (names, kinds []string, how string) {
+	return func(words string, max int) (names, kinds []string, how string) {
 		all, any, err := x.find(words, max)
 		if err != nil {
 			slog.Warn("mem's index could not search", "error", err)
-			return nil, nil, false
+			return nil, nil, ""
 		}
 		seen := map[string]bool{}
 		add := func(r memRow) {
@@ -656,49 +692,51 @@ func (h *memHost) finder(ctx context.Context, x *memIndex, j *journal) func(word
 		for _, r := range all {
 			add(r)
 		}
-		if near, ok := h.nearest(ctx, x, j, words); ok {
-			meaning = true
-			for _, r := range near {
-				add(r.memRow)
-			}
+		near, how := h.nearest(ctx, x, j, words)
+		for _, r := range near {
+			add(r.memRow)
 		}
 		if len(names) == 0 {
 			for _, r := range any {
 				add(r)
 			}
 		}
-		return names, kinds, meaning
+		return names, kinds, how
 	}
 }
 
-// nearest is the rows of x close in meaning to words, closest first; ok is
-// false when there is no embedding server, no vectors yet, or the server
-// does not answer, or is another model now.
-func (h *memHost) nearest(ctx context.Context, x *memIndex, j *journal, words string) ([]memScored, bool) {
+// nearest is the rows of x close in meaning to words, closest first. how is
+// "meaning" when it looked by meaning; "words" when the embedding server
+// did not answer the search, so that only the words were matched; and ""
+// when there is no server, no vectors yet, or vectors of another model.
+func (h *memHost) nearest(ctx context.Context, x *memIndex, j *journal, words string) (rows []memScored, how string) {
 	if h.embed == nil {
-		return nil, false
+		return nil, ""
 	}
 	v, err := openMemVectors(memVectorsPath(h.dir, j.generation))
 	if err != nil {
 		slog.Warn("mem's vectors could not be read", "error", err)
-		return nil, false
+		return nil, ""
 	}
 	defer v.close()
 	vecs, had, err := v.all()
 	if err != nil || len(vecs) == 0 {
-		return nil, false
+		return nil, ""
 	}
-	rows, err := x.rows()
+	all, err := x.rows()
 	if err != nil {
 		slog.Warn("mem's index could not be read", "error", err)
-		return nil, false
+		return nil, ""
 	}
-	qs, model := h.embed.query(ctx, words)
-	if qs == nil || model != had {
-		return nil, false
+	qs, model, err := h.embed.query(ctx, words)
+	switch {
+	case err != nil:
+		return nil, "words"
+	case model != had:
+		return nil, ""
 	}
-	s := memSnapshot{gen: j.generation, rows: rows, vecs: vecs, model: had}
-	return s.nearest(qs, model, memFindScore, "item", "fact", "rule"), true
+	s := memSnapshot{gen: j.generation, rows: all, vecs: vecs, model: had}
+	return s.nearest(qs, model, memFindScore, "item", "fact", "rule"), "meaning"
 }
 
 // meaningLine is what /mem says of finding by meaning: which model, and how
@@ -727,15 +765,21 @@ func (h *memHost) meaningLine(ctx context.Context) string {
 		model, err = v.model()
 		return err
 	})
+	var line string
 	switch {
 	case err != nil || !ok || all == 0:
 		return ""
 	case read == 0:
-		return fmt.Sprintf("mem will find by meaning too once the embedding server has read it (0 of %d entries so far)", all)
+		line = fmt.Sprintf("mem will find by meaning too once the embedding server has read it (0 of %d entries so far)", all)
 	case read < all:
-		return fmt.Sprintf("mem also finds by meaning, with %s: %d of %d entries read, the rest on their way", model, read, all)
+		line = fmt.Sprintf("mem also finds by meaning, with %s: %d of %d entries read, the rest on their way", model, read, all)
+	default:
+		line = fmt.Sprintf("mem also finds by meaning, with %s (all %d entries read)", model, all)
 	}
-	return fmt.Sprintf("mem also finds by meaning, with %s (all %d entries read)", model, all)
+	if late, _ := memLate.Load(h.embed.base); late == true {
+		line += fmt.Sprintf("; but the server did not answer its last search within %s, which matched words only", memEmbedWait)
+	}
+	return line
 }
 
 // memFills keeps one fill of mem's vectors running per mem directory in

@@ -134,8 +134,8 @@ func TestMemRecallLive(t *testing.T) {
 		{"write a haiku about autumn, and then translate it to French.", nil},
 	}
 	for _, p := range prompts {
-		qs, model := e.query(context.Background(), p.prompt)
-		require.NotNil(t, qs, "the embedding server answered")
+		qs, model, err := e.query(context.Background(), p.prompt)
+		require.NoError(t, err, "the embedding server answered")
 		var recalled, top []string
 		hit := false
 		for i, r := range s.nearest(qs, model, 0, "item", "fact") {

@@ -32,9 +32,10 @@ func record(kind, name, field, old, new, by string)
 func pending() (kinds, names, fields, olds, news, bys []string, ats []int64)
 
 // find is gnosh's index: the best matches for words, with their kinds
-// ("item", "fact" or "rule"); meaning is whether it looked by meaning as
-// well as by the words, which it does when gnosh has an embedding server.
-func find(words string, max int) (names, kinds []string, meaning bool)
+// ("item", "fact" or "rule"). how is "meaning" when it looked by meaning as
+// well as by the words, which it does when gnosh has an embedding server;
+// "words" when the server did not answer this search; "" otherwise.
+func find(words string, max int) (names, kinds []string, how string)
 
 // holding is where the journal, and this call's Ops, ever held text or its
 // name form: names with their kinds, and whether statements of past inputs

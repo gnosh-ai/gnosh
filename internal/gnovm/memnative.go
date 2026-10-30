@@ -40,7 +40,7 @@ type memContext struct {
 	limit memLimit
 	// find and holding answer from mem's index and journal; nil finds
 	// nothing. holding is also handed the Ops this call has made so far.
-	find    func(words string, max int) (names, kinds []string, meaning bool)
+	find    func(words string, max int) (names, kinds []string, how string)
 	holding func(text string, ops []memOp) (names, kinds []string, statements bool)
 }
 
@@ -92,14 +92,14 @@ func memNative(name gno.Name) func(*gno.Machine) {
 		return func(m *gno.Machine) {
 			ctx := memCallContext(m, "find")
 			var names, kinds []string
-			meaning := false
+			how := ""
 			if ctx.find != nil {
 				max := m.LastBlock().GetPointerTo(nil, gno.NewValuePathBlock(1, 1, "")).TV.GetInt()
-				names, kinds, meaning = ctx.find(memArg(m, 0), int(max))
+				names, kinds, how = ctx.find(memArg(m, 0), int(max))
 			}
 			memPush(m, names)
 			memPush(m, kinds)
-			memPush(m, meaning)
+			memPush(m, how)
 		}
 	case "holding":
 		return func(m *gno.Machine) {

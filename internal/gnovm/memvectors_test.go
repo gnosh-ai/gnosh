@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"hash/fnv"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -34,13 +35,19 @@ import (
 // fakeEmbedder is an embedding server for tests. A text's vector counts the
 // concepts its words name, so texts that share a concept are close in
 // meaning whatever their words. It answers 503 while down, and keeps every
-// text it was given.
+// text it was given. With slowFirst set, the first request on each
+// connection takes that long, as over a tunnel, where a new connection
+// costs most of a request's time; conns counts the connections, and
+// answered the requests answered in full.
 type fakeEmbedder struct {
 	*httptest.Server
-	model atomic.Value
-	down  atomic.Bool
-	mu    sync.Mutex
-	texts []string
+	model           atomic.Value
+	down            atomic.Bool
+	slowFirst       atomic.Int64
+	conns, answered atomic.Int64
+	mu              sync.Mutex
+	texts           []string
+	seen            map[string]bool
 }
 
 var fakeConcepts = [][]string{
@@ -52,9 +59,9 @@ var fakeConcepts = [][]string{
 
 func newFakeEmbedder(t *testing.T) *fakeEmbedder {
 	t.Helper()
-	f := &fakeEmbedder{}
+	f := &fakeEmbedder{seen: map[string]bool{}}
 	f.model.Store("fake-embed")
-	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	f.Server = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if f.down.Load() || r.URL.Path != "/v1/embeddings" {
 			http.Error(w, "down", http.StatusServiceUnavailable)
 			return
@@ -76,12 +83,25 @@ func newFakeEmbedder(t *testing.T) *fakeEmbedder {
 		}{Model: f.model.Load().(string)}
 		f.mu.Lock()
 		f.texts = append(f.texts, in.Input...)
+		first := !f.seen[r.RemoteAddr]
+		f.seen[r.RemoteAddr] = true
 		f.mu.Unlock()
+		if first {
+			time.Sleep(time.Duration(f.slowFirst.Load()))
+		}
 		for i, text := range in.Input {
 			out.Data = append(out.Data, datum{i, fakeVector(text)})
 		}
-		_ = json.NewEncoder(w).Encode(out)
+		if json.NewEncoder(w).Encode(out) == nil {
+			f.answered.Add(1)
+		}
 	}))
+	f.Server.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		if s == http.StateNew {
+			f.conns.Add(1)
+		}
+	}
+	f.Server.Start()
 	t.Cleanup(f.Close)
 	return f
 }
@@ -184,8 +204,42 @@ func TestMemFindsByMeaning(t *testing.T) {
 	require.Contains(t, find("deploy production"), `nothing in mem matches "deploy production", in its words or in meaning`)
 
 	f.down.Store(true)
-	require.Contains(t, find("testing suite"), "Find matches the words as they were stored", "the server down: words alone")
-	require.Contains(t, find("race"), "fact `cmd/test`")
+	require.Contains(t, find("testing suite"), `nothing in mem matches "testing suite": the embedding server did not answer this search, so it matched the words only`,
+		"the server down: words alone, and said")
+	out = find("race")
+	require.Contains(t, out, "fact `cmd/test`")
+	require.Contains(t, out, "(the embedding server did not answer this search, so it matched the words only)")
+}
+
+// A search the embedding server answers late is said to be one, and its
+// request is not cut: it finishes in the background and keeps its
+// connection, so the next search, on that connection, is answered in time.
+// Cut, it closed the connection, and over a tunnel, where a new connection
+// costs most of a request's time, every next search ran out of time too.
+func TestMemFindSaysWhenTheServerWasLate(t *testing.T) {
+	t.Parallel()
+	f := newFakeEmbedder(t)
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	h.embed = newMemEmbedder(f.URL + "/v1")
+	h.embed.client = &http.Client{Transport: &http.Transport{}}
+	memOK(t, h, `mem.Fact("cmd/test", "go test -race ./...")`)
+	require.NoError(t, fillMemVectorsNow(context.Background(), dir, h.embed))
+	h.embed.client.CloseIdleConnections()
+	f.slowFirst.Store(int64(memEmbedWait + 300*time.Millisecond))
+	answered := f.answered.Load()
+
+	out := memOK(t, h, `print(mem.Find("testing suite"))`).Output
+	require.Contains(t, out, `nothing in mem matches "testing suite": the embedding server did not answer this search, so it matched the words only`)
+	require.Contains(t, h.meaningLine(context.Background()), "but the server did not answer its last search within 500ms, which matched words only")
+	require.Eventually(t, func() bool { return f.answered.Load() == answered+1 }, 10*time.Second, 10*time.Millisecond,
+		"the late search's request was answered, not cut")
+
+	out = memOK(t, h, `print(mem.Find("testing suite"))`).Output
+	require.Contains(t, out, "fact `cmd/test` = go test -race ./...", "on the kept connection, in time")
+	require.NotContains(t, out, "did not answer")
+	require.Equal(t, int64(2), f.conns.Load(), "the fill's connection, then the late search's, kept")
+	require.NotContains(t, h.meaningLine(context.Background()), "did not answer")
 }
 
 // A vector is kept under its text's hash: a rebuilt index finds its rows'

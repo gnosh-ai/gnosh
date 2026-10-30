@@ -363,13 +363,22 @@ func (m *Mem) Find(words string) string {
 	if words == "" {
 		panic("Find needs words: mem.Find(\"release key\")")
 	}
-	names, kinds, meaning := find(words, 20)
+	names, kinds, looked := find(words, 20)
+	// A search the embedding server did not answer is said to be one, so
+	// it is not taken for a search by meaning that found nothing.
+	late := ""
+	if looked == "words" {
+		late = "the embedding server did not answer this search, so it matched the words only"
+	}
 	if len(names) == 0 {
 		// Say where to look instead, so the model reads the list once
 		// rather than guessing other words.
 		how := ": Find matches the words as they were stored"
-		if meaning {
+		switch looked {
+		case "meaning":
 			how = ", in its words or in meaning"
+		case "words":
+			how = ": " + late
 		}
 		facts := plural(m.facts.Size(), "fact")
 		if m.facts.Size() > maxShowFacts {
@@ -394,6 +403,9 @@ func (m *Mem) Find(words string) string {
 				sb.WriteString(mark(it) + " " + ref(n, it.Title) + arrow(it.Result) + " (" + day(it.Changed) + ")\n")
 			}
 		}
+	}
+	if late != "" {
+		return cut(sb.String()) + "(" + late + ")\n"
 	}
 	return cut(sb.String())
 }

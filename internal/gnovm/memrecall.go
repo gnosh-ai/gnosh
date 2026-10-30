@@ -85,8 +85,8 @@ func (l *Lazy) MemRecall(ctx context.Context, project, session, prompt string) s
 	if len(s.vecs) == 0 {
 		return ""
 	}
-	qs, model := e.query(ctx, prompt)
-	if qs == nil {
+	qs, model, err := e.query(ctx, prompt)
+	if err != nil {
 		return ""
 	}
 	// A session this process has told nothing yet is given the <mem> block
