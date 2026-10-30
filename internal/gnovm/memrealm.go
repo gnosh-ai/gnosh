@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -339,27 +340,48 @@ func memPanicText(p any, bodyLine int, oneLine bool) string {
 		}
 		msg = place + strings.TrimSuffix(msg[len(m[0]):], ":")
 	}
-	return msg
+	// gno's words for a call chained off one that returns nothing, as
+	// mem.Fact(…).Fact(…).
+	return strings.Replace(msg, "unexpected selector expression type *gnolang.tupleType",
+		"only mem.Goal(…) chains (.Steps, .Wait, .Ask): mem's other calls return nothing, so put each on its own line", 1)
 }
 
-// memNotKept names what a failed input's receipts said it added, for its
-// refusal: ", so `ship`, added above, is not in mem".
+// memNotKept names what a failed input's receipts said it added, and the
+// facts and rules they said it set, for its refusal: ", so `ship`, added
+// above, is not in mem". A model took a fact whose receipt it saw for kept.
 func memNotKept(ops []memOp) string {
-	var added []string
+	var added, set []string
 	for _, op := range ops {
-		if op.Kind == "add" {
+		switch {
+		case op.Kind == "add":
 			added = append(added, "`"+op.Name+"`")
+		case (op.Kind == "fact" || op.Kind == "rule") && op.New != "" && !slices.Contains(set, op.Kind+" `"+op.Name+"`"):
+			set = append(set, op.Kind+" `"+op.Name+"`")
 		}
 	}
-	switch {
-	case len(added) == 0:
-		return ""
-	case len(added) == 1:
-		return ", so " + added[0] + ", added above, is not in mem"
-	case len(added) > 3:
-		added = append(added[:3], "the rest")
+	list := func(names []string) string {
+		if len(names) > 3 {
+			names = append(names[:3:3], "the rest")
+		}
+		if len(names) == 1 {
+			return names[0]
+		}
+		return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 	}
-	return ", so " + strings.Join(added[:len(added)-1], ", ") + " and " + added[len(added)-1] + ", added above, are not in mem"
+	switch {
+	case len(added) > 0 && len(set) > 0:
+		return ", so " + list(added) + " (added above) and " + list(set) + " (set above) are not in mem"
+	case len(added)+len(set) == 0:
+		return ""
+	}
+	names, verb := added, "added"
+	if len(set) > 0 {
+		names, verb = set, "set"
+	}
+	if len(names) == 1 {
+		return ", so " + names[0] + ", " + verb + " above, is not in mem"
+	}
+	return ", so " + list(names) + ", " + verb + " above, are not in mem"
 }
 
 // memPlaceRe is where gno puts a compile error: main.gno:5:1-8: .

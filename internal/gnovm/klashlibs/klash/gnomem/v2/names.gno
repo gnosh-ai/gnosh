@@ -171,6 +171,8 @@ func (m *Mem) newGoalName(title string, given ...string) string {
 		switch {
 		case len(given) > 1:
 			panic("a goal takes one name: mem.Goal(\"title\", \"name\")")
+		case validName(title) && !validName(n):
+			panic("the title comes first, then the name: mem.Goal(" + strconv.Quote(n) + ", \"" + title + "\")")
 		case strings.Contains(n, "/"):
 			panic("a goal's name has no \"/\" (`" + n + "` would be a step of `" + parentOf(n) + "`): try `" + nameForm(n) + "`")
 		case !validName(n):
@@ -273,6 +275,13 @@ func (m *Mem) miss(name string) string {
 		return "`" + name + "` is a rule, not an item; to change it: mem.Rule(\"" + name + "\", \"…\")"
 	case m.titled(name) != "":
 		return strconv.Quote(name) + " is a title, not a name: the goal with that title is `" + m.titled(name) + "`"
+	case m.slugged(goalOf(name)) != "":
+		g := goalOf(name)
+		msg := "`" + g + "` is not a name: a goal's name keeps at most 4 words of its title, and this one's is `" + m.slugged(g) + "`"
+		if rest := name[len(g):]; rest != "" {
+			msg += ", so the step is `" + m.slugged(g) + rest + "`"
+		}
+		return msg
 	}
 	if p := parentOf(name); p != "" {
 		if it := m.get(p); it != nil {
@@ -290,6 +299,19 @@ func (m *Mem) titled(title string) string {
 	want, found := sameTitle(title), ""
 	m.open.Iterate("", "", func(_ string, v any) bool {
 		if n := v.(string); sameTitle(m.get(n).Title) == want {
+			found = n
+		}
+		return found != ""
+	})
+	return found
+}
+
+// slugged is the name of the open goal whose title's every word, joined by
+// "-", is name, as a model makes a name; or "".
+func (m *Mem) slugged(name string) string {
+	found := ""
+	m.open.Iterate("", "", func(_ string, v any) bool {
+		if n := v.(string); nameForm(m.get(n).Title) == name {
 			found = n
 		}
 		return found != ""

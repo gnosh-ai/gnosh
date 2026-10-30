@@ -136,6 +136,14 @@ asked `rotate-staging-key/1` "which day suits you?" (for the user); `rotate-stag
 > s1: mem.Goal("ping the team"); mem.Ask("ping the team", "who is on call?")
 added goal `ping-team` "ping the team"
 error: "ping the team" is a title, not a name: the goal with that title is `ping-team`; nothing was kept, so `ping-team`, added above, is not in mem
+> s1: mem.Goal("goal-until-green", "make go test ./... pass")
+error: the title comes first, then the name: mem.Goal("make go test ./... pass", "goal-until-green")
+> s1: mem.Goal("which Go file declares the most functions?"); mem.Note("which-go-file-declares-the-most-functions", "b.go has 5")
+added goal `which-go-file-declares` "which Go file declares the most functions?"
+error: `which-go-file-declares-the-most-functions` is not a name: a goal's name keeps at most 4 words of its title, and this one's is `which-go-file-declares`; nothing was kept, so `which-go-file-declares`, added above, is not in mem
+> s1: mem.Fact("cmd/deploy", "make ship ENV=prod"); mem.Note("qa", "Lin does QA")
+fact `cmd/deploy` is new; `cmd/` also has `cmd/build`, `cmd/test` and `cmd/tests`
+error: no item `qa`; mem.Show() lists them; nothing was kept, so fact `cmd/deploy`, set above, is not in mem
 > s1: mem.Note("bump-gno-pin", "the token is sk-live-4f9c2b")
 noted on `bump-gno-pin` "bump the gno pin"
 > s1: mem.Redact("sk-live-4f9c2b")
@@ -172,4 +180,4 @@ facts, newest first:
   `cmd/build` = make build
 
 > s1: println(mem.JSON("bump-gno-pin"))
-{"goals":[{"name":"bump-gno-pin","title":"bump the gno pin","status":"","result":"","wait":"PR #6399 merged","for":"","doing":"","by":"s1","changed":1793270640,"steps_open":0,"steps_done":0,"next":"","next_title":"","steps":[],"held":[{"name":"bump-gno-pin","why":"words"}]}]}
+{"goals":[{"name":"bump-gno-pin","title":"bump the gno pin","status":"","result":"","wait":"PR #6399 merged","for":"","doing":"","by":"s1","changed":1793270820,"steps_open":0,"steps_done":0,"next":"","next_title":"","steps":[],"held":[{"name":"bump-gno-pin","why":"words"}]}]}

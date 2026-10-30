@@ -29,8 +29,8 @@ type memSource struct {
 
 // shapeMemInput makes a mem input runnable, taking what models write:
 // statements, a whole program (its package clause dropped, its main called
-// last), imports or none (a package used without one is imported), and
-// declarations. A declaration of a func stands at the top level; others run
+// last), imports or none (a package used without one is imported; mem's
+// own, import "mem", is dropped), and declarations. A declaration of a func stands at the top level; others run
 // where they are, in order with the statements. A trailing read of mem
 // (mem.Show(), mem.Find(…), mem.Next(…), mem.JSON(…), or mem alone) prints
 // what it says.
@@ -57,6 +57,9 @@ func shapeMemInput(code string) (memSource, error) {
 	}
 	src.main = main.String()
 	for _, imp := range append(prog.imports, autoImports(prog, nil)...) {
+		if imp.Path == "mem" && (imp.Name == "" || imp.Name == "mem") {
+			continue // mem is there already; models import it
+		}
 		spec := strconv.Quote(imp.Path)
 		if imp.Name != "" {
 			spec = imp.Name + " " + spec
@@ -126,6 +129,9 @@ func memHint(code, msg string) string {
 			return `a name is a string: quote it, as mem.Done("release-v2/1", "…")`
 		}
 	}
+	if strings.Contains(msg, "cannot use klash/gnomem/v2.Goal as string") {
+		return "mem.Goal(…) gives a Goal, not a name: pass its name, g.Name, or the name mem printed in backticks"
+	}
 	if memAssignRe.MatchString(code) {
 		return "mem is your memory, kept by gnosh: change it with its calls (mem.Goal, mem.Done, mem.Fact, …), never by setting it"
 	}
@@ -146,5 +152,6 @@ var memMoved = map[string]string{
 	"Remember": `mem.Fact("name", "text") keeps a fact, and mem.Show("name") reads it back`,
 	"Facts":    `mem.Fact("name", "text") keeps a fact, and mem.Show("name") reads it back`,
 	"Items":    `mem.Show("name") shows an item, and mem.JSON("name") gives it as JSON`,
+	"List":     `mem.Show() lists what mem holds, and mem.Show("name") shows a goal with its steps`,
 	"Erase":    `mem.Forget("name") erases a closed item and its steps, or a fact; mem.Redact("text") takes a secret out everywhere`,
 }

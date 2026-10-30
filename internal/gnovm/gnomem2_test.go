@@ -116,6 +116,11 @@ func TestMemStory(t *testing.T) {
 	// input says which of what it printed is not in mem.
 	s.run("s1", `mem.Goal("rotate the staging key").Ask("which day suits you?")`)
 	s.run("s1", `mem.Goal("ping the team"); mem.Ask("ping the team", "who is on call?")`)
+	// The real-model pass's slips: the name before the title, a name made
+	// of all a title's words, and a fact before a failure.
+	s.run("s1", `mem.Goal("goal-until-green", "make go test ./... pass")`)
+	s.run("s1", `mem.Goal("which Go file declares the most functions?"); mem.Note("which-go-file-declares-the-most-functions", "b.go has 5")`)
+	s.run("s1", `mem.Fact("cmd/deploy", "make ship ENV=prod"); mem.Note("qa", "Lin does QA")`)
 	s.holding = func(text string, _ []memOp) ([]string, []string, bool) {
 		if text == "sk-live-4f9c2b" {
 			return []string{"bump-gno-pin"}, []string{"item"}, false

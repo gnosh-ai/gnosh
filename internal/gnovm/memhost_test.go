@@ -383,6 +383,19 @@ func TestHostRunsMem(t *testing.T) {
 	require.Contains(t, res.Notes, `items are named, not numbered: type the name mem printed in backticks, as mem.Done("release-v2/2", "…")`)
 	res = call(`mem.Done(ship/1, "built")`)
 	require.Contains(t, res.Notes, `a name is a string: quote it, as mem.Done("release-v2/1", "…")`)
+	// The real-model pass's slips: a call chained off one that returns
+	// nothing, a Goal where a name goes, mem.List, and mem imported.
+	res = call(`mem.Fact("staging-db", "db-stg-7").Fact("release-manager", "Priya")`)
+	require.EqualError(t, res.Err, "only mem.Goal(…) chains (.Steps, .Wait, .Ask): mem's other calls return nothing, so put each on its own line")
+	res = call("g := mem.Goal(\"count the funcs\")\nmem.Note(g, \"b.go has 5\")")
+	require.Contains(t, res.Notes, "mem.Goal(…) gives a Goal, not a name: pass its name, g.Name, or the name mem printed in backticks")
+	res = call(`mem.List("ship")`)
+	require.Contains(t, res.Notes, `mem.Show() lists what mem holds, and mem.Show("name") shows a goal with its steps`)
+	res = call("import \"mem\"\nmem.Fact(\"cmd/test\", \"go test ./...\")")
+	require.NoError(t, res.Err)
+	require.Equal(t, "fact `cmd/test` is new\n", res.Output)
+	res = call("mem.Fact(\"cmd/deploy\", \"make ship ENV=prod\")\nmem.Note(\"qa\", \"Lin does QA\")")
+	require.EqualError(t, res.Err, "no item `qa`; mem.Show() lists them; nothing was kept, so fact `cmd/deploy`, set above, is not in mem")
 
 	_, _, err := h.New(ctx, NewRequest{Project: "/proj", Name: MemVM})
 	require.ErrorContains(t, err, "mem is your memory")
@@ -392,7 +405,7 @@ func TestHostRunsMem(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list.VMs, 1)
 	require.Equal(t, MemVM, list.VMs[0].Name)
-	require.EqualValues(t, 1, list.VMs[0].Entries)
+	require.EqualValues(t, 2, list.VMs[0].Entries)
 	kept, err := h.Kept("/proj", MemVM, `req-mem.Goal("ship it").Steps("build", "test")`)
 	require.NoError(t, err)
 	require.True(t, kept)
@@ -402,6 +415,26 @@ func TestHostRunsMem(t *testing.T) {
 	require.Contains(t, block, "- `ship` \"ship it\" (0/2 done · ")
 	require.Contains(t, block, "next: `ship/1` \"build\"")
 	require.Empty(t, MemBlock(dir, "/elsewhere"))
+}
+
+// A failed input's refusal names what its receipts said it added and set.
+func TestMemNotKept(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		ops  []memOp
+		want string
+	}{
+		{nil, ""},
+		{[]memOp{{Kind: "note", Name: "a", New: "x"}}, ""},
+		{[]memOp{{Kind: "add", Name: "ship"}}, ", so `ship`, added above, is not in mem"},
+		{[]memOp{{Kind: "fact", Name: "cmd/deploy", New: "make ship"}}, ", so fact `cmd/deploy`, set above, is not in mem"},
+		{[]memOp{{Kind: "fact", Name: "cmd/old", Old: "x"}}, ""},
+		{[]memOp{{Kind: "fact", Name: "a", New: "1"}, {Kind: "fact", Name: "a", New: "2"}, {Kind: "rule", Name: "b", New: "3"}}, ", so fact `a` and rule `b`, set above, are not in mem"},
+		{[]memOp{{Kind: "add", Name: "t"}, {Kind: "add", Name: "t/1"}, {Kind: "add", Name: "t/2"}, {Kind: "add", Name: "t/3"}}, ", so `t`, `t/1`, `t/2` and the rest, added above, are not in mem"},
+		{[]memOp{{Kind: "add", Name: "t"}, {Kind: "fact", Name: "cmd/test", New: "go test"}}, ", so `t` (added above) and fact `cmd/test` (set above) are not in mem"},
+	} {
+		require.Equal(t, tc.want, memNotKept(tc.ops))
+	}
 }
 
 // A repository's worktrees and subdirectories share one mem: it is keyed
