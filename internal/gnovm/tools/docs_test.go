@@ -605,3 +605,69 @@ func TestDocInstallLinesRun(t *testing.T) {
 	require.NoError(t, err, "README's install lines leave gnosh in ~/.local/bin")
 	assert.NotZero(t, info.Mode()&0o111, "and it can be run")
 }
+
+// scenarioChecks counts a scenario's checks as the harness does: the lines
+// of its check section that are neither blank nor a # comment.
+func scenarioChecks(txtar string) int {
+	n := 0
+	for _, sec := range strings.Split("\n"+txtar, "\n-- ")[1:] {
+		name, body, _ := strings.Cut(sec, " --\n")
+		if name != "check" {
+			continue
+		}
+		for _, line := range strings.Split(body, "\n") {
+			if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// gnomemRun is a row of GNOMEM's table of real runs: the use case, which is
+// a scenario's name, its sessions, and the checks it passed, "all N" or
+// "K of N".
+var gnomemRun = regexp.MustCompile(`^\| ([a-z0-9-]+) \| .+ \| (\d+) \| (?:all (\d+)|\d+ of (\d+)) \|$`)
+
+// TestDocTableRowsAreScenarios: each row of GNOMEM's table of real runs names
+// a scenario in testdata/scenarios and gives its sessions and its number of
+// checks, so a row whose scenario is gone, or has changed since its run,
+// fails here until the scenario is run again and the row rewritten. A
+// scenario with no row yet is only logged: the table says "each use case
+// below", and a new one gets its row once it has been run.
+func TestDocTableRowsAreScenarios(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join(repoRoot, "internal", "gnovm", "testdata", "scenarios", "*.txtar"))
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+	want := map[string]string{}
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		require.NoError(t, err)
+		sessions := 1 + strings.Count("\n"+string(b), "\n-- prompt-new --\n")
+		want[strings.TrimSuffix(filepath.Base(f), ".txtar")] = fmt.Sprintf("%d sessions, %d checks", sessions, scenarioChecks(string(b)))
+	}
+	text, err := os.ReadFile(filepath.Join(repoRoot, "GNOMEM.md"))
+	require.NoError(t, err)
+	_, table, ok := strings.Cut(string(text), "\n| Use case | What the user asks | Sessions | Checks passed |\n|---|---|---|---|\n")
+	require.True(t, ok, "GNOMEM.md has no table of real runs")
+	rows := map[string]bool{}
+	for _, line := range strings.Split(table, "\n") {
+		if !strings.HasPrefix(line, "|") {
+			break
+		}
+		m := gnomemRun.FindStringSubmatch(line)
+		require.NotNil(t, m, "a row of GNOMEM's table is not | use case | what the user asks | sessions | all N, or K of N |: %s", line)
+		rows[m[1]] = true
+		w, ok := want[m[1]]
+		if !assert.True(t, ok, "GNOMEM's table has a row for %s, which is no scenario in testdata/scenarios: drop the row, or name the scenario it ran", m[1]) {
+			continue
+		}
+		assert.Equal(t, w, fmt.Sprintf("%s sessions, %s checks", m[2], m[3]+m[4]),
+			"GNOMEM's row for %s does not match its scenario, which has changed since the run: run it again (GNOMEM shows how) and rewrite the row", m[1])
+	}
+	for name := range want {
+		if !rows[name] {
+			t.Logf("%s has no row in GNOMEM's table yet: run it and add one", name)
+		}
+	}
+}

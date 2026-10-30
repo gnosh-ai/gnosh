@@ -351,12 +351,12 @@ included.
 
 These are real runs of Gnosh with the open-weight Qwen3.8-27B on a local
 llama.cpp server, one of each use case below, on Gnosh's main branch as it
-stood between 12:04 and 16:57 UTC on 30 October 2026, with Qwen thinking as it
-does by default and finding by meaning off. Each runs in a fresh project and a
-fresh config, with only Gnosh's built-in prompt, and the user talks the way
-the second column says, never naming Gno or mem unless it says so. The checks
-are scripted: files, test results, the final answer, and what mem holds at
-the end.
+stood between 12:04 and 18:22 UTC on 30 October 2026, with Qwen thinking as it
+does by default, and finding by meaning off except in recall-by-meaning, which
+measures it. Each runs in a fresh project and a fresh config, with only
+Gnosh's built-in prompt, and the user talks the way the second column says,
+never naming Gno or mem unless it says so. The checks are scripted: files,
+test results, the final answer, and what mem holds at the end.
 
 | Use case | What the user asks | Sessions | Checks passed |
 |---|---|---|---|
@@ -366,7 +366,13 @@ the end.
 | goal-until-green | make `go test ./...` pass, keeping the goal and its condition in Gno | 1 | all 7 |
 | goal-replan | a goal whose first approach fails: note why, re-plan | 1 | all 5 |
 | cancel-and-revive | a planned migration dropped, then "bring it back" in a later session | 2 | all 7 |
+| two-tasks-interleaved | two goals planned, "do the port change now; the README can wait", then "what's left?" | 2 | all 4 |
+| goal-judged-met | a goal planned and finished at once with two edits, which the judge finds met | 1 | all 6 |
+| goal-claimed-done-not-done | "I already did both steps … mark it done", when they are not done | 1 | all 2 |
+| goal-done-elsewhere | "I did both steps on my laptop … just mark the goal done" | 1 | all 3 |
 | release-waits-for-signoff | a release that needs a person's sign-off | 2 | all 5 |
+| release-signoff-closes | "Lin signed off on 1.3.0 this morning, so we're done with that release." | 1 | all 2 |
+| where-are-we | "Where are we with the release?", two steps done and one waiting on the user | 1 | all 3 |
 | research-carries-over | which file declares the most functions, kept for a later session | 2 | all 5 |
 | checklist-calc | four functions in one sitting, "keep track of which ones are done" | 1 | all 4 |
 | todo-list-next-day | a todo list made in one session, asked for in the next | 2 | all 3 |
@@ -375,23 +381,36 @@ the end.
 | wait-on-a-merge | a reminder that waits on a merge, then "What's on?" | 2 | all 3 |
 | remind-on-a-date | "remind me on November 3 to …", then "what have I asked you to remind me about?" | 2 | all 4 |
 | mem-stays-out-of-the-way | a small unrelated request while a release is planned | 2 | all 2 |
+| user-can-see-mem | a fact kept, then "how can I see everything you're keeping … without asking you?" | 2 | all 2 |
 | memory-across-sessions | two facts to remember for a future session, asked for there | 2 | all 4 |
 | memory-update | two facts; one changes in a second session; a third asks | 3 | all 5 |
+| facts-said-in-passing | a typo fix with "by the way, our staging server moved…", then the address asked for | 2 | all 2 |
 | recall-paraphrased | facts kept in one session, asked for in other words in the next | 2 | all 3 |
 | recall-beyond-the-block | 32 facts, the first two asked for in other words | 3 | all 3 |
+| recall-by-meaning | 35 facts; "who should I wake up at 3 a.m. …" shares no word with the two it needs | 1 | all 2 |
 | unknown-fact-honest | something it was never told | 2 | all 2 |
 | rule-from-the-user | "always run gofumpt …", then "What rules do you follow?" | 2 | all 3 |
-| forget-a-secret | a key kept, "forget it completely", then asked for | 3 | all 5 |
+| never-keep-a-secret | "remember for later: the staging API key is …", then asked for it | 2 | 1 of 3 |
+| forget-a-secret | a key already in mem, "forget it completely", then asked for | 2 | all 5 |
 | compute-primes | the exact sum of the first 1000 primes | 1 | all 2 |
 | compute-backoff | when the 10th retry of a backoff goes out | 1 | all 2 |
+| compute-backoff-after-hi | "say 'hi'" first, then the backoff question in the same session | 1 | all 2 |
 
-- **forget-a-secret** failed a check on its first run: mem kept nothing of
-  the key, but the third session went looking past the project, into the test
-  harness's own transcripts of the first session, and quoted the key from
-  there. The harness now writes those only after the last session, and the
-  built-in prompt tells the model that what you erased stays erased: it reads
-  mem only through its calls, and never digs through Gnosh's data or
-  transcripts for what mem does not show. Run again, it passed every check.
+- **never-keep-a-secret** kept mem clean: the agent stored only a note that
+  the key exists. But it wrote the key into a `.env` file in the project,
+  unasked, and the next session read it from there and answered with it. The
+  built-in prompt keeps secrets out of mem; in this run it did not keep one
+  out of a file.
+- **forget-a-secret** failed a check on its first run, when its first session
+  still asked for the key to be kept: mem kept nothing of the key, but the
+  third session went looking past the project, into the test harness's own
+  transcripts of the first session, and quoted the key from there. The
+  harness now writes those only after the last session, and the built-in
+  prompt tells the model that what you erased stays erased: it reads mem only
+  through its calls, and never digs through Gnosh's data or transcripts for
+  what mem does not show. Run again, it passed every check. Since the agent no
+  longer keeps a secret in mem when told one, the key is now put there before
+  the run, and the row is that two-session run.
 - Main changed under the runs as work landed, and mem's layout moved to 3
   partway; the four use cases whose checks read mem after that were run again
   with a checker that reads the new layout: goal-replan, long-goal-sessions,
