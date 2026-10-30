@@ -142,7 +142,8 @@ func TestScenarioFilesParse(t *testing.T) {
 		`(file|after \d+ file) \S+ (exists|absent|contains .+)|` +
 		`cmd .+|` +
 		`vm-persist (>=|<=|==|>|<) \d+|` +
-		`vm-dump contains .+)$`)
+		`vm-dump contains .+|` +
+		`vm-eval [a-z][a-z0-9_-]* \S+ ((>=|<=|==|>|<) -?\d+|contains .+))$`)
 	for _, file := range files {
 		sc, err := parseScenario(file)
 		if err != nil {
@@ -467,6 +468,24 @@ func dumpPersistentVMs(t *testing.T, gnovmDir, project string) map[string]string
 	return dumps
 }
 
+// evalInVM rebuilds a run's VM from its journal and returns an expression's
+// value there.
+func evalInVM(gnovmDir, project, vm, expr string) (string, error) {
+	h, err := NewHost(Options{Dir: gnovmDir, Client: NewClientID()})
+	if err != nil {
+		return "", err
+	}
+	defer h.Close()
+	res, err := h.Run(context.Background(), RunRequest{Project: project, Name: vm, Code: expr})
+	if err == nil && res.Err != nil {
+		err = res.Err
+	}
+	if err != nil {
+		return "", err
+	}
+	return res.Value, nil
+}
+
 var opRe = regexp.MustCompile(`^(>=|<=|==|>|<)$`)
 
 // check evaluates one check line; see the scenario files for the forms.
@@ -577,6 +596,20 @@ func (r *scenarioRun) check(line, project string, env []string) checkResult {
 		}
 		if !res.ok {
 			res.got = fmt.Sprintf("not in %d persistent VMs", len(r.vms))
+		}
+	case len(f) >= 5 && f[0] == "vm-eval":
+		// vm-eval <vm> <expression, no spaces> <op or contains> <value>:
+		// the expression's value in the VM, rebuilt from its journal.
+		got, err := evalInVM(filepath.Join(r.dir, "data", "crush", "gnovm"), project, f[1], f[2])
+		res.got = truncate(got, 160)
+		switch {
+		case err != nil:
+			res.got = err.Error()
+		case f[3] == "contains":
+			res.ok = strings.Contains(strings.ToLower(got), strings.ToLower(strings.Join(f[4:], " ")))
+		default:
+			n, err := strconv.Atoi(got)
+			res.ok = err == nil && countOK(n, f[3], f[4])
 		}
 	default:
 		res.got = "unknown check"

@@ -70,3 +70,5 @@ file stats_test.go contains want -2
 tool gnovm_run >= 2
 vm-persist >= 1
 vm-dump contains go test
+vm-eval mem len(mem.Items) >= 2
+vm-eval mem mem.Show() contains [x]

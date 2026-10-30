@@ -1,0 +1,47 @@
+A goal whose first approach fails: the model must note what it tried and
+why it failed, and re-plan, rather than give up or loop.
+
+-- project/go.mod --
+module numparse
+
+go 1.22
+-- project/parse.go --
+package numparse
+
+import "strconv"
+
+// Parse reads an integer written as Go writes integer literals: decimal,
+// 0x hex, 0o octal or 0b binary, with underscores between digits, an
+// optional sign, and spaces around it.
+func Parse(s string) (int64, error) {
+	n, err := strconv.Atoi(s)
+	return int64(n), err
+}
+-- project/parse_test.go --
+package numparse
+
+import "testing"
+
+func TestParse(t *testing.T) {
+	for in, want := range map[string]int64{
+		"42": 42, "-7": -7, " 12 ": 12, "1_000": 1000, "0x1F": 31, "0o17": 15, "0b101": 5,
+	} {
+		got, err := Parse(in)
+		if err != nil || got != want {
+			t.Errorf("Parse(%q) = %d, %v; want %d", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"", "abc", "1__0", "0x"} {
+		if _, err := Parse(in); err == nil {
+			t.Errorf("Parse(%q) has no error", in)
+		}
+	}
+}
+-- prompt --
+Make `go test ./...` pass by fixing parse.go, not the test. Keep the goal on your board, note each approach you try and why it fails, and re-plan when one does not work.
+-- check --
+cmd go test ./...
+file parse_test.go contains "0b101": 5
+tool gnovm_run >= 2
+vm-eval mem len(mem.Items) >= 2
+vm-eval mem mem.Show(1,2,3,4,5,6,7,8) contains note 1:

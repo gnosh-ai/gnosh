@@ -57,3 +57,4 @@ answer last contains b.go
 answer last contains 5
 turn 2 tool gnovm_run >= 1
 vm-dump contains b.go
+vm-eval mem mem.Show() contains b.go

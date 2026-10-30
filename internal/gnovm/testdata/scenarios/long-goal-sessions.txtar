@@ -26,3 +26,5 @@ turn 2 tool gnovm_run >= 1
 turn 3 tool gnovm_run >= 1
 turn 4 tool gnovm_run >= 1
 vm-persist >= 1
+vm-eval mem len(mem.Items) >= 5
+vm-eval mem mem.Show() contains 0 open
