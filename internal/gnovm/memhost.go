@@ -202,8 +202,10 @@ func (h *memHost) touched(r *memRealm, caller string, ops []memOp) []MemGoal {
 type memStatus struct {
 	Generation string `json:"generation"`
 	Seq        int64  `json:"seq"`
-	// Day is the user's local date it was computed on.
+	// Day is the user's local date it was computed on, and At when (Unix
+	// seconds): when mem last changed.
 	Day string          `json:"day"`
+	At  int64           `json:"at"`
 	Mem json.RawMessage `json:"mem"`
 }
 
@@ -217,7 +219,8 @@ func (h *memHost) writeStatus(r *memRealm, j *journal) {
 		slog.Warn("mem's status could not be computed", "error", err)
 		return
 	}
-	b, err := json.Marshal(memStatus{Generation: j.generation, Seq: j.seq, Day: h.now().Format(time.DateOnly), Mem: json.RawMessage(call.Output)})
+	now := h.now()
+	b, err := json.Marshal(memStatus{Generation: j.generation, Seq: j.seq, Day: now.Format(time.DateOnly), At: now.Unix(), Mem: json.RawMessage(call.Output)})
 	if err != nil {
 		slog.Warn("mem's status could not be written", "error", err)
 		return

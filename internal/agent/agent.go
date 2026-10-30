@@ -313,8 +313,10 @@ type sessionAgent struct {
 	// goals are the sessions' goals, kept by the coordinator that sets
 	// them; nil, there are none (see goalContinuation).
 	goals *goalBindings
-	// memBlock, memRecall and memSummarized are SessionAgentOptions'.
+	// memBlock, memChanged, memRecall and memSummarized are
+	// SessionAgentOptions'.
 	memBlock      func(sessionID string) string
+	memChanged    func(sessionID string, since time.Time) string
 	memRecall     func(ctx context.Context, sessionID, prompt string) string
 	memSummarized func(sessionID string)
 	// idleCompaction holds each session's idle-compaction timer, armed
@@ -429,6 +431,10 @@ type SessionAgentOptions struct {
 	// for a new session's first prompt and again after each summary; nil
 	// or "", nothing.
 	MemBlock func(sessionID string) string
+	// MemChanged is the same, for a session the user comes back to, when
+	// mem changed after since, the time of the session's newest message
+	// (Lazy.MemChanged); "", nothing.
+	MemChanged func(sessionID string, since time.Time) string
 	// MemRecall is what the project's mem holds close in meaning to a
 	// prompt the user typed (Lazy.MemRecall), which goes with it; nil or
 	// "", nothing. MemSummarized tells mem a session was summarized, so
@@ -482,6 +488,7 @@ func NewSessionAgent(
 		instructionsLoaded:    instructionsLoaded,
 		goals:                 opts.Goals,
 		memBlock:              opts.MemBlock,
+		memChanged:            opts.MemChanged,
 		memRecall:             opts.MemRecall,
 		memSummarized:         opts.MemSummarized,
 	}
@@ -1198,6 +1205,21 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				call.promptHookContext = joinHookContext(call.promptHookContext, block)
 				call.carriesSessionStart = true
 			}
+		}
+	} else if a.memChanged != nil && currentSession.ParentSessionID == "" && !call.HiddenUserMessage && call.Channel == "" {
+		// A session the user comes back to after mem changed elsewhere, in
+		// another session or by /mem, is shown it again with the prompt, as
+		// a new session is: what it saw of mem is out of date. Its last
+		// turn is its newest message, which this prompt's is not yet: the
+		// session's own mem calls came before it, and an erasure's
+		// scrubbing, which updates sessions and messages, moves no
+		// message's time.
+		var last int64
+		for _, msg := range msgs {
+			last = max(last, msg.CreatedAt)
+		}
+		if block := a.memChanged(call.SessionID, time.Unix(last, 0)); block != "" {
+			call.promptHookContext = joinHookContext(call.promptHookContext, block)
 		}
 	}
 

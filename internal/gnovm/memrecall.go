@@ -13,6 +13,7 @@ import (
 	"context"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Recall (MEMPLAN §6): with each prompt the user types in a main session,
@@ -37,6 +38,20 @@ func (l *Lazy) MemBlock(project, session string) string {
 	l.show(session, memNamesIn(block))
 	fillMemVectors(memDir(l.opts.Dir, project), newMemEmbedder(l.opts.Embeddings))
 	return block
+}
+
+// MemChanged is the <mem> block for session, resumed, when mem changed
+// after since, the time of the session's last turn: by another session,
+// or the user's /mem. A session's own changes come in its turns, before
+// since. Both are whole seconds, so a change in the very second the turn
+// ended is not seen. "" when mem has not changed since, or holds nothing
+// to tell.
+func (l *Lazy) MemChanged(project, session string, since time.Time) string {
+	st, ok := readMemStatus(memDir(l.opts.Dir, project))
+	if !ok || st.At <= since.Unix() {
+		return ""
+	}
+	return l.MemBlock(project, session)
 }
 
 // MemSummarized is told that session was summarized: what it was shown

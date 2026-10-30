@@ -416,6 +416,35 @@ func TestRun_SessionStartBlockStillMarksSessionStarted(t *testing.T) {
 	require.Equal(t, "x\n", string(data), "the second prompt does not run the hooks again")
 }
 
+// A session the user comes back to is shown mem again with the prompt
+// when mem changed after the session's last activity; a hidden prompt
+// is not.
+func TestRun_MemBlockGoesWithAResumedSessionWhenMemChanged(t *testing.T) {
+	t.Parallel()
+
+	r := sessionStartAgent(t, false, "")
+	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "first"})
+	require.NoError(t, err)
+	block := "<mem>\nmem: 1 item open\nopen goals, newest first:\n- `release` \"release v2\" (just now)\n</mem>"
+	var since []time.Time
+	r.agent.memChanged = func(_ string, t time.Time) string {
+		since = append(since, t)
+		return block
+	}
+	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "back again"})
+	require.NoError(t, err)
+	prompts := r.model.recorded()
+	require.Len(t, prompts, 2)
+	texts := userTexts(prompts[1])
+	require.Equal(t, "back again\n\n"+message.PromptHookContext(block), texts[len(texts)-1])
+	require.Len(t, since, 1)
+	require.False(t, since[0].IsZero(), "asked as of the session's last activity")
+
+	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "go on", HiddenUserMessage: true})
+	require.NoError(t, err)
+	require.Len(t, since, 1, "a hidden prompt is not shown it")
+}
+
 // A prompt the user types goes with what mem recalls for it, as hook
 // output does; a hidden prompt, as a continuation is, asks for none.
 func TestRun_MemRecallGoesWithATypedPrompt(t *testing.T) {

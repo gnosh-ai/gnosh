@@ -392,6 +392,18 @@ func (c *coordinator) memBlock(isSubAgent bool) func(sessionID string) string {
 	return func(sessionID string) string { return c.gnovms.MemBlock(c.cfg.WorkingDir(), sessionID) }
 }
 
+// memChanged is how a main agent shows a session the user comes back to
+// what the project's mem holds, when it changed since; a sub-agent's
+// sessions are not shown.
+func (c *coordinator) memChanged(isSubAgent bool) func(sessionID string, since time.Time) string {
+	if c.gnovms == nil || isSubAgent {
+		return nil
+	}
+	return func(sessionID string, since time.Time) string {
+		return c.gnovms.MemChanged(c.cfg.WorkingDir(), sessionID, since)
+	}
+}
+
 // memRecall is how a main agent gives a prompt the user typed what the
 // project's mem holds close to it in meaning; a sub-agent's prompts get
 // none. memSummarized goes with it.
@@ -1110,6 +1122,7 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		InstructionsLoaded:    c.instructionsLoaded,
 		Goals:                 c.goals,
 		MemBlock:              c.memBlock(isSubAgent),
+		MemChanged:            c.memChanged(isSubAgent),
 		MemRecall:             c.memRecall(isSubAgent),
 		MemSummarized:         c.memSummarized(isSubAgent),
 		DisableAutoSummarize:  c.cfg.Config().Options.DisableAutoSummarize,

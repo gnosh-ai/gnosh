@@ -366,3 +366,22 @@ func TestMemRecall(t *testing.T) {
 	again, _ := f.embedded("")
 	require.Equal(t, sent, again, "nor is its prompt sent anywhere")
 }
+
+// A session the user comes back to is shown mem again when it changed after
+// the session last did anything, and only then.
+func TestMemChanged(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestHost(t, dir)
+	l := NewLazy(ClientOptions{Options: Options{Dir: dir}})
+	require.Empty(t, l.MemChanged("/proj", "s1", time.Time{}), "no mem")
+	res, err := h.Run(context.Background(), RunRequest{Project: "/proj", Session: "s2", Name: MemVM, Code: `mem.Fact("cmd/test", "go test ./...")`})
+	require.NoError(t, err)
+	require.NoError(t, res.Err)
+	st, ok := readMemStatus(memDir(dir, "/proj"))
+	require.True(t, ok)
+	require.InDelta(t, testNow().Unix(), st.At, 60, "when mem changed, by the host's clock")
+
+	require.Contains(t, l.MemChanged("/proj", "s1", time.Unix(st.At-60, 0)), "`cmd/test` = go test ./...", "changed since")
+	require.Empty(t, l.MemChanged("/proj", "s1", time.Unix(st.At, 0)), "not since")
+}
