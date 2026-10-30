@@ -3,7 +3,9 @@
 Status: revision 4 (2026-10-29), after review rounds 1–3. Phases 1 (the core
 host) and 2 (the worker, its protocol and the client), and the four `gnovm_*`
 tools of phase 3, are implemented and tested, and the code follows this text;
-Jae had it published on 29 October 2026. Goals (the rest of phase 3) are next.
+Jae had it published on 29 October 2026. GNOMEM, the model's board in a `mem`
+VM (§19, Appendix E), was added on 30 October. Goals (the rest of phase 3)
+are next.
 Licensed with the rest of `internal/gnovm/` under the GNO Network GPL v6 (or a
 later version the Licensor accepts as proxy), with the Additional Terms in
 [LICENSE.md](LICENSE.md). Appendices A–C record every review finding and what
@@ -576,6 +578,46 @@ but not raise it, and cannot set `in_process`. Lands with the worker (phase
   guard against.
 - (Answered: the work went public on 29 October 2026.)
 
+## 19. GNOMEM: the agent's board (added 2026-10-30)
+
+Real-model scenario runs (`testdata/scenarios`, `TestScenarios`) showed that
+with a short recipe in the system prompt the model keeps its checklist and
+memory in persistent VMs, but writes its own structs each session (about 400
+tokens at 5-20 tokens/s) in a different shape each time. Jae asked for "memory
+Go structs for goals, subgoals, research, whatever": a minimal starting point,
+"a good foundation", which others may replace. It is model-side; the
+harness's goals (§12) remain separate.
+
+- **`klash/gnomem/v1`** (`klashlibs/klash/gnomem/v1`): `Board{Items, Facts,
+  Changed}` and `Item{Title, Parent, Status, Result, Notes}`, plain data;
+  `Add(title, steps...)`, `Step`, `Done(id, result)`, `Drop`, `Reopen`,
+  `Note`, `Show(ids...)`, `String`. One item type serves as goal, step and
+  question; a condition is a step (Done refuses while a step is open); a
+  question's notes are its findings and its result its answer. Titles clip at
+  200 bytes and notes and results at 1000, never refused; Show's outline is
+  capped near 3000 bytes.
+- **Grow-only.** A persistent VM is rebuilt by replaying its calls against the
+  library this klash embeds, so a change in what a call does, or a new
+  refusal, would break or silently change old boards. v1 may gain functions,
+  methods, types and trailing fields; anything else is `klash/gnomem/v2`.
+  `TestMemV1IsFrozen` replays a fixed board against golden files that are
+  never regenerated. `importByName` binds `gnomem` to the newest version.
+- **`mem`.** The host makes a persistent VM `mem` per project on first use,
+  whose first entry is `import gnomem "klash/gnomem/v1"; var mem =
+  gnomem.New()`; assigning to `mem` is refused; code using `mem` elsewhere is
+  pointed there. Two processes racing to make it end with one board (the
+  loser's first entry is refused as a redeclaration).
+- **Reads are not journaled.** Before, every method call counted as a change,
+  so each read of a board was kept and replayed forever, and the journal and
+  replay limits (§6) would end a board's life through use. An eval or print
+  that only reads a board (`R.Show(...)`, `R.String()`, `println(R)`) is
+  dropped from the entry once `vm.isBoard` confirms R's static type is
+  `*klash/gnomem/v1.Board` and no builtin is shadowed.
+- **Recipe.** `<gno_machines>` in the coder prompt teaches `mem` in seven
+  lines, with examples that are not the scenarios' own data.
+
+Round-1 review findings are in Appendix E.
+
 ---
 
 ## Appendix A. Review round 1: findings and dispositions
@@ -719,3 +761,33 @@ regression tests (`round4_test.go`).
 | G3 | Test (B) can pass without the goal being met | accepted: pass needs the script's check met in ≥2 of 3 runs, one a fresh-session resume, and an improvement over the control |
 | G4–G16 | Keying by worktree root; G10 hash rule; `/goal` record rules; snapshot-failure variant; block size; channel notices; `.env` moving the root; call sites; `/goal` refusal; tool alias; headers; attribution coverage; stale status | the alias, headers and status fixed now; the rest carried into phase 3–4 work |
 
+
+## Appendix E. GNOMEM review round 1: findings and dispositions
+
+Three fresh reviewers read the draft board (v0: `Board{Items []*Item, Facts
+map[string]Fact, byID, last}`, `Item{ID, Title, When, Check func() bool,
+Status int, Result, Notes []Note, Subs, Parent}`, 13 functions) with three
+lenses: minimalism (M), how a 27B model would use it (E), and durability as a
+foundation (F).
+
+| # | Finding | Disposition |
+|---|---|---|
+| F1 | No versioning: replay runs old calls against the current library, so a rename or a new refusal breaks old boards, and a changed meaning silently changes them | fixed: `klash/gnomem/v1`, grow-only, golden-file test, newest version auto-imported |
+| F2 | Reads are journaled as writes, so reading wears out a board | fixed: board reads not journaled after a type check (§19) |
+| F3 | Show had no real bound, rendered twice, and a newline could fake a line | fixed: one pass, closed items one line, newest 10 closed top-level, 20 facts, hard cap, newlines shown as ⏎ |
+| F4/M1 | The tree stored four ways (`Items`/`Subs`/`Parent`/`byID`), so hand edits break it | fixed: one append-only `Items` slice indexed by id, `Parent` the only link |
+| F5 | Caps must exist from the first release | fixed: clipping (not refusal) at 200 and 1000 bytes; Show's cap |
+| F6 | `ImportablePackages` would expose the harness-only goals library | fixed: `klash/goals` excluded |
+| F7 | `TestGnomemSurvivesARestart` compared a value with itself | fixed: captured on the first host |
+| M2/E4/F-b | `Check` closures prove nothing (a VM cannot run `go test`), cannot be shown or exported, and capture variables that later change; `When` is just more title | removed: a condition is a step |
+| M3 | `Fact` and `Note` structs carry timestamps nothing shows | removed: `Facts map[string]string`, `Notes []string`; the board keeps one `Changed` time |
+| M4/E4 | `Done` both a constant and a method; `Status` printed as 0 | fixed: `Status` is a string |
+| M5 | Too many readers, and `Done(Next(), …)` closes whatever is first | fixed: `Show`/`String` only; the outline and receipts name the next item |
+| M6 | No version in the path | fixed (F1) |
+| E1 | Resume depends on names the model chose, and `B := gnomem.New()` again wipes the board | fixed: the harness's `mem` VM and variable; assigning to `mem` refused |
+| E2 | Only `println(B.Show())` was readable; a trailing `B.Show()` came back as one quoted line | fixed: a multi-line string value is shown as it is |
+| E3 | Show hides what was tried | fixed: the next item's last three notes, a header with counts, the next item and the time |
+| E5 | Wrong ids pass silently; errors cost round trips | fixed: receipts from Done/Drop/Reopen; errors list open items with titles |
+| E6 | A checklist took three calls and ~100 tokens | fixed: `Add(title, steps...)` in one call, and `mem` needs no setup |
+| F-c | Should the harness's goals and the model's board be one design? | no: separate authorities sharing a vocabulary; the harness never takes the board as proof (DESIGN §12 stays) |
+| E-recipe | Examples in the recipe must not be the scenarios' data | done |
