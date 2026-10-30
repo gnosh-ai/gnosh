@@ -943,3 +943,37 @@ func TestMemStartRefusesAWaitAndReopenKeepsWhy(t *testing.T) {
 	require.Contains(t, show, "reopened: doing it after all")
 	require.Contains(t, show, "was dropped: not this quarter")
 }
+
+// An empty mem's store is stamped as it opens, so a later layout's build
+// knows what it holds; a store there already with no stamp, which holds no
+// entry, is made anew. An empty mem made at 09:57 never got a stamp, and
+// once layout 3 landed every call in Jae's lane failed reading its earlier
+// Mem: "index out of range [11] with length 10" (2026-10-30).
+func TestMemHostStampsAnEmptyMemAndRemakesAnUnstampedStore(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	memOK(t, h, `println(mem.Show())`)
+	st := memStoreStamp(t, dir)
+	require.Equal(t, memLayout, st.Layout)
+	require.Zero(t, st.Seq, "an empty mem's, stamped")
+
+	// A store as an earlier build left it: no stamp, and what it deployed.
+	stores, err := filepath.Glob(filepath.Join(dir, "store-*"))
+	require.NoError(t, err)
+	r, err := openMemRealm(newBase(), stores[0])
+	require.NoError(t, err)
+	r.kv.Delete(nil, memStampKey)
+	r.kv.Set(nil, []byte("klash/an-earlier-build"), []byte("its Mem"))
+	require.NoError(t, r.close())
+
+	memOK(t, h, `mem.Fact("cmd/test", "go test ./...")`)
+	r, err = openMemRealm(newBase(), stores[0])
+	require.NoError(t, err)
+	require.Nil(t, r.kv.Get(nil, []byte("klash/an-earlier-build")), "made anew")
+	_, ok, err := r.stamp()
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.NoError(t, r.close())
+	require.Contains(t, memOK(t, h, `print(mem.Show("cmd/test"))`).Output, "go test ./...")
+}

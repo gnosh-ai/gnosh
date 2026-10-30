@@ -391,10 +391,25 @@ func (h *memHost) open() (r *memRealm, j *journal, notes []string, err error) {
 		return nil, nil, nil, fmt.Errorf("mem's journal: %w: a %q journal", errBrokenJournal, hdr.Kind)
 	}
 	dir := filepath.Join(h.dir, "store-"+hdr.Generation)
+	_, statErr := os.Stat(dir)
 	if r, err = h.openStore(dir); err != nil {
 		return nil, nil, nil, err
 	}
 	st, ok, err := r.stamp()
+	// A store there already with no stamp holds no entry, only mem's realm
+	// as some build deployed it, of a layout nothing says: it is made anew.
+	// An empty mem's never got a stamp, so a later layout's code read an
+	// earlier Mem, and every call failed ("index out of range [11] with
+	// length 10" in Jae's lane, 2026-10-30).
+	if err == nil && !ok && statErr == nil {
+		r.close()
+		if err = os.RemoveAll(dir); err == nil {
+			r, err = h.openStore(dir)
+		}
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
 	if err == nil && ok {
 		if st.Layout > memLayout {
 			r.close()
@@ -448,9 +463,13 @@ func (h *memHost) open() (r *memRealm, j *journal, notes []string, err error) {
 		r.close()
 		return nil, nil, notes, err
 	}
-	if fresh && j.seq > 0 {
-		if differs := h.checkRebuild(r, j); differs != "" {
-			notes = append(notes, differs)
+	// A store built afresh is checked, and stamped: an empty mem's too, so
+	// a later layout's build knows what it holds.
+	if fresh {
+		if j.seq > 0 {
+			if differs := h.checkRebuild(r, j); differs != "" {
+				notes = append(notes, differs)
+			}
 		}
 		h.unchecked = false
 		if err := r.setStamp(h.stamp(j)); err != nil {
