@@ -30,8 +30,9 @@ const (
 // with its status, result, wait, for and doing, who made it and when it
 // changed, how many of its steps are open and done, its next for caller()
 // and that item's title, and, when its next is "", what holds back the open
-// items Next passed over: "day", "user", "words" or "session". A goal asked
-// for by name also comes with its steps, at most 100.
+// items Next passed over: "day", "user", "words" or "session", each with its
+// title, the wait on it or above it, and who started it. A goal asked for by
+// name also comes with its steps, at most 100.
 func (m *Mem) JSON(names ...string) string {
 	var j jsonWriter
 	j.open("{")
@@ -175,9 +176,11 @@ func (m *Mem) goalJSON(j *jsonWriter, name string, withSteps bool) {
 	if next == "" && g.Status == "" {
 		names, why := m.held(name, g, session)
 		for i, n := range names {
+			it := m.get(n)
 			j.open("{")
-			j.field("name", n)
-			j.field("why", why[i])
+			for _, kv := range [][2]string{{"name", n}, {"why", why[i]}, {"title", it.Title}, {"wait", m.waitOn(n)}, {"doing", it.Doing}} {
+				j.field(kv[0], kv[1])
+			}
 			j.close("}")
 		}
 	}

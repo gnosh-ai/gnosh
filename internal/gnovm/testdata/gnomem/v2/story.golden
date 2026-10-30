@@ -180,4 +180,4 @@ facts, newest first:
   `cmd/build` = make build
 
 > s1: println(mem.JSON("bump-gno-pin"))
-{"goals":[{"name":"bump-gno-pin","title":"bump the gno pin","status":"","result":"","wait":"PR #6399 merged","for":"","doing":"","by":"s1","changed":1793270820,"steps_open":0,"steps_done":0,"next":"","next_title":"","steps":[],"held":[{"name":"bump-gno-pin","why":"words"}]}]}
+{"goals":[{"name":"bump-gno-pin","title":"bump the gno pin","status":"","result":"","wait":"PR #6399 merged","for":"","doing":"","by":"s1","changed":1793270820,"steps_open":0,"steps_done":0,"next":"","next_title":"","steps":[],"held":[{"name":"bump-gno-pin","why":"words","title":"bump the gno pin","wait":"PR #6399 merged","doing":""}]}]}

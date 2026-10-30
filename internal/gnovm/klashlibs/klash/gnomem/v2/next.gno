@@ -105,6 +105,17 @@ func (m *Mem) held(name string, g *Todo, session string) (names, why []string) {
 	return names, why
 }
 
+// waitOn is what item name waits for: its own wait, or the nearest one
+// above it; "" for none.
+func (m *Mem) waitOn(name string) string {
+	for n := name; n != ""; n = parentOf(n) {
+		if w := m.get(n).Wait; w != "" {
+			return w
+		}
+	}
+	return ""
+}
+
 // whatNext ends a receipt: "; next: `x` "title"" for goal name, or what it
 // waits on, or that it can be closed.
 func (m *Mem) whatNext(goal string) string {
@@ -141,11 +152,7 @@ func (m *Mem) holds(names, why []string) string {
 		case "session":
 			parts = append(parts, "`"+n+"` was started by "+who(it.Doing))
 		default:
-			w := it.Wait
-			for p := n; w == "" && p != ""; p = parentOf(p) {
-				w = m.get(p).Wait
-			}
-			parts = append(parts, "`"+n+"`"+waitText(w))
+			parts = append(parts, "`"+n+"`"+waitText(m.waitOn(n)))
 		}
 	}
 	return joinList(parts)

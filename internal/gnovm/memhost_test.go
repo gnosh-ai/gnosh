@@ -412,6 +412,9 @@ func TestHostRunsMem(t *testing.T) {
 	res = call("import \"mem\"\nmem.Fact(\"cmd/test\", \"go test ./...\")")
 	require.NoError(t, res.Err)
 	require.Equal(t, "fact `cmd/test` is new\n", res.Output)
+	res = call("mem.Goal(\"x\").Steps(\n\t\"a\",\n\t\"b\"\n)")
+	require.ErrorContains(t, res.Err, "(a call over several lines needs a comma after its last argument too, as in Go)")
+	require.Contains(t, call(`mem.Find("push to production")`).Output, `nothing in mem matches "push to production": Find matches the words as they were stored; mem.Show() lists 1 goal, 1 fact and 0 rules`)
 	res = call("mem.Fact(\"cmd/deploy\", \"make ship ENV=prod\")\nmem.Note(\"qa\", \"Lin does QA\")")
 	require.EqualError(t, res.Err, "no item `qa`; mem.Show() lists them; nothing was kept, so fact `cmd/deploy`, set above, is not in mem")
 

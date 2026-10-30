@@ -653,3 +653,45 @@ func (c *workerConn) cause() string {
 	defer c.mu.Unlock()
 	return c.why
 }
+
+// goal makes one of /goal's calls, in-process or through the worker.
+func (c *Client) goal(ctx context.Context, req goalReq) (goalResp, error) {
+	if h, err := c.inProcess(); h != nil || err != nil {
+		if err != nil {
+			return goalResp{}, err
+		}
+		return h.goal(ctx, req)
+	}
+	body, err := c.call(ctx, msgGoal, req)
+	if err != nil {
+		return goalResp{}, err
+	}
+	var resp goalResp
+	err = json.Unmarshal(body, &resp)
+	return resp, err
+}
+
+// BindGoal binds a session's /goal; see Host.BindGoal.
+func (c *Client) BindGoal(ctx context.Context, project, session, condition string, prev *GoalBinding) (GoalBinding, string, error) {
+	resp, err := c.goal(ctx, goalReq{Op: "bind", Project: project, Session: session, Condition: condition, Prev: prev})
+	return resp.Binding, resp.Text, err
+}
+
+// GoalTurnEnd says what to do with a session's goal as its turn ends; see
+// Host.GoalTurnEnd.
+func (c *Client) GoalTurnEnd(ctx context.Context, project, session string, b GoalBinding, marker string) (GoalTurn, GoalBinding, error) {
+	resp, err := c.goal(ctx, goalReq{Op: "turn", Project: project, Session: session, Binding: b, Marker: marker})
+	return resp.Turn, resp.Binding, err
+}
+
+// GoalReopen reopens a goal the judge found not met; see Host.GoalReopen.
+func (c *Client) GoalReopen(ctx context.Context, project string, b GoalBinding, reason string) error {
+	_, err := c.goal(ctx, goalReq{Op: "reopen", Project: project, Binding: b, Reason: reason})
+	return err
+}
+
+// GoalClear unbinds a session's /goal; see Host.GoalClear.
+func (c *Client) GoalClear(ctx context.Context, project, session string, b GoalBinding) (string, error) {
+	resp, err := c.goal(ctx, goalReq{Op: "clear", Project: project, Session: session, Binding: b})
+	return resp.Text, err
+}

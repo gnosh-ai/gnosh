@@ -681,6 +681,9 @@ type RunRequest struct {
 	Reset bool
 	// Req identifies the call, so its outcome can be asked about later.
 	Req string
+	// Goal is the goal in mem the user's /goal binds the session to, which
+	// the session's own mem calls may not drop or forget.
+	Goal string `json:",omitempty"`
 }
 
 // RunResult is what a call did.

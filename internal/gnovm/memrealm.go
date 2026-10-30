@@ -346,9 +346,14 @@ func memPanicText(p any, bodyLine int, oneLine bool) string {
 		msg = place + strings.TrimSuffix(msg[len(m[0]):], ":")
 	}
 	// gno's words for a call chained off one that returns nothing, as
-	// mem.Fact(…).Fact(…).
-	return strings.Replace(msg, "unexpected selector expression type *gnolang.tupleType",
+	// mem.Fact(…).Fact(…), and Go's rule that models forget: a call over
+	// several lines ends each line with a comma, the last one too.
+	msg = strings.Replace(msg, "unexpected selector expression type *gnolang.tupleType",
 		"only mem.Goal(…) chains (.Steps, .Wait, .Ask): mem's other calls return nothing, so put each on its own line", 1)
+	if strings.Contains(msg, "missing ',' before newline in argument list") {
+		msg += " (a call over several lines needs a comma after its last argument too, as in Go)"
+	}
+	return msg
 }
 
 // memNotKept names what a failed input's receipts said it added, and the

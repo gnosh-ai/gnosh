@@ -297,8 +297,8 @@ func (m *Mem) showItem(sb *strings.Builder, name string, it *Todo) {
 	m.outlineSteps(sb, name, 1, m.nextFor(goalOf(name), m.get(goalOf(name)), caller()))
 }
 
-// Find lists items, closed ones too, facts and rules that match words, by
-// what they say or what they mean, best first. About 3000 bytes at most.
+// Find lists items, closed ones too, facts and rules that match words as
+// they were stored, best first. About 3000 bytes at most.
 func (m *Mem) Find(words string) string {
 	words = text("the words", words)
 	if words == "" {
@@ -306,7 +306,11 @@ func (m *Mem) Find(words string) string {
 	}
 	names, kinds := find(words, 20)
 	if len(names) == 0 {
-		return "nothing in mem matches " + strconv.Quote(words) + "\n"
+		// Find matches words as they were stored, not what they mean: say
+		// where to look instead, so the model reads the list once rather
+		// than guessing other words.
+		return "nothing in mem matches " + strconv.Quote(words) + ": Find matches the words as they were stored; mem.Show() lists " +
+			plural(m.open.Size()+m.closed.Size(), "goal") + ", " + plural(m.facts.Size(), "fact") + " and " + plural(m.rules.Size(), "rule") + "\n"
 	}
 	var sb strings.Builder
 	for i, n := range names {

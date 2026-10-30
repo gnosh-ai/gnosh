@@ -34,6 +34,8 @@ type memContext struct {
 	pendingAt []int64
 	// today is the user's local date, 2026-10-29.
 	today string
+	// bound is the goal the user's /goal binds the caller's session to.
+	bound string
 	// limit bounds the call (memrealm.go).
 	limit memLimit
 	// find and holding answer from mem's index and journal; nil finds
@@ -57,7 +59,7 @@ type memOp struct {
 var memNativeGas = gno.NativeGasInfo{Base: 1000, SlopeIdx: -1, SlopeKind: gno.SizeFlat}
 
 func init() {
-	for _, name := range []gno.Name{"caller", "today", "record", "pending", "find", "holding", "quote", "jsonString"} {
+	for _, name := range []gno.Name{"caller", "today", "bound", "record", "pending", "find", "holding", "quote", "jsonString"} {
 		info := memNativeGas
 		gno.RegisterNativeGas(memLibPath, name, &info)
 	}
@@ -72,6 +74,10 @@ func memNative(name gno.Name) func(*gno.Machine) {
 	case "caller":
 		return func(m *gno.Machine) {
 			memPush(m, memCallContext(m, "caller").caller)
+		}
+	case "bound":
+		return func(m *gno.Machine) {
+			memPush(m, memCallContext(m, "bound").bound)
 		}
 	case "today":
 		return func(m *gno.Machine) {

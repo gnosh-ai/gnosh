@@ -61,6 +61,8 @@ type memRequest struct {
 	User bool
 	// Req is the request's id.
 	Req string
+	// Goal is the goal the user's /goal binds the session to.
+	Goal string
 }
 
 // memResult is what an input to mem did.
@@ -75,6 +77,8 @@ type memResult struct {
 	Renamed map[string]string
 	// Goals are the goals the input changed, as its session sees them.
 	Goals []MemGoal
+	// Instance is mem's instance id, which a mem made anew does not share.
+	Instance string
 }
 
 // MemGoal is a goal a mem call changed, as a session's task list shows it:
@@ -124,8 +128,8 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 	case q.Session != "":
 		who, caller = "agent", q.Session
 	}
-	call, err := r.call(q.Code, memContext{caller: caller, find: x.finder(), holding: h.holding(j), limit: memLimit{ctx: ctx}})
-	res := memResult{Output: call.Output, Ops: call.Ops, Notes: notes}
+	call, err := r.call(q.Code, memContext{caller: caller, bound: q.Goal, find: x.finder(), holding: h.holding(j), limit: memLimit{ctx: ctx}})
+	res := memResult{Output: call.Output, Ops: call.Ops, Notes: notes, Instance: j.instance}
 	if err != nil || call.batch == nil {
 		return res, err
 	}
@@ -608,7 +612,7 @@ func (h *memHost) openIndex(j *journal) (*memIndex, error) {
 // runMem runs a gnovm_run call against the project's mem.
 func (h *Host) runMem(ctx context.Context, req RunRequest) (*RunResult, error) {
 	start := time.Now()
-	res, err := h.mem(req.Project).call(ctx, memRequest{Code: req.Code, Session: req.Session, Req: req.Req})
+	res, err := h.mem(req.Project).call(ctx, memRequest{Code: req.Code, Session: req.Session, Req: req.Req, Goal: req.Goal})
 	out := &RunResult{VM: MemVM, Output: res.Output, Journaled: res.Seq > 0, Seq: res.Seq, Notes: res.Notes, Wall: time.Since(start), MemGoals: res.Goals}
 	if err != nil {
 		var busy *busyError

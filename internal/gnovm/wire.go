@@ -38,6 +38,7 @@ const (
 	msgKept      = "kept"
 	msgRepair    = "repair"
 	msgMem       = "mem"
+	msgGoal      = "goal"
 	msgCancel    = "cancel"
 	msgResult    = "result"
 	msgAck       = "ack"
@@ -208,6 +209,23 @@ type (
 		Session string            `json:"session"`
 		Args    string            `json:"args"`
 		Titles  map[string]string `json:"titles,omitempty"`
+	}
+	// goalReq is one of /goal's calls: Op is "bind", "turn", "reopen" or
+	// "clear".
+	goalReq struct {
+		Op        string       `json:"op"`
+		Project   string       `json:"project"`
+		Session   string       `json:"session,omitempty"`
+		Condition string       `json:"condition,omitempty"`
+		Binding   GoalBinding  `json:"binding"`
+		Prev      *GoalBinding `json:"prev,omitempty"`
+		Reason    string       `json:"reason,omitempty"`
+		Marker    string       `json:"marker,omitempty"`
+	}
+	goalResp struct {
+		Binding GoalBinding `json:"binding"`
+		Turn    GoalTurn    `json:"turn"`
+		Text    string      `json:"text,omitempty"`
 	}
 	newResp struct {
 		Info    VMInfo `json:"info"`

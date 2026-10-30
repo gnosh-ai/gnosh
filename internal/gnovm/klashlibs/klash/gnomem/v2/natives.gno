@@ -20,6 +20,10 @@ func caller() string
 // today is the user's local date, "2026-10-29".
 func today() string
 
+// bound is the goal the user's /goal binds this input's session to; ""
+// for none.
+func bound() string
+
 // record hands gnosh an Op of this call.
 func record(kind, name, field, old, new, by string)
 
@@ -27,8 +31,8 @@ func record(kind, name, field, old, new, by string)
 // call's time.
 func pending() (kinds, names, fields, olds, news, bys []string, ats []int64)
 
-// find is gnosh's index, by words and by meaning: the best matches for
-// words, with their kinds ("item", "fact" or "rule").
+// find is gnosh's index of words: the best matches for words, with their
+// kinds ("item", "fact" or "rule").
 func find(words string, max int) (names, kinds []string)
 
 // holding is where the journal, and this call's Ops, ever held text or its

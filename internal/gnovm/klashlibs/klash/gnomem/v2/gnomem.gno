@@ -98,6 +98,27 @@ func (g Goal) Ask(question string) Goal {
 	return g
 }
 
+// Bind is the goal the user's /goal binds a session to: the open goal
+// titled title, matched as Goal matches titles, or else a new one, made by
+// the user. replacing is the goal the session's earlier /goal added, if
+// any: it is dropped, if it is still open and is not the goal bound now.
+// Only gnosh calls it, for /goal.
+func (m *Mem) Bind(title string, replacing ...string) Goal {
+	if caller() != "user" {
+		panic("only the user's /goal binds a goal; mem.Goal(…) makes one")
+	}
+	g := Goal{Name: m.titled(title), m: m}
+	if g.Name == "" {
+		g = m.Goal(title)
+	}
+	for _, r := range replacing {
+		if it := m.get(r); r != g.Name && it != nil && it.Status == "" {
+			m.Drop(r, "replaced by /goal "+strconv.Quote(clip(title, 80)))
+		}
+	}
+	return g
+}
+
 // String is the goal's name and title.
 func (g Goal) String() string {
 	if it := g.m.get(g.Name); it != nil {
@@ -243,6 +264,7 @@ func (m *Mem) Done(name string, result ...string) {
 // wait, come back when it is reopened.
 func (m *Mem) Drop(name, why string) {
 	it := m.openItem(name)
+	m.refuseBound(name, "drop")
 	why = clip(text("why", why), maxText)
 	if why == "" {
 		panic("say why: mem.Drop(\"" + name + "\", \"why\")")
@@ -256,6 +278,15 @@ func (m *Mem) Drop(name, why string) {
 		msg += ", with its open steps " + names(dropped)
 	}
 	println(msg + m.whatNext(goalOf(name)))
+}
+
+// refuseBound refuses to drop or forget (verb) the goal the user's /goal
+// binds this session to: the agent closes it when it holds, and only the
+// user clears it.
+func (m *Mem) refuseBound(name, verb string) {
+	if name != "" && name == bound() {
+		panic("`" + name + "` is the user's /goal for this session, so this session does not " + verb + " it: close it with mem.Done(\"" + name + "\", \"…\") once it holds, or \"stopped: …\" when the goal says to stop; the user clears it with /goal clear")
+	}
 }
 
 // drop closes open item it, named name, as dropped with why, and its open
@@ -436,6 +467,7 @@ func (m *Mem) Rule(name, rule string) {
 // the user forgets a rule; and every other call refuses a forgotten item.
 // Its receipt names no text.
 func (m *Mem) Forget(name string) {
+	m.refuseBound(name, "forget")
 	it := m.get(name)
 	if it == nil {
 		switch {
