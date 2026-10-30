@@ -977,3 +977,26 @@ func TestMemHostStampsAnEmptyMemAndRemakesAnUnstampedStore(t *testing.T) {
 	require.NoError(t, r.close())
 	require.Contains(t, memOK(t, h, `print(mem.Show("cmd/test"))`).Output, "go test ./...")
 }
+
+// A mem an earlier build made is opened by this one: a layout change must
+// upgrade what is on disk, not only what tests make afresh. Each fixture
+// in testdata/memupgrade is a mem as an earlier build left it; add one
+// whenever a layout changes. empty-layout2 is the mem Jae's lane made at
+// 09:57 on 2026-10-30 and never used: Mem's layout 2, and an index from
+// before its status column, neither stamped. Opened by layout 3, every
+// call failed: "index out of range [11] with length 10".
+func TestMemOpensAMemAnEarlierBuildMade(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"empty-layout2"} {
+		dir := t.TempDir()
+		require.NoError(t, os.CopyFS(dir, os.DirFS(filepath.Join("testdata", "memupgrade", name))))
+		h := newTestMemHost(t, dir)
+		require.Contains(t, memOK(t, h, `println(mem.Show())`).Output, "mem is empty", name)
+		memOK(t, h, `mem.Fact("staging-db", "the staging database is db-stg-7")`)
+		require.Contains(t, memOK(t, h, `print(mem.Show("staging-db"))`).Output, "db-stg-7", name)
+		s, ok, err := readMemSnapshot(context.Background(), dir)
+		require.NoError(t, err, name)
+		require.True(t, ok, "the index is read: %s", name)
+		require.Len(t, s.rows, 1, name)
+	}
+}
