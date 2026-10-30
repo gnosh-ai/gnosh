@@ -409,9 +409,9 @@ func (c *coordinator) memChanged(isSubAgent bool) func(sessionID string, since t
 	}
 }
 
-// memRecall is how a main agent gives a prompt the user typed what the
-// project's mem holds close to it in meaning; a sub-agent's prompts get
-// none. memSummarized goes with it.
+// memRecall is how a main agent gives a prompt the user typed, or a
+// channel's message, what the project's mem holds close to it in meaning;
+// a sub-agent's prompts get none. memSummarized goes with it.
 func (c *coordinator) memRecall(isSubAgent bool) func(ctx context.Context, sessionID, prompt string) string {
 	if c.gnovms == nil || isSubAgent {
 		return nil

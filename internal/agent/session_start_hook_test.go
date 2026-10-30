@@ -467,6 +467,10 @@ func TestRun_MemRecallGoesWithATypedPrompt(t *testing.T) {
 	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "go on", HiddenUserMessage: true})
 	require.NoError(t, err)
 	require.Equal(t, []string{r.sessionID + ": run the tests"}, asked, "a hidden prompt asks for none")
+
+	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "is CI green?", Channel: "signal"})
+	require.NoError(t, err)
+	require.Equal(t, []string{r.sessionID + ": run the tests", r.sessionID + ": is CI green?"}, asked, "a channel's message asks too")
 }
 
 // A new session starts with the project's mem in view, when it holds

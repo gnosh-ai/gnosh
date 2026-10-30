@@ -931,14 +931,11 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			return nil, err
 		}
 	}
-	// A prompt the user typed asks the project's mem for what bears on it
-	// as it goes out (see recallMem). A channel's message does not, though
-	// the user's own sessions do: its sender may not be the user, and
-	// recall would hand it mem's facts unasked (MEMPLAN §3 row 73 would
-	// treat channels as main sessions; that is undecided). It is marked
+	// A prompt the user typed, or a channel's message, asks the project's
+	// mem for what bears on it as it goes out (see recallMem). It is marked
 	// once, as the prompt is sent; a queued copy runs again with its mark.
 	if !call.promptHooksRan {
-		call.recallMem = a.memRecall != nil && !call.HiddenUserMessage && call.Channel == ""
+		call.recallMem = a.memRecall != nil && !call.HiddenUserMessage
 	}
 	// Sent, with or without hooks: a queued copy of this call, or a
 	// continuation made from it, does not run them again, even if some
@@ -1209,15 +1206,14 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				call.carriesSessionStart = true
 			}
 		}
-	} else if a.memChanged != nil && currentSession.ParentSessionID == "" && !call.HiddenUserMessage && call.Channel == "" {
+	} else if a.memChanged != nil && currentSession.ParentSessionID == "" && !call.HiddenUserMessage {
 		// A session the user comes back to after mem changed elsewhere, in
 		// another session or by /mem, is shown it again with the prompt, as
 		// a new session is: what it saw of mem is out of date. Its last
 		// turn is its newest message, which this prompt's is not yet: the
 		// session's own mem calls came before it, and an erasure's
 		// scrubbing, which updates sessions and messages, moves no
-		// message's time. A channel's turn is not shown it, as it gets no
-		// recall: its sender may not be the user.
+		// message's time.
 		var last int64
 		for _, msg := range msgs {
 			last = max(last, msg.CreatedAt)
