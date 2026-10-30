@@ -627,6 +627,25 @@ func (h *memHost) openIndex(j *journal) (*memIndex, error) {
 	return x, nil
 }
 
+// MemRule is a rule a call to mem set (Was ""), changed, or removed (Text
+// "").
+type MemRule struct {
+	Name string `json:"name"`
+	Text string `json:"text,omitempty"`
+	Was  string `json:"was,omitempty"`
+}
+
+// memRules is the rules ops set, changed or removed.
+func memRules(ops []memOp) []MemRule {
+	var out []MemRule
+	for _, op := range ops {
+		if op.Kind == "rule" && op.Old != op.New {
+			out = append(out, MemRule{Name: op.Name, Text: op.New, Was: op.Old})
+		}
+	}
+	return out
+}
+
 // The Host's side of mem. The tools name mem as a VM, though it is a realm
 // on disk, kept by a memHost per project.
 
@@ -635,6 +654,9 @@ func (h *Host) runMem(ctx context.Context, req RunRequest) (*RunResult, error) {
 	start := time.Now()
 	res, err := h.mem(req.Project).call(ctx, memRequest{Code: req.Code, Session: req.Session, Req: req.Req, Goal: req.Goal})
 	out := &RunResult{VM: MemVM, Output: res.Output, Journaled: res.Seq > 0, Seq: res.Seq, Notes: res.Notes, Wall: time.Since(start), MemGoals: res.Goals, Erased: res.Erased}
+	if res.Seq > 0 {
+		out.Rules = memRules(res.Ops)
+	}
 	if err != nil {
 		var busy *busyError
 		var ref *refusal

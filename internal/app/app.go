@@ -1325,6 +1325,7 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 		Interactive: interactive,
 		GnoVMs:      app.gnovms,
 		MemErased:   app.memErasedNotice,
+		MemRules:    app.memRulesNotice,
 		Artifacts:   app.artifacts,
 	})
 	if err != nil {

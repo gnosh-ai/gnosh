@@ -99,6 +99,14 @@ type runOptions struct {
 	onMem    MemGoalsFunc
 	bound    func(ctx context.Context, sessionID string) string
 	onErased func(ctx context.Context, sessionID string, e gnovm.MemErasure)
+	onRules  func(ctx context.Context, sessionID string, rules []gnovm.MemRule)
+}
+
+// OnMemRules has gnovm_run tell f the rules a call to mem set, changed or
+// removed, for the user to be told: a rule is given to every session as the
+// user's own, and only the user's words become rules.
+func OnMemRules(f func(ctx context.Context, sessionID string, rules []gnovm.MemRule)) RunOption {
+	return func(o *runOptions) { o.onRules = f }
 }
 
 // OnMemErased has gnovm_run tell f what a call to mem erased, so gnosh can
@@ -159,6 +167,9 @@ func NewRunTool(vms *gnovm.Lazy, project string, opts ...RunOption) fantasy.Agen
 			}
 			if o.onErased != nil && res.Erased != nil {
 				o.onErased(ctx, session, *res.Erased)
+			}
+			if o.onRules != nil && len(res.Rules) > 0 {
+				o.onRules(ctx, session, res.Rules)
 			}
 			return fantasy.NewTextResponse(text), nil
 		})

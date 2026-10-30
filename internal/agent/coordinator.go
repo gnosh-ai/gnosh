@@ -201,8 +201,9 @@ type coordinator struct {
 	notify      pubsub.Publisher[notify.Notification]
 	runComplete pubsub.Publisher[notify.RunComplete]
 	interactive bool
-	// memErased is CoordinatorOptions.MemErased.
+	// memErased and memRules are CoordinatorOptions'.
 	memErased func(ctx context.Context, sessionID string, e gnovm.MemErasure)
+	memRules  func(ctx context.Context, sessionID string, rules []gnovm.MemRule)
 	// gnovms is the App's hold on the GnoVM machines; nil gives no gnovm
 	// tools.
 	gnovms    *gnovm.Lazy
@@ -283,6 +284,9 @@ type CoordinatorOptions struct {
 	// MemErased takes what a session's mem call erased out of gnosh's own
 	// copies of mem's text (app.memErased); nil leaves them.
 	MemErased func(ctx context.Context, sessionID string, e gnovm.MemErasure)
+	// MemRules tells the user of the rules a session's mem call set,
+	// changed or removed; nil tells no one.
+	MemRules func(ctx context.Context, sessionID string, rules []gnovm.MemRule)
 	// Artifacts serves the deliverables the agent records with the
 	// artifact tool, so the user can open one from the machine they are
 	// at. Nil records them as paths.
@@ -316,6 +320,7 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		runComplete:        opts.RunComplete,
 		gnovms:             opts.GnoVMs,
 		memErased:          opts.MemErased,
+		memRules:           opts.MemRules,
 		agents:             make(map[string]SessionAgent),
 		sessionStarts:      newSessionStartState(),
 		instructionsLoaded: newInstructionsLoadedState(),
@@ -1271,7 +1276,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	// what the session's todos show.
 	if c.gnovms != nil {
 		allTools = append(allTools,
-			wrap(gnovmtools.NewRunTool(c.gnovms, c.cfg.WorkingDir(), gnovmtools.OnMemGoals(gnovmtools.SessionTodos(c.sessions)), gnovmtools.BoundGoal(c.goals.boundName), gnovmtools.OnMemErased(c.memErased))),
+			wrap(gnovmtools.NewRunTool(c.gnovms, c.cfg.WorkingDir(), gnovmtools.OnMemGoals(gnovmtools.SessionTodos(c.sessions)), gnovmtools.BoundGoal(c.goals.boundName), gnovmtools.OnMemErased(c.memErased), gnovmtools.OnMemRules(c.memRules))),
 			wrap(gnovmtools.NewNewTool(c.gnovms, c.cfg.WorkingDir())),
 			wrap(gnovmtools.NewListTool(c.gnovms, c.cfg.WorkingDir())),
 			wrap(gnovmtools.NewDropTool(c.gnovms, c.cfg.WorkingDir(), c.permissions)),

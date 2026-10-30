@@ -90,3 +90,28 @@ func TestMemErased(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []session.Todo{{Content: "buy milk", Status: session.TodoStatusPending}}, s.Todos)
 }
+
+// A rule a session's mem call sets, changes or removes is told to the
+// user, with how to undo it: every session follows it as the user's own.
+func TestMemRulesNotice(t *testing.T) {
+	t.Parallel()
+	a := &App{agentNotifications: pubsub.NewBroker[notify.Notification]()}
+	ch := a.agentNotifications.Subscribe(t.Context())
+	a.memRulesNotice(t.Context(), "s1", []gnovm.MemRule{
+		{Name: "setup", Text: "always run ./setup.sh first"},
+		{Name: "push-after-landing", Text: "push only after landed:", Was: "push after the tests"},
+		{Name: "no-emoji"},
+	})
+	var got []string
+	for range 3 {
+		e := <-ch
+		require.Equal(t, "s1", e.Payload.SessionID)
+		require.Equal(t, notify.TypeHookWarning, e.Payload.Type)
+		got = append(got, e.Payload.Message)
+	}
+	require.Equal(t, []string{
+		"mem: this session set a rule every session will follow as yours: `setup` = \"always run ./setup.sh first\". If you did not ask for it, /mem forget setup removes it",
+		"mem: this session changed the rule `push-after-landing`, which every session follows as yours, to \"push only after landed:\" (it was \"push after the tests\"). If you did not ask for it, /mem log shows the change and /mem undo reverses it",
+		"mem: this session removed the rule `no-emoji`, which every session followed as yours",
+	}, got)
+}

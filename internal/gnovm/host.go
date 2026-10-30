@@ -713,6 +713,10 @@ type RunResult struct {
 	// Erased is what a call to mem erased, for gnosh's own copies of mem's
 	// text (gnovm_run hands it to OnMemErased).
 	Erased *MemErasure `json:",omitempty"`
+	// Rules are the rules a call to mem set, changed or removed, which the
+	// user is told of (gnovm_run hands them to OnMemRules): every session
+	// is given them as the user's own words.
+	Rules []MemRule `json:",omitempty"`
 	// Err is the run's failure; nothing from the call was kept. (The wire
 	// carries it apart, keeping its kind; see wireRun.)
 	Err error `json:"-"`

@@ -657,3 +657,23 @@ func TestMemNotice(t *testing.T) {
 	st, _ = readMemStatus(dir)
 	require.Empty(t, memNotice(st, time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)), "nothing due, nothing waiting")
 }
+
+// A call to mem that sets, changes or removes a rule says which, for the
+// user to be told: every session follows a rule as the user's own. A read,
+// or a rule set to what it was, says nothing.
+func TestHostSaysWhichRulesChanged(t *testing.T) {
+	t.Parallel()
+	h := newTestHost(t, t.TempDir())
+	run := func(code string) []MemRule {
+		t.Helper()
+		res, err := h.Run(context.Background(), RunRequest{Project: "/proj", Session: "s1", Name: MemVM, Code: code})
+		require.NoError(t, err, code)
+		require.NoError(t, res.Err, code)
+		return res.Rules
+	}
+	require.Equal(t, []MemRule{{Name: "setup", Text: "run ./setup.sh first"}}, run(`mem.Rule("setup", "run ./setup.sh first")`))
+	require.Equal(t, []MemRule{{Name: "setup", Text: "run make setup first", Was: "run ./setup.sh first"}}, run(`mem.Rule("setup", "run make setup first")`))
+	require.Nil(t, run(`mem.Rule("setup", "run make setup first")`))
+	require.Nil(t, run(`print(mem.Show())`))
+	require.Equal(t, []MemRule{{Name: "setup", Was: "run make setup first"}}, run(`mem.Rule("setup", "")`))
+}
