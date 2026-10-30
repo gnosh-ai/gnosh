@@ -94,6 +94,11 @@ type Options struct {
 	Probe func() (HostMemory, error)
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
+	// Embeddings is the embedding server mem finds by meaning with, an
+	// OpenAI-compatible base URL such as http://127.0.0.1:8091/v1. mem's
+	// text, and what the user types, are sent there. "" finds by words
+	// alone, and sends nothing anywhere.
+	Embeddings string
 }
 
 // NewClientID returns a fresh id for a gnosh process.

@@ -731,6 +731,13 @@
             "off"
           ]
         },
+        "mem_embeddings_url": {
+          "type": "string",
+          "description": "An OpenAI-compatible embeddings server (such as llama-server --embedding) that mem uses to find by meaning, and to recall what bears on each prompt you type. mem's text and your prompts are sent to it to be embedded. Unset, mem finds by words alone and sends nothing.",
+          "examples": [
+            "http://127.0.0.1:8091/v1"
+          ]
+        },
         "loop_max_turns": {
           "type": "integer",
           "description": "An optional hard cap on how many turns /loop may drive. Unset (or 0 or negative) means no cap: every 25 turns the agent is asked whether it has a genuine reason to stop and otherwise keeps going.",

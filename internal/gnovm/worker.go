@@ -86,6 +86,7 @@ func serve(in io.Reader, out io.Writer, setup func(hello)) error {
 		DefaultMemoryMB: h.DefaultMemoryMB,
 		DefaultGas:      h.DefaultGas,
 		NsPerGas:        h.NsPerGas,
+		Embeddings:      h.Embeddings,
 	})
 	if err != nil {
 		_ = w.send(&frame{Type: msgHello, Err: toWire(err)})

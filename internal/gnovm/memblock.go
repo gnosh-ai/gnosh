@@ -215,9 +215,6 @@ func MemBlock(dir, project string) string {
 	return memBlock(st, time.Now())
 }
 
-// MemBlock is MemBlock for this Lazy's directory.
-func (l *Lazy) MemBlock(project string) string { return MemBlock(l.opts.Dir, project) }
-
 // MemNotice is what the user is told at a session's start, by gnosh itself
 // rather than the model, which may not raise it: what in mem is due today,
 // and what waits on the user. "" when nothing is.

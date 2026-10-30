@@ -313,8 +313,10 @@ type sessionAgent struct {
 	// goals are the sessions' goals, kept by the coordinator that sets
 	// them; nil, there are none (see goalContinuation).
 	goals *goalBindings
-	// memBlock is SessionAgentOptions.MemBlock.
-	memBlock func() string
+	// memBlock, memRecall and memSummarized are SessionAgentOptions'.
+	memBlock      func(sessionID string) string
+	memRecall     func(ctx context.Context, sessionID, prompt string) string
+	memSummarized func(sessionID string)
 	// idleCompaction holds each session's idle-compaction timer, armed
 	// when a turn ends and stopped when the next starts; idleCompactAfter
 	// is how long it waits (see armIdleCompaction).
@@ -423,9 +425,16 @@ type SessionAgentOptions struct {
 	// Goals are the sessions' goals (see Goal), shared by a coordinator's
 	// agents, which set them; nil, there are none.
 	Goals *goalBindings
-	// MemBlock is what the project's mem holds (gnovm.MemBlock), for a
-	// new session's first prompt; nil or "", nothing.
-	MemBlock func() string
+	// MemBlock is what the project's mem holds (gnovm's Lazy.MemBlock),
+	// for a new session's first prompt and again after each summary; nil
+	// or "", nothing.
+	MemBlock func(sessionID string) string
+	// MemRecall is what the project's mem holds close in meaning to a
+	// prompt the user typed (Lazy.MemRecall), which goes with it; nil or
+	// "", nothing. MemSummarized tells mem a session was summarized, so
+	// that what it was shown may be shown again.
+	MemRecall     func(ctx context.Context, sessionID, prompt string) string
+	MemSummarized func(sessionID string)
 }
 
 func NewSessionAgent(
@@ -473,6 +482,8 @@ func NewSessionAgent(
 		instructionsLoaded:    instructionsLoaded,
 		goals:                 opts.Goals,
 		memBlock:              opts.MemBlock,
+		memRecall:             opts.MemRecall,
+		memSummarized:         opts.MemSummarized,
 	}
 }
 
@@ -909,6 +920,16 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			return nil, err
 		}
 	}
+	// A prompt the user typed brings what the project's mem holds close
+	// to it in meaning, found within half a second or not at all, and it
+	// goes with the prompt as hook output does: hidden after its text, so
+	// a rebuilt conversation matches the server's cache. A queued copy
+	// carries it; a continuation does not ask again.
+	if a.memRecall != nil && !call.HiddenUserMessage && !call.promptHooksRan && call.Channel == "" {
+		if recall := a.memRecall(ctx, call.SessionID, call.Prompt); recall != "" {
+			call.promptHookContext = joinHookContext(call.promptHookContext, recall)
+		}
+	}
 	// Sent, with or without hooks: a queued copy of this call, or a
 	// continuation made from it, does not run them again, even if some
 	// are configured by the time it runs.
@@ -1173,7 +1194,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		// hook output does, so the system prompt stays the same for the
 		// server's cache.
 		if a.memBlock != nil {
-			if block := a.memBlock(); block != "" {
+			if block := a.memBlock(call.SessionID); block != "" {
 				call.promptHookContext = joinHookContext(call.promptHookContext, block)
 				call.carriesSessionStart = true
 			}
@@ -2131,9 +2152,14 @@ func (a *sessionAgent) compactConversation(ctx, genCtx context.Context, sessionI
 	// gives it after a summary: the files read most recently, read from
 	// disk now, the skills it loaded, and the background jobs still
 	// running, so it goes on without reading them again or starting a job
-	// twice.
+	// twice; and the project's mem, as a new session is given it. mem is
+	// told of the summary first, so that what recall gave the session
+	// before it may be given again.
+	if a.memSummarized != nil {
+		a.memSummarized(sessionID)
+	}
 	var givenParts []string
-	for _, part := range []string{a.restoredFilesText(genCtx, sessionID), restoredSkillsText(msgs), a.runningJobsText()} {
+	for _, part := range []string{a.restoredFilesText(genCtx, sessionID), restoredSkillsText(msgs), a.runningJobsText(), a.memBlockText(sessionID)} {
 		if part != "" {
 			givenParts = append(givenParts, part)
 		}
@@ -2819,6 +2845,15 @@ func (a *sessionAgent) runningJobsText() string {
 			job.ID, cmp.Or(job.Description, string(command)), string(command), job.ID))
 	}
 	return strings.Join(lines, "\n")
+}
+
+// memBlockText is the project's mem as a session is shown it after a
+// summary, as at its start; "" for a sub-agent's session, or an empty mem.
+func (a *sessionAgent) memBlockText(sessionID string) string {
+	if a.memBlock == nil {
+		return ""
+	}
+	return a.memBlock(sessionID)
 }
 
 // writeTranscript writes msgs, the conversation a summary replaces, in

@@ -368,16 +368,19 @@ func (m *Mem) Find(words string) string {
 	if words == "" {
 		panic("Find needs words: mem.Find(\"release key\")")
 	}
-	names, kinds := find(words, 20)
+	names, kinds, meaning := find(words, 20)
 	if len(names) == 0 {
-		// Find matches words as they were stored, not what they mean: say
-		// where to look instead, so the model reads the list once rather
-		// than guessing other words.
+		// Say where to look instead, so the model reads the list once
+		// rather than guessing other words.
+		how := ": Find matches the words as they were stored"
+		if meaning {
+			how = ", in its words or in meaning"
+		}
 		facts := plural(m.facts.Size(), "fact")
 		if m.facts.Size() > maxShowFacts {
 			facts = "the newest " + strconv.Itoa(maxShowFacts) + " of " + facts + ", with the groups of the rest"
 		}
-		return "nothing in mem matches " + strconv.Quote(words) + ": Find matches the words as they were stored; mem.Show() lists " +
+		return "nothing in mem matches " + strconv.Quote(words) + how + "; mem.Show() lists " +
 			plural(m.open.Size()+m.closed.Size(), "goal") + ", " + plural(m.rules.Size(), "rule") + " and " + facts + "\n"
 	}
 	var sb strings.Builder

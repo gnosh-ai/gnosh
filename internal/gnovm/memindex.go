@@ -14,12 +14,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 )
 
 // memIndex is mem's index, index-<generation>.db beside the store: each
-// item's, fact's and rule's name and current text, searchable by words. It is a
+// item's, fact's and rule's name and current text, searchable by words, and
+// an item's status, which recall shows. It is a
 // projection of the journal's Ops, kept by applying each Op as the store
 // does, so it needs nothing from the store, and is rebuilt from the journal
 // the same way. FTS5 with trigrams finds "flak" in "flakes"; secure-delete
@@ -32,7 +32,7 @@ type memIndex struct {
 const memIndexSchema = `
 CREATE TABLE IF NOT EXISTS stamp(id INTEGER PRIMARY KEY CHECK (id = 1), json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS names(id INTEGER PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL, UNIQUE(kind, name));
-CREATE VIRTUAL TABLE IF NOT EXISTS docs USING fts5(name, title, result, wait, notes, tokenize='trigram');
+CREATE VIRTUAL TABLE IF NOT EXISTS docs USING fts5(name, title, result, wait, notes, status UNINDEXED, tokenize='trigram');
 INSERT INTO docs(docs, rank) VALUES('secure-delete', 1);
 `
 
@@ -93,8 +93,8 @@ func (x *memIndex) apply(entries [][]memOp, st memStamp) error {
 	return tx.Commit()
 }
 
-// applyIndexOp changes the rows an Op changes the text of. Status, wait-free
-// fields and claims are not text, and a Field "statements" redact has no row.
+// applyIndexOp changes the rows an Op changes the text or the status of.
+// Asks and claims are not kept, and a Field "statements" redact has no row.
 func applyIndexOp(tx *sql.Tx, op memOp) error {
 	switch op.Kind {
 	case "add":
@@ -102,7 +102,7 @@ func applyIndexOp(tx *sql.Tx, op memOp) error {
 	case "unadd", "forget":
 		return deleteRow(tx, opTarget(op), op.Name)
 	case "set":
-		if op.Field == "result" || op.Field == "wait" {
+		if op.Field == "result" || op.Field == "wait" || op.Field == "status" {
 			return setColumn(tx, "item", op.Name, op.Field, op.New)
 		}
 	case "note", "unnote":
@@ -169,8 +169,8 @@ func putRow(tx *sql.Tx, kind, name string, cols map[string]string) error {
 	} else if _, err := tx.Exec(`DELETE FROM docs WHERE rowid = ?`, id); err != nil {
 		return err
 	}
-	_, err = tx.Exec(`INSERT INTO docs(rowid, name, title, result, wait, notes) VALUES(?, ?, ?, ?, ?, ?)`,
-		id, name, cols["title"], cols["result"], cols["wait"], cols["notes"])
+	_, err = tx.Exec(`INSERT INTO docs(rowid, name, title, result, wait, notes, status) VALUES(?, ?, ?, ?, ?, ?, ?)`,
+		id, name, cols["title"], cols["result"], cols["wait"], cols["notes"], cols["status"])
 	return err
 }
 
@@ -206,23 +206,11 @@ func setColumn(tx *sql.Tx, kind, name, col, value string) error {
 	return err
 }
 
-// finder is find as the find native asks it. An index that cannot answer
-// finds nothing, and the error is logged.
-func (x *memIndex) finder() func(words string, max int) (names, kinds []string) {
-	return func(words string, max int) ([]string, []string) {
-		names, kinds, err := x.find(words, max)
-		if err != nil {
-			slog.Warn("mem's index could not search", "error", err)
-			return nil, nil
-		}
-		return names, kinds
-	}
-}
-
-// find is the rows that match words, best first, at most max: each word of
-// three letters or more must be in the row; if no row has them all, any one
-// will do. Shorter words cannot be matched by trigrams, and are left out.
-func (x *memIndex) find(words string, max int) (names, kinds []string, err error) {
+// find is the rows that hold words, by name and kind, best first, at most
+// max of each: all hold every word of three letters or more, and any, for
+// more than one word, hold one of them. Shorter words cannot be matched by
+// trigrams, and are left out.
+func (x *memIndex) find(words string, max int) (all, any []memRow, err error) {
 	var terms []string
 	for _, w := range strings.Fields(words) {
 		if len([]rune(w)) >= 3 {
@@ -232,26 +220,45 @@ func (x *memIndex) find(words string, max int) (names, kinds []string, err error
 	if len(terms) == 0 {
 		return nil, nil, nil
 	}
-	for _, join := range []string{" AND ", " OR "} {
-		rows, err := x.db.Query(`SELECT n.name, n.kind FROM docs JOIN names n ON n.id = docs.rowid WHERE docs MATCH ? ORDER BY rank LIMIT ?`,
-			strings.Join(terms, join), max)
-		if err != nil {
-			return nil, nil, err
-		}
-		for rows.Next() {
-			var n, k string
-			if err := rows.Scan(&n, &k); err != nil {
-				rows.Close()
-				return nil, nil, err
-			}
-			names, kinds = append(names, n), append(kinds, k)
-		}
-		if err := rows.Close(); err != nil {
-			return nil, nil, err
-		}
-		if len(names) > 0 || len(terms) == 1 {
-			break
-		}
+	if all, err = x.match(strings.Join(terms, " AND "), max); err != nil || len(terms) == 1 {
+		return all, nil, err
 	}
-	return names, kinds, nil
+	any, err = x.match(strings.Join(terms, " OR "), max)
+	return all, any, err
+}
+
+// match is the rows an FTS5 query matches, by name and kind, best first.
+func (x *memIndex) match(query string, max int) ([]memRow, error) {
+	rows, err := x.db.Query(`SELECT n.kind, n.name FROM docs JOIN names n ON n.id = docs.rowid WHERE docs MATCH ? ORDER BY rank LIMIT ?`, query, max)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []memRow
+	for rows.Next() {
+		var r memRow
+		if err := rows.Scan(&r.kind, &r.name); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// rows is every row of the index, in the order they were made.
+func (x *memIndex) rows() ([]memRow, error) {
+	rows, err := x.db.Query(`SELECT n.kind, n.name, d.title, d.result, d.notes, d.status FROM names n JOIN docs d ON d.rowid = n.id ORDER BY n.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []memRow
+	for rows.Next() {
+		var r memRow
+		if err := rows.Scan(&r.kind, &r.name, &r.title, &r.result, &r.notes, &r.status); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }

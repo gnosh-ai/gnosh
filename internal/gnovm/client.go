@@ -147,6 +147,20 @@ func (c *Client) Deaths() []string {
 
 // Run runs code in a VM; see Host.Run.
 func (c *Client) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
+	res, err := c.run(ctx, req)
+	if err == nil && res != nil && req.Name == MemVM && res.Journaled {
+		c.memChanged(req.Project)
+	}
+	return res, err
+}
+
+// memChanged follows a change to a project's mem: its vectors are made in
+// the background, when there is an embedding server.
+func (c *Client) memChanged(project string) {
+	fillMemVectors(memDir(c.opts.Dir, project), newMemEmbedder(c.opts.Embeddings))
+}
+
+func (c *Client) run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	if h, err := c.inProcess(); h != nil || err != nil {
 		if err != nil {
 			return nil, err
@@ -250,6 +264,7 @@ func (c *Client) Repair(ctx context.Context, project, name string) (int, int, er
 // MemCommand runs /mem (see Host.MemCommand), and says what it erased, if
 // anything, for gnosh's own copies of mem's text.
 func (c *Client) MemCommand(ctx context.Context, project, session, args string, titles map[string]string) (string, *MemErasure, error) {
+	defer c.memChanged(project)
 	if h, err := c.inProcess(); h != nil || err != nil {
 		if err != nil {
 			return "", nil, err
@@ -406,6 +421,7 @@ func spawnWorker(opts ClientOptions) (*workerConn, error) {
 	h := myHello()
 	h.Dir, h.Client = opts.Dir, opts.Client
 	h.BudgetBytes, h.DefaultMemoryMB, h.DefaultGas, h.NsPerGas = opts.BudgetBytes, opts.DefaultMemoryMB, opts.DefaultGas, opts.NsPerGas
+	h.Embeddings = opts.Embeddings
 	if err := writeFrame(reqW, &frame{Type: msgHello, Body: mustJSON(h)}); err != nil {
 		conn.kill("handshake: " + err.Error())
 		return nil, fmt.Errorf("gnovm: worker handshake: %w", err)
@@ -657,6 +673,9 @@ func (c *workerConn) cause() string {
 
 // goal makes one of /goal's calls, in-process or through the worker.
 func (c *Client) goal(ctx context.Context, req goalReq) (goalResp, error) {
+	if req.Op != "turn" {
+		defer c.memChanged(req.Project)
+	}
 	if h, err := c.inProcess(); h != nil || err != nil {
 		if err != nil {
 			return goalResp{}, err

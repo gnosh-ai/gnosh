@@ -416,6 +416,30 @@ func TestRun_SessionStartBlockStillMarksSessionStarted(t *testing.T) {
 	require.Equal(t, "x\n", string(data), "the second prompt does not run the hooks again")
 }
 
+// A prompt the user types goes with what mem recalls for it, as hook
+// output does; a hidden prompt, as a continuation is, asks for none.
+func TestRun_MemRecallGoesWithATypedPrompt(t *testing.T) {
+	t.Parallel()
+
+	r := sessionStartAgent(t, false, "")
+	recall := "<mem>\nFrom your memory (mem), what may bear on what the user just wrote, found by meaning; `mem.Show(\"name\")` shows one in full:\n- fact `cmd/test` = go test -race ./...\n</mem>"
+	var asked []string
+	r.agent.memRecall = func(_ context.Context, sessionID, prompt string) string {
+		asked = append(asked, sessionID+": "+prompt)
+		return recall
+	}
+	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "run the tests"})
+	require.NoError(t, err)
+	prompts := r.model.recorded()
+	require.Len(t, prompts, 1)
+	first := userTexts(prompts[0])
+	require.Equal(t, "run the tests\n\n"+message.PromptHookContext(recall), first[len(first)-1])
+
+	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "go on", HiddenUserMessage: true})
+	require.NoError(t, err)
+	require.Equal(t, []string{r.sessionID + ": run the tests"}, asked, "a hidden prompt asks for none")
+}
+
 // A new session starts with the project's mem in view, when it holds
 // anything: it goes with the first prompt, as SessionStart hook output does,
 // and stays in the history as it went out.
@@ -424,7 +448,7 @@ func TestRun_MemBlockGoesWithTheFirstPrompt(t *testing.T) {
 
 	r := sessionStartAgent(t, false, "")
 	block := "<mem>\nmem: 2 items open\nopen goals, newest first:\n- `release` \"release v2\" (1/2 done · 2h ago) next: `release/2` \"update CHANGELOG\"\n</mem>"
-	r.agent.memBlock = func() string { return block }
+	r.agent.memBlock = func(string) string { return block }
 	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "carry on"})
 	require.NoError(t, err)
 

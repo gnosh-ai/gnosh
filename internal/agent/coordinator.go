@@ -382,6 +382,35 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 // start of a session are not cut.
 const onDemandContextLimit = 40000
 
+// memBlock is how a main agent tells a session what the project's mem
+// holds, as it starts and after each summary; a sub-agent's sessions are
+// not told.
+func (c *coordinator) memBlock(isSubAgent bool) func(sessionID string) string {
+	if c.gnovms == nil || isSubAgent {
+		return nil
+	}
+	return func(sessionID string) string { return c.gnovms.MemBlock(c.cfg.WorkingDir(), sessionID) }
+}
+
+// memRecall is how a main agent gives a prompt the user typed what the
+// project's mem holds close to it in meaning; a sub-agent's prompts get
+// none. memSummarized goes with it.
+func (c *coordinator) memRecall(isSubAgent bool) func(ctx context.Context, sessionID, prompt string) string {
+	if c.gnovms == nil || isSubAgent {
+		return nil
+	}
+	return func(ctx context.Context, sessionID, prompt string) string {
+		return c.gnovms.MemRecall(ctx, c.cfg.WorkingDir(), sessionID, prompt)
+	}
+}
+
+func (c *coordinator) memSummarized(isSubAgent bool) func(sessionID string) {
+	if c.gnovms == nil || isSubAgent {
+		return nil
+	}
+	return c.gnovms.MemSummarized
+}
+
 // subdirectoryContext returns, for a file a session views, writes or
 // edits, the instructions in the context files of the subdirectories
 // between the working directory and the file that the session has not
@@ -393,14 +422,6 @@ const onDemandContextLimit = 40000
 // session gives nothing: what is given is recorded per session. A
 // relative filePath, as lsp_replace_symbol passes on as the model wrote
 // it, is taken from the working directory.
-// memBlock is how a main agent tells a new session what the project's mem
-// holds; a sub-agent's sessions are not told.
-func (c *coordinator) memBlock(isSubAgent bool) func() string {
-	if c.gnovms == nil || isSubAgent {
-		return nil
-	}
-	return func() string { return c.gnovms.MemBlock(c.cfg.WorkingDir()) }
-}
 
 func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePath string) string {
 	if c.subdirectoryGiven == nil || sessionID == "" {
@@ -1089,6 +1110,8 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		InstructionsLoaded:    c.instructionsLoaded,
 		Goals:                 c.goals,
 		MemBlock:              c.memBlock(isSubAgent),
+		MemRecall:             c.memRecall(isSubAgent),
+		MemSummarized:         c.memSummarized(isSubAgent),
 		DisableAutoSummarize:  c.cfg.Config().Options.DisableAutoSummarize,
 		DisableIdleCompaction: c.cfg.Config().Options.DisableIdleCompaction,
 		IsYolo:                c.permissions.SkipRequests(),

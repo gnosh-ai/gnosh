@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/hooks"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,4 +56,30 @@ func TestSummarize_PostCompactFailedHookWarns(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, summarized)
 	require.NoFileExists(t, ran)
+}
+
+// After a summary the session is given the project's mem again, as a new
+// session is, with the rest of what it was working with; and mem is told
+// first, so that what recall gave the session may be given again.
+func TestSummarize_GivesMemAgain(t *testing.T) {
+	t.Parallel()
+
+	r := compactHookAgent(t, hooks.EventPostCompact, false)
+	block := "<mem>\nmem: 1 item open\nopen goals, newest first:\n- `release` \"release v2\" (just now)\n</mem>"
+	var calls []string
+	r.agent.memSummarized = func(sessionID string) { calls = append(calls, "summarized "+sessionID) }
+	r.agent.memBlock = func(sessionID string) string {
+		calls = append(calls, "block "+sessionID)
+		return block
+	}
+	err, summarized, _ := r.summarize(t, preCompactTriggerAuto)
+	require.NoError(t, err)
+	require.Equal(t, 1, summarized)
+	require.Equal(t, []string{"summarized " + r.sessionID, "block " + r.sessionID}, calls)
+
+	msgs, err := r.env.messages.List(t.Context(), r.sessionID)
+	require.NoError(t, err)
+	given := msgs[len(msgs)-1]
+	require.Equal(t, message.User, given.Role)
+	require.Equal(t, message.TextContent{Text: block, Hidden: true}, given.Parts[0])
 }

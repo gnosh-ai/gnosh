@@ -70,6 +70,7 @@ type hello struct {
 	DefaultMemoryMB int     `json:"default_memory_mb,omitempty"`
 	DefaultGas      int64   `json:"default_gas,omitempty"`
 	NsPerGas        float64 `json:"ns_per_gas,omitempty"`
+	Embeddings      string  `json:"embeddings,omitempty"`
 }
 
 func writeFrame(w io.Writer, f *frame) error {

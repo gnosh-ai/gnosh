@@ -23,6 +23,10 @@ type Lazy struct {
 	opts ClientOptions
 	mu   sync.Mutex
 	c    *Client
+	// shown is what each session was shown of mem since its last summary,
+	// by name, which recall leaves out (memrecall.go).
+	shownMu sync.Mutex
+	shown   map[string]map[string]bool
 }
 
 // NewLazy returns a Lazy that acquires a client with opts when first used.

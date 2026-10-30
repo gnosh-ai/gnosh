@@ -621,7 +621,13 @@ type Options struct {
 	// and an artifact is then recorded as its path. Only a file the agent
 	// recorded is served, each behind an unguessable token.
 	ArtifactServer string `json:"artifact_server,omitempty" jsonschema:"description=Where recorded artifacts (see the artifact tool) are served so the user can open them from another machine. Unset listens on 127.0.0.1:7777\\, reachable from another machine through an ssh -L forward; \":7777\" serves every interface; off serves none. Only files the agent recorded are served\\, each behind an unguessable token.,example=127.0.0.1:7777,example=off"`
-	LoopMaxTurns   *int   `json:"loop_max_turns,omitempty" jsonschema:"description=An optional hard cap on how many turns /loop may drive. Unset (or 0 or negative) means no cap: every 25 turns the agent is asked whether it has a genuine reason to stop and otherwise keeps going.,example=200"`
+	// MemEmbeddingsURL is the embedding server mem finds by meaning with,
+	// and recalls with each typed prompt what bears on it: an
+	// OpenAI-compatible base URL, as llama-server --embedding serves. mem's
+	// text and the prompts typed are sent there. Unset, mem finds by words
+	// alone and sends nothing anywhere: there is no default.
+	MemEmbeddingsURL string `json:"mem_embeddings_url,omitempty" jsonschema:"description=An OpenAI-compatible embeddings server (such as llama-server --embedding) that mem uses to find by meaning\\, and to recall what bears on each prompt you type. mem's text and your prompts are sent to it to be embedded. Unset\\, mem finds by words alone and sends nothing.,example=http://127.0.0.1:8091/v1"`
+	LoopMaxTurns     *int   `json:"loop_max_turns,omitempty" jsonschema:"description=An optional hard cap on how many turns /loop may drive. Unset (or 0 or negative) means no cap: every 25 turns the agent is asked whether it has a genuine reason to stop and otherwise keeps going.,example=200"`
 }
 
 // DefaultMaxBackgroundJobs is how many background shell jobs may run at once

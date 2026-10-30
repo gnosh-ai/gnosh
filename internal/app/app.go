@@ -1304,7 +1304,8 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 	}
 	if app.gnovms == nil {
 		app.gnovms = gnovm.NewLazy(gnovm.ClientOptions{Options: gnovm.Options{
-			Dir: filepath.Join(filepath.Dir(config.GlobalConfigData()), "gnovm"),
+			Dir:        filepath.Join(filepath.Dir(config.GlobalConfigData()), "gnovm"),
+			Embeddings: app.config.Config().Options.MemEmbeddingsURL,
 		}})
 	}
 	app.setArtifactServer(interactive, app.config.Config().Options)

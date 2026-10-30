@@ -27,9 +27,12 @@ import (
 
 // memHost is a project's mem on disk. Its directory holds:
 //
-//	journal.jsonl  every input that changed mem: the source (memjournal.go)
-//	store-<gen>/   the realm, built from the journal of generation gen
-//	lock           held through each call, so gnosh processes take turns
+//	journal.jsonl     every input that changed mem: the source (memjournal.go)
+//	store-<gen>/      the realm, built from the journal of generation gen
+//	index-<gen>.db    its rows' text, searched by words (memindex.go)
+//	vectors-<gen>.db  their vectors, searched by meaning (memvectors.go)
+//	status.json       mem.JSON(), for hooks and the <mem> block
+//	lock              held through each call, so gnosh processes take turns
 //
 // A call takes the lock, opens the store and brings it up to the journal,
 // runs, journals what it changed, commits that to the store, and closes the
@@ -42,6 +45,9 @@ type memHost struct {
 	// slice is how long one call may spend bringing the store up to the
 	// journal before it says to call again. What it applied is kept.
 	slice time.Duration
+	// embed is the embedding server mem.Find looks by meaning with; nil
+	// looks by words alone.
+	embed *memEmbedder
 }
 
 func newMemHost(b *base, dir string) *memHost {
@@ -130,7 +136,7 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 	case q.Session != "":
 		who, caller = "agent", q.Session
 	}
-	call, err := r.call(q.Code, memContext{caller: caller, bound: q.Goal, find: x.finder(), holding: h.holding(j), limit: memLimit{ctx: ctx}})
+	call, err := r.call(q.Code, memContext{caller: caller, bound: q.Goal, find: h.finder(ctx, x, j), holding: h.holding(j), limit: memLimit{ctx: ctx}})
 	res := memResult{Output: call.Output, Ops: call.Ops, Notes: notes, Instance: j.instance}
 	if err != nil || call.batch == nil {
 		return res, err
@@ -312,12 +318,19 @@ func (h *memHost) holding(j *journal) func(text string, ops []memOp) (names, kin
 // lock takes mem's lock, waiting at most lockWait while another gnosh
 // process holds it.
 func (h *memHost) lock(ctx context.Context) (func(), error) {
-	if err := mkdirSync(h.dir); err != nil {
+	return lockMemDir(ctx, h.dir)
+}
+
+// lockMemDir takes the lock of mem in dir, waiting at most lockWait, or
+// until ctx is done, while another holds it: a gnosh process's call, or
+// its main process reading the index or writing vectors.
+func lockMemDir(ctx context.Context, dir string) (func(), error) {
+	if err := mkdirSync(dir); err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, lockWait)
 	defer cancel()
-	path := filepath.Join(h.dir, "lock")
+	path := filepath.Join(dir, "lock")
 	for {
 		release, err := lock.TryFile(path)
 		if err == nil {
@@ -525,15 +538,16 @@ func (h *memHost) applyEach(r *memRealm, j *journal, batch []readEntry) error {
 	return nil
 }
 
-// removeOtherGenerations deletes the stores and indexes of generations
-// other than gen (of every generation, for gen ""): what an erasure or a
-// repair left behind.
+// removeOtherGenerations deletes the stores, indexes and vectors of
+// generations other than gen (of every generation, for gen ""): what an
+// erasure or a repair left behind.
 func (h *memHost) removeOtherGenerations(gen string) {
 	ds, _ := os.ReadDir(h.dir)
 	for _, d := range ds {
 		name := d.Name()
 		other := strings.HasPrefix(name, "store-") && (gen == "" || name != "store-"+gen) ||
-			strings.HasPrefix(name, "index-") && (gen == "" || !strings.HasPrefix(name, "index-"+gen+".db"))
+			strings.HasPrefix(name, "index-") && (gen == "" || !strings.HasPrefix(name, "index-"+gen+".db")) ||
+			strings.HasPrefix(name, "vectors-") && (gen == "" || !strings.HasPrefix(name, "vectors-"+gen+".db"))
 		if other {
 			_ = os.RemoveAll(filepath.Join(h.dir, name))
 		}
@@ -542,7 +556,8 @@ func (h *memHost) removeOtherGenerations(gen string) {
 
 // memIndexLayout is the layout of mem's index: a change to its schema or to
 // how Ops become rows is a new number, and an index of another is rebuilt.
-const memIndexLayout = 1
+// 2 keeps an item's status.
+const memIndexLayout = 2
 
 func (h *memHost) indexStamp(j *journal) memStamp {
 	return memStamp{Layout: memIndexLayout, Generation: j.generation, Seq: j.seq, End: j.size, Hash: j.lastHash}
@@ -642,6 +657,7 @@ func (h *Host) mem(project string) *memHost {
 	if m == nil {
 		m = newMemHost(h.base, dir)
 		m.now = h.opts.Now
+		m.embed = newMemEmbedder(h.opts.Embeddings)
 		h.mems[dir] = m
 	}
 	m.b = h.base
@@ -735,9 +751,9 @@ func (h *memHost) kept(req string) (bool, error) {
 	return found, err
 }
 
-// repair deletes mem's store and index, under its lock, so that the next
-// call builds them afresh from the journal, the source, whose every entry
-// it keeps. It returns how many there are.
+// repair deletes mem's store, index and vectors, under its lock, so that
+// the next call builds them afresh from the journal, the source, whose
+// every entry it keeps. It returns how many there are.
 func (h *memHost) repair(ctx context.Context) (int, error) {
 	release, err := h.lock(ctx)
 	if err != nil {
