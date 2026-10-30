@@ -149,7 +149,8 @@ and none of the 10 without one got anything. These runs used
 Qwen3-Embedding-0.6B, on a CPU.
 
 With the option set, mem's text and the prompts you type go to that server;
-unset, nothing is sent anywhere.
+unset, nothing is sent anywhere. `/mem` then ends with a line that says so, as
+`mem also finds by meaning, with qwen3-embedding-0.6b (all 32 entries read)`.
 
 ### A reminder for next time
 
@@ -242,6 +243,8 @@ mem waiting on you: "which day suits you for the release?" (release-v2/3)
 
 `/mem` alone shows the outline the agent reads: what waits on you, each open
 goal with its next step and the session that made it, and the newest facts.
+Past ten facts it lists the rest by the first part of their names, as
+``… 22 more facts, in `api/` (1), `auth/` (1), …: /mem show api lists a group``.
 `/mem log` lists every change: when, who made it (you, or the agent by its
 session's title), the call, and what it changed. `/mem undo` takes a change
 back, as a change of yours. `/mem redact` takes a secret's exact text out of
