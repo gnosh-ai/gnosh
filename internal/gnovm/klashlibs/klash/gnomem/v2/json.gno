@@ -199,6 +199,8 @@ func (m *Mem) goalJSON(j *jsonWriter, name string, withSteps bool) {
 			for _, kv := range [][2]string{{"name", n}, {"why", why[i]}, {"title", it.Title}, {"wait", m.waitOn(n)}, {"doing", it.Doing}} {
 				j.field(kv[0], kv[1])
 			}
+			j.key("changed")
+			j.num(it.Changed)
 			j.close("}")
 		}
 	}

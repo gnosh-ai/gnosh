@@ -14,6 +14,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -135,34 +136,29 @@ func TestGoalBinding(t *testing.T) {
 func TestGoalTurnTable(t *testing.T) {
 	t.Parallel()
 	b := GoalBinding{Name: "g", Title: "the goal"}
+	now := time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)
 	held := func(why, wait, doing string) memGoalJSON {
 		var g memGoalJSON
 		g.Name, g.Title = "g", "the goal"
-		g.Held = append(g.Held, struct {
-			Name  string `json:"name"`
-			Why   string `json:"why"`
-			Title string `json:"title"`
-			Wait  string `json:"wait"`
-			Doing string `json:"doing"`
-		}{"g/1", why, "a step", wait, doing})
+		g.Held = append(g.Held, memHeld{Name: "g/1", Why: why, Title: "a step", Wait: wait, Doing: doing, Changed: now.Unix() - 300})
 		return g
 	}
-	tn, _ := goalTurn(b, held("session", "", "8b1f3c2a-0000"), "2026-10-30", "STOP")
+	tn, _ := goalTurn(b, held("session", "", "8b1f3c2a-0000"), now, "STOP")
 	require.Equal(t, "end", tn.Do)
-	require.Contains(t, tn.Notice, "`g/1` \"a step\" was started by session 8b1f3c2a")
-	tn, _ = goalTurn(b, held("day", "2026-11-03", ""), "2026-10-30", "STOP")
+	require.Contains(t, tn.Notice, "`g/1` \"a step\" was started by session 8b1f3c2a, 5m ago")
+	tn, _ = goalTurn(b, held("day", "2026-11-03", ""), now, "STOP")
 	require.Equal(t, "end", tn.Do)
 	require.Contains(t, tn.Notice, "`g/1` \"a step\" waits until 2026-11-03")
 	g := held("day", "2026-11-03", "")
 	g.Wait = "2026-11-03"
-	tn, b2 := goalTurn(b, g, "2026-10-30", "STOP")
+	tn, b2 := goalTurn(b, g, now, "STOP")
 	require.Equal(t, "checkpoint", tn.Do, "the goal itself waits")
-	tn, _ = goalTurn(b2, g, "2026-10-30", "STOP")
+	tn, _ = goalTurn(b2, g, now, "STOP")
 	require.Equal(t, "end", tn.Do)
 	for status, want := range map[string]string{"dropped": "was dropped", "forgotten": "was forgotten", "missing": "no longer in mem"} {
 		g := memGoalJSON{}
 		g.Status = status
-		tn, _ := goalTurn(b, g, "2026-10-30", "STOP")
+		tn, _ := goalTurn(b, g, now, "STOP")
 		require.Equal(t, "clear", tn.Do)
 		require.Contains(t, tn.Notice, want)
 	}

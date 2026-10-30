@@ -257,7 +257,7 @@ func (m *Mem) aside(name string, it *Todo, top bool) string {
 			parts = append(parts, "waits on the user")
 		}
 		if it.Doing != "" {
-			parts = append(parts, "started by "+who(it.Doing))
+			parts = append(parts, "started by "+who(it.Doing)+", "+ago(it.Changed))
 		}
 	}
 	if len(parts) == 0 {

@@ -150,7 +150,7 @@ func (m *Mem) holds(names, why []string) string {
 		case "user":
 			parts = append(parts, "`"+n+"` is for the user")
 		case "session":
-			parts = append(parts, "`"+n+"` was started by "+who(it.Doing))
+			parts = append(parts, "`"+n+"` was started by "+who(it.Doing)+", "+ago(it.Changed))
 		default:
 			parts = append(parts, "`"+n+"`"+waitText(m.waitOn(n)))
 		}

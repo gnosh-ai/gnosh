@@ -117,13 +117,7 @@ type memGoalJSON struct {
 		Name  string `json:"name"`
 		Title string `json:"title"`
 	} `json:"asks"`
-	Held []struct {
-		Name  string `json:"name"`
-		Why   string `json:"why"`
-		Title string `json:"title"`
-		Wait  string `json:"wait"`
-		Doing string `json:"doing"`
-	} `json:"held"`
+	Held []memHeld `json:"held"`
 }
 
 // lastGoalJSON reads the goal that mem.JSON(name), printed last, gives.
@@ -174,7 +168,7 @@ func (h *memHost) goalTurnEnd(ctx context.Context, session string, b GoalBinding
 	if err != nil {
 		return GoalTurn{}, b, err
 	}
-	turn, b := goalTurn(b, g, h.now().Format(time.DateOnly), marker)
+	turn, b := goalTurn(b, g, h.now(), marker)
 	if turn.Do == "judge" {
 		res, err := h.call(ctx, memRequest{Code: "print(mem.Show(" + strconv.Quote(b.Name) + "))", Session: session})
 		if err != nil {
@@ -186,8 +180,9 @@ func (h *memHost) goalTurnEnd(ctx context.Context, session string, b GoalBinding
 }
 
 // goalTurn is MEMPLAN §7's table: what a turn's end does with goal g, bound
-// as b, on day today; marker is the line a reply ends with to stop.
-func goalTurn(b GoalBinding, g memGoalJSON, today, marker string) (GoalTurn, GoalBinding) {
+// as b, at now; marker is the line a reply ends with to stop.
+func goalTurn(b GoalBinding, g memGoalJSON, now time.Time, marker string) (GoalTurn, GoalBinding) {
+	today := now.Format(time.DateOnly)
 	ref := "`" + b.Name + "` " + strconv.Quote(memLine(g.Title, 80))
 	switch g.Status {
 	case "done":
@@ -218,7 +213,7 @@ func goalTurn(b GoalBinding, g memGoalJSON, today, marker string) (GoalTurn, Goa
 			strconv.Quote(memLine(g.NextTitle, 120)) + ": do it, and mark it with `mem.Done(" + strconv.Quote(g.Next) + ", \"…\")`. " +
 			"Once the goal holds, close it with `mem.Done(" + strconv.Quote(b.Name) + ", \"<command> → <result>\")`."}, b
 	}
-	holds := goalHolds(g)
+	holds := goalHolds(g, now)
 	// A wait on the goal holds back every item under it, which then says so.
 	waits := g.Wait != "" && !(memIsDay(g.Wait) && g.Wait <= today)
 	why := map[string]bool{}
@@ -252,8 +247,22 @@ func goalAsks(g memGoalJSON) string {
 	return strings.Join(parts, "; ")
 }
 
-// goalHolds says what holds back each item goal g's next passed over.
-func goalHolds(g memGoalJSON) string {
+// memHeld is an item a goal's next passed over, and what holds it back:
+// "user", "session", "day" or "words".
+type memHeld struct {
+	Name  string `json:"name"`
+	Why   string `json:"why"`
+	Title string `json:"title"`
+	Wait  string `json:"wait"`
+	Doing string `json:"doing"`
+	// Changed is when it last changed: for one a session started, about
+	// when that session started it or last worked on it.
+	Changed int64 `json:"changed"`
+}
+
+// goalHolds says what holds back each item goal g's next passed over, as
+// of now.
+func goalHolds(g memGoalJSON, now time.Time) string {
 	var parts []string
 	for _, h := range g.Held {
 		item := "`" + h.Name + "` " + strconv.Quote(memLine(h.Title, 80))
@@ -261,7 +270,7 @@ func goalHolds(g memGoalJSON) string {
 		case "user":
 			parts = append(parts, item+" is for the user")
 		case "session":
-			parts = append(parts, item+" was started by session "+memShortID(h.Doing))
+			parts = append(parts, item+" was started by session "+memShortID(h.Doing)+", "+memAgo(now, h.Changed))
 		case "day":
 			parts = append(parts, item+" waits until "+h.Wait)
 		default:

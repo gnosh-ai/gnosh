@@ -38,7 +38,7 @@ mem: 3 goals open
 goals:
   [ ] `release-v2` "release v2" (1/3 done · this session · 2m ago)
     [x] `release-v2/1` "bump the version" → now 2.0.0
-    [ ] `release-v2/2` "tag v2.0.0" (started by session s2)
+    [ ] `release-v2/2` "tag v2.0.0" (started by session s2, 2m ago)
       [x] `release-v2/2/1` "which key signs the tag?" → the YubiKey
     [ ] `release-v2/3` "CI is green"  ← next
   [ ] `bump-gno-pin` "bump the gno pin" (this session · 3m ago · waits for: PR #6399 merged)
@@ -183,4 +183,4 @@ facts, newest first:
   `cmd/build` = make build
 
 > s1: println(mem.JSON("bump-gno-pin"))
-{"goals":[{"name":"bump-gno-pin","title":"bump the gno pin","status":"","result":"","wait":"PR #6399 merged","for":"","doing":"","by":"s1","changed":1793270820,"steps_open":0,"steps_done":0,"next":"","next_title":"","asks":[],"steps":[],"held":[{"name":"bump-gno-pin","why":"words","title":"bump the gno pin","wait":"PR #6399 merged","doing":""}]}]}
+{"goals":[{"name":"bump-gno-pin","title":"bump the gno pin","status":"","result":"","wait":"PR #6399 merged","for":"","doing":"","by":"s1","changed":1793270820,"steps_open":0,"steps_done":0,"next":"","next_title":"","asks":[],"steps":[],"held":[{"name":"bump-gno-pin","why":"words","title":"bump the gno pin","wait":"PR #6399 merged","doing":"","changed":1793270820}]}]}
