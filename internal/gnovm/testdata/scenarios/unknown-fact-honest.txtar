@@ -1,0 +1,10 @@
+Recall must not invent. Asked in a new session for something it was never
+told, the agent says it does not know instead of guessing a plausible name.
+
+-- prompt --
+Remember: the staging database is db-stg-7.
+-- prompt-new --
+What's the production database called?
+-- check --
+turn 1 tool gnovm_run >= 1
+answer last matches (?i)(don.?t know|do not know|not sure|no record|wasn.?t told|was not told|weren.?t told|haven.?t been told|don.?t have|only .*staging|nothing .*production|no .*production)

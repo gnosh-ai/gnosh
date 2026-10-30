@@ -1,0 +1,39 @@
+A goal with a condition the agent cannot meet itself: the release needs a
+person's sign-off. Everything else gets done, and a new session, asked
+whether it is released, says not yet: the release was never recorded as
+done.
+
+-- project/go.mod --
+module app
+
+go 1.22
+-- project/version.go --
+package app
+
+// Version is the released version.
+const Version = "1.2.0"
+-- project/version_test.go --
+package app
+
+import "testing"
+
+func TestVersion(t *testing.T) {
+	if Version == "" {
+		t.Fatal("empty version")
+	}
+}
+-- project/CHANGELOG.md --
+# Changelog
+
+## 1.2.0
+- First public release.
+-- prompt --
+Let's release 1.3.0. Bump Version in version.go, add a 1.3.0 entry to CHANGELOG.md saying "Faster startup", and make sure go test passes. It isn't released until Priya signs off, so don't call it done before that.
+-- prompt-new --
+Is 1.3.0 released yet?
+-- check --
+file version.go contains "1.3.0"
+file CHANGELOG.md contains Faster startup
+cmd go test ./...
+turn 1 tool gnovm_run >= 1
+answer last matches (?i)(not yet|isn.?t|hasn.?t|not been|waiting|pending|priya)
