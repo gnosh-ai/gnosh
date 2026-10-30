@@ -12,11 +12,13 @@ import (
 
 // gnosh mem prints what /mem shows, with no model: the outline, an item in
 // full, a search, the log. It only reads, and a project with no mem is
-// told so, rather than given an empty one.
+// told so, rather than given an empty one. It needs no provider: the docs
+// session's run with none configured stopped at loading the config.
 func TestMemCommandReadsTheProjectsMem(t *testing.T) {
 	t.Setenv("GNOSH_GLOBAL_CONFIG", t.TempDir())
 	t.Setenv("GNOSH_GLOBAL_DATA", t.TempDir())
 	t.Setenv("GNOSH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	t.Setenv("GNOSH_DISABLE_DEFAULT_PROVIDERS", "1")
 	project, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)
 	t.Chdir(project)

@@ -105,6 +105,9 @@ type sessionServices struct {
 	cfg      *config.ConfigStore
 }
 
+// sessionSetup loads the config and opens the project's sessions for a
+// command that calls no model (gnosh session, gnosh mem): the config's
+// files only, so it works with no provider configured.
 func sessionSetup(cmd *cobra.Command) (context.Context, *sessionServices, func(), error) {
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 	ctx := cmd.Context()
@@ -114,7 +117,7 @@ func sessionSetup(cmd *cobra.Command) (context.Context, *sessionServices, func()
 		return nil, nil, nil, err
 	}
 
-	cfg, err := config.Init(cwd, dataDir, false)
+	cfg, err := config.LoadFiles(cwd, dataDir, false)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to initialize config: %w", err)
 	}

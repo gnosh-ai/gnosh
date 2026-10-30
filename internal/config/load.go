@@ -40,20 +40,30 @@ import (
 
 const defaultCatwalkURL = "https://catwalk.charm.land"
 
-// Load loads the configuration from the default paths and returns a
-// ConfigStore that owns both the pure-data Config and all runtime state.
-func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
+// LoadFiles loads the configuration files from the default paths, merged
+// and with their defaults, and stops short of the providers: for commands
+// that call no model, as gnosh mem and gnosh session, which must work on a
+// machine with none configured. Load goes on from here.
+func LoadFiles(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
+	store, _, err := loadFiles(workingDir, dataDir, debug)
+	return store, err
+}
+
+// loadFiles is LoadFiles, with the config paths Load watches for changes:
+// every one it looked at, loaded or not, so a config file created after
+// startup (a crushrc added mid-session, say) counts as a change.
+func loadFiles(workingDir, dataDir string, debug bool) (*ConfigStore, []string, error) {
 	// Migrate deprecated disable_notifications before loading config.
 	migrateDisableNotifications()
 
 	if err := checkProjectConfigOwners(workingDir); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	configPaths := lookupConfigs(workingDir)
 
 	cfg, loadedPaths, err := loadFromConfigPaths(context.Background(), configPaths)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load config from paths %v: %w", configPaths, err)
+		return nil, nil, fmt.Errorf("failed to load config from paths %v: %w", configPaths, err)
 	}
 
 	cfg.setDefaults(workingDir, dataDir)
@@ -73,7 +83,7 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 	// Load workspace config last so it has highest priority.
 	merged, err := mergeWorkspaceConfig(cfg, store.workspacePath, workingDir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if merged {
 		store.config = cfg
@@ -83,8 +93,19 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 	// Validate after all config merging is complete, so the checks see
 	// the same config the session will actually run with.
 	if err := cfg.Validate(); err != nil {
+		return nil, nil, err
+	}
+	return store, append(slices.Clone(configPaths), loadedPaths...), nil
+}
+
+// Load loads the configuration from the default paths and returns a
+// ConfigStore that owns both the pure-data Config and all runtime state.
+func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
+	store, watched, err := loadFiles(workingDir, dataDir, debug)
+	if err != nil {
 		return nil, err
 	}
+	cfg := store.config
 
 	if !isInsideWorktree() {
 		const depth = 2
@@ -181,11 +202,8 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 	}
 	store.SetupAgents()
 
-	// Capture initial staleness snapshot
-	// Capture initial staleness snapshot. Track every discovered config path,
-	// not just the ones that loaded, so a config file created after startup
-	// (e.g. a crushrc added mid-session) is detected as a change.
-	store.captureStalenessSnapshot(append(slices.Clone(configPaths), loadedPaths...))
+	// Capture initial staleness snapshot.
+	store.captureStalenessSnapshot(watched)
 
 	return store, nil
 }
