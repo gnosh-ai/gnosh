@@ -1323,7 +1323,6 @@ func (h *Host) countNamed(project string) (int, error) {
 }
 
 // Drop evicts a VM from memory (action "evict"), or deletes it ("delete").
-// The goals VM is not deleted here.
 func (h *Host) Drop(ctx context.Context, projectPath, name, action string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()

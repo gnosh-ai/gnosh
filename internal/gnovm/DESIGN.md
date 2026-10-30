@@ -591,8 +591,9 @@ with a short recipe in the system prompt the model keeps its checklist and
 memory in persistent VMs, but writes its own structs each session (about 400
 tokens at 5-20 tokens/s) in a different shape each time. Jae asked for "memory
 Go structs for goals, subgoals, research, whatever": a minimal starting point,
-"a good foundation", which others may replace. It is model-side; the
-harness's goals (§12) remain separate.
+"a good foundation", which others may replace. It is model-side. (It was
+written beside the harness's goals of §12, which were never built; mem v2
+supersedes both, see the note at §12.)
 
 - **`klash/gnomem/v1`** (`klashlibs/klash/gnomem/v1`): `Board{Items, Facts}`
   and `Item{Title, Parent, Status, Result, Notes}`, plain data (Items[0] is the
@@ -803,7 +804,7 @@ foundation (F).
 | E3 | Show hides what was tried | fixed: the next item's last three notes, a header with counts, the next item and the time |
 | E5 | Wrong ids pass silently; errors cost round trips | fixed: receipts from Done/Drop/Reopen; errors list open items with titles |
 | E6 | A checklist took three calls and ~100 tokens | fixed: `Add(title, steps...)` in one call, and `mem` needs no setup |
-| F-c | Should the harness's goals and the model's board be one design? | no: separate authorities sharing a vocabulary; the harness never takes the board as proof (DESIGN §12 stays) |
+| F-c | Should the harness's goals and the model's board be one design? | no: separate authorities sharing a vocabulary; the harness never takes the board as proof (DESIGN §12 stays). Superseded 2026-10-30: mem v2 is one design for both, see the note at §12 |
 | E-recipe | Examples in the recipe must not be the scenarios' data | done |
 
 ## Appendix F. GNOMEM review round 2: findings and dispositions
