@@ -118,8 +118,8 @@ func TestMemRecallLive(t *testing.T) {
 		{"go builds act weird after bumping modules", []string{"ci/cache"}},
 		{"where do the backups go?", []string{"hosts/backup-droplet", "backup-journal"}},
 		{"build it on a bigger machine", []string{"hosts/devbox"}},
-		// Two questions in one prompt, from the docs loop's
-		// recall-beyond-the-block: close to neither, asked whole.
+		// Two questions in one prompt, from the recall-beyond-the-block
+		// scenario: close to neither, asked whole.
 		{"How do I push this to production, and who has to check it first?", []string{"cmd/deploy", "release/qa-signoff"}},
 		{"what's the weather tomorrow?", nil},
 		{"refactor the parser in internal/lexer", nil},

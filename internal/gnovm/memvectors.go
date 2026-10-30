@@ -160,7 +160,8 @@ var memClauseRe = regexp.MustCompile(`[.?!;]+(\s+|$)|\n+|,\s+(and|but|then|also)
 // of those too. A prompt asking two things is close to neither as a whole:
 // "How do I push this to production, and who has to check it first?" came
 // to 0.48 and 0.45 against the facts that answer it, asked whole, and
-// 0.55 and 0.60, asked in halves (the docs loop, 2026-10-30).
+// 0.55 and 0.60, asked in halves (the recall-beyond-the-block scenario's
+// mem, 2026-10-30).
 func memQueries(words string) []string {
 	var parts []string
 	keep := func(p string) {
@@ -511,7 +512,7 @@ func (v *memVectors) version() (int64, string, error) {
 // generation, the entry the index holds, and the vectors' version and
 // model. Any change to mem, or any write to its vectors, changes it: a
 // count of the vectors would not, when a fill adds the new text's vector
-// and then prunes the old text's (found by the cleanup session's review).
+// and then prunes the old text's.
 type memSnapshotKey struct {
 	gen   string
 	seq   int64

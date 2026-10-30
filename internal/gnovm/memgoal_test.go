@@ -165,8 +165,8 @@ func TestGoalTurnTable(t *testing.T) {
 	require.Contains(t, GoalCheckpoint(b, 10, "STOP"), "the goal `g` \"the goal\" 10 times")
 }
 
-// A real `gnosh run --goal` never ended its turns (Qwen, 2026-10-30, the
-// docs loop): asked to find out which day suits the release, the agent
+// A real `gnosh run --goal` never ended its turns (Qwen, 2026-10-30): asked
+// to find out which day suits the release, the agent
 // planned "ask the user which day suits the release" and "record the
 // chosen release day as a fact in mem", put the question under step 1 as
 // the recipe says, and was then told at every turn's end to do step 2,

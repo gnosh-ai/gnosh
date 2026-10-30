@@ -526,7 +526,7 @@ func TestMemRecallKeepsNothingStale(t *testing.T) {
 
 // Recall's kept read is read again after any write to the vectors, even
 // one that leaves as many as there were: a fill that adds a changed fact's
-// vector and prunes the old text's (the cleanup session's case).
+// vector and prunes the old text's.
 func TestMemRecallSeesAFillThatKeepsTheCount(t *testing.T) {
 	t.Parallel()
 	f := newFakeEmbedder(t)

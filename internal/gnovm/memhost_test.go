@@ -542,7 +542,7 @@ func TestHostRunsMem(t *testing.T) {
 	require.ErrorContains(t, res.Err, "(mem's calls go one per line, with no comma after them)")
 	res = call(`mem.Fact("release/qa-signoff")`)
 	require.EqualError(t, res.Err, "mem.Fact takes 2 arguments, not 1: mem.Fact(name, text) sets a fact, and mem.Show(name) shows one")
-	// From the QA's release-waits-for-signoff on the box's Qwen: a step
+	// From the release-waits-for-signoff scenario on a local Qwen: a step
 	// marked done on the plan, a question given a name, a name made from a
 	// title by hand. What a call takes, and what a Goal has, are read from
 	// gnomem's source (memAPI).
