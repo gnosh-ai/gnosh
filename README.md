@@ -72,7 +72,7 @@ instead of re-reading it. [GNOMEM](GNOMEM.md) has the design and real runs.
 ### Goals that outlive the session
 
 > **You:** Add a `Median` to the stats package, with tests. It's done when
-> `go test ./...` passes.
+> `go test ./...` passes. Keep it on your board; we may not finish today.
 
 The agent puts the goal on its board with the condition as a step of its own,
 and checks the steps off as it goes. A goal cannot be marked done while one of
@@ -85,10 +85,16 @@ agent is told what is open and what is next (the first line of the outline in
 [what the agent runs](#what-the-agent-runs)), so asked to continue, it picks up
 there.
 
+Work that is meant to outlast the session is where the board earns its keep,
+and where the agent reliably uses it: in real runs it kept every goal on its
+board when the prompt asked for that or said the work would carry on later.
+Left to itself on a task it expects to finish in one sitting, it sometimes
+keeps count in its head instead, so say so when you want the board.
+
 ### Facts, kept current
 
-> **You:** Remember that we deploy with `make ship ENV=prod`, and that the
-> staging database is `db-stg-4`.
+> **You:** Remember for later sessions: we deploy with `make ship ENV=prod`,
+> and the staging database is `db-stg-4`.
 >
 > *(a week later)* **You:** Staging's database moved to `db-stg-9`.
 

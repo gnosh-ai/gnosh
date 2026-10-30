@@ -84,8 +84,8 @@ message, so it knows where the goal stands without being told.
 
 ### A knowledge base
 
-> **You:** Remember that staging's database is `db-stg-4`, the on-call
-> engineer is Dana, and we deploy with `make ship ENV=prod`.
+> **You:** Remember for later sessions: staging's database is `db-stg-4`, the
+> on-call engineer is Dana, and we deploy with `make ship ENV=prod`.
 >
 > *(next week)* **You:** Staging moved to `db-stg-9`.
 >
