@@ -293,8 +293,10 @@ func (r *memRealm) call(code string, ctx memContext) (call memCall, err error) {
 		if p := recover(); p != nil {
 			if terr := meter.tripped(); terr != nil {
 				fail(classifyTrip(terr).Error())
+			} else if msg := memPanicText(p, bodyLine, oneLine); memCommaJoined(code) && strings.Contains(msg, "expected 1 expression") {
+				fail(msg + " (mem's calls go one per line, with no comma after them)")
 			} else {
-				fail(memPanicText(p, bodyLine, oneLine))
+				fail(msg)
 			}
 		}
 	}()

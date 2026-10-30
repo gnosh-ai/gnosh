@@ -472,6 +472,15 @@ func TestHostRunsMem(t *testing.T) {
 	require.Contains(t, res.Notes, "mem.Goal(…) gives a Goal, not a name: pass its name, g.Name, or the name mem printed in backticks")
 	res = call(`mem.List("ship")`)
 	require.Contains(t, res.Notes, `mem.Show() lists what mem holds, and mem.Show("name") shows a goal with its steps`)
+	// From a launch-video take: a plan begun in one call, a step guessed
+	// for another goal's, and calls joined with commas, as a list.
+	res = call(`mem.Goal("add Median to stats").Steps("implement Median", "add tests").Start()`)
+	require.NoError(t, res.Err)
+	require.Contains(t, res.Output, "started `add-median-stats/1` \"implement Median\"")
+	res = call(`mem.Goal("tidy the tests").Steps("a", "b").Start("tests/1")`)
+	require.ErrorContains(t, res.Err, "`tests/1` is not a step of `tidy-tests`, whose steps are `tidy-tests/1` to `tidy-tests/2`: .Start() with no name starts the next")
+	res = call("mem.Done(\"add-median-stats/1\", \"done\"),\nmem.Done(\"add-median-stats/2\", \"done\")")
+	require.ErrorContains(t, res.Err, "(mem's calls go one per line, with no comma after them)")
 	res = call(`mem.Fact("release/qa-signoff")`)
 	require.EqualError(t, res.Err, "mem.Fact takes 2 arguments, not 1: mem.Fact(name, text) sets a fact, and mem.Show(name) shows one")
 	res = call("import \"mem\"\nmem.Fact(\"cmd/test\", \"go test ./...\")")
@@ -479,7 +488,7 @@ func TestHostRunsMem(t *testing.T) {
 	require.Equal(t, "fact `cmd/test` is new\n", res.Output)
 	res = call("mem.Goal(\"x\").Steps(\n\t\"a\",\n\t\"b\"\n)")
 	require.ErrorContains(t, res.Err, "(a call over several lines needs a comma after its last argument too, as in Go)")
-	require.Contains(t, call(`mem.Find("push to production")`).Output, `nothing in mem matches "push to production": Find matches the words as they were stored; mem.Show() lists 1 goal, 0 rules and 1 fact`)
+	require.Contains(t, call(`mem.Find("push to production")`).Output, `nothing in mem matches "push to production": Find matches the words as they were stored; mem.Show() lists 2 goals, 0 rules and 1 fact`)
 	res = call("mem.Fact(\"cmd/deploy\", \"make ship ENV=prod\")\nmem.Note(\"qa\", \"Lin does QA\")")
 	require.EqualError(t, res.Err, "no item `qa`; mem.Show() lists them; nothing was kept, so fact `cmd/deploy`, set above, is not in mem")
 
@@ -491,7 +500,7 @@ func TestHostRunsMem(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list.VMs, 1)
 	require.Equal(t, MemVM, list.VMs[0].Name)
-	require.EqualValues(t, 2, list.VMs[0].Entries)
+	require.EqualValues(t, 3, list.VMs[0].Entries)
 	kept, err := h.Kept("/proj", MemVM, `req-mem.Goal("ship it").Steps("build", "test")`)
 	require.NoError(t, err)
 	require.True(t, kept)

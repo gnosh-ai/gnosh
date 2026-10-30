@@ -92,6 +92,47 @@ func (g Goal) Wait(until string) Goal {
 	return g
 }
 
+// Start starts the goal's next step for this session, as mem.Start does,
+// so a plan can be made and begun in one call:
+// mem.Goal("…").Steps("…", "…").Start(). Given a name, it starts that step
+// of the goal instead.
+func (g Goal) Start(step ...string) Goal {
+	g.m.startIn(g.Name, step...)
+	return g
+}
+
+// startIn is Goal(…).Start, in mem's realm, as its natives need: a Goal
+// is a value outside it.
+func (m *Mem) startIn(goal string, step ...string) {
+	switch {
+	case len(step) > 1:
+		panic("Start takes one step, or none for the next")
+	case len(step) == 1 && step[0] != goal && !strings.HasPrefix(step[0], goal+"/"):
+		panic("`" + step[0] + "` is not a step of `" + goal + "`" + m.stepsOf(goal) + ": .Start() with no name starts the next")
+	case len(step) == 1:
+		m.Start(step[0])
+		return
+	}
+	next := m.nextFor(goal, m.get(goal), caller())
+	if next == "" {
+		panic("`" + goal + "` has no step this session can start now" + m.whatNext(goal))
+	}
+	m.Start(next)
+}
+
+// stepsOf names goal name's steps, for a refusal: ", whose steps are
+// `g/1` to `g/3`", or "" when it has none.
+func (m *Mem) stepsOf(name string) string {
+	it := m.get(name)
+	if it == nil || it.Last == 0 {
+		return ""
+	}
+	if it.Last == 1 {
+		return ", whose step is `" + name + "/1`"
+	}
+	return ", whose steps are `" + name + "/1` to `" + name + "/" + strconv.Itoa(it.Last) + "`"
+}
+
 // Ask asks the user something, as a step of the goal (see Mem.Ask).
 func (g Goal) Ask(question string) Goal {
 	g.m.Ask(g.Name, question)

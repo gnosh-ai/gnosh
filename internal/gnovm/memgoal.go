@@ -113,7 +113,11 @@ type memGoalJSON struct {
 	NextTitle string `json:"next_title"`
 	Result    string `json:"result"`
 	Wait      string `json:"wait"`
-	Held      []struct {
+	Asks      []struct {
+		Name  string `json:"name"`
+		Title string `json:"title"`
+	} `json:"asks"`
+	Held []struct {
 		Name  string `json:"name"`
 		Why   string `json:"why"`
 		Title string `json:"title"`
@@ -197,6 +201,13 @@ func goalTurn(b GoalBinding, g memGoalJSON, today, marker string) (GoalTurn, Goa
 	}
 	asked := b.Asked
 	b.Asked = ""
+	// A question for the user open under the goal ends the turn even when
+	// a step is free: the steps after it may need the answer, which only
+	// the user can give. (A real run went on for nine minutes looking for
+	// a day the user had not yet chosen.)
+	if asks := goalAsks(g); asks != "" {
+		return GoalTurn{Do: "end", Notice: "The goal " + ref + " waits: " + asks + ". It stays set"}, b
+	}
 	switch {
 	case g.Next == b.Name:
 		return GoalTurn{Do: "continue", Prompt: "The goal " + ref + " is not closed, and none of its steps is open. Once it holds, close it with " +
@@ -229,6 +240,16 @@ func goalTurn(b GoalBinding, g memGoalJSON, today, marker string) (GoalTurn, Goa
 		return GoalTurn{Do: "end", Notice: "The goal " + ref + " waits on other sessions: " + holds + ". It stays set; `mem.Start(name)` in this session takes a step over"}, b
 	}
 	return GoalTurn{Do: "end", Notice: "The goal " + ref + " waits: " + holds + ". It stays set"}, b
+}
+
+// goalAsks names the questions for the user open under goal g, as
+// goalHolds does: "`g/1/1` "which day?" is for the user"; "" for none.
+func goalAsks(g memGoalJSON) string {
+	var parts []string
+	for _, a := range g.Asks {
+		parts = append(parts, "`"+a.Name+"` "+strconv.Quote(memLine(a.Title, 80))+" is for the user")
+	}
+	return strings.Join(parts, "; ")
 }
 
 // goalHolds says what holds back each item goal g's next passed over.

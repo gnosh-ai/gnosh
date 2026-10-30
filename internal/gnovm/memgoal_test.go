@@ -168,3 +168,32 @@ func TestGoalTurnTable(t *testing.T) {
 	}
 	require.Contains(t, GoalCheckpoint(b, 10, "STOP"), "the goal `g` \"the goal\" 10 times")
 }
+
+// A real `gnosh run --goal` never ended its turns (Qwen, 2026-10-30, the
+// docs loop): asked to find out which day suits the release, the agent
+// planned "ask the user which day suits the release" and "record the
+// chosen release day as a fact in mem", put the question under step 1 as
+// the recipe says, and was then told at every turn's end to do step 2,
+// which needs the answer. It searched mem for a day for nine minutes, until
+// it was stopped. While a question for the user is open under the goal,
+// the goal cannot go on without the user, so the turn should end, as it
+// does when the question is under the last step.
+func TestGoalTurnEndsWhileAQuestionUnderItIsOpen(t *testing.T) {
+	t.Parallel()
+	h := newTestHost(t, t.TempDir())
+	ctx := context.Background()
+	b, _, err := h.BindGoal(ctx, "/proj", "s1", "the release day the user chose is kept in mem as a fact", nil)
+	require.NoError(t, err)
+	for _, code := range []string{
+		`mem.Steps("` + b.Name + `", "ask the user which day suits the release", "record the chosen release day as a fact in mem")`,
+		`mem.Ask("` + b.Name + `/1", "which day suits you for the release?")`,
+	} {
+		res, err := h.Run(ctx, RunRequest{Project: "/proj", Session: "s1", Name: MemVM, Code: code, Goal: b.Name})
+		require.NoError(t, err, code)
+		require.NoError(t, res.Err, code)
+	}
+	tn, _, err := h.GoalTurnEnd(ctx, "/proj", "s1", b, "STOP")
+	require.NoError(t, err)
+	require.Equal(t, "end", tn.Do, "a question for the user is open under the goal, and the turn went on with: %s", tn.Prompt)
+	require.Contains(t, tn.Notice, "is for the user")
+}

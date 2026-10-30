@@ -69,6 +69,18 @@ func shapeMemInput(code string) (memSource, error) {
 	return src, nil
 }
 
+// memCommaJoined reports whether code joins calls with commas, as a list
+// would: a line ending in "),", then one that calls mem.
+func memCommaJoined(code string) bool {
+	lines := strings.Split(code, "\n")
+	for i := 0; i+1 < len(lines); i++ {
+		if strings.HasSuffix(strings.TrimSpace(lines[i]), "),") && strings.HasPrefix(strings.TrimSpace(lines[i+1]), "mem.") {
+			return true
+		}
+	}
+	return false
+}
+
 // declaresFunc reports whether declarations hold a func, which cannot be
 // declared inside main.
 func declaresFunc(decls string) bool {

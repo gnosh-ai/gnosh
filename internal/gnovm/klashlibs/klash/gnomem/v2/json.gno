@@ -32,7 +32,8 @@ const (
 // and that item's title, and, when its next is "", what holds back the open
 // items Next passed over: "day", "user", "words" or "session", each with its
 // title, the wait on it or above it, and who started it. A goal asked for by
-// name also comes with its steps, at most 100.
+// name also comes with the questions for the user open under it, and its
+// steps, at most 100.
 func (m *Mem) JSON(names ...string) string {
 	var j jsonWriter
 	j.open("{")
@@ -157,6 +158,19 @@ func (m *Mem) goalJSON(j *jsonWriter, name string, withSteps bool) {
 	j.field("next", next)
 	j.field("next_title", nextTitle)
 	if withSteps {
+		// The questions for the user open anywhere under the goal: one under
+		// a step holds back what comes after it, and Next may not say so.
+		j.key("asks")
+		j.open("[")
+		m.eachBelow(name, false, func(n string, it *Todo) {
+			if it.Status == "" && it.For != "" {
+				j.open("{")
+				j.field("name", n)
+				j.field("title", it.Title)
+				j.close("}")
+			}
+		})
+		j.close("]")
 		j.key("steps")
 		j.open("[")
 		n := 0
