@@ -306,8 +306,8 @@ func TestMemV1IsFrozen(t *testing.T) {
 	clock := func() time.Time { return time.Unix(1_800_000_000, 0) }
 	host := func() *Host {
 		h, err := NewHost(Options{
-			Dir: dir, Client: NewClientID(), Now: clock, BudgetBytes: 2 << 30,
-			Probe: func() (HostMemory, error) { return HostMemory{Total: 16 << 30, Available: 8 << 30}, nil },
+			Dir: dir, Client: NewClientID(), Now: clock, BudgetBytes: 32 << 30,
+			Probe: func() (HostMemory, error) { return HostMemory{Total: 128 << 30, Available: 64 << 30}, nil },
 		})
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = h.Close() })

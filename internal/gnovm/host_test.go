@@ -34,12 +34,13 @@ func newTestHost(t *testing.T, dir string) *Host {
 	h, err := NewHost(Options{
 		Dir:    dir,
 		Client: NewClientID(),
-		Probe:  func() (HostMemory, error) { return HostMemory{Total: 16 << 30, Available: 8 << 30}, nil },
+		Probe:  func() (HostMemory, error) { return HostMemory{Total: 128 << 30, Available: 64 << 30}, nil },
 		Now:    testNow,
 		// A base measures the heap it grows by (base.ensure), and parallel
-		// tests' allocations land in each other's measurements: a fixed
-		// budget keeps that noise from refusing VMs.
-		BudgetBytes: 2 << 30,
+		// tests' allocations land in each other's measurements: on the AI
+		// box's 32 cores they came to more than 2 GB. Room enough keeps that
+		// noise from refusing VMs; the budget's own tests set small ones.
+		BudgetBytes: 32 << 30,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = h.Close() })
