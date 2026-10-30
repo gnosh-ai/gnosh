@@ -215,6 +215,9 @@ var optionSpecs = map[string]optionSpec{
 	"metrics-url":    {jsonKey: "metrics_url", kind: optString},
 	"metrics-key":    {jsonKey: "metrics_key", kind: optString},
 	"update-repo":    {jsonKey: "update_repo", kind: optString},
+	// mem's embedding server: what mem's text and the prompts typed are
+	// sent to (config's mem_embeddings_url); unset, nothing is.
+	"mem-embeddings-url": {jsonKey: "mem_embeddings_url", kind: optString},
 
 	// Integer fields.
 	"request-timeout":     {jsonKey: "request_timeout", kind: optInt},
