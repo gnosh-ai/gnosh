@@ -10,6 +10,7 @@
 package gnovm
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
 	"testing"
@@ -57,4 +58,59 @@ func TestMemIndexFTS5(t *testing.T) {
 	_, err = db.Exec(`DELETE FROM docs WHERE name = 'gotcha/fill'`)
 	require.NoError(t, err)
 	require.Empty(t, match(`"deepfill"`))
+}
+
+// An index of an earlier layout is built afresh, stamped or not: one made
+// before the file said its layout kept the tables it was made with when no
+// stamp said otherwise, as an empty mem's never was, and every session start
+// read it as today's ("no such column: d.status" in Jae's lane, 2026-10-30).
+// Readers take it for no index yet; mem's next call builds it.
+func TestMemIndexOfAnEarlierLayoutIsBuiltAfresh(t *testing.T) {
+	t.Parallel()
+	// oldIndex puts at path an index as builds before the status column
+	// made it, unstamped.
+	oldIndex := func(path string) {
+		t.Helper()
+		removeMemIndex(path)
+		db, err := openSQLite(path, map[string]string{"journal_mode": "WAL"})
+		require.NoError(t, err)
+		_, err = db.Exec(`CREATE TABLE stamp(id INTEGER PRIMARY KEY CHECK (id = 1), json TEXT NOT NULL);
+CREATE TABLE names(id INTEGER PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL, UNIQUE(kind, name));
+CREATE VIRTUAL TABLE docs USING fts5(name, title, result, wait, notes, tokenize='trigram');`)
+		require.NoError(t, err)
+		require.NoError(t, db.Close())
+	}
+	for _, empty := range []bool{true, false} {
+		dir := t.TempDir()
+		h := newTestMemHost(t, dir)
+		memOK(t, h, `println(mem.Show())`)
+		if !empty {
+			memOK(t, h, `mem.Fact("cmd/test", "go test ./...")`)
+		}
+		hdr, _, err := readJournalHeader(filepath.Join(dir, "journal.jsonl"))
+		require.NoError(t, err)
+		path := filepath.Join(dir, "index-"+hdr.Generation+".db")
+		oldIndex(path)
+
+		_, ok, err := readMemSnapshot(context.Background(), dir)
+		require.NoError(t, err, "a reader takes it for no index yet")
+		require.False(t, ok)
+
+		memOK(t, h, `println(mem.Show())`)
+		s, ok, err := readMemSnapshot(context.Background(), dir)
+		require.NoError(t, err)
+		require.True(t, ok, "mem's call built it afresh")
+		if empty {
+			require.Empty(t, s.rows)
+		} else {
+			require.Len(t, s.rows, 1)
+			require.Equal(t, "cmd/test", s.rows[0].name)
+		}
+		x, err := openMemIndex(path)
+		require.NoError(t, err)
+		var layout int
+		require.NoError(t, x.db.QueryRow(`PRAGMA user_version`).Scan(&layout))
+		require.Equal(t, memIndexLayout, layout)
+		require.NoError(t, x.close())
+	}
 }

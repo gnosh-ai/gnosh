@@ -14,8 +14,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -38,6 +40,18 @@ CREATE VIRTUAL TABLE IF NOT EXISTS docs USING fts5(name, title, result, wait, no
 INSERT INTO docs(docs, rank) VALUES('secure-delete', 1);
 `
 
+// errOldIndex is an index file of an earlier layout, whose tables are not
+// this build's: openIndex builds it afresh, and a reader takes it for no
+// index yet.
+var errOldIndex = errors.New("mem's index is of an earlier layout")
+
+// openMemIndex opens the index at path, making a new one with today's
+// tables. The file says its layout in its user_version. An index made
+// before it did kept the tables it was made with, when no stamp said
+// otherwise, as an empty mem's never was: in Jae's lane every session start
+// then read it as today's, and failed with "no such column: d.status"
+// (2026-10-30). One of an earlier layout is errOldIndex; of a later one,
+// refused.
 func openMemIndex(path string) (*memIndex, error) {
 	db, err := openSQLite(path, map[string]string{
 		"journal_mode":  "WAL",
@@ -47,11 +61,40 @@ func openMemIndex(path string) (*memIndex, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec(memIndexSchema); err != nil {
+	fail := func(err error) (*memIndex, error) {
 		db.Close()
-		return nil, fmt.Errorf("mem's index: %w", err)
+		return nil, err
+	}
+	var layout, tables int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&layout); err != nil {
+		return fail(fmt.Errorf("mem's index: %w", err))
+	}
+	switch {
+	case layout > memIndexLayout:
+		return fail(&refusal{"a newer gnosh wrote mem's index (layout " + strconv.Itoa(layout) + "); restart gnosh to use it"})
+	case layout == memIndexLayout:
+		return &memIndex{db: db}, nil
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM sqlite_master`).Scan(&tables); err != nil {
+		return fail(fmt.Errorf("mem's index: %w", err))
+	}
+	if tables > 0 {
+		return fail(errOldIndex)
+	}
+	if _, err := db.Exec(memIndexSchema); err != nil {
+		return fail(fmt.Errorf("mem's index: %w", err))
+	}
+	if _, err := db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, memIndexLayout)); err != nil {
+		return fail(fmt.Errorf("mem's index: %w", err))
 	}
 	return &memIndex{db: db}, nil
+}
+
+// removeMemIndex deletes the index at path, with its write-ahead log.
+func removeMemIndex(path string) {
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		_ = os.Remove(path + suffix)
+	}
 }
 
 func (x *memIndex) close() error { return x.db.Close() }

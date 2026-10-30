@@ -482,6 +482,9 @@ func atMem(ctx context.Context, dir, gen string, f func(gen string, x *memIndex,
 		return false, nil
 	}
 	x, err := openMemIndex(path)
+	if errors.Is(err, errOldIndex) {
+		return false, nil // mem's next call builds it afresh (openIndex)
+	}
 	if err != nil {
 		return false, err
 	}
