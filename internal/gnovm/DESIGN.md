@@ -588,35 +588,43 @@ Go structs for goals, subgoals, research, whatever": a minimal starting point,
 "a good foundation", which others may replace. It is model-side; the
 harness's goals (§12) remain separate.
 
-- **`klash/gnomem/v1`** (`klashlibs/klash/gnomem/v1`): `Board{Items, Facts,
-  Changed}` and `Item{Title, Parent, Status, Result, Notes}`, plain data;
-  `Add(title, steps...)`, `Step`, `Done(id, result)`, `Drop`, `Reopen`,
-  `Note`, `Show(ids...)`, `String`. One item type serves as goal, step and
-  question; a condition is a step (Done refuses while a step is open); a
-  question's notes are its findings and its result its answer. Titles clip at
-  200 bytes and notes and results at 1000, never refused; Show's outline is
-  capped near 3000 bytes.
-- **Grow-only.** A persistent VM is rebuilt by replaying its calls against the
-  library this klash embeds, so a change in what a call does, or a new
-  refusal, would break or silently change old boards. v1 may gain functions,
-  methods, types and trailing fields; anything else is `klash/gnomem/v2`.
-  `TestMemV1IsFrozen` replays a fixed board against golden files that are
-  never regenerated. `importByName` binds `gnomem` to the newest version.
-- **`mem`.** The host makes a persistent VM `mem` per project on first use,
-  whose first entry is `import gnomem "klash/gnomem/v1"; var mem =
-  gnomem.New()`; assigning to `mem` is refused; code using `mem` elsewhere is
-  pointed there. Two processes racing to make it end with one board (the
-  loser's first entry is refused as a redeclaration).
-- **Reads are not journaled.** Before, every method call counted as a change,
-  so each read of a board was kept and replayed forever, and the journal and
-  replay limits (§6) would end a board's life through use. An eval or print
-  that only reads a board (`R.Show(...)`, `R.String()`, `println(R)`) is
-  dropped from the entry once `vm.isBoard` confirms R's static type is
-  `*klash/gnomem/v1.Board` and no builtin is shadowed.
-- **Recipe.** `<gno_machines>` in the coder prompt teaches `mem` in seven
+- **`klash/gnomem/v1`** (`klashlibs/klash/gnomem/v1`): `Board{Items, Facts}`
+  and `Item{Title, Parent, Status, Result, Notes}`, plain data (Items[0] is the
+  root; Status "" is open and any other word closes); `Add(title, steps...)`,
+  `Step`, `Done(id, result)`, `Drop(id, why)`, `Reopen`, `Note`,
+  `Show(ids...)`, `String`. One item type serves as goal, step and question; a
+  condition is a step (Done refuses while a step is open); a question's notes
+  are its findings and its result its answer. Each change prints a line with
+  the ids it made and what is next. Reopen restores the steps dropped with an
+  item. Titles clip at 200 bytes and notes and results at 1000, never refused;
+  Show's outline is capped near 3000 bytes.
+- **Frozen storage.** A persistent VM is rebuilt by replaying its calls against
+  the library this klash embeds, so a call never changes what it stores or the
+  ids it returns, and never refuses what it once accepted; it may store new
+  trailing fields, refuse less, and print or show things differently.
+  `TestMemV1IsFrozen` replays a fixed corpus against a field-by-field dump that
+  is never rewritten, and against format files that may be, after review.
+  `importByName` binds `gnomem` to the newest version.
+- **`mem`.** The host makes a persistent VM `mem` per project on first use; its
+  first entry, `import gnomem "klash/gnomem/v1"; var mem = gnomem.New()`, is
+  written under the VM's lock when the journal is empty, so racing processes
+  end with one board. A VM named mem whose mem is not a board is refused with
+  what to do; assigning to `mem`, or a call that leaves it nil, keeps nothing;
+  code using `mem` elsewhere is pointed there.
+- **Reads are not journaled.** An eval or print that only reads a board
+  (`R.Show(...)`, `R.String()`, `R` alone, `println(R)`, `fmt.Println(R)` when
+  fmt is the real package) is dropped from the entry once `vm.isBoard`
+  confirms R's static type is `*klash/gnomem/v1.Board` and no builtin is
+  shadowed. A board read's value is shown unquoted.
+- **A session starts with the board in view.** After each change the host
+  writes the outline's first line to the VM's `summary.txt`; a new top-level
+  session's first prompt carries it (as SessionStart hook output does) when an
+  item is open, with the file's time. No worker starts and no VM is rebuilt to
+  read it.
+- **Recipe.** `<gno_machines>` in the coder prompt teaches `mem` in eight
   lines, with examples that are not the scenarios' own data.
 
-Round-1 review findings are in Appendix E.
+Review findings are in Appendices E (round 1) and F (round 2).
 
 ---
 
