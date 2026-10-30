@@ -11,7 +11,7 @@
 </p>
 
 <p align="center"><strong>A coding agent that thinks, plans, and remembers in Gno.</strong><br>
-Gnosh runs the Gno VM in the AI harness. The agent keeps its goals, what it found and the facts you gave it in <code>mem</code>, kept in Gno on your disk, and a new session starts with what is still open and the newest facts, so it picks up where the last one stopped.</p>
+Gnosh runs the <a href="https://github.com/gnolang/gno">Gno</a> VM in the AI harness. The agent keeps its goals, what it found and the facts you gave it in <code>mem</code>, kept in Gno on your disk, and a new session starts with what is still open and the newest facts, so it picks up where the last one stopped.</p>
 
 <p align="center">Security-first underneath: a fork of Charm's <a href="https://github.com/charmbracelet/crush">Crush</a> that closes the doors a coding agent usually leaves open.</p>
 
