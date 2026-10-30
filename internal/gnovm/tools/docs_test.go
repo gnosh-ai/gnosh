@@ -695,3 +695,15 @@ func TestDocUserWordVerdict(t *testing.T) {
 	assert.Contains(t, strings.Join(strings.Fields(string(doc)), " "), "("+strings.TrimSpace(string(m[1]))+" ",
 		"GNOMEM's verdict on the user's word no longer begins as gnosh writes it")
 }
+
+// TestDocLoopNote: README quotes the note the scratch machine adds when a
+// loop shows only its result, as the tool gives it after such a run.
+func TestDocLoopNote(t *testing.T) {
+	resp := docRun(t, NewRunTool(newLazy(t), "/proj"), `{"code":"total := 0\nfor i := 1; i <= 3; i++ {\n\ttotal += i\n}\ntotal"}`)
+	note := regexp.MustCompile(`(?m)^note: (only the loop's result was printed[^\n]*)$`).FindStringSubmatch(resp.Content)
+	require.NotNil(t, note, "a scratch loop that showed one line got no such note:\n%s", resp.Content)
+	readme, err := os.ReadFile(filepath.Join(repoRoot, "README.md"))
+	require.NoError(t, err)
+	assert.Contains(t, strings.Join(strings.Fields(string(readme)), " "), `"`+note[1]+`"`,
+		"README should quote the note as the scratch machine gives it")
+}

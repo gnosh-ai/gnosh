@@ -243,6 +243,13 @@ machine and got 111 s every time. With its thinking turned off it also used a
 machine every time and was right in 4 runs of 5; the miss ran a loop one wait
 short and said 81 s.
 
+Gnosh holds the model to its work. When a loop in the scratch machine shows
+only its result, the model is told so, in a note under the output: "only the
+loop's result was printed: if your answer gives its terms or a breakdown,
+print them too, run it again, and give them as printed". Over 28 scored runs
+of the backoff question on 30 October, an answer was right in 18 runs of 18
+when the machine printed every term, and in 2 of 10 when it showed one line.
+
 `mem` is one machine among many. Gnosh carries the GnoVM, gno.land's
 interpreter for its Go dialect, and runs named virtual machines in it for the
 agent:
