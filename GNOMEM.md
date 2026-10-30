@@ -72,7 +72,11 @@ and a dump of every persistent machine.
 Klash's system prompt carries a short recipe, so the model needs no setup:
 `mem` is made the first time it is used.
 
-- **At the start of a task**: `mem.Show()`, and continue from ← next.
+- **At the start of a session** the model is told, with its first prompt,
+  what the board has open (`board: 2 open, 5 done · next: 3 "update
+  CHANGELOG"`), so it needs no tool call to find earlier work; `mem.Show()`
+  gives the whole outline. Klash rewrites that line after every change, and
+  reading it starts nothing.
 - **A task of two or more steps**: `mem.Add(goal, steps...)`, then
   `mem.Done(id, what came of it)` as each finishes; Done answers with what is
   next. A goal cannot be done while a step of it is open, so a success
