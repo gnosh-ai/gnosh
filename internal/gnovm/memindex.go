@@ -14,6 +14,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -209,16 +211,23 @@ func setColumn(tx *sql.Tx, kind, name, col, value string) error {
 // find is the rows that hold words, by name and kind, best first, at most
 // max of each: all hold every word of three letters or more, and any, for
 // more than one word, hold one of them. Shorter words cannot be matched by
-// trigrams, and are left out.
+// trigrams: they are left out, unless they are all there is ("CI", "QA"),
+// when the rows holding each as a word of its own are found by a scan.
 func (x *memIndex) find(words string, max int) (all, any []memRow, err error) {
-	var terms []string
+	var terms, short []string
 	for _, w := range strings.Fields(words) {
 		if len([]rune(w)) >= 3 {
 			terms = append(terms, `"`+strings.ReplaceAll(w, `"`, `""`)+`"`)
+		} else {
+			short = append(short, w)
 		}
 	}
 	if len(terms) == 0 {
-		return nil, nil, nil
+		if len(short) == 0 {
+			return nil, nil, nil
+		}
+		all, err = x.holding(short, max)
+		return all, nil, err
 	}
 	if all, err = x.match(strings.Join(terms, " AND "), max); err != nil || len(terms) == 1 {
 		return all, nil, err
@@ -243,6 +252,29 @@ func (x *memIndex) match(query string, max int) ([]memRow, error) {
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// holding is the rows that hold each of words as a word of its own, in any
+// case, newest first, at most max: a scan, for words too short for
+// trigrams, where "CI" must not find "decision".
+func (x *memIndex) holding(words []string, max int) ([]memRow, error) {
+	var res []*regexp.Regexp
+	for _, w := range words {
+		res = append(res, regexp.MustCompile(`(?i)(^|[^\pL\pN])`+regexp.QuoteMeta(w)+`($|[^\pL\pN])`))
+	}
+	rows, err := x.rows()
+	if err != nil {
+		return nil, err
+	}
+	var out []memRow
+	for i := len(rows) - 1; i >= 0 && len(out) < max; i-- {
+		r := rows[i]
+		text := r.name + "\n" + r.title + "\n" + r.result + "\n" + r.notes
+		if !slices.ContainsFunc(res, func(re *regexp.Regexp) bool { return !re.MatchString(text) }) {
+			out = append(out, memRow{kind: r.kind, name: r.name})
+		}
+	}
+	return out, nil
 }
 
 // rows is every row of the index, in the order they were made.

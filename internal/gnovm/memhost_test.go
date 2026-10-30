@@ -242,6 +242,13 @@ func TestMemHostFinds(t *testing.T) {
 	require.Contains(t, out, "fact `cmd/test` = go test -race ./...")
 	require.Contains(t, find("box"), "`fix-ci/1`")
 	require.Contains(t, find("nothing here"), "nothing in mem matches")
+	// A word too short for trigrams is found as a word of its own, and
+	// only as one: "CI" is in "fix the CI", not in "decision".
+	memOK(t, h, `mem.Fact("decisions/db", "use SQLite, a decision of 2026")`)
+	out = find("CI")
+	require.Contains(t, out, "`fix-ci`")
+	require.NotContains(t, out, "decisions/db")
+	require.Contains(t, find("db"), "fact `decisions/db`")
 
 	memOK(t, h, `mem.Drop("fix-ci", "moved")`)
 	memOK(t, h, `mem.Forget("fix-ci")`)
