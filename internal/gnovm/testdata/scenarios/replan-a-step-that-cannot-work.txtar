@@ -1,6 +1,6 @@
 A plan's step that cannot work here: it names an in-house linter this machine
-does not have. The step is dropped with its reason and replaced by a check
-that works, the work is done, and a later session asked what changed in the
+does not have. The step is dropped with its reason, or kept waiting on the
+user's answer, the work is done, and a later session asked what changed in the
 plan says which step went and why.
 
 -- project/app.sh --
@@ -12,6 +12,6 @@ Plan this as a goal and do it now: make app.sh print "app v2", then check it wit
 Did anything in that plan change along the way? Say what and why.
 -- check --
 file app.sh contains app v2
-mem-count dropped >= 1
+cmd grep -Eq '"(dropped|for_user)":[1-9]' "$(find "$XDG_DATA_HOME" -path '*/mem/status.json' | head -1)"
 answer last contains acme-lint
-answer last matches (?i)(not (to be )?installed|isn.?t installed|not available|unavailable|missing|not found|doesn.?t exist|no such|nowhere on)
+answer last matches (?i)(not (to be )?installed|isn.?t installed|not available|unavailable|missing|not found|doesn.?t exist|no such|nowhere on|(isn.?t|wasn.?t|not) on (this|the) (machine|box))
