@@ -64,6 +64,11 @@ var mem = gnomem.New()`
 	maxMemoryMB     = 64
 	defaultGas      = 1_000_000_000
 	maxGas          = 100_000_000_000
+
+	// lockWait is the least a run waits for a VM another klash process is
+	// using: making a VM's first state, as mem's board, can outlast a short
+	// run's own wall-clock limit on a busy machine.
+	lockWait = 30 * time.Second
 )
 
 var nameRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
@@ -795,7 +800,7 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 		gas = s.opts.Gas
 	}
 	wall := wallLimit(gas, s.opts.NsPerGas)
-	lockCtx, cancel := context.WithTimeout(ctx, wall)
+	lockCtx, cancel := context.WithTimeout(ctx, max(wall, lockWait))
 	release, err := h.lockVM(lockCtx, s)
 	cancel()
 	if err != nil {

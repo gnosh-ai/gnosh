@@ -39,7 +39,10 @@ func pipeWorker(t *testing.T) (send func(*frame), recv func() *frame, closeReq f
 		require.NoError(t, err)
 		return f
 	}
-	return send, recv, func() { reqW.Close() }, done
+	// The client goes as a real one does, closing both its ends: a frame
+	// the worker still writes, such as a cancel's ack sent after the
+	// result, then fails instead of waiting for ever for a reader.
+	return send, recv, func() { reqW.Close(); repR.Close() }, done
 }
 
 func clientHello(dir string) *frame {
