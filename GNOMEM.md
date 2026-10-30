@@ -178,6 +178,20 @@ unrelated task every time (4 of 4). With the earlier mem, whose recipe told
 the model to use mem only where the task at hand was part of it, it had never
 done that (0 of 7).
 
+A reminder can wait on something happening rather than on a day:
+
+> **You:** Once PR #6399 is merged we need to bump the gno pin. Keep that for
+> later: it can't be done before the merge.
+>
+> *(next session)* **You:** Morning. What's on?
+
+The agent kept `mem.Goal("bump the gno pin").Wait("PR #6399 merged")`, and
+the next session opened with it among the open goals,
+``- `bump-gno-pin` "bump the gno pin" (just now) waits for: PR #6399 merged``.
+In a real run the check-in got "One thing: goal `bump-gno-pin` (bump the gno
+pin) — still blocked on PR #6399", after the agent had looked the pull
+request up and found it still open.
+
 ### A standing rule
 
 > **You:** From now on, always run gofumpt -l . before you commit anything in

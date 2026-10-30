@@ -1,0 +1,12 @@
+A reminder that waits on something happening rather than on a day: kept as
+a goal that waits on the merge, and a later session's morning check-in
+brings it back, still waiting.
+
+-- prompt --
+Once PR #6399 is merged we need to bump the gno pin. Keep that for later: it can't be done before the merge.
+-- prompt-new --
+Morning. What's on?
+-- check --
+turn 1 tool gnovm_run >= 1
+mem-count open >= 1
+answer last contains 6399
