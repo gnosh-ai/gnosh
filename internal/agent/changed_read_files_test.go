@@ -106,6 +106,26 @@ func TestChangedReadFilesNamesWhatACallChanged(t *testing.T) {
 	require.Equal(t, "ran", run(nothing))
 }
 
+// A command that rewrites a file at the same size, before the file
+// system's clock ticks, leaves its modification time as it was: Linux
+// before 6.13 stamps files from a clock a few milliseconds coarse. The
+// stamp alone would call the file untouched.
+func TestChangedReadFilesSeesASameSizeChangeInOneClockTick(t *testing.T) {
+	t.Parallel()
+	c := newChangedFilesTest(t)
+	path := c.writeAndRead(t, "tick.go", "package a\n")
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+
+	bash := &funcTool{name: tools.BashToolName, run: func(context.Context, fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		writeFile(t, path, "package z\n")
+		// The clock has not ticked since the file was last written.
+		require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime()))
+		return fantasy.NewTextResponse("ran"), nil
+	}}
+	require.Equal(t, "ran\n\nThis command changed files you read before: tick.go. View them again before you edit them.", c.runWith(t, c.wrap(bash), tools.BashToolName, "{}"))
+}
+
 // A file the session read, changed on disk by something other than the
 // agent's own tools, is named in the result of the next tool call after
 // the change, whatever the tool, and at the end of the result.

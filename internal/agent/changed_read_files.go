@@ -99,15 +99,45 @@ func (n *namedChanges) clear(sessionID, path string) {
 }
 
 // fileStamp is what a file's modification time and size were, to tell
-// cheaply whether a call touched it.
+// cheaply whether a call touched it, and, for a racy stamp (see
+// stampBefore), what it held.
 type fileStamp struct {
 	exists  bool
 	modTime time.Time
 	size    int64
+	summed  bool
+	sum     [sha256.Size]byte
 }
 
 func (s fileStamp) same(o fileStamp) bool {
 	return s.exists == o.exists && s.size == o.size && s.modTime.Equal(o.modTime)
+}
+
+// racyStampWindow is how soon after a file's last change a stamp of it
+// cannot vouch for it: a file system's clock may not tick again within
+// it. Linux before 6.13 stamps files from a clock that ticks every few
+// milliseconds, and FAT keeps two-second times.
+const racyStampWindow = 2 * time.Second
+
+// racyHashLimit bounds the racy files whose content a stamp keeps, as
+// the file tracker bounds the files it hashes at a read.
+const racyHashLimit = 16 << 20
+
+// stampBefore is the stamp of path before a call. A file changed within
+// racyStampWindow of now could change again in the same tick of the file
+// system's clock, at the same size, and keep its stamp, so the stamp of
+// such a file keeps its content too.
+func stampBefore(path string, now time.Time) fileStamp {
+	s := stampOf(path)
+	if s.exists && now.Sub(s.modTime) < racyStampWindow && s.size <= racyHashLimit {
+		s.summed, s.sum = true, contentHash(path)
+	}
+	return s
+}
+
+// unchanged reports whether path is as its stamp before a call found it.
+func (s fileStamp) unchanged(path string) bool {
+	return stampOf(path).same(s) && (!s.summed || contentHash(path) == s.sum)
 }
 
 func stampOf(path string) fileStamp {
@@ -143,8 +173,9 @@ func (t *changedReadFiles) Run(ctx context.Context, call fantasy.ToolCall) (fant
 	if toolName == tools.BashToolName && sessionID != "" && t.files != nil {
 		if read, err := t.files.ListReadFiles(ctx, sessionID); err == nil {
 			before = make(map[string]fileStamp, len(read))
+			now := time.Now()
 			for _, path := range read {
-				before[path] = stampOf(path)
+				before[path] = stampBefore(path, now)
 			}
 		}
 	}
@@ -172,7 +203,7 @@ func (t *changedReadFiles) Run(ctx context.Context, call fantasy.ToolCall) (fant
 	var commandChanged []string
 	if toolName == tools.BashToolName && err == nil && len(before) > 0 {
 		for path, stamp := range before {
-			if stampOf(path).same(stamp) || t.files.UnchangedSinceRead(ctx, sessionID, path) {
+			if stamp.unchanged(path) || t.files.UnchangedSinceRead(ctx, sessionID, path) {
 				continue
 			}
 			commandChanged = append(commandChanged, path)
