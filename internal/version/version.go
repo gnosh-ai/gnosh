@@ -2,6 +2,7 @@ package version
 
 import (
 	"os"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 )
@@ -52,14 +53,21 @@ func init() {
 // deriveBuildID uses the running executable's modification time as a unique
 // build fingerprint. This changes on every recompilation (including `go run`),
 // making it reliable for detecting stale servers during development.
+//
+// On Linux it is the running image's, through /proc/self/exe, not that of
+// whatever file is at the executable's path now: the binary may be replaced
+// while this process runs (a deploy), and the gnovm worker it then starts
+// from /proc/self/exe is this same image, which must have this same ID.
 func deriveBuildID() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return "unknown"
-	}
-	fi, err := os.Stat(exe)
-	if err != nil {
-		return "unknown"
+	fi, err := os.Stat("/proc/self/exe")
+	if runtime.GOOS != "linux" || err != nil {
+		exe, err := os.Executable()
+		if err != nil {
+			return "unknown"
+		}
+		if fi, err = os.Stat(exe); err != nil {
+			return "unknown"
+		}
 	}
 	return strconv.FormatInt(fi.ModTime().UnixNano(), 36)
 }
