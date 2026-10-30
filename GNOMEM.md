@@ -12,6 +12,8 @@ the agent's board ([klash/gnomem/v1](internal/gnovm/klashlibs/klash/gnomem/v1/gn
 
 ```
 gnovm_run {"name": "mem", "code": "mem.Add(\"release v2\", \"bump the version\", \"tag v2.0.0\", \"CI is green\")"}
+  1
+  output:
   added 1 "release v2": steps 2 "bump the version", 3 "tag v2.0.0", 4 "CI is green"
 gnovm_run {"name": "mem", "code": "mem.Done(2, \"now 2.0.0\")"}
   done 2 "bump the version"; next: 3 "tag v2.0.0"
