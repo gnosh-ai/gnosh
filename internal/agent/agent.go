@@ -931,7 +931,10 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// to it in meaning, found within half a second or not at all, and it
 	// goes with the prompt as hook output does: hidden after its text, so
 	// a rebuilt conversation matches the server's cache. A queued copy
-	// carries it; a continuation does not ask again.
+	// carries it; a continuation does not ask again. A channel's message
+	// gets none, as the user's own sessions do: its sender may not be the
+	// user, and recall would hand it mem's facts unasked (MEMPLAN §3 row
+	// 73 treats channels as main sessions; that is Jae's call to make).
 	if a.memRecall != nil && !call.HiddenUserMessage && !call.promptHooksRan && call.Channel == "" {
 		if recall := a.memRecall(ctx, call.SessionID, call.Prompt); recall != "" {
 			call.promptHookContext = joinHookContext(call.promptHookContext, recall)
@@ -1213,7 +1216,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		// turn is its newest message, which this prompt's is not yet: the
 		// session's own mem calls came before it, and an erasure's
 		// scrubbing, which updates sessions and messages, moves no
-		// message's time.
+		// message's time. A channel's turn is not shown it, as it gets no
+		// recall: its sender may not be the user.
 		var last int64
 		for _, msg := range msgs {
 			last = max(last, msg.CreatedAt)
