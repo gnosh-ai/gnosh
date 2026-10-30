@@ -377,7 +377,7 @@ included.
 
 These are real runs of Gnosh with the open-weight Qwen3.8-27B on a local
 llama.cpp server, one of each use case below, on Gnosh's main branch as it
-stood between 12:04 and 18:22 UTC on 30 October 2026, with Qwen thinking as it
+stood between 12:04 and 20:00 UTC on 30 October 2026, with Qwen thinking as it
 does by default, and finding by meaning off except in recall-by-meaning, which
 measures it. Each runs in a fresh project and a fresh config, with only
 Gnosh's built-in prompt, and the user talks the way the second column says,
@@ -391,6 +391,7 @@ test results, the final answer, and what mem holds at the end.
 | resume-checklist | a checklist of four jobs, two now, the rest in a new session | 2 | all 8 |
 | goal-until-green | make `go test ./...` pass, keeping the goal and its condition in Gno | 1 | all 7 |
 | goal-replan | a goal whose first approach fails: note why, re-plan | 1 | all 5 |
+| replan-a-step-that-cannot-work | a plan whose check needs "acme-lint, our in-house linter", missing here; then "did anything in that plan change?" | 2 | all 4 |
 | cancel-and-revive | a planned migration dropped, then "bring it back" in a later session | 2 | all 7 |
 | two-tasks-interleaved | two goals planned, "do the port change now; the README can wait", then "what's left?" | 2 | all 4 |
 | goal-judged-met | a goal planned and finished at once with two edits, which the judge finds met | 1 | all 6 |
@@ -421,6 +422,7 @@ test results, the final answer, and what mem holds at the end.
 | compute-primes | the exact sum of the first 1000 primes | 1 | all 2 |
 | compute-backoff | when the 10th retry of a backoff goes out | 1 | all 2 |
 | compute-backoff-after-hi | "say 'hi'" first, then the backoff question in the same session | 1 | all 2 |
+| one-off-question-leaves-mem-alone | the backoff question asked cold: no fact kept, no goal left open | 1 | all 1 |
 
 - **never-keep-a-secret** kept mem clean: the agent stored only a note that
   the key exists. But it wrote the key into a `.env` file in the project,
