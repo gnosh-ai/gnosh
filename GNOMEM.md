@@ -187,6 +187,20 @@ unrelated task every time (4 of 4). With the earlier mem, whose recipe told
 the model to use mem only where the task at hand was part of it, it had never
 done that (0 of 7).
 
+A reminder can be for a day:
+
+> **You:** Remind me on November 3 to renew the TLS certificate for
+> api.acme.test.
+>
+> *(next session)* **You:** What have I asked you to remind me about, and
+> when?
+
+In a real run the agent kept
+`mem.Goal("renew TLS cert for api.acme.test").Wait("2026-11-03")`, a day of
+the right year, and the next session answered: "One reminder:
+**`renew-tls-cert-api`** — renew the TLS cert for api.acme.test, scheduled for
+**2026-11-03**."
+
 A reminder can wait on something happening rather than on a day:
 
 > **You:** Once PR #6399 is merged we need to bump the gno pin. Keep that for
@@ -336,9 +350,9 @@ included.
 ## See it work
 
 These are real runs of Gnosh with the open-weight Qwen3.8-27B on a local
-llama.cpp server, one of each use case, on Gnosh's main branch as it stood
-between 12:04 and 14:30 UTC on 30 October 2026, with Qwen thinking as it does
-by default and finding by meaning off. Each runs in a fresh project and a
+llama.cpp server, one of each use case below, on Gnosh's main branch as it
+stood between 12:04 and 16:57 UTC on 30 October 2026, with Qwen thinking as it
+does by default and finding by meaning off. Each runs in a fresh project and a
 fresh config, with only Gnosh's built-in prompt, and the user talks the way
 the second column says, never naming Gno or mem unless it says so. The checks
 are scripted: files, test results, the final answer, and what mem holds at
@@ -351,6 +365,7 @@ the end.
 | resume-checklist | a checklist of four jobs, two now, the rest in a new session | 2 | all 8 |
 | goal-until-green | make `go test ./...` pass, keeping the goal and its condition in Gno | 1 | all 7 |
 | goal-replan | a goal whose first approach fails: note why, re-plan | 1 | all 5 |
+| cancel-and-revive | a planned migration dropped, then "bring it back" in a later session | 2 | all 7 |
 | release-waits-for-signoff | a release that needs a person's sign-off | 2 | all 5 |
 | research-carries-over | which file declares the most functions, kept for a later session | 2 | all 5 |
 | checklist-calc | four functions in one sitting, "keep track of which ones are done" | 1 | all 4 |
@@ -358,6 +373,7 @@ the end.
 | todo-list-over-days | a todo list to work through over the next few days | 2 | all 3 |
 | remind-next-time | "remind me next time we talk to …", then a morning check-in | 2 | all 2 |
 | wait-on-a-merge | a reminder that waits on a merge, then "What's on?" | 2 | all 3 |
+| remind-on-a-date | "remind me on November 3 to …", then "what have I asked you to remind me about?" | 2 | all 4 |
 | mem-stays-out-of-the-way | a small unrelated request while a release is planned | 2 | all 2 |
 | memory-across-sessions | two facts to remember for a future session, asked for there | 2 | all 4 |
 | memory-update | two facts; one changes in a second session; a third asks | 3 | all 5 |
