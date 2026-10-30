@@ -9,8 +9,8 @@
 
 // Command syncstdlibs copies the Gno standard library sources from the
 // github.com/gnolang/gno version in go.mod into internal/gnovm/stdlibs, where
-// they are embedded: a deployed klash has no GNOROOT to load them from. It
-// also copies gno's ufmt into internal/gnovm/klashlibs/fmt, renamed to fmt.
+// they are embedded: a deployed klash has no GNOROOT to load them from.
+// (klashlibs, fmt included, is klash's own and is not generated.)
 // Run it with `go generate ./internal/gnovm` after changing the gno version. The
 // copy's VERSION file must match go.mod, or TestEmbeddedStdlibsVersion fails,
 // since the embedded sources and the native bindings compiled into klash must
@@ -103,55 +103,6 @@ func run() error {
 		return err
 	}
 	fmt.Printf("syncstdlibs: %d files from gno %s\n", n, version)
-
-	// Gno has no fmt; models write it anyway. klashlibs/fmt is gno's ufmt,
-	// with only its package clause renamed. The rest of klashlibs is klash's
-	// own and is left alone.
-	ufmt := filepath.Join(modDir, "examples", "gno.land", "p", "nt", "ufmt", "v0")
-	fmtDst := filepath.Join("klashlibs", "fmt")
-	if err := os.RemoveAll(fmtDst); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(fmtDst, 0o755); err != nil {
-		return err
-	}
-	entries, err := os.ReadDir(ufmt)
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		if e.IsDir() || !isProdGno(e.Name()) {
-			continue
-		}
-		body, err := os.ReadFile(filepath.Join(ufmt, e.Name()))
-		if err != nil {
-			return err
-		}
-		renamed := bytes.Replace(body, []byte("\npackage ufmt\n"), []byte("\npackage fmt\n"), 1)
-		if bytes.Equal(renamed, body) {
-			return fmt.Errorf("%s: no package ufmt clause to rename", e.Name())
-		}
-		name := strings.Replace(e.Name(), "ufmt", "fmt", 1)
-		// The license (section 5(a)) asks a modified file to say so, with
-		// a date. The change, and so the date, is the same every run.
-		notice := "// Modified by klash on 29 October 2026: the package is renamed from ufmt to\n" +
-			"// fmt (and ufmt.gno to fmt.gno). The original is gno's\n" +
-			"// examples/gno.land/p/nt/ufmt/v0; see LICENSE.md in this directory.\n\n"
-		if err := os.WriteFile(filepath.Join(fmtDst, name), append([]byte(notice), renamed...), 0o644); err != nil {
-			return err
-		}
-	}
-	fmtNotice := []byte("The files in this directory are gno's ufmt package\n" +
-		"(examples/gno.land/p/nt/ufmt/v0) from github.com/gnolang/gno " + version + ",\n" +
-		"copied by internal/gnovm/internal/syncstdlibs with the package renamed to fmt\n" +
-		"and ufmt.gno renamed to fmt.gno, and a dated notice of that change added to\n" +
-		"each file; nothing else is changed. They are copyright\n" +
-		"NewTendermint, LLC, under the license below, including its Additional Terms\n" +
-		"(Strong Attribution).\n\n---\n\n")
-	if err := os.WriteFile(filepath.Join(fmtDst, "LICENSE.md"), bytes.Join([][]byte{fmtNotice, license}, nil), 0o644); err != nil {
-		return err
-	}
-	fmt.Printf("syncstdlibs: klashlibs/fmt from ufmt v0\n")
 	return nil
 }
 

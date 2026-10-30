@@ -56,8 +56,11 @@ func newBase() *base {
 // runs (gigabytes at high gas, measured), nothing on the VM's side can read
 // them, and dropping them changes no state, so replay is unchanged.
 func nativeResolver(pkgPath string, name gno.Name) func(*gno.Machine) {
-	if pkgPath == "chain" && name == "emit" {
+	switch {
+	case pkgPath == "chain" && name == "emit":
 		return func(*gno.Machine) {}
+	case pkgPath == "fmt":
+		return fmtNative(name)
 	}
 	return stdlibs.NativeResolver(pkgPath, name)
 }

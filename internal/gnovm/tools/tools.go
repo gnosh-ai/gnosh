@@ -45,7 +45,7 @@ const runDescription = `Run Go-shaped code in a Gno virtual machine (the GnoVM, 
 - State stays between calls in the same VM, like a REPL. With no name you get your session's scratch VM; code with a package clause (package main + func main) runs as a whole program in a fresh VM, like go run.
 - Redeclaring a name in a VM is refused: assign with =, use a new name, or pass reset: true (memory-only VMs).
 - Gas: 1 gas is about 1 ns of work; a call that runs out of gas, memory or time is stopped and keeps nothing (the VM is as it was before the call).
-- Gno is Go without goroutines, reflection, os, net, sync, encoding/json or unsafe; there is the Gno standard library (strings, strconv, sort, math, time, regexp, bytes, unicode, encoding/hex|base64|csv, crypto/sha256, ...) and a small fmt (Sprintf, Println, Errorf; %v of slices and maps is limited, floats print as %f).`
+- Gno is Go without goroutines, reflection, os, net, sync, encoding/json or unsafe; there is the Gno standard library (strings, strconv, sort, math, time, regexp, bytes, unicode, encoding/hex|base64|csv, crypto/sha256, ...) and fmt, which formats as Go's does.`
 
 const newDescription = `Make a named Gno VM, or change one's settings. Names: a lowercase letter, then up to 31 lowercase letters, digits, - or _. Name your session's scratch VM "scratch" to change its settings.
 

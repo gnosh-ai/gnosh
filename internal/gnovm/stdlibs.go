@@ -30,8 +30,8 @@ import (
 //go:embed stdlibs
 var stdlibFS embed.FS
 
-// klashlibFS holds the libraries klash adds for its VMs: fmt (gno's ufmt,
-// renamed by internal/syncstdlibs, since gno has no fmt) and klash's own
+// klashlibFS holds the libraries klash adds for its VMs: fmt, since gno has
+// none (formatted natively, with Go's fmt: fmtnative.go), and klash's own
 // packages under klash/.
 //
 //go:embed klashlibs
@@ -128,11 +128,11 @@ func libraryPaths() []string {
 
 // ImportablePackages lists the packages a VM may import, besides fmt: the
 // standard library less what VMs refuse (see unavailablePackage) and the
-// internal packages.
+// internal packages, and klash's own (klash/gnomem).
 func ImportablePackages() []string {
 	var out []string
 	for _, p := range libraryPaths() {
-		if p == "fmt" || strings.HasPrefix(p, "klash/") || strings.Contains(p, "internal") || unavailablePackage(p) != "" {
+		if p == "fmt" || strings.Contains(p, "internal") || unavailablePackage(p) != "" {
 			continue
 		}
 		out = append(out, p)
