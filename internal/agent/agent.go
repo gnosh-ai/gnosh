@@ -1660,6 +1660,15 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			continued = true
 		}
 	}
+	// A turn the agent finished that ended in an automatic summary, which
+	// queued nothing, ends all the same: its goal goes on after the
+	// summary (MEMPLAN §7).
+	if shouldSummarize && currentAssistant != nil && !haltedByTool && len(currentAssistant.ToolCalls()) == 0 {
+		if next, open := a.goalContinuation(ctx, call, currentAssistant.Content().String()); open {
+			a.queueContinuation(next)
+			continued = true
+		}
+	}
 
 	// Route the finished turn's response back to the channel it came
 	// from, unless the turn was cut short for summarization with work

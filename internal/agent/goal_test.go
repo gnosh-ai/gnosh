@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -52,7 +53,7 @@ type goalRun struct {
 // newGoalRun makes a session whose goal is condition, bound in mem, and
 // an agent whose model is main and whose goal check is judge. Run with
 // run.
-func newGoalRun(t *testing.T, condition string, main fantasy.LanguageModel, turns *atomic.Int64, judge fantasy.LanguageModel) goalRun {
+func newGoalRun(t *testing.T, condition string, main fantasy.LanguageModel, turns *atomic.Int64, judge fantasy.LanguageModel, opts ...func(*SessionAgentOptions)) goalRun {
 	t.Helper()
 	env := testEnv(t)
 	notifier := &recordingNotifier{}
@@ -62,7 +63,7 @@ func newGoalRun(t *testing.T, condition string, main fantasy.LanguageModel, turn
 	model := func(llm fantasy.LanguageModel) Model {
 		return Model{Model: llm, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000}}
 	}
-	a := NewSessionAgent(SessionAgentOptions{
+	o := SessionAgentOptions{
 		LargeModel:           model(main),
 		SmallModel:           model(judge),
 		SystemPrompt:         "test",
@@ -73,7 +74,11 @@ func newGoalRun(t *testing.T, condition string, main fantasy.LanguageModel, turn
 		Cfg:                  config.NewTestStore(&config.Config{}),
 		Notify:               notifier,
 		Goals:                goals,
-	}).(*sessionAgent)
+	}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	a := NewSessionAgent(o).(*sessionAgent)
 
 	sess, err := env.sessions.Create(t.Context(), "goal turn")
 	require.NoError(t, err)
@@ -179,6 +184,59 @@ func TestGoalDrivesTheTurnFromMem(t *testing.T) {
 	require.Contains(t, prompts[0], "Its next step is `tests-pass/1` \"fix the parser\"")
 	require.Contains(t, prompts[1], "The check found the goal `tests-pass` not met: the tests still fail")
 	require.Contains(t, r.mem(`mem.Show("tests-pass")`), "the check found it not met: the tests still fail")
+}
+
+// fullContextModel answers each call in turn with replies, the first one
+// reporting a context nearly full, and runs before, if set, ahead of each.
+type fullContextModel struct {
+	fakeLanguageModel
+	mu      sync.Mutex
+	calls   int
+	replies []string
+	before  func(call int)
+}
+
+func (m *fullContextModel) Stream(context.Context, fantasy.Call) (fantasy.StreamResponse, error) {
+	m.mu.Lock()
+	m.calls++
+	n := m.calls
+	reply := m.replies[min(n, len(m.replies))-1]
+	m.mu.Unlock()
+	if m.before != nil {
+		m.before(n)
+	}
+	usage := fantasy.Usage{InputTokens: 1_000, OutputTokens: 10}
+	if n == 1 {
+		usage.InputTokens = 190_000
+	}
+	return func(yield func(fantasy.StreamPart) bool) {
+		yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextStart, ID: "t1"})
+		yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextDelta, ID: "t1", Delta: reply})
+		yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeTextEnd, ID: "t1"})
+		yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeFinish, FinishReason: fantasy.FinishReasonStop, Usage: usage})
+	}, nil
+}
+
+// A turn that fills the context and ends in an automatic summary goes on
+// toward its goal after the summary.
+func TestGoalGoesOnAfterAnAutomaticSummary(t *testing.T) {
+	var turns atomic.Int64
+	var r goalRun
+	main := &fullContextModel{replies: []string{"Working.", "the summary", "Closed."}}
+	main.before = func(call int) {
+		if call == 3 {
+			r.mem(`mem.Done("tests-pass", "go test → ok")`)
+		}
+	}
+	judge := &judgeModel{verdicts: []string{`{"ok": true, "reason": "the test run passes"}`}}
+	r = newGoalRun(t, "the tests pass", main, &turns, judge, func(o *SessionAgentOptions) { o.DisableAutoSummarize = false })
+	r.run("make the tests pass")
+
+	require.Equal(t, 3, main.calls, "the turn, its summary, and the goal's next turn")
+	sess, err := r.agent.sessions.Get(t.Context(), r.sessionID)
+	require.NoError(t, err)
+	require.NotEmpty(t, sess.SummaryMessageID, "summarized")
+	require.Equal(t, []string{"Goal met: the tests pass (the test run passes)"}, r.notices(notify.TypeGoalMet))
 }
 
 // A goal that waits on the user ends the turn, still set, and says why.
