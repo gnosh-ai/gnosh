@@ -70,3 +70,19 @@ func colorEqual(a, b color.Color) bool {
 	br, bg, bb, _ := b.RGBA()
 	return ar == br && ag == bg && ab == bb
 }
+
+// The wide logo's rows all end in the same column: the field to the right
+// of the word does not step in row by row.
+func TestWideLogoRightEdgeIsStraight(t *testing.T) {
+	purple := color.RGBA{R: 0x6b, G: 0x50, B: 0xff, A: 0xff}
+	o := Opts{FieldColor: purple, TitleColorA: purple, TitleColorB: purple, CharmColor: purple, VersionColor: purple, Width: 120}
+	lines := strings.Split(strings.TrimRight(ansi.Strip(Render(lipgloss.NewStyle(), "v9.9", false, o)), "\n"), "\n")
+	for i, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			continue // the blank row under the logo
+		}
+		if w := lipgloss.Width(strings.TrimRight(l, " ")); w != lipgloss.Width(strings.TrimRight(lines[0], " ")) {
+			t.Fatalf("row %d ends at column %d, row 0 at %d:\n%s", i, w, lipgloss.Width(lines[0]), strings.Join(lines, "\n"))
+		}
+	}
+}

@@ -126,16 +126,12 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 		fmt.Fprintln(leftField, field(base, o, leftWidth, false))
 	}
 
-	// Right field.
+	// Right field, as wide on every row, so the logo's right edge is
+	// straight: Crush's stepped one cell in per row, a ragged corner.
 	rightWidth := max(15, o.Width-titleWidth-leftWidth-2) // 2 for the gap.
-	const stepDownAt = 0
 	rightField := new(strings.Builder)
-	for i := range fieldHeight {
-		width := rightWidth
-		if i >= stepDownAt {
-			width = rightWidth - (i - stepDownAt)
-		}
-		fmt.Fprint(rightField, field(base, o, width, false), "\n")
+	for range fieldHeight {
+		fmt.Fprint(rightField, field(base, o, rightWidth, false), "\n")
 	}
 
 	// Return the wide version.
