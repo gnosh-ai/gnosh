@@ -22,10 +22,10 @@ import (
 
 // TestMemRecallLive measures recall with a real embedding server, named by
 // GNOSH_TEST_EMBEDDINGS (the AI box's: http://127.0.0.1:8091/v1), through
-// gnosh's own code: a project's mem of 30 entries, and 26 prompts, 16 of
+// gnosh's own code: a project's mem of 31 entries, and 28 prompts, 17 of
 // which mem has the answer to. With Qwen3-Embedding-0.6B on 2026-10-30, at
-// memRecallScore, 12 of the 16 were given their answer and none of the
-// other 10 was given anything; each prompt's best rows are logged with
+// memRecallScore, 12 of the 17 were given their answer and none of the
+// other 11 was given anything; each prompt's best rows are logged with
 // their scores. It fails when a model, or a change to what is embedded,
 // makes recall miss more or add noise. Run it where the server is:
 //
@@ -61,6 +61,7 @@ func TestMemRecallLive(t *testing.T) {
 		{"ci/flaky", "TestWorkerHeartbeatsAndCancel flakes under load (one heartbeat in 1.6 s)"},
 		{"ci/cache", "the Go build cache is keyed by go.sum; clear it when modules act stale"},
 		{"ui/colors", "purple and hot pink, faded gradients; green and gold sparingly"},
+		{"release/qa-signoff", "Lin signs off QA before anything ships to production"},
 	} {
 		run(`mem.Fact("` + f[0] + `", "` + f[1] + `")`)
 	}
@@ -117,6 +118,9 @@ func TestMemRecallLive(t *testing.T) {
 		{"go builds act weird after bumping modules", []string{"ci/cache"}},
 		{"where do the backups go?", []string{"hosts/backup-droplet", "backup-journal"}},
 		{"build it on a bigger machine", []string{"hosts/devbox"}},
+		// Two questions in one prompt, from the docs loop's
+		// recall-beyond-the-block: close to neither, asked whole.
+		{"How do I push this to production, and who has to check it first?", []string{"cmd/deploy", "release/qa-signoff"}},
 		{"what's the weather tomorrow?", nil},
 		{"refactor the parser in internal/lexer", nil},
 		{"add a --verbose flag to the CLI", nil},
@@ -127,13 +131,14 @@ func TestMemRecallLive(t *testing.T) {
 		{"translate the error messages to French", nil},
 		{"what does this regex match?", nil},
 		{"summarize the last commit", nil},
+		{"write a haiku about autumn, and then translate it to French.", nil},
 	}
 	for _, p := range prompts {
-		q, model := e.query(context.Background(), p.prompt)
-		require.NotNil(t, q, "the embedding server answered")
+		qs, model := e.query(context.Background(), p.prompt)
+		require.NotNil(t, qs, "the embedding server answered")
 		var recalled, top []string
 		hit := false
-		for i, r := range s.nearest(q, model, 0, "item", "fact") {
+		for i, r := range s.nearest(qs, model, 0, "item", "fact") {
 			if i < 3 {
 				top = append(top, fmt.Sprintf("%s %.2f", r.name, r.score))
 			}
@@ -155,7 +160,7 @@ func TestMemRecallLive(t *testing.T) {
 		}
 		t.Logf("%-58q → %v (best: %s)", p.prompt, recalled, strings.Join(top, ", "))
 	}
-	t.Logf("answered %d of 16; gave something to %d of 10 with no answer; %d wrong recalls", answered, noise, wrong)
+	t.Logf("answered %d of 17; gave something to %d of 11 with no answer; %d wrong recalls", answered, noise, wrong)
 	require.GreaterOrEqual(t, answered, 12, "recall misses more than it did")
 	require.LessOrEqual(t, noise, 1, "recall adds noise to prompts mem has nothing on")
 }

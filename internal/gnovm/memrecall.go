@@ -85,8 +85,8 @@ func (l *Lazy) MemRecall(ctx context.Context, project, session, prompt string) s
 	if len(s.vecs) == 0 {
 		return ""
 	}
-	q, model := e.query(ctx, prompt)
-	if q == nil {
+	qs, model := e.query(ctx, prompt)
+	if qs == nil {
 		return ""
 	}
 	// A session this process has told nothing yet is given the <mem> block
@@ -97,7 +97,7 @@ func (l *Lazy) MemRecall(ctx context.Context, project, session, prompt string) s
 	}
 	var b strings.Builder
 	var names []string
-	for _, r := range s.nearest(q, model, memRecallScore, "item", "fact") {
+	for _, r := range s.nearest(qs, model, memRecallScore, "item", "fact") {
 		if len(names) == memRecalls {
 			break
 		}

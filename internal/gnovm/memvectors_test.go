@@ -411,3 +411,18 @@ func TestMemCommandSaysHowItFindsByMeaning(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, out, "by meaning")
 }
+
+// A search is made whole, and by each of its sentences or clauses of three
+// words or more, when it has two or more; never at a dot inside a path or
+// a version.
+func TestMemQueries(t *testing.T) {
+	t.Parallel()
+	q := "How do I push this to production, and who has to check it first?"
+	require.Equal(t, []string{q, "How do I push this to production", "who has to check it first"}, memQueries(q))
+	require.Equal(t, []string{"run the tests"}, memQueries("run the tests"))
+	require.Equal(t, []string{"go test ./... then tag v2.0.0"}, memQueries("go test ./... then tag v2.0.0"))
+	q = "Fix the build. It fails on CI since yesterday. ok"
+	require.Equal(t, []string{q, "Fix the build", "It fails on CI since yesterday"}, memQueries(q))
+	q = "one two three. four five six. seven eight nine. ten eleven twelve. more words here."
+	require.Len(t, memQueries(q), 1+memQueryParts)
+}

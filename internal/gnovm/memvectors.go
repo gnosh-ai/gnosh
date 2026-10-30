@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -122,17 +123,64 @@ func (e *memEmbedder) embed(ctx context.Context, texts []string) ([][]int8, stri
 	return vecs, out.Model, nil
 }
 
-// query is the vector of a search's words, or nil when the server does not
-// answer within memEmbedWait.
-func (e *memEmbedder) query(ctx context.Context, words string) ([]int8, string) {
+// query is the vectors of a search's words (memQueries), or nil when the
+// server does not answer within memEmbedWait.
+func (e *memEmbedder) query(ctx context.Context, words string) ([][]int8, string) {
 	ctx, cancel := context.WithTimeout(ctx, memEmbedWait)
 	defer cancel()
-	vecs, model, err := e.embed(ctx, []string{memQuery + memCut(words, memEmbedMax)})
+	var texts []string
+	for _, q := range memQueries(words) {
+		texts = append(texts, memQuery+memCut(q, memEmbedMax))
+	}
+	vecs, model, err := e.embed(ctx, texts)
 	if err != nil {
 		slog.Debug("mem searches by words alone", "error", err)
 		return nil, ""
 	}
-	return vecs[0], model
+	return vecs, model
+}
+
+// memWordEnd reports whether b can end a word before a sentence's dot.
+func memWordEnd(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || b == ')' || b == '"' || b == '\'' || b >= 0x80
+}
+
+// memQueryParts is how many of a search's sentences or clauses are
+// searched as well as the whole.
+const memQueryParts = 4
+
+// memClauseRe is where a search's words may break into sentences and
+// clauses: after a sentence's end, at a new line, a semicolon, or a comma
+// before "and", "but", "then" or "also". memQueries keeps a break at a dot
+// only after a word, so "./..." and "v2.0.0" stay whole.
+var memClauseRe = regexp.MustCompile(`[.?!;]+(\s+|$)|\n+|,\s+(and|but|then|also)\s+`)
+
+// memQueries is what words are searched as: the whole of them, and, when
+// they hold more than one sentence or clause of three words or more, each
+// of those too. A prompt asking two things is close to neither as a whole:
+// "How do I push this to production, and who has to check it first?" came
+// to 0.48 and 0.45 against the facts that answer it, asked whole, and
+// 0.55 and 0.60, asked in halves (the docs loop, 2026-10-30).
+func memQueries(words string) []string {
+	var parts []string
+	keep := func(p string) {
+		if p = strings.TrimSpace(p); len(strings.Fields(p)) >= 3 {
+			parts = append(parts, p)
+		}
+	}
+	start := 0
+	for _, at := range memClauseRe.FindAllStringIndex(words, -1) {
+		if words[at[0]] == '.' && (at[0] == 0 || !memWordEnd(words[at[0]-1])) {
+			continue
+		}
+		keep(words[start:at[0]])
+		start = at[1]
+	}
+	keep(words[start:])
+	if len(parts) < 2 {
+		return []string{words}
+	}
+	return append([]string{words}, parts[:min(len(parts), memQueryParts)]...)
 }
 
 // quantize keeps a vector as a byte per number, scaled so that its largest
@@ -422,9 +470,9 @@ type memScored struct {
 }
 
 // nearest is the rows of s whose kind is in kinds, closest first, at least
-// least close to q, which model made.
-func (s memSnapshot) nearest(q []int8, model string, least float64, kinds ...string) []memScored {
-	if q == nil || model != s.model {
+// least close to one of qs, which model made.
+func (s memSnapshot) nearest(qs [][]int8, model string, least float64, kinds ...string) []memScored {
+	if qs == nil || model != s.model {
 		return nil
 	}
 	var out []memScored
@@ -432,8 +480,12 @@ func (s memSnapshot) nearest(q []int8, model string, least float64, kinds ...str
 		if !slices.Contains(kinds, r.kind) || r.status == "forgotten" {
 			continue
 		}
-		if c := cosine(q, s.vecs[r.hash()]); c >= least {
-			out = append(out, memScored{r, c})
+		v, best := s.vecs[r.hash()], -1.0
+		for _, q := range qs {
+			best = max(best, cosine(q, v))
+		}
+		if best >= least {
+			out = append(out, memScored{r, best})
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].score > out[j].score })
@@ -499,12 +551,12 @@ func (h *memHost) nearest(ctx context.Context, x *memIndex, j *journal, words st
 		slog.Warn("mem's index could not be read", "error", err)
 		return nil, false
 	}
-	q, model := h.embed.query(ctx, words)
-	if q == nil || model != had {
+	qs, model := h.embed.query(ctx, words)
+	if qs == nil || model != had {
 		return nil, false
 	}
 	s := memSnapshot{gen: j.generation, rows: rows, vecs: vecs, model: had}
-	return s.nearest(q, model, memFindScore, "item", "fact", "rule"), true
+	return s.nearest(qs, model, memFindScore, "item", "fact", "rule"), true
 }
 
 // meaningLine is what /mem says of finding by meaning: which model, and how
