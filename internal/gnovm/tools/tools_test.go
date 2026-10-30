@@ -113,14 +113,10 @@ func TestNewListDropTools(t *testing.T) {
 	require.Contains(t, resp.Content, "there is no VM named notes")
 }
 
-func TestProgramsAndGoalsRefusal(t *testing.T) {
+func TestPrograms(t *testing.T) {
 	l := newLazy(t)
 	resp := call(t, NewRunTool(l, "/proj"), `{"code": "package main\n\nimport \"fmt\"\n\nfunc main() { fmt.Println(\"from a program\") }"}`)
 	require.False(t, resp.IsError, resp.Content)
 	require.Contains(t, resp.Content, "from a program")
 	require.Contains(t, resp.Content, "a fresh program VM")
-
-	resp = call(t, NewRunTool(l, "/proj"), `{"name": "goals", "code": "1"}`)
-	require.True(t, resp.IsError)
-	require.Contains(t, resp.Content, "goals tool")
 }

@@ -129,12 +129,12 @@ func libraryPaths() []string {
 
 // ImportablePackages lists the packages a VM may import, besides fmt: the
 // standard library less what VMs refuse (see unavailablePackage) and the
-// internal packages, and klash's own for models (klash/gnomem/v1; the
-// harness's goals library is the goals tool's alone).
+// internal packages, and klash's own for models (klash/gnomem/v1,
+// klash/bptree/v0; klash/gnomem/v2 is mem's realm's alone).
 func ImportablePackages() []string {
 	var out []string
 	for _, p := range libraryPaths() {
-		if p == "fmt" || strings.Contains(p, "internal") || strings.HasPrefix(p, "klash/goals") || unavailablePackage(p) != "" {
+		if p == "fmt" || strings.Contains(p, "internal") || p == memLibPath || unavailablePackage(p) != "" {
 			continue
 		}
 		out = append(out, p)

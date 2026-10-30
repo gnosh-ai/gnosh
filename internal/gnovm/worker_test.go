@@ -83,7 +83,7 @@ func TestWorkerServesRequests(t *testing.T) {
 	require.Equal(t, "40", wr.Value)
 
 	// A refusal keeps its kind across the wire.
-	send(&frame{ID: 3, Type: msgRun, Body: mustJSON(RunRequest{Project: "/p", Name: GoalsVM, Code: `1`})})
+	send(&frame{ID: 3, Type: msgRun, Body: mustJSON(RunRequest{Project: "/p", Name: "nosuchvm", Code: `1`})})
 	f, _ = recvResult(t, recv)
 	var ref *refusal
 	require.ErrorAs(t, fromWire(f.Err), &ref)

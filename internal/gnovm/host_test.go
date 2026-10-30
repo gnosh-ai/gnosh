@@ -11,7 +11,6 @@ package gnovm
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -320,14 +319,6 @@ func TestBudgetEvictsLeastRecentlyUsed(t *testing.T) {
 	require.True(t, resident["b"])
 	// a comes back from its journal when used.
 	require.Equal(t, `"a"`, run(t, h, "a", `v`).Value)
-}
-
-func TestGoalsVMIsNotForGnovmRun(t *testing.T) {
-	t.Parallel()
-	h := newTestHost(t, t.TempDir())
-	_, err := h.Run(context.Background(), RunRequest{Project: "/proj", Name: GoalsVM, Code: `1`})
-	var ref *refusal
-	require.True(t, errors.As(err, &ref))
 }
 
 func TestUnavailablePackageIsExplained(t *testing.T) {

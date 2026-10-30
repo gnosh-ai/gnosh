@@ -220,22 +220,18 @@ func TestRound4ClosureSyntaxTreesUncharged(t *testing.T) {
 }
 
 // P10: Run, Drop, Repair and Kept take a VM name without checking it, so
-// "./goals" passes the goals-VM refusal, and "../../<other key>/vms/x"
+// "./mem" names the mem VM's directory, and "../../<other key>/vms/x"
 // reaches another project's VM, under a lock path that is not that VM's.
 func TestRound4VMNameTraversal(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	h := newTestHost(t, dir)
-	// The goals VM, as phase 3 will make it.
-	gs, err := h.create(projectKey("/proj"), GoalsVM, VMOptions{MemoryMB: 16, Gas: defaultGas, NsPerGas: 1, Persist: true})
-	require.NoError(t, err)
-	_ = gs
-	res, err := h.Run(bg, RunRequest{Project: "/proj", Name: "./goals", Code: `forged := "closed as met"`})
+	res, err := h.Run(bg, RunRequest{Project: "/proj", Name: "./mem", Code: `forged := "closed as met"`})
 	if err == nil {
-		t.Logf("./goals: journaled=%v err=%v", res.Journaled, res.Err)
+		t.Logf("./mem: journaled=%v err=%v", res.Journaled, res.Err)
 	}
 	if err == nil {
-		t.Errorf("./goals passes the goals-VM refusal")
+		t.Errorf("./mem is taken as a VM name")
 	}
 
 	// Another project's VM.

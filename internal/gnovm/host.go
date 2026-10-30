@@ -38,9 +38,6 @@ import (
 )
 
 const (
-	// GoalsVM is the VM that holds the harness's goals; only the goals
-	// tool writes to it.
-	GoalsVM = "goals"
 	// MemVM is the agent's board: a persistent VM klash makes on first
 	// use, whose first entry declares mem, a klash/gnomem/v1 Board.
 	MemVM = "mem"
@@ -735,9 +732,6 @@ func (h *Host) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		name = ScratchName(req.Session)
 	}
 	scratch := name == ScratchName(req.Session)
-	if name == GoalsVM {
-		return nil, &refusal{"the goals VM is written only by the goals tool; use goals and goals_list"}
-	}
 	var notes []string
 	if name == MemVM {
 		if err := h.ensureMem(project); err != nil {
@@ -1171,7 +1165,7 @@ func (h *Host) New(ctx context.Context, req NewRequest) (VMInfo, bool, error) {
 		if !nameRe.MatchString(req.Name) {
 			return VMInfo{}, false, &refusal{"a VM name is a lowercase letter, then up to 31 lowercase letters, digits, - or _"}
 		}
-		if req.Name == GoalsVM || strings.HasPrefix(req.Name, scratchPrefix) {
+		if strings.HasPrefix(req.Name, scratchPrefix) {
 			return VMInfo{}, false, &refusal{fmt.Sprintf("the name %s is reserved", req.Name)}
 		}
 	}
@@ -1315,7 +1309,7 @@ func (h *Host) countNamed(project string) (int, error) {
 			return 0, err
 		}
 		for _, e := range entries {
-			if e.IsDir() && nameRe.MatchString(e.Name()) && !strings.HasPrefix(e.Name(), scratchPrefix) && e.Name() != GoalsVM {
+			if e.IsDir() && nameRe.MatchString(e.Name()) && !strings.HasPrefix(e.Name(), scratchPrefix) {
 				names[e.Name()] = true
 			}
 		}
@@ -1341,9 +1335,6 @@ func (h *Host) Drop(ctx context.Context, projectPath, name, action string) error
 		s.res = nil
 		return nil
 	case "delete":
-		if name == GoalsVM {
-			return &refusal{"the goals VM is not deleted with gnovm_drop; close goals with the goals tool"}
-		}
 		lockCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		release, err := h.lockVM(lockCtx, s)
 		cancel()
