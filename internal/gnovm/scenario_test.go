@@ -278,6 +278,11 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning str
 	}
 	env := append(os.Environ(), "XDG_CONFIG_HOME="+cfg, "XDG_DATA_HOME="+data, "TMPDIR="+filepath.Join(r.dir, "tmp"))
 	session := ""
+	// What each turn printed goes beside project/ only after the last turn:
+	// a turn's agent can read anything on disk, and an earlier turn's
+	// stream holds what that turn was told, a secret the user then had mem
+	// erase among it.
+	var outs, errs [][]byte
 	for i, ts := range sc.turns {
 		args := []string{"run", "--output-format", "stream-json", "-q", "-c", project}
 		if model := os.Getenv("GNOVM_SCENARIO_MODEL"); model != "" {
@@ -304,9 +309,8 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning str
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
 		err := cmd.Run()
 		cancel()
-		_ = os.WriteFile(filepath.Join(r.dir, fmt.Sprintf("turn-%d.jsonl", i+1)), stdout.Bytes(), 0o600)
-		_ = os.WriteFile(filepath.Join(r.dir, fmt.Sprintf("turn-%d.stderr", i+1)), stderr.Bytes(), 0o600)
-		tr := parseStream(&stdout)
+		outs, errs = append(outs, stdout.Bytes()), append(errs, stderr.Bytes())
+		tr := parseStream(bytes.NewReader(stdout.Bytes()))
 		tr.prompt, tr.took = ts.prompt, time.Since(turnStart)
 		if err != nil && tr.answer == "" {
 			tr.answer = fmt.Sprintf("(gnosh failed: %v; %s)", err, lastLine(stderr.String()))
@@ -316,6 +320,10 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning str
 		r.turns = append(r.turns, tr)
 		r.after = append(r.after, listFiles(project))
 		t.Logf("turn %d: %d tool calls, %s: %s", i+1, len(tr.calls), tr.took.Round(time.Second), truncate(tr.answer, 200))
+	}
+	for i := range outs {
+		_ = os.WriteFile(filepath.Join(r.dir, fmt.Sprintf("turn-%d.jsonl", i+1)), outs[i], 0o600)
+		_ = os.WriteFile(filepath.Join(r.dir, fmt.Sprintf("turn-%d.stderr", i+1)), errs[i], 0o600)
 	}
 	r.vms = dumpPersistentVMs(t, filepath.Join(data, "crush", "gnovm"), project)
 	for _, line := range sc.checks {
