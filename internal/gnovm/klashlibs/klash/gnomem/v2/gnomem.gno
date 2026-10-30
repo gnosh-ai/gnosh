@@ -247,6 +247,20 @@ func (m *Mem) Drop(name, why string) {
 	if why == "" {
 		panic("say why: mem.Drop(\"" + name + "\", \"why\")")
 	}
+	dropped := m.drop(name, it, why)
+	msg := "dropped " + ref(name, it.Title)
+	if len(dropped) > 0 {
+		for i, j := 0, len(dropped)-1; i < j; i, j = i+1, j-1 {
+			dropped[i], dropped[j] = dropped[j], dropped[i]
+		}
+		msg += ", with its open steps " + names(dropped)
+	}
+	println(msg + m.whatNext(goalOf(name)))
+}
+
+// drop closes open item it, named name, as dropped with why, and its open
+// steps with it, the lowest first, which it returns.
+func (m *Mem) drop(name string, it *Todo, why string) []string {
 	var dropped []string
 	m.eachBelow(name, true, func(step string, s *Todo) {
 		if s.Status != "" {
@@ -263,14 +277,7 @@ func (m *Mem) Drop(name, why string) {
 	}
 	m.do(Op{Kind: "set", Name: name, Field: "status", New: "dropped"})
 	m.do(Op{Kind: "set", Name: name, Field: "result", New: why})
-	msg := "dropped " + ref(name, it.Title)
-	if len(dropped) > 0 {
-		for i, j := 0, len(dropped)-1; i < j; i, j = i+1, j-1 {
-			dropped[i], dropped[j] = dropped[j], dropped[i]
-		}
-		msg += ", with its open steps " + names(dropped)
-	}
-	println(msg + m.whatNext(goalOf(name)))
+	return dropped
 }
 
 // Reopen opens item name again if it is done or dropped, with the items it
@@ -423,17 +430,37 @@ func (m *Mem) Rule(name, rule string) {
 }
 
 // Forget empties closed item name and every item under it (title, result,
-// wait, notes) and closes them as forgotten. Gnosh erases their text from
-// the journal and the index. It refuses an open item (Drop it first);
-// every other call refuses a forgotten item. Its receipt names no text.
+// wait, notes) and closes them as forgotten; or it removes fact or rule
+// name. Gnosh erases their text from the journal and the index. It refuses
+// an open item (Drop it first), which the user's /mem forget drops; only
+// the user forgets a rule; and every other call refuses a forgotten item.
+// Its receipt names no text.
 func (m *Mem) Forget(name string) {
 	it := m.get(name)
 	if it == nil {
+		switch {
+		case m.getFact(name) != nil:
+			m.do(Op{Kind: "forget", Name: name, Field: "fact"})
+			println("forgot fact `" + name + "`; gnosh erases its text from its files")
+			return
+		case m.getRule(name) != nil:
+			if caller() != "user" {
+				panic("rules are the user's: they forget one with /mem forget " + name)
+			}
+			m.do(Op{Kind: "forget", Name: name, Field: "rule"})
+			println("forgot rule `" + name + "`; gnosh erases its text from its files")
+			return
+		}
 		m.item(name) // refuses, saying why
 	}
+	verb := "forgot"
 	switch it.Status {
 	case "":
-		panic("`" + name + "` is open: mem.Drop(\"" + name + "\", \"why\") first, then forget it")
+		if caller() != "user" {
+			panic("`" + name + "` is open: mem.Drop(\"" + name + "\", \"why\") first, then forget it")
+		}
+		m.drop(name, it, "forgotten")
+		verb = "dropped and forgot"
 	case "forgotten":
 		println("`" + name + "` is forgotten already")
 		return
@@ -446,7 +473,7 @@ func (m *Mem) Forget(name string) {
 		}
 	})
 	m.do(Op{Kind: "forget", Name: name})
-	msg := "forgot `" + name + "`"
+	msg := verb + " `" + name + "`"
 	if len(gone) > 0 {
 		msg += " and its " + plural(len(gone), "step")
 	}

@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -12,7 +12,7 @@ package gnomem
 import bptree "klash/bptree/v0"
 
 // This file and apply.gno fix how a Mem is stored, with bptree and the
-// realm's source: klash pins their hash to its layout number (memLayout),
+// realm's source: gnosh pins their hash to its layout number (memLayout),
 // and a change to any of them is a new layout, which rebuilds every mem from
 // its journal.
 
@@ -72,7 +72,7 @@ type Rule struct {
 type Op struct {
 	Kind  string // see below
 	Name  string // the item, fact or rule; an add carries the full name
-	Field string // set: "status", "result", "wait", "for" or "doing"; redact: "item", "fact", "rule" or "statements"
+	Field string // set: "status", "result", "wait", "for" or "doing"; redact: "item", "fact", "rule" or "statements"; forget: "" (an item), "fact" or "rule"
 	Old   string // set, fact, rule: before; unadd: the title; unnote, redact: the text taken out
 	New   string // add: the title; set, fact, rule: after; note: the text
 	By    string // add, unadd: who made the item; rule: who set it
@@ -88,7 +88,8 @@ type Op struct {
 //	unnote  the last of item Name's notes, Old, is taken off  ↔ note
 //	fact    fact Name goes from Old to New; "" is none        ↔ fact, swapped
 //	rule    rule Name goes from Old to New; "" is none        ↔ rule, swapped
-//	forget  item Name is emptied and closed as forgotten      final
+//	forget  item Name is emptied and closed as forgotten; or,
+//	        with Field "fact" or "rule", that is removed      final
 //	redact  Old becomes "(redacted)" in the item, fact or rule
 //	        Name (Field says which)                           final
 //

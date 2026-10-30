@@ -244,6 +244,16 @@ func handle(ctx context.Context, host *Host, f *frame) *frame {
 			return fail(err)
 		}
 		reply.Body = mustJSON(repairResp{Kept: kept, Cut: cut})
+	case msgMem:
+		var req memReq
+		if err := json.Unmarshal(f.Body, &req); err != nil {
+			return fail(err)
+		}
+		out, err := host.MemCommand(ctx, req.Project, req.Session, req.Args, req.Titles)
+		if err != nil {
+			return fail(err)
+		}
+		reply.Body = mustJSON(out)
 	default:
 		return fail(fmt.Errorf("unknown request %q", f.Type))
 	}

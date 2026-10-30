@@ -71,8 +71,8 @@ const (
 	memForgotten = "(forgotten)"
 )
 
-// memErasure is what one input erases: the texts it redacts, and the items
-// it forgets.
+// memErasure is what one input erases: the texts it redacts, and the items,
+// facts and rules it forgets, as their opTarget and name ("fact cmd/test").
 type memErasure struct {
 	secrets   []string
 	forgotten map[string]bool
@@ -91,11 +91,16 @@ func erasureOf(ops []memOp) (er memErasure, ok bool) {
 			if er.forgotten == nil {
 				er.forgotten = map[string]bool{}
 			}
-			er.forgotten[op.Name] = true
+			er.forgotten[opTarget(op)+" "+op.Name] = true
 			ok = true
 		}
 	}
 	return er, ok
+}
+
+// forgets reports whether er forgets the item, fact or rule (target) name.
+func (er memErasure) forgets(target, name string) bool {
+	return er.forgotten[target+" "+name]
 }
 
 // opTarget is what an Op names: an "item", "fact" or "rule"; or
@@ -104,7 +109,7 @@ func opTarget(op memOp) string {
 	switch {
 	case op.Kind == "fact" || op.Kind == "rule":
 		return op.Kind
-	case op.Kind == "redact":
+	case op.Kind == "redact", op.Kind == "forget" && op.Field != "":
 		return op.Field
 	}
 	return "item"
@@ -153,7 +158,8 @@ func (er memErasure) scrub(s string) string {
 //     an entry with such an Op has its statements replaced whole;
 //   - a goal that is forgotten, or whose name holds a secret, typed or in a
 //     name's form, is renamed forgotten-<n> in every entry; a fact or rule
-//     whose name holds a secret loses every Op.
+//     that is forgotten, or whose name holds a secret, loses every Op, its
+//     forget among them, and the entries that had one their statements.
 //
 // Kinds, fields, status words and who made what are left as they are. It
 // returns the entries, and the goals renamed: old name to new.
@@ -175,7 +181,7 @@ func erase(entries []memEntry, er memErasure) ([]memEntry, map[string]string) {
 			if opTarget(op) != "item" || renamed[g] != "" || strings.HasPrefix(g, "forgotten-") {
 				continue
 			}
-			if er.forgotten[g] || er.nameHolds(g) {
+			if er.forgets("item", g) || er.nameHolds(g) {
 				renamed[g] = "forgotten-" + strconv.Itoa(next)
 				next++
 			}
@@ -190,7 +196,12 @@ func erase(entries []memEntry, er memErasure) ([]memEntry, map[string]string) {
 			case (target == "fact" || target == "rule") && er.nameHolds(op.Name):
 				wipe = memRedacted
 				continue
-			case target == "item" && er.forgotten[op.Name]:
+			case (target == "fact" || target == "rule") && er.forgets(target, op.Name):
+				if wipe == "" {
+					wipe = memForgotten
+				}
+				continue
+			case target == "item" && er.forgets("item", op.Name):
 				if op.Kind == "redact" {
 					wipe = memForgotten
 					continue

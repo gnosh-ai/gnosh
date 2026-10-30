@@ -80,7 +80,7 @@ func (e *brokenError) Error() string {
 	if e.msg != "" {
 		return e.msg
 	}
-	return fmt.Sprintf("VM %s is broken: %v. Repair it with /goals repair %s (it keeps the entries before the damage), or delete it with gnovm_drop",
+	return fmt.Sprintf("VM %s is broken: %v. The user can repair it with /mem repair %s, which keeps the entries before the damage; or delete it with gnovm_drop",
 		e.vm, e.cause, e.vm)
 }
 

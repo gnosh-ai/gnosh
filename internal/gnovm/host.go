@@ -505,7 +505,7 @@ func (h *Host) sync(ctx context.Context, s *vmState) error {
 		j, entries, torn, err := readJournal(filepath.Join(s.dir, "journal.jsonl"))
 		if err != nil {
 			s.broken = err
-			return err
+			return &brokenError{vm: s.name, cause: err}
 		}
 		if torn {
 			if err := j.cutTail(); err != nil {
@@ -534,7 +534,7 @@ func (h *Host) sync(ctx context.Context, s *vmState) error {
 	tail, torn, err := s.j.readFrom()
 	if err != nil {
 		s.broken = err
-		return err
+		return &brokenError{vm: s.name, cause: err}
 	}
 	for _, t := range tail {
 		s.cost.add(&t.entry)

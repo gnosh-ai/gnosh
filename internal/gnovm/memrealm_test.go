@@ -60,6 +60,7 @@ func TestMemLayoutPinned(t *testing.T) {
 	got := hex.EncodeToString(h.Sum(nil))[:16]
 	pins := map[int]string{
 		1: "40f2ee6d42a9774f",
+		2: "8aa10005d9fdb3b5",
 	}
 	want, ok := pins[memLayout]
 	if !ok {

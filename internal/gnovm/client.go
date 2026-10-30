@@ -247,6 +247,23 @@ func (c *Client) Repair(ctx context.Context, project, name string) (int, int, er
 	return r.Kept, r.Cut, err
 }
 
+// MemCommand runs /mem; see Host.MemCommand.
+func (c *Client) MemCommand(ctx context.Context, project, session, args string, titles map[string]string) (string, error) {
+	if h, err := c.inProcess(); h != nil || err != nil {
+		if err != nil {
+			return "", err
+		}
+		return h.MemCommand(ctx, project, session, args, titles)
+	}
+	body, err := c.call(ctx, msgMem, memReq{Project: project, Session: session, Args: args, Titles: titles})
+	if err != nil {
+		return "", err
+	}
+	var out string
+	err = json.Unmarshal(body, &out)
+	return out, err
+}
+
 // inProcess returns the client's own host when it runs VMs in-process, made
 // on first use, or nil when it uses a worker.
 func (c *Client) inProcess() (*Host, error) {

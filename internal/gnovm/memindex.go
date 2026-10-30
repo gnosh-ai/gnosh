@@ -100,7 +100,7 @@ func applyIndexOp(tx *sql.Tx, op memOp) error {
 	case "add":
 		return putRow(tx, "item", op.Name, map[string]string{"title": op.New})
 	case "unadd", "forget":
-		return deleteRow(tx, "item", op.Name)
+		return deleteRow(tx, opTarget(op), op.Name)
 	case "set":
 		if op.Field == "result" || op.Field == "wait" {
 			return setColumn(tx, "item", op.Name, op.Field, op.New)

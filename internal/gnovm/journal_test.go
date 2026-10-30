@@ -127,6 +127,7 @@ func TestRepairCutsAtTheFirstBadEntry(t *testing.T) {
 	h2 := newTestHost(t, dir)
 	_, err = h2.Run(context.Background(), RunRequest{Project: "/proj", Name: "fixme", Code: `a`})
 	require.ErrorIs(t, err, errBrokenJournal)
+	require.ErrorContains(t, err, "The user can repair it with /mem repair fixme")
 	kept, cut, err := h2.Repair(context.Background(), "/proj", "fixme")
 	require.NoError(t, err)
 	require.Equal(t, 1, kept)
@@ -138,6 +139,38 @@ func TestRepairCutsAtTheFirstBadEntry(t *testing.T) {
 
 	_, _, err = h2.Repair(context.Background(), "/proj", "fixme")
 	require.ErrorContains(t, err, "not broken")
+	out, err := h2.MemCommand(context.Background(), "/proj", "s1", "repair fixme", nil)
+	require.NoError(t, err)
+	require.Equal(t, "VM fixme is not broken", out)
+}
+
+// /mem repair <vm> repairs a broken VM, as the broken VM's error says.
+func TestMemCommandRepairsAVM(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestHost(t, dir)
+	persist := true
+	_, _, err := h.New(context.Background(), NewRequest{Project: "/proj", Name: "fixme", Persist: &persist})
+	require.NoError(t, err)
+	run(t, h, "fixme", `a := 1`)
+	run(t, h, "fixme", `a = 2`)
+	run(t, h, "fixme", `a = 3`)
+	require.NoError(t, h.Close())
+	path := filepath.Join(dir, projectKey("/proj"), "vms", "fixme", "journal.jsonl")
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	lines := strings.SplitAfter(string(data), "\n")
+	lines[2] = "garbage\n" // entry 2; a bad last line would be a torn append, cut
+	require.NoError(t, os.WriteFile(path, []byte(strings.Join(lines, "")), 0o600))
+
+	h2 := newTestHost(t, dir)
+	out, err := h2.MemCommand(context.Background(), "/proj", "s1", "repair fixme", nil)
+	require.NoError(t, err)
+	require.Equal(t, "VM fixme is repaired: 1 entry kept, 2 cut from the damage on; its old journal is kept beside it", out)
+	require.Equal(t, "1", run(t, h2, "fixme", `a`).Value)
+	out, err = h2.MemCommand(context.Background(), "/proj", "s1", "repair nosuch", nil)
+	require.NoError(t, err)
+	require.Equal(t, "there is no VM named nosuch", out)
 }
 
 func TestSessionMayResizeItsScratchVM(t *testing.T) {

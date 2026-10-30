@@ -37,6 +37,7 @@ const (
 	msgDrop      = "drop"
 	msgKept      = "kept"
 	msgRepair    = "repair"
+	msgMem       = "mem"
 	msgCancel    = "cancel"
 	msgResult    = "result"
 	msgAck       = "ack"
@@ -201,6 +202,12 @@ type (
 	repairReq struct {
 		Project string `json:"project"`
 		Name    string `json:"name"`
+	}
+	memReq struct {
+		Project string            `json:"project"`
+		Session string            `json:"session"`
+		Args    string            `json:"args"`
+		Titles  map[string]string `json:"titles,omitempty"`
 	}
 	newResp struct {
 		Info    VMInfo `json:"info"`

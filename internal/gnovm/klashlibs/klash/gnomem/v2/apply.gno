@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -27,7 +27,7 @@ const maxSteps = 9999
 //     notes, a result or a wait;
 //   - a set would open an item under a closed one, or close one with an
 //     open step;
-//   - a forget names an open item.
+//   - a forget names an open item, or a missing fact or rule.
 //
 // A redact naming a missing item, fact or rule changes and stamps nothing.
 func (m *Mem) apply(op Op, at int64) {
@@ -58,6 +58,22 @@ func (m *Mem) apply(op Op, at int64) {
 		m.applyRule(op, at)
 		return
 	case "forget":
+		switch op.Field {
+		case "fact":
+			f := m.getFact(op.Name)
+			if f == nil {
+				panic("apply: no fact `" + op.Name + "`")
+			}
+			m.recent.Remove(stampKey(f.Changed, op.Name))
+			m.facts.Remove(op.Name)
+			return
+		case "rule":
+			if m.getRule(op.Name) == nil {
+				panic("apply: no rule `" + op.Name + "`")
+			}
+			m.rules.Remove(op.Name)
+			return
+		}
 		it := m.must(op)
 		if it.Status == "" {
 			panic("apply: cannot forget open `" + op.Name + "`")

@@ -146,5 +146,5 @@ var memMoved = map[string]string{
 	"Remember": `mem.Fact("name", "text") keeps a fact, and mem.Show("name") reads it back`,
 	"Facts":    `mem.Fact("name", "text") keeps a fact, and mem.Show("name") reads it back`,
 	"Items":    `mem.Show("name") shows an item, and mem.JSON("name") gives it as JSON`,
-	"Erase":    `mem.Forget("name") erases a closed item and its steps; mem.Redact("text") takes a secret out everywhere`,
+	"Erase":    `mem.Forget("name") erases a closed item and its steps, or a fact; mem.Redact("text") takes a secret out everywhere`,
 }
