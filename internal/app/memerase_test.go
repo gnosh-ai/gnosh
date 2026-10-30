@@ -1,0 +1,79 @@
+package app
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/charmbracelet/crush/internal/agent/notify"
+	"github.com/charmbracelet/crush/internal/db"
+	"github.com/charmbracelet/crush/internal/gnovm"
+	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/charmbracelet/crush/internal/session"
+	"github.com/stretchr/testify/require"
+)
+
+// What mem erased leaves gnosh's own copies of mem's text: the <mem> block
+// saved after a prompt, the /goal binding, the pills and the summary. What
+// the user saw stays, and the sessions where it still holds a redacted
+// secret are named.
+func TestMemErased(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := db.Connect(ctx, t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	q := db.New(conn)
+	sessions := session.NewService(q, conn)
+	messages := message.NewService(q)
+	a := &App{Sessions: sessions, Messages: messages, agentNotifications: pubsub.NewBroker[notify.Notification]()}
+
+	s, err := sessions.Create(ctx, "Party planning")
+	require.NoError(t, err)
+	block := "<user-prompt-submit-hook>\n<mem>\n- `plan-surprise-party` \"plan the surprise party\"\n  next: `plan-surprise-party/1` \"book Moonlight Hall\"\n- `buy-milk` \"buy milk\"\n</mem>\n</user-prompt-submit-hook>"
+	prompt, err := messages.Create(ctx, s.ID, message.CreateMessageParams{Role: message.User, Parts: []message.ContentPart{
+		message.TextContent{Text: "plan the surprise party"},
+		message.TextContent{Text: block, Hidden: true},
+	}})
+	require.NoError(t, err)
+	_, err = messages.Create(ctx, s.ID, message.CreateMessageParams{Role: message.Assistant, Parts: []message.ContentPart{
+		message.ToolCall{ID: "c1", Name: "gnovm_run", Input: `{"name":"mem","code":"mem.Fact(\"deploy\", \"sk-live-4f9a2c\")"}`, Finished: true},
+	}})
+	require.NoError(t, err)
+	summary, err := messages.Create(ctx, s.ID, message.CreateMessageParams{Role: message.Assistant, Parts: []message.ContentPart{
+		message.TextContent{Text: "We plan the surprise party; the deploy key is sk-live-4f9a2c."},
+	}})
+	require.NoError(t, err)
+	_, err = sessions.UpdateSummary(ctx, s.ID, summary.ID, 10, 0, false)
+	require.NoError(t, err)
+	binding, err := json.Marshal(gnovm.GoalBinding{Condition: "plan the surprise party, then tell Ana", Name: "plan-surprise-party", Title: "plan the surprise party", Added: true})
+	require.NoError(t, err)
+	ok, err := sessions.SwapGoal(ctx, s.ID, "", string(binding))
+	require.NoError(t, err)
+	require.True(t, ok)
+	_, err = sessions.SetTodos(ctx, s.ID, []session.Todo{{Content: "book Moonlight Hall", Status: session.TodoStatusPending}, {Content: "buy milk", Status: session.TodoStatusPending}})
+	require.NoError(t, err)
+
+	note := a.memErased(ctx, gnovm.MemErasure{
+		Texts:   map[string]string{"plan the surprise party": "(forgotten)", "book Moonlight Hall": "(forgotten)", "sk-live-4f9a2c": "(redacted)"},
+		Names:   []string{"plan-surprise-party", "plan-surprise-party/1"},
+		Renamed: map[string]string{"plan-surprise-party": "forgotten-1"},
+	})
+	require.Equal(t, `what you saw of it is still in 1 session(s), "Party planning", and reaches the model again in them: start a new session, or delete those`, note)
+
+	got, err := messages.Get(ctx, prompt.ID)
+	require.NoError(t, err)
+	require.Equal(t, "plan the surprise party", got.Parts[0].(message.TextContent).Text, "what was typed stays")
+	require.Equal(t, "<user-prompt-submit-hook>\n<mem>\n- `buy-milk` \"buy milk\"\n</mem>\n</user-prompt-submit-hook>", got.Parts[1].(message.TextContent).Text)
+	got, err = messages.Get(ctx, summary.ID)
+	require.NoError(t, err)
+	require.Equal(t, "We (forgotten); the deploy key is (redacted).", got.Content().Text)
+	stored, err := sessions.Goal(ctx, s.ID)
+	require.NoError(t, err)
+	var b gnovm.GoalBinding
+	require.NoError(t, json.Unmarshal([]byte(stored), &b))
+	require.Equal(t, gnovm.GoalBinding{Condition: "(forgotten), then tell Ana", Name: "forgotten-1", Title: "(forgotten)", Added: true}, b)
+	s, err = sessions.Get(ctx, s.ID)
+	require.NoError(t, err)
+	require.Equal(t, []session.Todo{{Content: "buy milk", Status: session.TodoStatusPending}}, s.Todos)
+}

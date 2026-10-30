@@ -247,21 +247,22 @@ func (c *Client) Repair(ctx context.Context, project, name string) (int, int, er
 	return r.Kept, r.Cut, err
 }
 
-// MemCommand runs /mem; see Host.MemCommand.
-func (c *Client) MemCommand(ctx context.Context, project, session, args string, titles map[string]string) (string, error) {
+// MemCommand runs /mem (see Host.MemCommand), and says what it erased, if
+// anything, for gnosh's own copies of mem's text.
+func (c *Client) MemCommand(ctx context.Context, project, session, args string, titles map[string]string) (string, *MemErasure, error) {
 	if h, err := c.inProcess(); h != nil || err != nil {
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
-		return h.MemCommand(ctx, project, session, args, titles)
+		return h.memCommand(ctx, project, session, args, titles)
 	}
 	body, err := c.call(ctx, msgMem, memReq{Project: project, Session: session, Args: args, Titles: titles})
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	var out string
-	err = json.Unmarshal(body, &out)
-	return out, err
+	var resp memResp
+	err = json.Unmarshal(body, &resp)
+	return resp.Text, resp.Erased, err
 }
 
 // inProcess returns the client's own host when it runs VMs in-process, made

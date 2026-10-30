@@ -210,6 +210,10 @@ type (
 		Args    string            `json:"args"`
 		Titles  map[string]string `json:"titles,omitempty"`
 	}
+	memResp struct {
+		Text   string      `json:"text"`
+		Erased *MemErasure `json:"erased,omitempty"`
+	}
 	// goalReq is one of /goal's calls: Op is "bind", "turn", "reopen" or
 	// "clear".
 	goalReq struct {

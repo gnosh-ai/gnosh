@@ -259,11 +259,11 @@ func handle(ctx context.Context, host *Host, f *frame) *frame {
 		if err := json.Unmarshal(f.Body, &req); err != nil {
 			return fail(err)
 		}
-		out, err := host.MemCommand(ctx, req.Project, req.Session, req.Args, req.Titles)
+		out, erased, err := host.memCommand(ctx, req.Project, req.Session, req.Args, req.Titles)
 		if err != nil {
 			return fail(err)
 		}
-		reply.Body = mustJSON(out)
+		reply.Body = mustJSON(memResp{Text: out, Erased: erased})
 	default:
 		return fail(fmt.Errorf("unknown request %q", f.Type))
 	}

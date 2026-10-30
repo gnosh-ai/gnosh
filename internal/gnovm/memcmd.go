@@ -38,6 +38,21 @@ const memUsage = `/mem                 mem's outline
 // ids, for /mem log. Its arguments are never logged: /mem redact carries a
 // secret.
 func (h *Host) MemCommand(ctx context.Context, project, session, args string, titles map[string]string) (string, error) {
+	out, _, err := h.memCommand(ctx, project, session, args, titles)
+	return out, err
+}
+
+// memCommand is MemCommand, with what it erased, if anything, for gnosh's
+// own copies of mem's text.
+func (h *Host) memCommand(ctx context.Context, project, session, args string, titles map[string]string) (string, *MemErasure, error) {
+	var erased *MemErasure
+	text, err := h.memAnswer(ctx, project, session, args, titles, &erased)
+	return text, erased, err
+}
+
+// memAnswer answers /mem; an input that erased something leaves what it
+// erased in erased.
+func (h *Host) memAnswer(ctx context.Context, project, session, args string, titles map[string]string, erased **MemErasure) (string, error) {
 	args = strings.TrimSpace(args)
 	sub, rest := args, ""
 	if i := strings.IndexFunc(args, unicode.IsSpace); i >= 0 {
@@ -56,12 +71,12 @@ func (h *Host) MemCommand(ctx context.Context, project, session, args string, ti
 		for _, n := range strings.Fields(rest) {
 			names = append(names, strconv.Quote(n))
 		}
-		return m.user(ctx, session, "mem.Show("+strings.Join(names, ", ")+")", titles)
+		return m.user(ctx, session, "mem.Show("+strings.Join(names, ", ")+")", titles, erased)
 	case "find":
 		if rest == "" {
 			return "/mem find takes words: /mem find release key", nil
 		}
-		return m.user(ctx, session, "mem.Find("+strconv.Quote(rest)+")", titles)
+		return m.user(ctx, session, "mem.Find("+strconv.Quote(rest)+")", titles, erased)
 	case "log":
 		n := 20
 		if rest != "" {
@@ -84,12 +99,12 @@ func (h *Host) MemCommand(ctx context.Context, project, session, args string, ti
 		if rest == "" {
 			return "/mem forget takes a name, as /mem shows it: /mem forget release-v2", nil
 		}
-		return m.user(ctx, session, "mem.Forget("+strconv.Quote(rest)+")", titles)
+		return m.user(ctx, session, "mem.Forget("+strconv.Quote(rest)+")", titles, erased)
 	case "redact":
 		if rest == "" {
 			return "/mem redact takes a secret's exact text: /mem redact sk-live-…", nil
 		}
-		return m.user(ctx, session, "mem.Redact("+strconv.Quote(rest)+")", titles)
+		return m.user(ctx, session, "mem.Redact("+strconv.Quote(rest)+")", titles, erased)
 	case "repair":
 		n, err := m.repair(ctx)
 		if err != nil {
@@ -123,8 +138,9 @@ func (h *Host) repairVM(ctx context.Context, project, name string) (string, erro
 // what it printed, then why it failed, if it did, and what gnosh did
 // besides. Only a busy mem is an error: the rest is the answer. Sessions
 // are named for the user (memSessions).
-func (h *memHost) user(ctx context.Context, session, code string, titles map[string]string) (string, error) {
+func (h *memHost) user(ctx context.Context, session, code string, titles map[string]string, erased **MemErasure) (string, error) {
 	res, err := h.call(ctx, memRequest{Code: code, Session: session, User: true})
+	*erased = res.Erased
 	var busy *busyError
 	if errors.As(err, &busy) {
 		return "", err

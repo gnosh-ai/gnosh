@@ -161,7 +161,7 @@ func TestDocExamplesRun(t *testing.T) {
 					case "/mem":
 						client, err := l.Get()
 						require.NoError(t, err)
-						got, err := client.MemCommand(context.Background(), "/proj", docUserSession, c.input, titles)
+						got, _, err := client.MemCommand(context.Background(), "/proj", docUserSession, c.input, titles)
 						require.NoError(t, err, "%s line %d: /mem %s", doc, c.line, c.input)
 						assert.Equal(t, docWhen(c.want), docWhen(strings.TrimRight(got, "\n")),
 							"%s line %d: /mem %s no longer shows what the document says. Update the example, or the code if the document is right.\nIt showed:\n%s",

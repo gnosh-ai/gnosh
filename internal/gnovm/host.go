@@ -705,6 +705,9 @@ type RunResult struct {
 	// MemGoals are the goals a call to mem changed, as its session sees
 	// them, for the session's task list.
 	MemGoals []MemGoal `json:",omitempty"`
+	// Erased is what a call to mem erased, for gnosh's own copies of mem's
+	// text (gnovm_run hands it to OnMemErased).
+	Erased *MemErasure `json:",omitempty"`
 	// Err is the run's failure; nothing from the call was kept. (The wire
 	// carries it apart, keeping its kind; see wireRun.)
 	Err error `json:"-"`

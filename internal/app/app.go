@@ -1323,6 +1323,7 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 		Skills:      app.Skills,
 		Interactive: interactive,
 		GnoVMs:      app.gnovms,
+		MemErased:   app.memErasedNotice,
 		Artifacts:   app.artifacts,
 	})
 	if err != nil {

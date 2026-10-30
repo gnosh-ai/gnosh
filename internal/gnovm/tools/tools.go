@@ -96,8 +96,15 @@ type MemGoalsFunc func(ctx context.Context, session string, goals []gnovm.MemGoa
 type RunOption func(*runOptions)
 
 type runOptions struct {
-	onMem MemGoalsFunc
-	bound func(ctx context.Context, sessionID string) string
+	onMem    MemGoalsFunc
+	bound    func(ctx context.Context, sessionID string) string
+	onErased func(ctx context.Context, sessionID string, e gnovm.MemErasure)
+}
+
+// OnMemErased has gnovm_run tell f what a call to mem erased, so gnosh can
+// erase it from its own copies of mem's text too.
+func OnMemErased(f func(ctx context.Context, sessionID string, e gnovm.MemErasure)) RunOption {
+	return func(o *runOptions) { o.onErased = f }
 }
 
 // OnMemGoals has gnovm_run tell f the goals each call to mem changed.
@@ -149,6 +156,9 @@ func NewRunTool(vms *gnovm.Lazy, project string, opts ...RunOption) fantasy.Agen
 			}
 			if o.onMem != nil && len(res.MemGoals) > 0 {
 				o.onMem(ctx, session, res.MemGoals)
+			}
+			if o.onErased != nil && res.Erased != nil {
+				o.onErased(ctx, session, *res.Erased)
 			}
 			return fantasy.NewTextResponse(text), nil
 		})

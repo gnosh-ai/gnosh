@@ -73,8 +73,10 @@ type memResult struct {
 	Seq int64
 	// Notes say what gnosh did besides: rebuilt the store, caught it up.
 	Notes []string
-	// Renamed is the goals an erasure renamed, old name to new.
+	// Renamed is the goals an erasure renamed, old name to new; Erased is
+	// all an erasure took away, for gnosh's own copies (MemErasure).
 	Renamed map[string]string
+	Erased  *MemErasure
 	// Goals are the goals the input changed, as its session sees them.
 	Goals []MemGoal
 	// Instance is mem's instance id, which a mem made anew does not share.
@@ -236,7 +238,8 @@ func (h *memHost) erase(res memResult, j *journal, e *memEntry, er memErasure) (
 		res.Ops = nil
 		return res, err
 	}
-	entries, res.Renamed = erase(append(entries, *e), er)
+	entries, gone := erase(append(entries, *e), er)
+	res.Renamed, res.Erased = gone.Renamed, &gone
 	nj, err := rewriteMemJournal(j.path, j.instance, entries, h.now())
 	if err != nil {
 		res.Ops = nil
@@ -613,7 +616,7 @@ func (h *memHost) openIndex(j *journal) (*memIndex, error) {
 func (h *Host) runMem(ctx context.Context, req RunRequest) (*RunResult, error) {
 	start := time.Now()
 	res, err := h.mem(req.Project).call(ctx, memRequest{Code: req.Code, Session: req.Session, Req: req.Req, Goal: req.Goal})
-	out := &RunResult{VM: MemVM, Output: res.Output, Journaled: res.Seq > 0, Seq: res.Seq, Notes: res.Notes, Wall: time.Since(start), MemGoals: res.Goals}
+	out := &RunResult{VM: MemVM, Output: res.Output, Journaled: res.Seq > 0, Seq: res.Seq, Notes: res.Notes, Wall: time.Since(start), MemGoals: res.Goals, Erased: res.Erased}
 	if err != nil {
 		var busy *busyError
 		var ref *refusal

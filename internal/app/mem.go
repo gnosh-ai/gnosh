@@ -26,7 +26,13 @@ func (a *App) MemCommand(ctx context.Context, sessionID, args string) (string, e
 			titles[s.ID] = s.Title
 		}
 	}
-	return client.MemCommand(ctx, a.config.WorkingDir(), sessionID, args, titles)
+	text, erased, err := client.MemCommand(ctx, a.config.WorkingDir(), sessionID, args, titles)
+	if err == nil && erased != nil {
+		if note := a.memErased(ctx, *erased); note != "" {
+			text += "\n(" + note + ")"
+		}
+	}
+	return text, err
 }
 
 // MemNotice is what the user is told of the project's mem as a session

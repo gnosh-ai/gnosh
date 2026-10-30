@@ -162,9 +162,25 @@ func (er memErasure) scrub(s string) string {
 //     forget among them, and the entries that had one their statements.
 //
 // Kinds, fields, status words and who made what are left as they are. It
-// returns the entries, and the goals renamed: old name to new.
-func erase(entries []memEntry, er memErasure) ([]memEntry, map[string]string) {
+// returns the entries, and what gnosh's own copies must lose too (see
+// MemErasure): the goals renamed, old name to new, the texts erased, each
+// with what took its place, and the names forgotten.
+func erase(entries []memEntry, er memErasure) ([]memEntry, MemErasure) {
 	renamed := map[string]string{}
+	gone := MemErasure{Texts: map[string]string{}}
+	for _, t := range er.secrets {
+		gone.Texts[t] = memRedacted
+	}
+	forget := func(op memOp) {
+		for _, t := range []string{op.Old, op.New} {
+			if t != "" && gone.Texts[t] == "" {
+				gone.Texts[t] = memForgotten
+			}
+		}
+		if !slices.Contains(gone.Names, op.Name) {
+			gone.Names = append(gone.Names, op.Name)
+		}
+	}
 	next := 1
 	for _, e := range entries {
 		for _, op := range e.Ops {
@@ -197,6 +213,9 @@ func erase(entries []memEntry, er memErasure) ([]memEntry, map[string]string) {
 				wipe = memRedacted
 				continue
 			case (target == "fact" || target == "rule") && er.forgets(target, op.Name):
+				if op.Kind == target {
+					forget(op)
+				}
 				if wipe == "" {
 					wipe = memForgotten
 				}
@@ -205,6 +224,9 @@ func erase(entries []memEntry, er memErasure) ([]memEntry, map[string]string) {
 				if op.Kind == "redact" {
 					wipe = memForgotten
 					continue
+				}
+				if memTextOp(op) {
+					forget(op)
 				}
 				if op.Kind != "set" || op.Field != "status" {
 					if op.Old != "" {
@@ -235,7 +257,20 @@ func erase(entries []memEntry, er memErasure) ([]memEntry, map[string]string) {
 		}
 		out = append(out, e)
 	}
-	return out, renamed
+	gone.Renamed = renamed
+	return out, gone
+}
+
+// memTextOp reports whether an Op on an item carries the item's text: its
+// title, result, wait or a note, not a status, a session or "user".
+func memTextOp(op memOp) bool {
+	switch op.Kind {
+	case "add", "unadd", "note", "unnote":
+		return true
+	case "set":
+		return op.Field == "result" || op.Field == "wait"
+	}
+	return false
 }
 
 // rewriteMemJournal writes entries as mem's journal at path, under a new
