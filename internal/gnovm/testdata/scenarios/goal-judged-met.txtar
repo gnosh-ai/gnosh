@@ -1,0 +1,19 @@
+Real work the agent finishes stays finished: it plans a goal, makes two edits
+it can show, and closes the goal. The judge that reads the end of the
+conversation finds it met, and does not send the agent back to redo it.
+
+-- project/greet.go --
+package main
+
+import "fmt"
+
+func main() { fmt.Println("hello") }
+-- prompt --
+Plan this as a goal with steps, then do all of it now: make greet.go print "hello, world" instead of "hello", and add a README.md that says to run it with `go run greet.go`.
+-- check --
+turn 1 tool gnovm_run >= 1
+file greet.go contains hello, world
+file README.md contains go run greet.go
+mem-count open == 0
+mem-count done >= 1
+cmd ! grep -q "found not met" .gnosh/logs/gnosh.log
