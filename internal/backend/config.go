@@ -348,12 +348,3 @@ func (b *Backend) ListMCPPrompts(workspaceID string) ([]proto.MCPPrompt, error) 
 	}
 	return result, nil
 }
-
-// GetWorkingDir returns the working directory for a workspace.
-func (b *Backend) GetWorkingDir(workspaceID string) (string, error) {
-	ws, err := b.GetWorkspace(workspaceID)
-	if err != nil {
-		return "", err
-	}
-	return ws.Cfg.WorkingDir(), nil
-}

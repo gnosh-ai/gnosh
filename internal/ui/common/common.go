@@ -168,15 +168,6 @@ func largeModelProviderID(ws workspace.Workspace) string {
 	return cfg.Models[config.SelectedModelTypeLarge].Provider
 }
 
-// NewCommon returns common UI configurations using the given theme.
-func NewCommon(ws workspace.Workspace, themeName string) *Common {
-	s := LoadThemeStyles(themeName)
-	return &Common{
-		Workspace: ws,
-		Styles:    &s,
-	}
-}
-
 // ThemeNameFromConfig extracts the theme name from config, returning ""
 // (which LoadTheme treats as the default) when config is nil or unset.
 func ThemeNameFromConfig(cfg *config.Config) string {

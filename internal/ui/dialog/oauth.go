@@ -1,7 +1,6 @@
 package dialog
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -78,7 +77,6 @@ type OAuth struct {
 	expiresIn       int
 	interval        int
 	token           *oauth.Token
-	cancelFunc      context.CancelFunc
 	// codeInput is the paste field for providers whose browser flow
 	// can finish with a code entered back in the terminal.
 	codeInput textinput.Model

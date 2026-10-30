@@ -110,15 +110,6 @@ func (s *Server) Backend() *backend.Backend {
 	return s.backend
 }
 
-// DefaultServer returns a new [Server] with the default address.
-func DefaultServer(cfg *config.ConfigStore) *Server {
-	hostURL, err := ParseHostURL(DefaultHost())
-	if err != nil {
-		panic("invalid default host")
-	}
-	return NewServer(cfg, hostURL.Scheme, hostURL.Host)
-}
-
 // NewServer creates a new [Server] with the given network and address.
 func NewServer(cfg *config.ConfigStore, network, address string) *Server {
 	s := new(Server)

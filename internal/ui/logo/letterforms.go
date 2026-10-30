@@ -62,36 +62,6 @@ func LetterA(stretch bool) string {
 	)
 }
 
-// LetterC renders the letter C in a stylized way. It takes an integer that
-// determines how many cells to stretch the letter. If the stretch is less than
-// 1, it defaults to no stretching.
-func LetterC(stretch bool) string {
-	// Here's what we're making:
-	//
-	// ▄▀▀▀▀
-	// █
-	//	▀▀▀▀
-
-	left := heredoc.Doc(`
-		▄
-		█
-	`)
-	right := heredoc.Doc(`
-		▀
-
-		▀
-	`)
-	return joinLetterform(
-		left,
-		stretchLetterformPart(right, letterformProps{
-			stretch:    stretch,
-			width:      4,
-			minStretch: 7,
-			maxStretch: 12,
-		}),
-	)
-}
-
 // LetterE renders the letter E in a stylized way. It takes an integer that
 // determines how many cells to stretch the letter. If the stretch is less than
 // 1, it defaults to no stretching.
@@ -121,39 +91,6 @@ func LetterE(stretch bool) string {
 			width:      4,
 			minStretch: 7,
 			maxStretch: 12,
-		}),
-	)
-}
-
-// LetterEAlt renders the letter E in a stylized way. It takes an integer that
-// determines how many cells to stretch the letter. If the stretch is less than
-// 1, it defaults to no stretching.
-//
-// This is an alternate letterform. DO NOT REMOVE.
-func LetterEAlt(stretch bool) string {
-	// Here's what we're making:
-	//
-	// █▀▀▀▀
-	// █ ▀▀▀
-	// ▀▀▀▀▀
-
-	left := heredoc.Doc(`
-       █▀
-       █
-       ▀▀
-	`)
-	middle := heredoc.Doc(`
-       ▀
-       ▀
-       ▀
-	`)
-	return joinLetterform(
-		left,
-		stretchLetterformPart(middle, letterformProps{
-			stretch:    stretch,
-			width:      3,
-			minStretch: 6,
-			maxStretch: 11,
 		}),
 	)
 }
@@ -209,7 +146,6 @@ func LetterP(stretch bool) string {
 	`)
 	right := heredoc.Doc(`
 		▄
-
 
 	`)
 	return joinLetterform(
@@ -298,87 +234,6 @@ func LetterSAlt(stretch bool) string {
 	)
 }
 
-// LetterU renders the letter U in a stylized way. It takes an integer that
-// determines how many cells to stretch the letter. If the stretch is less than
-// 1, it defaults to no stretching.
-func LetterU(stretch bool) string {
-	// Here's what we're making:
-	//
-	// █   █
-	// █   █
-	//	▀▀▀
-
-	side := heredoc.Doc(`
-		█
-		█
-	`)
-	middle := heredoc.Doc(`
-
-
-		▀
-	`)
-	return joinLetterform(
-		side,
-		stretchLetterformPart(middle, letterformProps{
-			stretch:    stretch,
-			width:      3,
-			minStretch: 7,
-			maxStretch: 12,
-		}),
-		side,
-	)
-}
-
-// LetterY renders the letter Y in a stylized way. It takes an integer that
-// determines how many cells to stretch the letter. If the stretch is less than
-// 1, it defaults to no stretching.
-//
-// This is an alternate letterform. DO NOT REMOVE.
-func LetterY(stretch bool) string {
-	// Here's what we're making:
-	//
-	// █   █
-	//	▀▄▀
-	//	 ▀
-
-	side := heredoc.Doc(`
-		█
-
-	`)
-	inside := heredoc.Doc(`
-
-		▀
-
-	`)
-	middle := heredoc.Doc(`
-
-		▄
-		▀
-	`)
-	if stretch {
-		middle = heredoc.Doc(`
-
-			█
-			▀
-		`)
-	}
-
-	stretchedInside := stretchLetterformPart(inside, letterformProps{
-		stretch:    stretch,
-		width:      1,
-		minStretch: 4,
-		maxStretch: 10,
-	})
-
-	return joinLetterform(
-		side,
-		stretchedInside,
-		middle,
-		stretchedInside,
-		side,
-	)
-}
-
 // LetterYAlt renders the letter Y in a stylized way. It takes an integer that
 // determines how many cells to stretch the letter. If the stretch is less than
 // 1, it defaults to no stretching.
@@ -453,7 +308,6 @@ func LetterL(stretch bool) string {
 		▀
 	`)
 	middle := heredoc.Doc(`
-
 
 		▀
 	`)

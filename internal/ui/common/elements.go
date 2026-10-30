@@ -16,13 +16,6 @@ import (
 	"golang.org/x/text/language"
 )
 
-// PrettyPath formats a file path with home directory shortening and applies
-// muted styling.
-func PrettyPath(t *styles.Styles, path string, width int) string {
-	formatted := home.Short(path)
-	return t.Sidebar.WorkingDir.Width(width).Render(formatted)
-}
-
 // PrettyPathWithBranch formats a file path with an optional git branch prefix.
 // When a branch is present, it is displayed on its own line above the path.
 func PrettyPathWithBranch(t *styles.Styles, path, branch string, width int) string {

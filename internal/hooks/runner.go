@@ -184,7 +184,7 @@ func (r *Runner) RunStop(ctx context.Context, sessionID, lastAssistantMessage st
 // exactly as RunStop does for the main agent. Matchers do not apply, as
 // for Stop, so every hook the runner holds is executed. sessionID is
 // the session the sub-agent works for; agentID and agentType name the
-// sub-agent (see BuildSubagentStopPayload).
+// sub-agent (see subagentStopPayload).
 //
 // A DecisionDeny result means a hook refused to let the sub-agent
 // finish; the caller should put it back to work with the aggregated

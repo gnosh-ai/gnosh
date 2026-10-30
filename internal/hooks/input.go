@@ -337,18 +337,6 @@ func BuildSubagentStartPayload(sessionID, agentID, agentType, cwd string) []byte
 	})
 }
 
-// BuildSubagentStopPayload constructs the JSON stdin payload for an
-// EventSubagentStop hook, which fires when a sub-agent is about to
-// finish. There is no tool in play, so tool_name is empty and
-// tool_input is an empty object. As in Claude Code's SubagentStop input,
-// sessionID is the session the sub-agent works for, and agentID and
-// agentType name the sub-agent: its own session and its type.
-// stopHookActive, as on a Stop payload, is set when the sub-agent's turn
-// is only still running because an earlier SubagentStop hook blocked it.
-func BuildSubagentStopPayload(sessionID, agentID, agentType, cwd, lastAssistantMessage string, stopHookActive bool) []byte {
-	return marshalPayload(subagentStopPayload(sessionID, agentID, agentType, cwd, lastAssistantMessage, stopHookActive))
-}
-
 func subagentStopPayload(sessionID, agentID, agentType, cwd, lastAssistantMessage string, stopHookActive bool) Payload {
 	return Payload{
 		Event:                EventSubagentStop,
@@ -361,13 +349,6 @@ func subagentStopPayload(sessionID, agentID, agentType, cwd, lastAssistantMessag
 		StopHookActive:       stopHookActive,
 		LastAssistantMessage: lastAssistantMessage,
 	}
-}
-
-// BuildUserPromptSubmitPayload constructs the JSON stdin payload for an
-// EventUserPromptSubmit hook. There is no tool in play, so tool_name is
-// empty and tool_input is an empty object.
-func BuildUserPromptSubmitPayload(sessionID, cwd, prompt string, attachments []string) []byte {
-	return marshalPayload(userPromptSubmitPayload(sessionID, cwd, prompt, attachments))
 }
 
 func userPromptSubmitPayload(sessionID, cwd, prompt string, attachments []string) Payload {

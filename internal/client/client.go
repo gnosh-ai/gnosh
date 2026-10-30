@@ -15,7 +15,6 @@ import (
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
-	"github.com/charmbracelet/crush/internal/server"
 	"github.com/google/uuid"
 )
 
@@ -29,15 +28,6 @@ type Client struct {
 	network  string
 	addr     string
 	clientID string
-}
-
-// DefaultClient creates a new [Client] connected to the default server address.
-func DefaultClient(path string) (*Client, error) {
-	host, err := server.ParseHostURL(server.DefaultHost())
-	if err != nil {
-		return nil, err
-	}
-	return NewClient(path, host.Scheme, host.Host)
 }
 
 // NewClient creates a new [Client] connected to the server at the given

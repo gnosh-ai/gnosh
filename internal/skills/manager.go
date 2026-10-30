@@ -16,7 +16,7 @@ import (
 // one Manager per workspace.
 //
 // Package-level helpers (GetLatestStates, SetLatestStates,
-// PublishStates, SubscribeEvents) are preserved for callers that share a
+// PublishStates) are preserved for callers that share a
 // process with the TUI. To bridge a Manager to those globals, construct
 // it with WithGlobalMirror. Only do this when the process hosts a single
 // workspace (local mode or a client process); the backend server hosts
