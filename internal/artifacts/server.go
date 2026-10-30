@@ -35,11 +35,16 @@ import (
 const Off = "off"
 
 // DefaultAddress is where the server listens unless the config says
-// otherwise: every interface, so the URL works from another machine on
-// the network, at a port that is the same from run to run, so a URL
-// outlives the session it was made in. A port already taken falls back
-// to a free one.
-const DefaultAddress = ":7777"
+// otherwise: this machine only, at a port that is the same from run to
+// run, so a URL outlives the session it was made in. A port already
+// taken falls back to a free one.
+//
+// Loopback, because an artifact is whatever the agent was told to make
+// and the machine Klash runs on is often shared. Reaching it from the
+// machine the user sits at is then an ssh -L away, which costs them one
+// line of ~/.ssh/config and exposes nothing to the network. Set
+// artifact_server to ":7777" to serve every interface instead.
+const DefaultAddress = "127.0.0.1:7777"
 
 // keep is how many artifacts the register holds; the oldest go first.
 const keep = 200
@@ -90,8 +95,9 @@ func Start(addr, dir string) *Server {
 	ln, err := net.Listen("tcp", cmp.Or(addr, DefaultAddress))
 	if err != nil && addr == "" {
 		// The default port is taken — by another Klash, most likely.
-		// Any free port still serves this session's artifacts.
-		ln, err = net.Listen("tcp", ":0")
+		// Any free port still serves this session's artifacts, on the
+		// same loopback address the default binds.
+		ln, err = net.Listen("tcp", "127.0.0.1:0")
 	}
 	if err != nil {
 		slog.Warn("Artifacts are not served over HTTP; they are recorded as paths", "address", cmp.Or(addr, DefaultAddress), "error", err)
@@ -170,10 +176,24 @@ func (s *Server) Register(path, host string) (string, error) {
 
 // Close stops serving.
 func (s *Server) Close() error {
-	if s == nil || s.srv == nil {
+	if s == nil {
 		return nil
 	}
-	return s.srv.Close()
+	var err error
+	if s.srv != nil {
+		err = s.srv.Close()
+	}
+	// Serve closes the listener too, but only when its goroutine gets
+	// there. Closing it here means the port is free by the time Close
+	// returns, which is what a caller taking the port back expects — a
+	// `klash run` dropping the server it inherited, or a test. Closing a
+	// listener the server has already closed is not a failure.
+	if s.ln != nil {
+		if cerr := s.ln.Close(); cerr != nil && err == nil && !errors.Is(cerr, net.ErrClosed) {
+			err = cerr
+		}
+	}
+	return err
 }
 
 // ServeHTTP serves /<token>/<name>, and /<token> as well, since a URL

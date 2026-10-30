@@ -3,6 +3,7 @@ package artifacts
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -177,6 +178,25 @@ func TestOffServesNothing(t *testing.T) {
 
 // A listener on every interface is advertised at an address another
 // machine can reach, never 0.0.0.0, which reaches nothing from outside.
+// By default the server is reachable from this machine and no other. An
+// artifact is whatever the agent was told to make, and the machine Klash
+// runs on is often shared; the user at another machine gets to it with an
+// ssh -L forward rather than by Klash opening a port to the network.
+func TestTheDefaultIsThisMachineOnly(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "127.0.0.1:7777", DefaultAddress)
+
+	s := Start("", t.TempDir())
+	require.NotNil(t, s)
+	t.Cleanup(func() { _ = s.Close() })
+	require.True(t, strings.HasPrefix(s.BaseURL(), "http://127.0.0.1:"),
+		"the default must not advertise an address other machines can reach, got %s", s.BaseURL())
+	host, _, err := net.SplitHostPort(s.ln.Addr().String())
+	require.NoError(t, err)
+	require.True(t, net.ParseIP(host).IsLoopback(), "the default must listen on loopback, got %s", host)
+}
+
 func TestEveryInterfaceIsAdvertisedReachably(t *testing.T) {
 	t.Parallel()
 
@@ -235,4 +255,46 @@ func TestContentTypeFallsBackForMedia(t *testing.T) {
 
 	own := &Server{byExtension: func(string) string { return "text/html" }}
 	require.Equal(t, "text/html", own.contentType("page.html"), "this machine's own table answers first")
+}
+
+// Close hands the port back before it returns. A `klash run` closes the
+// server app.New made for it and the next listener on that address has
+// to succeed; waiting on the Serve goroutine to get round to it is a
+// race the caller cannot see.
+func TestCloseFreesThePortAtOnce(t *testing.T) {
+	t.Parallel()
+
+	for range 20 {
+		s := Start("127.0.0.1:0", t.TempDir())
+		require.NotNil(t, s)
+		addr := strings.TrimPrefix(s.BaseURL(), "http://")
+		require.NoError(t, s.Close())
+		require.NoError(t, s.Close(), "closing twice is not a failure")
+
+		ln, err := net.Listen("tcp", addr)
+		require.NoError(t, err, "the port was still held after Close returned")
+		require.NoError(t, ln.Close())
+	}
+}
+
+// When the default port is taken — by another Klash, most likely — the
+// fallback stays on this machine too. A fallback that opened every
+// interface would quietly undo the default on exactly the machines where
+// it matters most: the ones already running a Klash.
+func TestTheFallbackStaysOnThisMachine(t *testing.T) {
+	// Not parallel: it takes the default port for the duration. Whether
+	// or not that listen succeeds, the port is in use afterwards, so
+	// Start("") has to fall back either way.
+	if taken, err := net.Listen("tcp", DefaultAddress); err == nil {
+		defer taken.Close()
+	}
+
+	s := Start("", t.TempDir())
+	require.NotNil(t, s)
+	t.Cleanup(func() { _ = s.Close() })
+
+	host, port, err := net.SplitHostPort(strings.TrimPrefix(s.BaseURL(), "http://"))
+	require.NoError(t, err)
+	require.NotEqual(t, "7777", port, "the default port was taken; this should be the fallback")
+	require.True(t, net.ParseIP(host).IsLoopback(), "the fallback must stay on loopback, got %s", host)
 }

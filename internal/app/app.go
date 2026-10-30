@@ -1245,6 +1245,33 @@ func (app *App) InitCoderAgentNonInteractive(ctx context.Context) error {
 	return app.initCoderAgent(ctx, false)
 }
 
+// setArtifactServer makes or drops the artifact server to match how the
+// coder agent is being initialized. Both directions matter: app.New
+// initializes the agent interactively, and a `klash run` only then
+// re-initializes it without the interactive tools, so a server made for
+// that first init has to go. Otherwise every headless run holds the
+// artifact port open for a tool its agent is never given, and the next
+// interactive session, finding the port taken, falls back to a random
+// one and its URLs no longer outlive it.
+func (app *App) setArtifactServer(interactive bool, opts *config.Options) {
+	if !interactive {
+		if app.artifacts != nil {
+			_ = app.artifacts.Close()
+			app.artifacts = nil
+		}
+		return
+	}
+	if app.artifacts != nil {
+		return
+	}
+	app.artifacts = artifactServerFor(interactive, opts)
+	if app.artifacts != nil {
+		app.cleanupFuncs = append(app.cleanupFuncs, func(context.Context) error {
+			return app.artifacts.Close()
+		})
+	}
+}
+
 // artifactServerFor serves the deliverables the agent records, for a
 // session that has a sidebar to show them in. A run has none and serves
 // nothing: its agent is given no artifact tool either.
@@ -1265,14 +1292,7 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 			Dir: filepath.Join(filepath.Dir(config.GlobalConfigData()), "gnovm"),
 		}})
 	}
-	if app.artifacts == nil {
-		app.artifacts = artifactServerFor(interactive, app.config.Config().Options)
-		if app.artifacts != nil {
-			app.cleanupFuncs = append(app.cleanupFuncs, func(context.Context) error {
-				return app.artifacts.Close()
-			})
-		}
-	}
+	app.setArtifactServer(interactive, app.config.Config().Options)
 	var err error
 	app.AgentCoordinator, err = agent.NewCoordinator(ctx, agent.CoordinatorOptions{
 		Config:      app.config,

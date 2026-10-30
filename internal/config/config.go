@@ -612,7 +612,7 @@ type Options struct {
 	// its own narrows it, as "127.0.0.1:7777" does; "off" serves none,
 	// and an artifact is then recorded as its path. Only a file the agent
 	// recorded is served, each behind an unguessable token.
-	ArtifactServer string `json:"artifact_server,omitempty" jsonschema:"description=Where recorded artifacts (see the artifact tool) are served so the user can open them from another machine. Unset listens on every interface at port 7777; off serves none. Only files the agent recorded are served\\, each behind an unguessable token.,example=127.0.0.1:7777,example=off"`
+	ArtifactServer string `json:"artifact_server,omitempty" jsonschema:"description=Where recorded artifacts (see the artifact tool) are served so the user can open them from another machine. Unset listens on 127.0.0.1:7777\\, reachable from another machine through an ssh -L forward; \":7777\" serves every interface; off serves none. Only files the agent recorded are served\\, each behind an unguessable token.,example=127.0.0.1:7777,example=off"`
 	LoopMaxTurns   *int   `json:"loop_max_turns,omitempty" jsonschema:"description=An optional hard cap on how many turns /loop may drive. Unset (or 0 or negative) means no cap: every 25 turns the agent is asked whether it has a genuine reason to stop and otherwise keeps going.,example=200"`
 }
 

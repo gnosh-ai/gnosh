@@ -725,7 +725,7 @@
         },
         "artifact_server": {
           "type": "string",
-          "description": "Where recorded artifacts (see the artifact tool) are served so the user can open them from another machine. Unset listens on every interface at port 7777; off serves none. Only files the agent recorded are served, each behind an unguessable token.",
+          "description": "Where recorded artifacts (see the artifact tool) are served so the user can open them from another machine. Unset listens on 127.0.0.1:7777, reachable from another machine through an ssh -L forward; \":7777\" serves every interface; off serves none. Only files the agent recorded are served, each behind an unguessable token.",
           "examples": [
             "127.0.0.1:7777",
             "off"
