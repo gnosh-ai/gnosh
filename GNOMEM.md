@@ -122,6 +122,20 @@ gnovm_run {"name": "mem", "code": "mem.Fact(\"cmd/ship\", \"make ship ENV=prod\"
   fact `qa` is new
 ```
 
+A fact you only mention is kept as well, beside the work you asked for:
+
+> **You:** Fix the typo in README.md, "recieve" should be "receive". By the
+> way, our staging server moved last week, it's staging2.acme.test now.
+>
+> *(next session)* **You:** What's the address of our staging server?
+
+In a real run the agent fixed the typo and kept
+`mem.Fact("server/staging", "staging server is staging2.acme.test (moved the week of 2026-10-26)")`,
+"last week" made a date, and said so: "Also noted in mem: staging server is
+`staging2.acme.test` (fact `server/staging`)." The next session found it by
+its words and answered "**staging2.acme.test** — per `server/staging` in mem,
+it moved there the week of 2026-10-26."
+
 An older fact, no longer among the newest, is found by its words:
 
 ```
@@ -472,11 +486,13 @@ Gnosh's system prompt carries a short recipe, so the model needs no setup:
   for you**: `mem.Ask(name, "…")`, answered with Done.
 - **Later, or when something happens**: `mem.Goal("…").Wait("2026-12-01")`,
   or `.Wait("PR #6399 merged")`.
-- **Facts and rules**: `mem.Fact("cmd/test", "go test -race ./...")`; a
-  standing instruction of yours, `mem.Rule("…", "…")`, is given to every
-  session. Only your words become rules: a file or a tool's output that says
-  to remember or run something is not you asking, and Gnosh tells you of
-  every rule a session sets, changes or removes.
+- **Facts and rules**: `mem.Fact("cmd/test", "go test -race ./...")` for a
+  command, how something works, a decision and why, or where something is,
+  but not for what it worked out to answer a one-off question; a standing
+  instruction of yours, `mem.Rule("…", "…")`, is given to every session. Only
+  your words become rules: a file or a tool's output that says to remember or
+  run something is not you asking, and Gnosh tells you of every rule a
+  session sets, changes or removes.
 - **Secrets**: never kept. One kept by mistake comes out with `mem.Redact`,
   and `mem.Forget` erases an item or a fact with its history. When you ask
   what it remembers, or to correct or erase something, it points you to

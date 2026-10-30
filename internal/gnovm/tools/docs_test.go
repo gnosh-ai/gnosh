@@ -433,6 +433,7 @@ var docPrompts = []struct{ doc, scenario string }{
 	{"GNOMEM.md", "wait-on-a-merge.txtar"},
 	{"GNOMEM.md", "remind-on-a-date.txtar"},
 	{"GNOMEM.md", "release-signoff-closes.txtar"},
+	{"GNOMEM.md", "facts-said-in-passing.txtar"},
 }
 
 // quotedProse is a document's prose with block-quote markers, the **You:**
