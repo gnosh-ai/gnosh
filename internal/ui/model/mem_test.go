@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/workspace"
@@ -81,6 +83,28 @@ func TestMemNotice(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, ws.notice, info.Msg)
 	require.Equal(t, util.InfoTypeInfo, info.Type)
+}
+
+// mem's notice comes again with a prompt: a new session's first, unless
+// the notice shown as gnosh started stands for it, and the first of a new
+// day; not with every prompt.
+func TestMemNoticeOnPrompt(t *testing.T) {
+	t.Parallel()
+
+	u := newTestUI()
+	u.com.Workspace = &memWorkspace{notice: `mem waiting on you: "which day suits you?" (plan-release/1)`}
+	u.memNoticeDay, u.memNoticeFresh = time.Now().Format(time.DateOnly), true // as Init leaves them
+	require.Nil(t, u.memNoticeOnPrompt(), "the first session's first prompt: the start's notice stands")
+	require.NotNil(t, u.memNoticeOnPrompt(), "a later new session's first prompt")
+	u.session = &session.Session{ID: "s1"}
+	require.Nil(t, u.memNoticeOnPrompt(), "a session's later prompt, the same day")
+	u.memNoticeDay = "2026-10-29"
+	cmd := u.memNoticeOnPrompt()
+	require.NotNil(t, cmd, "the first prompt of a new day")
+	info, ok := cmd().(util.InfoMsg)
+	require.True(t, ok)
+	require.Contains(t, info.Msg, "which day suits you?")
+	require.Nil(t, u.memNoticeOnPrompt(), "once a day")
 }
 
 // Esc Esc keeps what the prompt held for Up to bring back, but not a /mem

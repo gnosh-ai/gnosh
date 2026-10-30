@@ -337,6 +337,11 @@ type UI struct {
 	// reported to the terminal until the user has seen it. See
 	// trackTurnOutcome.
 	turnOutcome tea.ProgramState
+	// memNoticeDay is the local day mem's notice was last asked for, and
+	// memNoticeFresh whether the one asked for as gnosh started still
+	// stands for the first new session (see memNoticeOnPrompt).
+	memNoticeDay   string
+	memNoticeFresh bool
 
 	// caps hold different terminal capabilities that we query for.
 	caps common.Capabilities
@@ -683,6 +688,7 @@ func (m *UI) Init() tea.Cmd {
 	if cmd := m.safeModeNotice(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	m.memNoticeDay, m.memNoticeFresh = time.Now().Format(time.DateOnly), true
 	cmds = append(cmds, m.memNotice())
 	// load the user commands async
 	cmds = append(cmds, m.loadCustomCommands())
@@ -5951,6 +5957,25 @@ func (m *UI) memCommand(args string) tea.Cmd {
 	}
 }
 
+// memNoticeOnPrompt is mem's notice again with a prompt the user sends:
+// with a new session's first, unless the notice shown as gnosh started
+// stands for it, and with the first of a new day, so a TUI left open
+// overnight tells the user when they are back, not at midnight to an empty
+// room; nil otherwise. It reads status.json, and starts no worker.
+func (m *UI) memNoticeOnPrompt() tea.Cmd {
+	if m.memNoticeDay == "" {
+		return nil // not started: Init asks for the first
+	}
+	today := time.Now().Format(time.DateOnly)
+	show := today != m.memNoticeDay || !m.hasSession() && !m.memNoticeFresh
+	m.memNoticeFresh = false
+	if !show {
+		return nil
+	}
+	m.memNoticeDay = today
+	return m.memNotice()
+}
+
 // memNotice tells the user as gnosh starts what in mem is due and what
 // waits on them, since the model, busy with the task at hand, may not.
 func (m *UI) memNotice() tea.Cmd {
@@ -6105,6 +6130,9 @@ func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...mes
 	m.turnOutcome = ""
 
 	var cmds []tea.Cmd
+	if cmd := m.memNoticeOnPrompt(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	loadCmd, err := m.ensureSession()
 	if err != nil {
 		return util.ReportError(err)
