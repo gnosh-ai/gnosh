@@ -47,6 +47,9 @@ type memHost struct {
 	// slice is how long one call may spend bringing the store up to the
 	// journal before it says to call again. What it applied is kept.
 	slice time.Duration
+	// unchecked is what the stamps written while the store is brought up
+	// to the journal say of it (memStamp.Unchecked).
+	unchecked bool
 	// embed is the embedding server mem.Find looks by meaning with; nil
 	// looks by words alone.
 	embed *memEmbedder
@@ -364,7 +367,7 @@ func newerGno(v string) bool {
 }
 
 func (h *memHost) stamp(j *journal) memStamp {
-	return memStamp{Layout: memLayout, Gno: stdlibVersion(), Generation: j.generation, Seq: j.seq, End: j.size, Hash: j.lastHash}
+	return memStamp{Layout: memLayout, Gno: stdlibVersion(), Generation: j.generation, Seq: j.seq, End: j.size, Hash: j.lastHash, Unchecked: h.unchecked}
 }
 
 // open opens mem's store, under the lock, and brings it up to the journal,
@@ -428,7 +431,11 @@ func (h *memHost) open() (r *memRealm, j *journal, notes []string, err error) {
 	if ok {
 		j.seq, j.size, j.lastHash = st.Seq, st.End, st.Hash
 	}
-	fresh := !ok
+	// A store built afresh, in this call or in earlier ones cut short, is
+	// checked once the whole journal is in it; its stamps say so until.
+	fresh := !ok || st.Unchecked
+	h.unchecked = fresh
+	defer func() { h.unchecked = false }()
 	n, err := h.catchUp(r, j)
 	switch {
 	case n == 0 || len(notes) > 0:
@@ -441,9 +448,14 @@ func (h *memHost) open() (r *memRealm, j *journal, notes []string, err error) {
 		r.close()
 		return nil, nil, notes, err
 	}
-	if fresh && n > 0 {
+	if fresh && j.seq > 0 {
 		if differs := h.checkRebuild(r, j); differs != "" {
 			notes = append(notes, differs)
+		}
+		h.unchecked = false
+		if err := r.setStamp(h.stamp(j)); err != nil {
+			r.close()
+			return nil, nil, notes, err
 		}
 	}
 	h.removeOtherGenerations(hdr.Generation)

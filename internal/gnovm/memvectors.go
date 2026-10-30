@@ -524,11 +524,27 @@ type memSnapshotKey struct {
 	model string
 }
 
-// snapshot is readMemSnapshot for recall, which reads with every prompt:
-// the last one read, while mem and its vectors have not changed since; read
-// again, and kept, when they have. Reading 10k rows and their vectors took
-// 109 ms; seeing that they have not changed, two queries.
-func (l *Lazy) snapshot(ctx context.Context, dir string) (s memSnapshot, ok bool, err error) {
+// memSnaps keeps, per mem directory, the last snapshot recall read, while
+// mem has not changed (keptMemSnapshot). A change made through this
+// process, an erasure first of all, drops it at once (Client.memChanged);
+// one made elsewhere moves its key.
+var memSnaps = struct {
+	sync.Mutex
+	m map[string]memSnapshotEntry
+}{m: map[string]memSnapshotEntry{}}
+
+// dropMemSnapshot forgets the snapshot kept of mem in dir.
+func dropMemSnapshot(dir string) {
+	memSnaps.Lock()
+	defer memSnaps.Unlock()
+	delete(memSnaps.m, dir)
+}
+
+// keptMemSnapshot is readMemSnapshot for recall, which reads with every
+// prompt: the last one read, while mem and its vectors have not changed
+// since; read again, and kept, when they have. Reading 10k rows and their
+// vectors took 109 ms; seeing that they have not changed, two queries.
+func keptMemSnapshot(ctx context.Context, dir string) (s memSnapshot, ok bool, err error) {
 	ok, err = atMem(ctx, dir, "", func(gen string, x *memIndex, v *memVectors) error {
 		st, _, err := x.stamp()
 		if err != nil {
@@ -539,9 +555,9 @@ func (l *Lazy) snapshot(ctx context.Context, dir string) (s memSnapshot, ok bool
 			return err
 		}
 		key := memSnapshotKey{gen: gen, seq: st.Seq, end: st.End, vecs: n, model: model}
-		l.snapMu.Lock()
-		kept, hit := l.snaps[dir]
-		l.snapMu.Unlock()
+		memSnaps.Lock()
+		kept, hit := memSnaps.m[dir]
+		memSnaps.Unlock()
 		if hit && kept.key == key {
 			s = kept.s
 			return nil
@@ -557,12 +573,9 @@ func (l *Lazy) snapshot(ctx context.Context, dir string) (s memSnapshot, ok bool
 		for i, r := range s.rows {
 			s.hashes[i] = r.hash()
 		}
-		l.snapMu.Lock()
-		if l.snaps == nil {
-			l.snaps = map[string]memSnapshotEntry{}
-		}
-		l.snaps[dir] = memSnapshotEntry{key, s}
-		l.snapMu.Unlock()
+		memSnaps.Lock()
+		memSnaps.m[dir] = memSnapshotEntry{key, s}
+		memSnaps.Unlock()
 		return nil
 	})
 	return s, ok && err == nil, err

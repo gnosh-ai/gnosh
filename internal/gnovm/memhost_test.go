@@ -867,3 +867,42 @@ func TestMemStatusOfAnotherGenerationIsNotRead(t *testing.T) {
 	_, ok = readMemStatus(dir)
 	require.False(t, ok)
 }
+
+// A rebuild cut across calls, as a long journal's is, is checked by the
+// call that finishes it, as one finished in a single call is. (Not
+// parallel: it shortens memBatchOps.)
+func TestMemHostChecksARebuildCutAcrossCalls(t *testing.T) {
+	defer func(n int) { memBatchOps = n }(memBatchOps)
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	for i := range 4 {
+		memOK(t, h, `mem.Fact("cmd/f`+strconv.Itoa(i)+`", "x")`)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, memStatusFile))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, memStatusFile), bytes.Replace(b, []byte(`"facts":4`), []byte(`"facts":5`), 1), 0o600))
+	stores, err := filepath.Glob(filepath.Join(dir, "store-*"))
+	require.NoError(t, err)
+	for _, s := range stores {
+		require.NoError(t, os.RemoveAll(s))
+	}
+	memBatchOps, h.slice = 1, time.Nanosecond
+	var notes []string
+	cut := 0
+	for range 20 {
+		res, err := h.call(context.Background(), memRequest{Code: `print(mem.Show())`, Session: "s1"})
+		if err == nil {
+			notes = res.Notes
+			break
+		}
+		var busy *busyError
+		require.ErrorAs(t, err, &busy)
+		cut++
+		require.True(t, memStoreStamp(t, dir).Unchecked, "unchecked while it is cut short")
+	}
+	require.Positive(t, cut, "the rebuild was cut across calls")
+	require.Contains(t, strings.Join(notes, "\n"), "differs from what mem showed before: facts 4, where mem showed 5")
+	require.False(t, memStoreStamp(t, dir).Unchecked, "checked once")
+	res := memOK(t, h, `print(mem.Show())`)
+	require.Empty(t, res.Notes, "and not again")
+}

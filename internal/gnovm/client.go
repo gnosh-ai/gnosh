@@ -154,10 +154,13 @@ func (c *Client) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	return res, err
 }
 
-// memChanged follows a change to a project's mem: its vectors are made in
+// memChanged follows a change to a project's mem: what recall kept of it
+// is dropped, an erasure's text first of all, and its vectors are made in
 // the background, when there is an embedding server.
 func (c *Client) memChanged(project string) {
-	fillMemVectors(memDir(c.opts.Dir, project), newMemEmbedder(c.opts.Embeddings))
+	dir := memDir(c.opts.Dir, project)
+	dropMemSnapshot(dir)
+	fillMemVectors(dir, newMemEmbedder(c.opts.Embeddings))
 }
 
 func (c *Client) run(ctx context.Context, req RunRequest) (*RunResult, error) {

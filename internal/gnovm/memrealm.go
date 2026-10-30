@@ -188,6 +188,10 @@ type memStamp struct {
 	Seq        int64  `json:"seq"`
 	End        int64  `json:"end"`
 	Hash       string `json:"hash,omitempty"`
+	// Unchecked marks a store being built afresh from the journal, whose
+	// rebuild has not been checked yet (memHost.checkRebuild): one cut
+	// across calls is checked by the call that finishes it.
+	Unchecked bool `json:"unchecked,omitempty"`
 }
 
 // memStampKey keeps the stamp beside gno's own keys.
@@ -200,6 +204,16 @@ func (r *memRealm) stamp() (st memStamp, ok bool, err error) {
 		return memStamp{}, false, nil
 	}
 	return st, true, json.Unmarshal(b, &st)
+}
+
+// setStamp writes the store's stamp alone.
+func (r *memRealm) setStamp(st memStamp) error {
+	b, err := json.Marshal(st)
+	if err != nil {
+		return err
+	}
+	r.kv.Set(nil, memStampKey, b)
+	return nil
 }
 
 // commit writes what call changed to the store, with the stamp the store

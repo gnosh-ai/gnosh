@@ -75,7 +75,7 @@ func (l *Lazy) MemRecall(ctx context.Context, project, session, prompt string) s
 	ctx, cancel := context.WithTimeout(ctx, memEmbedWait)
 	defer cancel()
 	dir := memDir(l.opts.Dir, project)
-	s, ok, err := l.snapshot(ctx, dir)
+	s, ok, err := keptMemSnapshot(ctx, dir)
 	if err != nil || !ok {
 		return ""
 	}

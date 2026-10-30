@@ -485,10 +485,9 @@ func TestMemRecallScale(t *testing.T) {
 	t.Logf("%d rows: reading them and their vectors %v, ranking against 5 queries %v (%d over the score)", len(s.rows), read, time.Since(start), len(near))
 
 	// Recall's own read, kept between prompts while mem has not changed.
-	var l Lazy
 	for _, what := range []string{"recall's first read", "recall's next read, mem unchanged"} {
 		start = time.Now()
-		s, ok, err := l.snapshot(context.Background(), dir)
+		s, ok, err := keptMemSnapshot(context.Background(), dir)
 		require.NoError(t, err)
 		require.True(t, ok)
 		read := time.Since(start)
