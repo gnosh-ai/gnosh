@@ -636,7 +636,8 @@ var gnomemRun = regexp.MustCompile(`^\| ([a-z0-9-]+) \| .+ \| (\d+) \| (?:all (\
 // checks, so a row whose scenario is gone, or has changed since its run,
 // fails here until the scenario is run again and the row rewritten. A
 // scenario with no row yet is only logged: the table says "each use case
-// below", and a new one gets its row once it has been run.
+// below", and a new one gets its row once it has been run. The line above
+// the table counts the rows and those that passed every check.
 func TestDocTableRowsAreScenarios(t *testing.T) {
 	files, err := filepath.Glob(filepath.Join(repoRoot, "internal", "gnovm", "testdata", "scenarios", "*.txtar"))
 	require.NoError(t, err)
@@ -653,6 +654,7 @@ func TestDocTableRowsAreScenarios(t *testing.T) {
 	_, table, ok := strings.Cut(string(text), "\n| Use case | What the user asks | Sessions | Checks passed |\n|---|---|---|---|\n")
 	require.True(t, ok, "GNOMEM.md has no table of real runs")
 	rows := map[string]bool{}
+	allPass := 0
 	for _, line := range strings.Split(table, "\n") {
 		if !strings.HasPrefix(line, "|") {
 			break
@@ -660,6 +662,9 @@ func TestDocTableRowsAreScenarios(t *testing.T) {
 		m := gnomemRun.FindStringSubmatch(line)
 		require.NotNil(t, m, "a row of GNOMEM's table is not | use case | what the user asks | sessions | all N, or K of N |: %s", line)
 		rows[m[1]] = true
+		if m[3] != "" {
+			allPass++
+		}
 		w, ok := want[m[1]]
 		if !assert.True(t, ok, "GNOMEM's table has a row for %s, which is no scenario in testdata/scenarios: drop the row, or name the scenario it ran", m[1]) {
 			continue
@@ -672,6 +677,9 @@ func TestDocTableRowsAreScenarios(t *testing.T) {
 			t.Logf("%s has no row in GNOMEM's table yet: run it and add one", name)
 		}
 	}
+	summary := fmt.Sprintf("Of the %d use cases, %d passed every check", len(rows), allPass)
+	assert.Contains(t, strings.Join(strings.Fields(string(text)), " "), summary,
+		"GNOMEM's line above the table should say %q, as its rows do", summary)
 }
 
 // TestDocUserWordVerdict: GNOMEM quotes the words gnosh itself puts before

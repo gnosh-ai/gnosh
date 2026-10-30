@@ -398,6 +398,9 @@ Gnosh's built-in prompt, and the user talks the way the second column says,
 never naming Gno or mem unless it says so. The checks are scripted: files,
 test results, the final answer, and what mem holds at the end.
 
+Of the 38 use cases, 36 passed every check; the notes under the table say
+what the other 2 did.
+
 | Use case | What the user asks | Sessions | Checks passed |
 |---|---|---|---|
 | readme-goal | the README's goal: plan it as steps, do the first now, "we'll carry on in another session" | 2 | all 3 |
