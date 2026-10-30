@@ -281,6 +281,7 @@ func (s *Shell) execCommon(ctx context.Context, command string, stdout, stderr i
 	}
 
 	err = runner.Run(ctx, line)
+	noteLookups(stderr, line, runner)
 	return err
 }
 

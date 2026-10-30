@@ -90,7 +90,9 @@ func Run(ctx context.Context, opts RunOptions) (err error) {
 		return fmt.Errorf("could not run command: %w", err)
 	}
 
-	return runner.Run(ctx, line)
+	err = runner.Run(ctx, line)
+	noteLookups(stderr, line, runner)
+	return err
 }
 
 // CaptureResult holds the combined output and exit code from a
@@ -191,7 +193,6 @@ func newRunner(cwd string, env []string, stdin io.Reader, stdout, stderr io.Writ
 		interp.Interactive(false),
 		interp.Env(expand.ListEnviron(env...)),
 		interp.Dir(cwd),
-		interp.CallHandler(lookupHandler(stderr)),
 		execHandlerOption(blockFuncs),
 	)
 }
@@ -392,7 +393,7 @@ func missingCommandHandler() execMiddleware {
 			if len(args) == 0 || ExitCode(err) != 127 {
 				return err
 			}
-			if hc := interp.HandlerCtx(ctx); notInstalled(hc, args[0]) {
+			if hc := interp.HandlerCtx(ctx); notInstalled(hc.Dir, hc.Env, args[0]) {
 				fmt.Fprintln(hc.Stderr, MissingCommandNote(args[0]))
 			}
 			return err
@@ -400,27 +401,104 @@ func missingCommandHandler() execMiddleware {
 	}
 }
 
-// lookupHandler returns a call handler that gives the same note to a
-// lookup of a program that is not installed: `command -v`, `type` and
-// `which` say nothing of it, or "not found", and an agent whose empty
-// `command -v` sat in a longer command searched the disk next (QA,
-// 2026-10-30). The note goes to stderr, the whole command's, since a
-// lookup's own output is most often thrown away (`>/dev/null 2>&1`).
-// Only the command's own lookups get it: a script it runs probes for
-// optional tools as it likes.
-func lookupHandler(stderr io.Writer) interp.CallHandlerFunc {
-	if stderr == nil {
-		stderr = io.Discard
+// noteLookups writes the same note for each program that file, once r
+// has run it, looked up by a name its text writes out and r did not
+// find: `command -v`, `type` and `which` say nothing of it, or "not
+// found", and an agent whose empty `command -v` sat in a longer command
+// searched the disk next (QA, 2026-10-30). Coming after the run, the
+// notes are not thrown away with a lookup's own output (`>/dev/null
+// 2>&1`), and a function the run defined, nvm's say, counts as found. A
+// file the command sources, a .bashrc say, probes for tools by names
+// the command does not write, and those get no note.
+func noteLookups(w io.Writer, file *syntax.File, r *interp.Runner) {
+	if w == nil {
+		return
 	}
-	return func(ctx context.Context, args []string) ([]string, error) {
-		hc := interp.HandlerCtx(ctx)
-		for _, name := range lookedUp(args) {
-			if notInstalled(hc, name) {
-				fmt.Fprintln(stderr, MissingCommandNote(name))
+	env := expand.FuncEnviron(func(name string) string { return r.Vars[name].String() })
+	noted := map[string]bool{}
+	for _, name := range lookups(file) {
+		if noted[name] || r.Funcs[name] != nil || !notInstalled(r.Dir, env, name) {
+			continue
+		}
+		noted[name] = true
+		fmt.Fprintln(w, MissingCommandNote(name))
+	}
+}
+
+// lookups returns the names file's lookups write out: a word as written,
+// or for a loop's variable alone (`for t in go gofumpt; do command -v
+// "$t"`), the loop's words. A lookup with assignments of its own
+// (`PATH=… command -v x`) looks where the run does not, and is left out.
+func lookups(file *syntax.File) []string {
+	loops := map[string][]*syntax.Word{}
+	var names []string
+	syntax.Walk(file, func(node syntax.Node) bool {
+		switch n := node.(type) {
+		case *syntax.ForClause:
+			if it, ok := n.Loop.(*syntax.WordIter); ok {
+				loops[it.Name.Value] = it.Items
+			}
+		case *syntax.CallExpr:
+			var args []string
+			for _, w := range n.Args {
+				if items, ok := loops[loopVar(w)]; ok {
+					for _, item := range items {
+						args = append(args, wordText(item))
+					}
+				} else {
+					args = append(args, wordText(w))
+				}
+			}
+			if len(args) > 0 && len(n.Assigns) == 0 {
+				names = append(names, lookedUp(args)...)
 			}
 		}
-		return args, nil
+		return true
+	})
+	return names
+}
+
+// wordText returns w as written when nothing in it expands, else "".
+func wordText(w *syntax.Word) string {
+	var b strings.Builder
+	for _, part := range w.Parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+			if strings.ContainsAny(p.Value, "*?[{") {
+				return "" // a glob or braces
+			}
+			b.WriteString(p.Value)
+		case *syntax.SglQuoted:
+			b.WriteString(p.Value)
+		case *syntax.DblQuoted:
+			for _, q := range p.Parts {
+				lit, ok := q.(*syntax.Lit)
+				if !ok {
+					return ""
+				}
+				b.WriteString(lit.Value)
+			}
+		default:
+			return ""
+		}
 	}
+	return b.String()
+}
+
+// loopVar returns t when w is $t or "$t", else "".
+func loopVar(w *syntax.Word) string {
+	parts := w.Parts
+	if len(parts) == 1 {
+		if dq, ok := parts[0].(*syntax.DblQuoted); ok {
+			parts = dq.Parts
+		}
+	}
+	if len(parts) == 1 {
+		if pe, ok := parts[0].(*syntax.ParamExp); ok && pe.Short {
+			return pe.Param.Value
+		}
+	}
+	return ""
 }
 
 // lookedUp returns the names args look up, when they are a lookup:
@@ -440,16 +518,16 @@ func lookedUp(args []string) []string {
 	return names
 }
 
-// notInstalled reports whether nothing answers to name in hc's shell: no
-// keyword, no builtin of the shell's or Gnosh's own, and no program on
-// the PATH. A path, and a Gnosh tool's name, have notes of their own or
-// none; a function the command defined is not seen.
-func notInstalled(hc interp.HandlerContext, name string) bool {
+// notInstalled reports whether nothing answers to name in a shell in dir
+// with env: no keyword, no builtin of the shell's or Gnosh's own, and no
+// program on the PATH. A path, and a Gnosh tool's name, have notes of
+// their own or none.
+func notInstalled(dir string, env expand.Environ, name string) bool {
 	if name == "" || strings.Contains(name, "/") || tooldefs.IsKnown(name) ||
 		syntax.IsKeyword(name) || interp.IsBuiltin(name) || IsBuiltin(name) {
 		return false
 	}
-	_, err := interp.LookPathDir(hc.Dir, hc.Env, name)
+	_, err := interp.LookPathDir(dir, env, name)
 	return err != nil
 }
 

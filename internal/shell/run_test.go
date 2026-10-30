@@ -308,16 +308,23 @@ func TestRun_ToolNameAsCommand(t *testing.T) {
 }
 
 // A lookup of a program that is not installed gets the missing command's
-// note, inside a longer command and with its output thrown away too: an
-// agent whose empty `command -v acme-lint` sat after `&&` got no note and
-// searched the disk (QA, 2026-10-30). A lookup that finds a program, a
-// builtin or Gnosh's jq gets none, and so does a command that only runs.
+// note, inside a longer command, in a loop and with its output thrown
+// away too: an agent whose empty `command -v acme-lint` sat after `&&`
+// got no note and searched the disk (QA, 2026-10-30). A lookup that
+// finds a program, a builtin, Gnosh's jq or a function gets none, nor
+// does a command that only runs, nor a sourced file's probes (QA's rc
+// file, like a .bashrc or nvm.sh).
 func TestRun_LookupOfAMissingProgram(t *testing.T) {
+	dir := t.TempDir()
+	rc := "if command -v no_such_pyenv >/dev/null 2>&1; then echo pyenv; fi\nnvm() { :; }\n"
+	if err := os.WriteFile(filepath.Join(dir, "rc.sh"), []byte(rc), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	run := func(command string) (stderr string) {
 		var out, errOut bytes.Buffer
 		_ = Run(t.Context(), RunOptions{
 			Command: command,
-			Cwd:     t.TempDir(),
+			Cwd:     dir,
 			Env:     os.Environ(),
 			Stdout:  &out,
 			Stderr:  &errOut,
@@ -331,6 +338,8 @@ func TestRun_LookupOfAMissingProgram(t *testing.T) {
 		"true && command -v no_such_lint >/dev/null 2>&1 || echo missing",
 		`p=$(which no_such_lint); echo "[$p]"`,
 		"type -p no_such_lint | cat",
+		`for t in sh no_such_lint; do command -v "$t" >/dev/null || echo "no $t"; done`,
+		"command -v no_such_lint; command -v no_such_lint",
 	} {
 		if stderr := run(command); strings.Count(stderr, note) != 1 {
 			t.Errorf("%s: stderr %q, want the note once", command, stderr)
@@ -342,6 +351,8 @@ func TestRun_LookupOfAMissingProgram(t *testing.T) {
 		"command -v jq",
 		"command -v ./no_such_lint",
 		"command true no_such_lint",
+		". ./rc.sh && command -v nvm",
+		"f() { :; }; command -v f",
 	} {
 		if stderr := run(command); strings.Contains(stderr, "is not installed here") {
 			t.Errorf("%s: stderr %q, want no note", command, stderr)
