@@ -367,10 +367,11 @@ mem and out of its history, and `/mem forget` erases a goal, a step, a fact
 or a rule with its history; both write mem's journal again without it, and
 neither can be undone. `/mem show` shows one item in full.
 
-From a terminal, with no session and no model, `gnosh mem` prints the same
-outline, and `gnosh mem show`, `gnosh mem find` and `gnosh mem log` the rest,
-for the project in the directory it runs in. It only reads: changes to mem
-are `/mem`'s, in a session.
+From a terminal, with no session and without calling a model, so even with
+the model server down, `gnosh mem` prints the same outline, and `gnosh mem
+show`, `gnosh mem find` and `gnosh mem log` the rest, for the project in the
+directory it runs in. It only reads: `undo`, `forget`, `redact` and `repair`
+are refused there, since changes to mem are `/mem`'s, in a session.
 
 The notice sits in the TUI's status bar as gnosh starts, and comes again with
 the first prompt of each new session you open in it and with the first
