@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -408,6 +409,7 @@ func (h *memHost) open() (r *memRealm, j *journal, notes []string, err error) {
 	if ok {
 		j.seq, j.size, j.lastHash = st.Seq, st.End, st.Hash
 	}
+	fresh := !ok
 	n, err := h.catchUp(r, j)
 	switch {
 	case n == 0 || len(notes) > 0:
@@ -420,8 +422,48 @@ func (h *memHost) open() (r *memRealm, j *journal, notes []string, err error) {
 		r.close()
 		return nil, nil, notes, err
 	}
+	if fresh && n > 0 {
+		if differs := h.checkRebuild(r, j); differs != "" {
+			notes = append(notes, differs)
+		}
+	}
 	h.removeOtherGenerations(hdr.Generation)
 	return r, j, notes, nil
+}
+
+// checkRebuild checks a store just built afresh from the whole journal
+// (MEMPLAN §5): mem's own Check, and its counts against what mem showed
+// before, status.json, when that was written at the same entry. The
+// journal is the source, so the store stands; what differs is said, and
+// "" when nothing does.
+func (h *memHost) checkRebuild(r *memRealm, j *journal) string {
+	var differs []string
+	if call, err := r.call(`print(mem.Check())`, memContext{caller: "klash"}); err != nil || call.Output != "" {
+		differs = append(differs, "its check found "+strconv.Quote(strings.TrimSpace(call.Output+fmt.Sprint(err))))
+	}
+	if st, ok := readMemStatus(h.dir); ok && st.Generation == j.generation && st.Seq == j.seq {
+		var before, after struct {
+			Counts map[string]int `json:"counts"`
+		}
+		call, err := r.call(`print(mem.JSON())`, memContext{caller: "klash"})
+		if err == nil && json.Unmarshal(st.Mem, &before) == nil && json.Unmarshal([]byte(call.Output), &after) == nil {
+			var names []string
+			for k := range before.Counts {
+				names = append(names, k)
+			}
+			sort.Strings(names)
+			for _, k := range names {
+				if was, now := before.Counts[k], after.Counts[k]; was != now {
+					differs = append(differs, fmt.Sprintf("%s %d, where mem showed %d", k, now, was))
+				}
+			}
+		}
+	}
+	if len(differs) == 0 {
+		return ""
+	}
+	slog.Warn("mem's store, built afresh from its journal, differs from what mem showed before", "differs", differs)
+	return "mem's store was built afresh from its journal, the source, and differs from what mem showed before: " + strings.Join(differs, "; ")
 }
 
 func (h *memHost) openStore(dir string) (*memRealm, error) {

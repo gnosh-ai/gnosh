@@ -222,6 +222,37 @@ func TestMemHostCutsATornTail(t *testing.T) {
 	require.Len(t, entries, 2)
 }
 
+// A store built afresh from the journal is checked against what mem
+// showed before (MEMPLAN §5): nothing is said when they agree, and what
+// differs is, when they do not.
+func TestMemHostChecksARebuild(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	memOK(t, h, `mem.Goal("release v2").Steps("bump", "tag")`)
+	memOK(t, h, `mem.Done("release-v2/1", "bumped")`)
+	memOK(t, h, `mem.Fact("cmd/test", "go test ./...")`)
+	rebuild := func() []string {
+		t.Helper()
+		stores, err := filepath.Glob(filepath.Join(dir, "store-*"))
+		require.NoError(t, err)
+		for _, s := range stores {
+			require.NoError(t, os.RemoveAll(s))
+		}
+		return memOK(t, h, `print(mem.Show())`).Notes
+	}
+	require.Equal(t, []string{"mem's store caught up with 3 journal entries"}, rebuild())
+
+	// What mem showed before said one more fact than the journal holds.
+	b, err := os.ReadFile(filepath.Join(dir, memStatusFile))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, memStatusFile), bytes.Replace(b, []byte(`"facts":1`), []byte(`"facts":2`), 1), 0o600))
+	require.Equal(t, []string{
+		"mem's store caught up with 3 journal entries",
+		"mem's store was built afresh from its journal, the source, and differs from what mem showed before: facts 1, where mem showed 2",
+	}, rebuild())
+}
+
 // mem.Find searches the index, which follows every change: titles, notes,
 // facts; a forgotten item leaves it. Deleted, it is built again from the
 // journal.
