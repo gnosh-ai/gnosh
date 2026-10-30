@@ -39,8 +39,9 @@ import (
 //
 // It is skipped unless GNOVM_SCENARIO_GNOSH names the gnosh to run. Every
 // run gets its own config and data directories (copied from
-// GNOVM_SCENARIO_HOME, default $HOME: the crushrc and the files that keep
-// first-run questions away), so it never touches the user's settings.
+// GNOVM_SCENARIO_HOME, default $HOME: the crushrc, crush.json and the files
+// that keep first-run questions away), so it never touches the user's
+// settings.
 //
 //	GNOVM_SCENARIO_GNOSH     the gnosh to run (required)
 //	GNOVM_SCENARIO_HOME      whose config to copy (default $HOME)
@@ -171,7 +172,7 @@ func TestScenarioFilesParse(t *testing.T) {
 			}
 		}
 		if sc.mem != "" {
-			if err := seedMem(t.TempDir(), "/proj", sc.mem); err != nil {
+			if err := seedMem(t.TempDir(), "/proj", sc.mem, ""); err != nil {
 				t.Errorf("%s: %v", file, err)
 			}
 		}
@@ -196,7 +197,7 @@ mem-count facts == 1
 	sc, err := parseScenario(file)
 	require.NoError(t, err)
 	dir := t.TempDir()
-	require.NoError(t, seedMem(dir, "/proj", sc.mem))
+	require.NoError(t, seedMem(dir, "/proj", sc.mem, ""))
 	n, err := memCount(dir, "/proj", "facts")
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
@@ -207,7 +208,43 @@ mem-count facts == 1
 	require.NoError(t, err)
 	require.Len(t, entries, 1, "one call, one entry")
 	require.Equal(t, "user", entries[0].Who, "kept as the user's")
-	require.Error(t, seedMem(dir, "/proj", `mem.Fact("BAD NAME", "x")`), "a section that fails stops the run")
+	require.Error(t, seedMem(dir, "/proj", `mem.Fact("BAD NAME", "x")`, ""), "a section that fails stops the run")
+
+	// With an embedding server, the seeded rows have their vectors before
+	// the first turn.
+	f := newFakeEmbedder(t)
+	dir = t.TempDir()
+	require.NoError(t, seedMem(dir, "/proj", sc.mem, f.URL+"/v1"))
+	s, ok, err := readMemSnapshot(context.Background(), memDir(dir, "/proj"))
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.NotEmpty(t, s.vecs)
+	require.False(t, s.lacksVectors())
+}
+
+// TestScenarioEmbeddingsURL checks that the harness finds the embedding
+// server a run's gnosh is given wherever the copied config sets it.
+func TestScenarioEmbeddingsURL(t *testing.T) {
+	t.Parallel()
+	write := func(path, body string) {
+		t.Helper()
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+	}
+	for name, files := range map[string]map[string]string{
+		"config crush.json": {"config/crush/crush.json": `{"options": {"mem_embeddings_url": "http://127.0.0.1:8091/v1"}}`},
+		"data crush.json":   {"data/crush/crush.json": `{"options": {"mem_embeddings_url": "http://127.0.0.1:8091/v1"}}`},
+		"crushrc":           {"config/crush/crushrc": "option reasoning nothink\noption mem-embeddings-url 'http://127.0.0.1:8091/v1'\n"},
+	} {
+		dir := t.TempDir()
+		for path, body := range files {
+			write(filepath.Join(dir, path), body)
+		}
+		require.Equal(t, "http://127.0.0.1:8091/v1", memEmbeddingsURL(filepath.Join(dir, "config"), filepath.Join(dir, "data")), name)
+	}
+	dir := t.TempDir()
+	write(filepath.Join(dir, "config/crush/crush.json"), `{"models": {"large": {"provider": "qwen"}}}`)
+	require.Empty(t, memEmbeddingsURL(filepath.Join(dir, "config"), filepath.Join(dir, "data")), "none set")
 }
 
 var sectionRe = regexp.MustCompile(`(?m)^-- (.+?) --$`)
@@ -294,7 +331,9 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning str
 			t.Fatal(err)
 		}
 	}
-	copyIfThere(t, filepath.Join(home, ".config", "crush", "crushrc"), filepath.Join(cfg, "crush", "crushrc"))
+	for _, f := range []string{"crushrc", "crush.json"} {
+		copyIfThere(t, filepath.Join(home, ".config", "crush", f), filepath.Join(cfg, "crush", f))
+	}
 	for _, f := range []string{"providers.json", "metrics-consent.json", "crush.json"} {
 		copyIfThere(t, filepath.Join(home, ".local", "share", "crush", f), filepath.Join(data, "crush", f))
 	}
@@ -311,7 +350,7 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning str
 		}
 	}
 	if sc.mem != "" {
-		if err := seedMem(filepath.Join(data, "crush", "gnovm"), project, sc.mem); err != nil {
+		if err := seedMem(filepath.Join(data, "crush", "gnovm"), project, sc.mem, memEmbeddingsURL(cfg, data)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -543,8 +582,10 @@ func dumpPersistentVMs(t *testing.T, gnovmDir, project string) map[string]string
 
 // seedMem runs a scenario's mem section in project's mem as the user, typed
 // in no session: what mem held before the scenario's first turn, a secret
-// the user means to have erased, say.
-func seedMem(gnovmDir, project, code string) error {
+// the user means to have erased, say. With an embedding server, the rows
+// get their vectors now: gnosh makes them in the background as a session
+// starts, and a first prompt's recall does not wait for them.
+func seedMem(gnovmDir, project, code, embeddings string) error {
 	h, err := NewHost(Options{Dir: gnovmDir, Client: NewClientID()})
 	if err != nil {
 		return err
@@ -556,7 +597,36 @@ func seedMem(gnovmDir, project, code string) error {
 	if _, err := h.mem(project).call(context.Background(), memRequest{Code: code, User: true}); err != nil {
 		return fmt.Errorf("the mem section: %w", err)
 	}
+	if embeddings == "" {
+		return nil
+	}
+	if err := fillMemVectorsNow(context.Background(), memDir(gnovmDir, project), newMemEmbedder(embeddings)); err != nil {
+		return fmt.Errorf("the mem section's vectors: %w", err)
+	}
 	return nil
+}
+
+var memEmbeddingsOptionRe = regexp.MustCompile(`(?m)^\s*option\s+mem-embeddings-url\s+["']?([^"'\s]+)`)
+
+// memEmbeddingsURL is the embedding server a run's gnosh is given, if any:
+// mem_embeddings_url in either of its crush.json files, or its crushrc's
+// option line.
+func memEmbeddingsURL(cfg, data string) string {
+	for _, path := range []string{filepath.Join(data, "crush", "crush.json"), filepath.Join(cfg, "crush", "crush.json")} {
+		var c struct {
+			Options struct {
+				MemEmbeddingsURL string `json:"mem_embeddings_url"`
+			} `json:"options"`
+		}
+		if b, err := os.ReadFile(path); err == nil && json.Unmarshal(b, &c) == nil && c.Options.MemEmbeddingsURL != "" {
+			return c.Options.MemEmbeddingsURL
+		}
+	}
+	b, _ := os.ReadFile(filepath.Join(cfg, "crush", "crushrc"))
+	if m := memEmbeddingsOptionRe.FindSubmatch(b); m != nil {
+		return string(m[1])
+	}
+	return ""
 }
 
 // evalInVM rebuilds a run's VM from its journal and returns an expression's
