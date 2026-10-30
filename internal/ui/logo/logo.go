@@ -28,6 +28,7 @@ type Opts struct {
 	FieldColorB  color.Color // when set, the diagonal lines fade from FieldColor to it
 	TitleColorA  color.Color // left gradient ramp point
 	TitleColorB  color.Color // right gradient ramp point
+	GnoColor     color.Color // when set, G, N and O are this one color, and the gradient runs over the rest
 	CharmColor   color.Color // maker's mark color
 	VersionColor color.Color // version text color
 	Width        int         // width of the rendered logo, used for truncation
@@ -80,9 +81,13 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 		title = renderWord(spacing, stretchIndex, hyperLetterforms...) + "\n" + title
 	}
 	titleWidth := lipgloss.Width(title)
+	gnoWidth := 0
+	if o.GnoColor != nil && !o.Hyper {
+		gnoWidth = lipgloss.Width(renderWord(spacing, stretchIndex, LetterG, LetterN, LetterO))
+	}
 	b := new(strings.Builder)
 	for r := range strings.SplitSeq(title, "\n") {
-		fmt.Fprintln(b, styles.ApplyForegroundGrad(base, r, o.TitleColorA, o.TitleColorB))
+		fmt.Fprintln(b, titleRow(base, r, gnoWidth, o))
 	}
 	title = b.String()
 
@@ -147,6 +152,16 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 	return logo
 }
 
+// titleRow colors one row of the title: its first gnoWidth cells, the
+// letters G, N and O, in o.GnoColor, and the rest in the gradient.
+func titleRow(base lipgloss.Style, row string, gnoWidth int, o Opts) string {
+	if gnoWidth == 0 {
+		return styles.ApplyForegroundGrad(base, row, o.TitleColorA, o.TitleColorB)
+	}
+	gno, rest := ansi.Cut(row, 0, gnoWidth), ansi.Cut(row, gnoWidth, lipgloss.Width(row))
+	return base.Foreground(o.GnoColor).Render(gno) + styles.ApplyForegroundGrad(base, rest, o.TitleColorA, o.TitleColorB)
+}
+
 // field draws one row of diagonal lines, width cells long. With
 // o.FieldColorB set the row fades from o.FieldColor to it, or the other way
 // when reverse is set.
@@ -170,6 +185,9 @@ func SmallRender(t *styles.Styles, width int, o Opts) string {
 		name = "HYPERCRUSH"
 	}
 	title := styles.ApplyBoldForegroundGrad(t.Logo.GradCanvas, name, t.Logo.SmallGradFromColor, t.Logo.SmallGradToColor)
+	if t.Logo.GnoColor != nil && !o.Hyper {
+		title = styles.ApplyBoldWordmark(t.Logo.GradCanvas, name, t.Logo.GnoColor, t.Logo.TitleColorA, t.Logo.TitleColorB)
+	}
 	remainingWidth := width - lipgloss.Width(title) - 1 // 1 for the space after the name
 	if remainingWidth > 0 {
 		lines := strings.Repeat("╱", remainingWidth)

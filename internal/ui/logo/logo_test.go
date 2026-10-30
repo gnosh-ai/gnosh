@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -34,4 +35,38 @@ func TestWordUnstretchedAndMarkUnder(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestTitleRowGnoIsOneColor(t *testing.T) {
+	green := color.RGBA{R: 0x00, G: 0xff, B: 0xb2, A: 0xff}
+	purple := color.RGBA{R: 0x6b, G: 0x50, B: 0xff, A: 0xff}
+	pink := color.RGBA{R: 0xff, G: 0x60, B: 0xff, A: 0xff}
+	o := Opts{GnoColor: green, TitleColorA: purple, TitleColorB: pink}
+	row := strings.Split(renderWord(1, -1, LetterG, LetterN, LetterO, LetterSAlt, LetterH), "\n")[0]
+	gnoWidth := lipgloss.Width(renderWord(1, -1, LetterG, LetterN, LetterO))
+
+	scr := uv.NewScreenBuffer(lipgloss.Width(row), 1)
+	uv.NewStyledString(titleRow(lipgloss.NewStyle(), row, gnoWidth, o)).Draw(scr, scr.Bounds())
+	for x := range lipgloss.Width(row) {
+		cell := scr.CellAt(x, 0)
+		if cell == nil || strings.TrimSpace(cell.Content) == "" {
+			continue
+		}
+		isGreen := colorEqual(cell.Style.Fg, green)
+		if x < gnoWidth && !isGreen {
+			t.Errorf("cell %d, in G, N and O, is %v, want the one green", x, cell.Style.Fg)
+		}
+		if x >= gnoWidth && isGreen {
+			t.Errorf("cell %d, in S and H, is the green of Gno", x)
+		}
+	}
+}
+
+func colorEqual(a, b color.Color) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	ar, ag, ab, _ := a.RGBA()
+	br, bg, bb, _ := b.RGBA()
+	return ar == br && ag == bg && ab == bb
 }

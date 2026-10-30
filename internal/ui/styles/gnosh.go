@@ -56,6 +56,13 @@ func gnoshOverrides(s Styles) Styles {
 	s.Dialog.TitleGradFromColor, s.Dialog.TitleGradToColor = from, to
 	s.WorkingGradFromColor, s.WorkingGradToColor = from, to
 
+	// In the wordmarks, Gno is green, one color, and the rest of the name
+	// fades from Crush's purple to hot pink. A fade over the whole name
+	// bands into stripes in Apple's Terminal, which has 256 colors. Jae,
+	// 2026-10-30: "at least make 'gno' one color, green i suppose".
+	s.Logo.GnoColor = GnoshGreen
+	s.Logo.TitleColorA, s.Logo.TitleColorB = GnoshPurple, GnoshPink
+
 	// The logo's fields fade from purple to hot pink instead of lying flat.
 	s.Logo.FieldColorB = GnoshPink
 

@@ -233,6 +233,10 @@ type Styles struct {
 		GradCanvas         lipgloss.Style // Blank canvas for gradient painting
 		SmallGradFromColor color.Color    // Small "Crush" wordmark gradient start
 		SmallGradToColor   color.Color    // Small "Crush" wordmark gradient end
+		// GnoColor, when set, is the one color of Gno, the name's first three
+		// letters, in every wordmark; the rest of the name fades from
+		// TitleColorA to TitleColorB.
+		GnoColor color.Color
 	}
 
 	// Working indicator gradient (spinners/shimmers on assistant "thinking",

@@ -58,6 +58,7 @@ func logoSection(contentWidth int) string {
 		FieldColorB:  t.Logo.FieldColorB,
 		TitleColorA:  t.Logo.TitleColorA,
 		TitleColorB:  t.Logo.TitleColorB,
+		GnoColor:     t.Logo.GnoColor,
 		CharmColor:   t.Logo.CharmColor,
 		VersionColor: t.Logo.VersionColor,
 		Hyper:        false,

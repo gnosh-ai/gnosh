@@ -56,6 +56,16 @@ func ApplyForegroundGrad(base lipgloss.Style, input string, color1, color2 color
 	return o.String()
 }
 
+// ApplyBoldWordmark renders the name in bold: with gno set, its first three
+// letters, Gno, in that one color and the rest in a fade from color1 to
+// color2; with gno nil, all of it in the fade.
+func ApplyBoldWordmark(base lipgloss.Style, name string, gno, color1, color2 color.Color) string {
+	if gno == nil || len(name) <= 3 {
+		return ApplyBoldForegroundGrad(base, name, color1, color2)
+	}
+	return base.Bold(true).Foreground(gno).Render(name[:3]) + ApplyBoldForegroundGrad(base, name[3:], color1, color2)
+}
+
 // ApplyBoldForegroundGrad renders a given string with a horizontal gradient
 // foreground.
 func ApplyBoldForegroundGrad(base lipgloss.Style, input string, color1, color2 color.Color) string {

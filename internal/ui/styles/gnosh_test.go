@@ -49,7 +49,6 @@ func TestGnoshCosmos_FadesRunThroughTheNebula(t *testing.T) {
 	want := []string{*hex(GnoshGreen), *hex(GnoshPurple), *hex(GnoshPink), *hex(GnoshGold)}
 	s := GnoshCosmos()
 	for name, ends := range map[string][2]color.Color{
-		"wordmark":       {s.Logo.TitleColorA, s.Logo.TitleColorB},
 		"small wordmark": {s.Logo.SmallGradFromColor, s.Logo.SmallGradToColor},
 		"header":         {s.Header.LogoGradFromColor, s.Header.LogoGradToColor},
 		"dialog title":   {s.Dialog.TitleGradFromColor, s.Dialog.TitleGradToColor},
@@ -63,6 +62,23 @@ func TestGnoshCosmos_FadesRunThroughTheNebula(t *testing.T) {
 		if fmt.Sprint(got) != fmt.Sprint(want) {
 			t.Errorf("the %s fades through %v, want %v", name, got, want)
 		}
+	}
+}
+
+func TestGnoshCosmos_WordmarkGnoIsGreen(t *testing.T) {
+	// Gno, the first three letters of every wordmark, is one green; the rest
+	// of the name fades from Crush's purple to hot pink.
+	s := GnoshCosmos()
+	if got, want := *hex(s.Logo.GnoColor), *hex(GnoshGreen); got != want {
+		t.Errorf("Gno is %s, want %s", got, want)
+	}
+	stops := fade.Stops(s.Logo.TitleColorA, s.Logo.TitleColorB)
+	got := make([]string, len(stops))
+	for i, c := range stops {
+		got[i] = *hex(c)
+	}
+	if want := []string{*hex(GnoshPurple), *hex(GnoshPink)}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("the rest of the wordmark fades through %v, want %v", got, want)
 	}
 }
 
