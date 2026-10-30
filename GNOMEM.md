@@ -135,16 +135,42 @@ it would. Ask what is open, or say good morning, and it is there.
 ## See it work
 
 These are real runs of Klash with the open-weight Qwen3.8-27B on a local
-llama.cpp server. Each runs in a fresh project and a fresh config, with only
-Klash's built-in prompt. The checks are scripted: files, test results, the
-final answer, and what the machines hold at the end.
+llama.cpp server, from every build of 30 October 2026 that had mem (from
+01:08 UTC on). Each runs in a fresh project and a fresh config, with only
+Klash's built-in prompt, and the user talks the way the second column says,
+never naming Gno or mem unless it says so. The checks are scripted: files,
+test results, the final answer, and what mem holds at the end.
 
-| Use case | What the model had to do | Machine | Kept on disk | Sessions | Time | Checks |
-|---|---|---|---|---|---|---|
-| checklist-calc | implement 4 functions one at a time, keeping track | `tasks` | yes | 1 | 4m30s | 4/4 |
-| resume-checklist | plan 4 jobs, do 2, then finish in a new session from the checklist alone | `tasks` | yes, read back | 2 | 4m12s + 1m09s | 8/8 |
-| memory-across-sessions | remember two facts; a new session is asked for them | `memory` | yes, read back | 2 | 39s + 22s | 4/4 |
-| compute-primes | the exact sum of the first 1000 primes | scratch | no | 1 | 52s | 2/2 |
+| Use case | What the user asks | Sessions | Passed every check |
+|---|---|---|---|
+| readme-goal | the README's goal: plan it as steps, do the first now, "we'll carry on in another session" | 2 | 3 of 3 |
+| long-goal-sessions | a four-step plan kept in Gno, one step per session | 4 | 3 of 3 |
+| resume-checklist | a checklist of four jobs, two now, "we will continue later, in another session" | 2 | 3 of 3 |
+| goal-until-green | make `go test ./...` pass, keeping the goal and its condition in Gno | 1 | 3 of 3 |
+| goal-replan | a goal to keep whose first approach fails: note why, re-plan | 1 | 2 of 2 |
+| research-carries-over | which file declares the most functions, kept in Gno for a later session | 2 | 3 of 3 |
+| memory-across-sessions | two facts to remember for a future session, asked for there | 2 | 3 of 3 |
+| memory-update | two facts; one changes in a second session; a third asks | 3 | 2 of 3 |
+| recall-paraphrased | facts kept in one session, asked for in other words in the next | 2 | 3 of 3 |
+| remind-next-time | "remind me next time we talk to …", then a morning check-in | 2 | 5 of 6 |
+| compute-primes | the exact sum of the first 1000 primes | 1 | 3 of 3 |
+| checklist-calc | four functions in one sitting, "keep track of which ones are done" | 1 | 2 of 8 |
+| todo-list-next-day | a todo list made in one session, asked for in the next | 2 | 2 of 2 |
+
+- **memory-update** failed once in a way its check then missed: a session
+  stored the moved database under a second name beside the old one. That
+  run is why a new session is now told the names of the facts mem holds,
+  and why the check now counts them.
+- **remind-next-time**: one of its six runs failed by keeping the reminder
+  in a MEMORY.md file of its own instead of mem (the reminder still came
+  back). Another is counted as the pass it was, though its check, which
+  looks for "rotate", missed an answer that said the key "needs rotating".
+- **checklist-calc** shows the other list: a task meant for one sitting
+  mostly goes to the session's own To-Do list, which is gone in the next
+  session. Its two passes both came with the recipe's per-task look at mem,
+  as did both runs of **todo-list-next-day**, whose list was in mem the next
+  day. A todo list is not always so lucky; see the README's
+  [two lists](README.md#goals-that-outlive-the-session).
 
 Before the built-in prompt, the model never kept a checklist in a machine,
 and it put memory in a MEMORY.md file. The use cases are txtar files in

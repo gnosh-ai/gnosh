@@ -90,10 +90,11 @@ Work that is meant to outlast the session is where mem earns its keep. Klash
 has a second list, the session's own To-Do list, which ends with the session,
 and the agent picks between the two by what you say. In real runs it put every
 goal and every checklist in mem when the user said the work would carry on
-later. Ask for a "todo list", though, and the To-Do list is what you get, even
-when you say the work will take days, and a task it expects to finish in one
-sitting is usually tracked there too. So for anything that should outlast the
-session, ask for a plan or a checklist, and say you will carry on later.
+later. A "todo list" can go either way: in two runs the list was in mem the
+next day, and in another, asked for "over the next few days", it went to the
+To-Do list and was gone. A task it expects to finish in one sitting usually
+goes to the To-Do list too. So for anything that should outlast the session,
+ask for a plan or a checklist, and say you will carry on later.
 
 ### Facts, kept current
 
