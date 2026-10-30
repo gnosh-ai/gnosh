@@ -1,0 +1,19 @@
+Two pieces of work planned at once, one done now: the user plans a README
+section and a port change, and asks for the port change first. A later
+session asked what is left names the README section, and not the port.
+
+-- project/README.md --
+# Acme
+
+Run it with `make run`.
+-- project/config.yaml --
+port: 8080
+-- prompt --
+Plan two things as separate goals: add an "Install" section to README.md, and change the port in config.yaml to 9090. Do the port change now; the README can wait.
+-- prompt-new --
+What's left from what we planned?
+-- check --
+file config.yaml contains 9090
+cmd ! grep -qi install README.md
+answer last matches (?i)install
+answer last matches (?i)readme
