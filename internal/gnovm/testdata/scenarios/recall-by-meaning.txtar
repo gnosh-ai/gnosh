@@ -1,12 +1,15 @@
 Facts asked about in words they do not share: the question has no word in
-common with the two facts it needs, which are older than the 30 the session is
-shown at its start, so only meaning connects them. Run it with and without
-mem_embeddings_url to see what recall by meaning adds. The first session is a
-throwaway, so the seeded facts' vectors are filled before the question.
+common with the two facts it needs, and the <mem> block a session starts with
+leaves both out. The block lists the newest 10 facts; seeded facts are all as
+new as each other, and these two were written first and their names sort low,
+so they stay out however a tie is broken. Only meaning, or a good guess at
+other words, connects them. Run it with and without mem_embeddings_url to see
+what recall by meaning adds: with a server, the seeded facts have their
+vectors before the first turn.
 
 -- mem --
 mem.Fact("people/sam", "Sam Okafor carries the pager this week")
-mem.Fact("storage/snapshots", "snapshots are taken nightly at 02:00 UTC and kept 35 days")
+mem.Fact("ops/snapshots", "snapshots are taken nightly at 02:00 UTC and kept 35 days")
 mem.Fact("infra/vpn", "the VPN gateway is vpn2.internal")
 mem.Fact("infra/grafana", "Grafana is at grafana.internal:3000")
 mem.Fact("ci/cache", "the build cache bucket is s3://ci-cache-7")
@@ -37,9 +40,10 @@ mem.Fact("design/colours", "the brand colours are in the design repo")
 mem.Fact("infra/dns", "DNS is managed in Route 53")
 mem.Fact("team/standup", "standup is at 9:30 every weekday")
 mem.Fact("infra/cdn", "the CDN is CloudFront distribution E2X9")
+mem.Fact("travel/policy", "travel is booked through Navan")
+mem.Fact("vendor/payroll", "payroll runs through Gusto")
+mem.Fact("wiki/home", "the team wiki lives at wiki.acme.test")
 -- prompt --
-Good morning! Nothing to do yet, just checking in.
--- prompt-new --
 Who should I wake up at 3 a.m. if the site goes down, and how long do we hold on to old copies of the database?
 -- check --
 answer last contains Sam
