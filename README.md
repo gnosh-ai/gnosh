@@ -11,7 +11,7 @@
 </p>
 
 <p align="center"><strong>A coding agent that remembers, in Gno.</strong><br>
-Gnosh runs the GnoVM, gno.land's interpreter, inside itself. The agent keeps its goals, what it found and the facts you gave it in a Gno machine on your disk, and a new session is told what is still open, so it can pick up where the last one stopped.</p>
+Gnosh runs the GnoVM, gno.land's interpreter, inside itself. The agent keeps its goals, what it found and the facts you gave it in <code>mem</code>, kept in Gno on your disk, and a new session starts with what is still open and the newest facts, so it picks up where the last one stopped.</p>
 
 <p align="center">Security-first underneath: a fork of Charm's <a href="https://github.com/charmbracelet/crush">Crush</a> that closes the doors a coding agent usually leaves open.</p>
 
@@ -38,8 +38,9 @@ the same terminal UI, sessions, LSP and MCP support, and any model you like,
 from a hosted API to one running on your own machine. On top of that:
 
 - **Remembers, in Gno.** The agent keeps its goals and their steps, what it
-  tried and found, and the facts you told it in `mem`, a persistent Gno
-  machine. A new session is told what is open and which facts it holds:
+  tried and found, and the facts you told it in `mem`, kept in Gno on your
+  disk. A new session starts with what is open and the newest facts, and a
+  reminder you asked for comes back beside whatever you start on:
   [memory that runs](#memory-that-runs).
 - **Runs Go in Go.** The GnoVM, gno.land's interpreter, runs inside Gnosh:
   named machines with memory caps, gas (1 gas is about 1 ns) and optional
@@ -64,10 +65,10 @@ from a hosted API to one running on your own machine. On top of that:
 ## Memory that runs
 
 A model forgets. Each session starts empty, and a compaction throws away most
-of what came before. Gnosh gives the agent `mem`, a persistent Gno machine
-that holds its goals and their steps, what it tried and found, and facts. It is typed
-data on your disk rather than a page of notes, and the agent asks it questions
-instead of re-reading it. [GNOMEM](GNOMEM.md) has the design and real runs.
+of what came before. Gnosh gives the agent `mem`, kept in Gno on your disk
+with no size limit: its goals and their steps, what it tried and found, what
+waits on you, and facts. It is typed data rather than a page of notes, and
+the agent asks it questions instead of re-reading it. [GNOMEM](GNOMEM.md) has the design and real runs.
 
 ### Goals that outlive the session
 
