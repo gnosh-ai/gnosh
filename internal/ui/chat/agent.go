@@ -22,11 +22,17 @@ type NestedToolContainer interface {
 	AddNestedTool(tool ToolMessageItem)
 }
 
-// AgentToolMessageItem is a message item that represents an agent tool call.
-type AgentToolMessageItem struct {
+// nestingToolMessageItem is a tool call that runs tool calls of its own and
+// shows them inside its entry, as the agent and agentic fetch tools do.
+type nestingToolMessageItem struct {
 	*baseToolMessageItem
 
 	nestedTools []ToolMessageItem
+}
+
+// AgentToolMessageItem is a message item that represents an agent tool call.
+type AgentToolMessageItem struct {
+	nestingToolMessageItem
 }
 
 var (
@@ -59,7 +65,7 @@ func NewAgentToolMessageItem(
 // parent's output — so the list only checks the parent's version.
 // Without the bump, the list cache would serve the previously rendered
 // frame indefinitely and the spinner would appear frozen.
-func (a *AgentToolMessageItem) Advance() bool {
+func (a *nestingToolMessageItem) Advance() bool {
 	if a.result != nil || a.Status() == ToolStatusCanceled {
 		return false
 	}
@@ -74,7 +80,7 @@ func (a *AgentToolMessageItem) Advance() bool {
 // restyleAnim implements [animRestyler]. It also reaches nested tools,
 // which are not list entries of their own and therefore never receive
 // the call directly.
-func (a *AgentToolMessageItem) restyleAnim() {
+func (a *nestingToolMessageItem) restyleAnim() {
 	a.baseToolMessageItem.restyleAnim()
 	for _, nested := range a.nestedTools {
 		if ar, ok := nested.(animRestyler); ok {
@@ -96,7 +102,7 @@ func advanceNested(tools []ToolMessageItem) bool {
 }
 
 // NestedTools returns the nested tools.
-func (a *AgentToolMessageItem) NestedTools() []ToolMessageItem {
+func (a *nestingToolMessageItem) NestedTools() []ToolMessageItem {
 	return a.nestedTools
 }
 
@@ -114,14 +120,14 @@ func (a *AgentToolMessageItem) NestedTools() []ToolMessageItem {
 // at most once per agent event; in the rare case the slice is
 // truly unchanged the worst case is one extra parent re-render
 // while every child cache hit stays warm.
-func (a *AgentToolMessageItem) SetNestedTools(tools []ToolMessageItem) {
+func (a *nestingToolMessageItem) SetNestedTools(tools []ToolMessageItem) {
 	a.nestedTools = tools
 	a.clearCache()
 	a.Bump()
 }
 
 // AddNestedTool adds a nested tool.
-func (a *AgentToolMessageItem) AddNestedTool(tool ToolMessageItem) {
+func (a *nestingToolMessageItem) AddNestedTool(tool ToolMessageItem) {
 	// Mark nested tools as simple (compact) rendering.
 	if s, ok := tool.(Compactable); ok {
 		s.SetCompact(true)
@@ -211,9 +217,7 @@ func (r *AgentToolRenderContext) RenderTool(sty *styles.Styles, width int, opts 
 
 // AgenticFetchToolMessageItem is a message item that represents an agentic fetch tool call.
 type AgenticFetchToolMessageItem struct {
-	*baseToolMessageItem
-
-	nestedTools []ToolMessageItem
+	nestingToolMessageItem
 }
 
 var (
@@ -235,56 +239,6 @@ func NewAgenticFetchToolMessageItem(
 		return !state.HasResult() && !state.IsCanceled()
 	}
 	return t
-}
-
-// Advance implements [Animatable]. See [AgentToolMessageItem.Advance]
-// for the parent-bump rationale; without an override the embedded base
-// Advance would never advance the nested children.
-func (a *AgenticFetchToolMessageItem) Advance() bool {
-	if a.result != nil || a.Status() == ToolStatusCanceled {
-		return false
-	}
-	changed := a.anim.Advance()
-	changed = advanceNested(a.nestedTools) || changed
-	if changed {
-		a.Bump()
-	}
-	return changed
-}
-
-// restyleAnim implements [animRestyler]. See
-// [AgentToolMessageItem.restyleAnim] for the nested-tool rationale.
-func (a *AgenticFetchToolMessageItem) restyleAnim() {
-	a.baseToolMessageItem.restyleAnim()
-	for _, nested := range a.nestedTools {
-		if ar, ok := nested.(animRestyler); ok {
-			ar.restyleAnim()
-		}
-	}
-}
-
-// NestedTools returns the nested tools.
-func (a *AgenticFetchToolMessageItem) NestedTools() []ToolMessageItem {
-	return a.nestedTools
-}
-
-// SetNestedTools sets the nested tools. Always bumps the version;
-// see [AgentToolMessageItem.SetNestedTools] for the rationale.
-func (a *AgenticFetchToolMessageItem) SetNestedTools(tools []ToolMessageItem) {
-	a.nestedTools = tools
-	a.clearCache()
-	a.Bump()
-}
-
-// AddNestedTool adds a nested tool.
-func (a *AgenticFetchToolMessageItem) AddNestedTool(tool ToolMessageItem) {
-	// Mark nested tools as simple (compact) rendering.
-	if s, ok := tool.(Compactable); ok {
-		s.SetCompact(true)
-	}
-	a.nestedTools = append(a.nestedTools, tool)
-	a.clearCache()
-	a.Bump()
 }
 
 // AgenticFetchToolRenderContext renders agentic fetch tool messages.
