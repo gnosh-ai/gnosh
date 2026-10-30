@@ -791,3 +791,29 @@ foundation (F).
 | E6 | A checklist took three calls and ~100 tokens | fixed: `Add(title, steps...)` in one call, and `mem` needs no setup |
 | F-c | Should the harness's goals and the model's board be one design? | no: separate authorities sharing a vocabulary; the harness never takes the board as proof (DESIGN §12 stays) |
 | E-recipe | Examples in the recipe must not be the scenarios' data | done |
+
+## Appendix F. GNOMEM review round 2: findings and dispositions
+
+Two fresh reviewers read v1 (§19): one for simplicity and convergence (S),
+one hunting bugs adversarially (A). Real runs added one finding (R). All were
+settled before any board outside the tests depended on v1, so the golden
+files were written again once.
+
+| # | Finding | Disposition |
+|---|---|---|
+| R1 | `Add(goal, steps...)` showed only the goal's id; the model guessed the steps' ids and was refused | fixed: every change prints a line with the ids it made and what is next |
+| S1 | Freeze what calls store, not what Show prints: the text ships with the recipe | fixed: rule reworded (§19); data.golden is a field-by-field dump, never rewritten; the show, items and printed files are format tests, rewritten after review |
+| S2 | The frozen corpus skipped the state rules that matter | fixed: nested drop cascades, Reopen up the parents, Step on a step, Note on a closed item, Reopen of an open item, multi-byte clipping |
+| S3 | `Changed` was wrong (facts never bumped it, an open item's reopen did) | cut; the session summary uses the summary file's time |
+| S4 | Show printed facts last, so a cut dropped them; an unknown status was drawn open but counted closed | fixed: facts after the header; any non-empty status closes and is shown as its word |
+| S5 | Recipe: its example contradicted "a condition is a step", it never taught Step, and `q := mem.Add` made a permanent declaration in mem per use | fixed |
+| S6 | Boards have no way out of v1 when they reach the journal or replay limits | open: a harness rebase (replay, then rewrite the journal as the first entry plus the data) needs no v1 change while the data stays plain |
+| A1 | **State divergence**: `fmt` was trusted by name; a VM's own `var fmt` with a mutating Println had its print dropped from the journal | fixed: prints count as reads only when the VM's fmt is the real package |
+| A2 | **State divergence**: `%p` printed a Go address, different on every rebuild, into stored strings | fixed: refused |
+| A3 | ensureMem could delete, without the VM lock, a board another klash had written | fixed: the first entry is written under the lock on first use; ensureMem never deletes |
+| A4 | Show cut the next item when an open goal had many closed steps; Show(ids...) had no cap | fixed: the newest five closed steps under an open item, the rest counted; both capped |
+| A5 | Drop then Reopen left a goal's condition step dropped, so the goal could be marked done untested | fixed: Reopen restores the steps dropped with an item; Drop needs a reason |
+| A6 | An older VM named mem was quietly used, or its prelude refused as "already declared" | fixed: refused with what to do; its Show never runs for the summary |
+| A7 | Minor: stale journal cache, the first call's rebuild inside a short lock budget, `gnovm_new` mem with persist false, `{ mem = nil }` | fixed (the first two by A3; persist false refused; a nil board keeps nothing) |
+| A8 | Raw display of every multi-line string lost newlines and hid quotes | fixed: only board reads are shown unquoted |
+| A9 | fmt applied String methods for every verb | fixed: only for %v, %s, %q, %x and %X, as Go does; nested Stringers are still printed by structure |
