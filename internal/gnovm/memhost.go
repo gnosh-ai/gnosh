@@ -651,6 +651,10 @@ func (h *memHost) indexStamp(j *journal) memStamp {
 func (h *memHost) openIndex(j *journal) (*memIndex, error) {
 	path := filepath.Join(h.dir, "index-"+j.generation+".db")
 	x, err := openMemIndex(path)
+	if errors.Is(err, errOldIndex) {
+		removeMemIndex(path)
+		x, err = openMemIndex(path)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -666,9 +670,7 @@ func (h *memHost) openIndex(j *journal) (*memIndex, error) {
 		}
 		if err == nil && !same {
 			x.close()
-			for _, suffix := range []string{"", "-wal", "-shm"} {
-				_ = os.Remove(path + suffix)
-			}
+			removeMemIndex(path)
 			if x, err = openMemIndex(path); err != nil {
 				return nil, err
 			}
