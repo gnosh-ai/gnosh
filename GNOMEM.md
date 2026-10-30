@@ -180,7 +180,7 @@ mem waiting on you: "which day suits you for the release?" (release-v2/3)
   redacted it in 1 place; gnosh rewrites mem's files
   (mem's journal was written again without what was erased; its store and index are built afresh from it)
 /mem find sk-live
-  nothing in mem matches "sk-live": Find matches the words as they were stored; mem.Show() lists 1 goal, 2 facts and 0 rules
+  nothing in mem matches "sk-live": Find matches the words as they were stored; /mem lists 1 goal, 0 rules and 2 facts
 /mem log 3
   #4 2026-10-30 10:12, the agent in "Release v2": (redacted)
       fact `deploy`: "Deploy with the key (redacted), then run make deploy."

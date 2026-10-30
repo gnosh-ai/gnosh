@@ -45,7 +45,11 @@ func TestMemCommand(t *testing.T) {
 	agent(`mem.Goal("ship the release").Steps("build", "test")`) // #1
 	agent(`mem.Fact("cmd/test", "go test ./...")`)               // #2
 
-	require.Contains(t, mem(""), "`ship-release` \"ship the release\"")
+	require.Contains(t, mem(""), "`ship-release` \"ship the release\" (0/2 done · session \"Release work\" · ")
+	inS1, err := h.MemCommand(ctx, "/proj", "s1", "", titles)
+	require.NoError(t, err)
+	require.Contains(t, inS1, "(0/2 done · this session · ")
+	require.Contains(t, mem("find zzz-nothing"), "/mem lists 1 goal, 0 rules and 1 fact")
 	require.Contains(t, mem("show ship-release cmd/test"), "go test ./...")
 	require.Contains(t, mem("find release"), "`ship-release`")
 	log := mem("log")
@@ -98,6 +102,7 @@ func TestMemCommand(t *testing.T) {
 	require.Contains(t, agent(`mem.Redact("555-0199")`).Err.Error(), "that text is in 4 places")
 	require.Contains(t, mem("redact 555-0199"), "redacted it in 4 places")
 	requireNowhere(t, dir, "555-0199")
+	require.Contains(t, mem("log 1"), "you: (redacted)")
 
 	require.Contains(t, mem("repair"), "built again from its journal")
 	require.Contains(t, mem(""), "(redacted)")

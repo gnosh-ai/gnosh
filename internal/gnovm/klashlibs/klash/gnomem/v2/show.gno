@@ -84,18 +84,67 @@ func (m *Mem) Show(names ...string) string {
 	}
 	if m.facts.Size() > 0 {
 		sb.WriteString("facts, newest first:\n")
-		i := 0
+		shown := map[string]bool{}
 		m.recent.ReverseIterate("", "", func(_ string, v any) bool {
 			n := v.(string)
 			sb.WriteString("  `" + n + "` = " + line(m.getFact(n).Text, maxLine) + "\n")
-			i++
-			return i == maxShowFacts
+			shown[n] = true
+			return len(shown) == maxShowFacts
 		})
-		if more := m.facts.Size() - i; more > 0 {
-			sb.WriteString("  … " + plural(more, "more fact") + ": mem.Show(\"name\") or mem.Find(\"words\")\n")
+		if more := m.facts.Size() - len(shown); more > 0 {
+			sb.WriteString("  … " + plural(more, "more fact") + ", " + m.factGroups(shown) + "\n")
 		}
 	}
 	return cut(sb.String())
+}
+
+// maxShowGroups is how many groups of facts Show names for the facts it
+// leaves out.
+const maxShowGroups = 12
+
+// factGroups names the facts not shown by their groups, a name's first
+// segment, each with how many it holds ("`infra/` (12)"), and a fact with
+// no group by its name; then how to see a group. Names are paths so that a
+// model looking for a deploy command finds `cmd/` here in one look.
+func (m *Mem) factGroups(shown map[string]bool) string {
+	var parts []string
+	group, count, first := "", 0, ""
+	flush := func() {
+		switch {
+		case count == 0:
+		case strings.HasSuffix(group, "/"):
+			parts = append(parts, "`"+group+"` ("+strconv.Itoa(count)+")")
+			if first == "" {
+				first = strings.TrimSuffix(group, "/")
+			}
+		default:
+			parts = append(parts, "`"+group+"`")
+		}
+	}
+	m.facts.Iterate("", "", func(n string, _ any) bool {
+		if shown[n] {
+			return false
+		}
+		g := n
+		if i := strings.Index(n, "/"); i >= 0 {
+			g = n[:i+1]
+		}
+		if g != group {
+			flush()
+			group, count = g, 0
+		}
+		count++
+		return false
+	})
+	flush()
+	if len(parts) > maxShowGroups {
+		parts = append(parts[:maxShowGroups], plural(len(parts)-maxShowGroups, "more group"))
+	}
+	text := "in " + strings.Join(parts, ", ")
+	if first != "" {
+		text += ": mem.Show(\"" + first + "\") lists a group"
+	}
+	return text
 }
 
 // String is Show(), so that println(mem) shows mem.
@@ -309,8 +358,12 @@ func (m *Mem) Find(words string) string {
 		// Find matches words as they were stored, not what they mean: say
 		// where to look instead, so the model reads the list once rather
 		// than guessing other words.
+		facts := plural(m.facts.Size(), "fact")
+		if m.facts.Size() > maxShowFacts {
+			facts = "the newest " + strconv.Itoa(maxShowFacts) + " of " + facts + ", with the groups of the rest"
+		}
 		return "nothing in mem matches " + strconv.Quote(words) + ": Find matches the words as they were stored; mem.Show() lists " +
-			plural(m.open.Size()+m.closed.Size(), "goal") + ", " + plural(m.facts.Size(), "fact") + " and " + plural(m.rules.Size(), "rule") + "\n"
+			plural(m.open.Size()+m.closed.Size(), "goal") + ", " + plural(m.rules.Size(), "rule") + " and " + facts + "\n"
 	}
 	var sb strings.Builder
 	for i, n := range names {
@@ -388,6 +441,9 @@ func who(by string) string {
 		return "gnosh"
 	case caller():
 		return "this session"
+	}
+	if len(by) > 8 {
+		by = by[:8] // enough to tell sessions apart; ids are long
 	}
 	return "session " + by
 }

@@ -414,7 +414,7 @@ func TestHostRunsMem(t *testing.T) {
 	require.Equal(t, "fact `cmd/test` is new\n", res.Output)
 	res = call("mem.Goal(\"x\").Steps(\n\t\"a\",\n\t\"b\"\n)")
 	require.ErrorContains(t, res.Err, "(a call over several lines needs a comma after its last argument too, as in Go)")
-	require.Contains(t, call(`mem.Find("push to production")`).Output, `nothing in mem matches "push to production": Find matches the words as they were stored; mem.Show() lists 1 goal, 1 fact and 0 rules`)
+	require.Contains(t, call(`mem.Find("push to production")`).Output, `nothing in mem matches "push to production": Find matches the words as they were stored; mem.Show() lists 1 goal, 0 rules and 1 fact`)
 	res = call("mem.Fact(\"cmd/deploy\", \"make ship ENV=prod\")\nmem.Note(\"qa\", \"Lin does QA\")")
 	require.EqualError(t, res.Err, "no item `qa`; mem.Show() lists them; nothing was kept, so fact `cmd/deploy`, set above, is not in mem")
 
@@ -456,6 +456,27 @@ func TestMemNotKept(t *testing.T) {
 	} {
 		require.Equal(t, tc.want, memNotKept(tc.ops))
 	}
+}
+
+// Show lists the newest facts, and the rest by their groups, so a model
+// looking for a deploy command among many facts finds `cmd/` in one look;
+// a Find that matches nothing says exactly that.
+func TestMemShowGroupsHiddenFacts(t *testing.T) {
+	t.Parallel()
+	h := newTestMemHost(t, t.TempDir())
+	for _, name := range []string{"cmd/deploy", "infra/a", "infra/b", "people/lin", "staging-db"} {
+		memOK(t, h, `mem.Fact("`+name+`", "x")`)
+	}
+	for i := 1; i <= 10; i++ {
+		memOK(t, h, fmt.Sprintf(`mem.Fact("notes/n%02d", "y")`, i))
+	}
+	out := memOK(t, h, `mem.Show()`).Output
+	require.Contains(t, out, "  `notes/n01` = y\n")
+	require.NotContains(t, out, "`cmd/deploy` =")
+	require.Contains(t, out, "  … 5 more facts, in `cmd/` (1), `infra/` (2), `people/` (1), `staging-db`: mem.Show(\"cmd\") lists a group\n")
+	require.Contains(t, memOK(t, h, `mem.Show("infra")`).Output, "under `infra/`: fact `infra/a`, fact `infra/b`")
+	require.Equal(t, "nothing in mem matches \"production\": Find matches the words as they were stored; mem.Show() lists 0 goals, 0 rules and the newest 10 of 15 facts, with the groups of the rest\n",
+		memOK(t, h, `mem.Find("production")`).Output)
 }
 
 // A repository's worktrees and subdirectories share one mem: it is keyed

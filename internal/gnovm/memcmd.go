@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -55,12 +56,12 @@ func (h *Host) MemCommand(ctx context.Context, project, session, args string, ti
 		for _, n := range strings.Fields(rest) {
 			names = append(names, strconv.Quote(n))
 		}
-		return m.user(ctx, session, "mem.Show("+strings.Join(names, ", ")+")")
+		return m.user(ctx, session, "mem.Show("+strings.Join(names, ", ")+")", titles)
 	case "find":
 		if rest == "" {
 			return "/mem find takes words: /mem find release key", nil
 		}
-		return m.user(ctx, session, "mem.Find("+strconv.Quote(rest)+")")
+		return m.user(ctx, session, "mem.Find("+strconv.Quote(rest)+")", titles)
 	case "log":
 		n := 20
 		if rest != "" {
@@ -83,12 +84,12 @@ func (h *Host) MemCommand(ctx context.Context, project, session, args string, ti
 		if rest == "" {
 			return "/mem forget takes a name, as /mem shows it: /mem forget release-v2", nil
 		}
-		return m.user(ctx, session, "mem.Forget("+strconv.Quote(rest)+")")
+		return m.user(ctx, session, "mem.Forget("+strconv.Quote(rest)+")", titles)
 	case "redact":
 		if rest == "" {
 			return "/mem redact takes a secret's exact text: /mem redact sk-live-…", nil
 		}
-		return m.user(ctx, session, "mem.Redact("+strconv.Quote(rest)+")")
+		return m.user(ctx, session, "mem.Redact("+strconv.Quote(rest)+")", titles)
 	case "repair":
 		n, err := m.repair(ctx)
 		if err != nil {
@@ -120,8 +121,9 @@ func (h *Host) repairVM(ctx context.Context, project, name string) (string, erro
 
 // user runs code against mem as the user, typed in session, and returns
 // what it printed, then why it failed, if it did, and what gnosh did
-// besides. Only a busy mem is an error: the rest is the answer.
-func (h *memHost) user(ctx context.Context, session, code string) (string, error) {
+// besides. Only a busy mem is an error: the rest is the answer. Sessions
+// are named for the user (memSessions).
+func (h *memHost) user(ctx context.Context, session, code string, titles map[string]string) (string, error) {
 	res, err := h.call(ctx, memRequest{Code: code, Session: session, User: true})
 	var busy *busyError
 	if errors.As(err, &busy) {
@@ -134,7 +136,32 @@ func (h *memHost) user(ctx context.Context, session, code string) (string, error
 	for _, n := range res.Notes {
 		out += "\n(" + n + ")"
 	}
-	return out, nil
+	// mem's text points the agent at mem.Show; the user has /mem.
+	out = memShowRe.ReplaceAllStringFunc(out, func(call string) string {
+		if name := memShowRe.FindStringSubmatch(call)[1]; name != "" {
+			return "/mem show " + name
+		}
+		return "/mem"
+	})
+	return memSessions(out, session, titles), nil
+}
+
+// memShowRe is a call of mem.Show in mem's text, with the name it shows.
+var memShowRe = regexp.MustCompile(`mem\.Show\((?:"([^"]*)")?\)`)
+
+// memSessions names the sessions in mem's text, where gnomem says
+// "session " and an id's first 8 bytes, as /mem log does: session, which
+// /mem was typed in, as this session, and the others by their titles.
+func memSessions(out, session string, titles map[string]string) string {
+	if session != "" {
+		out = strings.ReplaceAll(out, "session "+memShortID(session), "this session")
+	}
+	for id, title := range titles {
+		if title != "" && id != session {
+			out = strings.ReplaceAll(out, "session "+memShortID(id), "session "+strconv.Quote(memLine(title, 60)))
+		}
+	}
+	return out
 }
 
 // entries reads mem's journal, which may be cut short by a torn last line
@@ -201,11 +228,7 @@ func memWho(e memEntry, titles map[string]string) string {
 	case titles[e.Session] != "":
 		return "the agent in " + strconv.Quote(memLine(titles[e.Session], 60))
 	}
-	id := e.Session
-	if len(id) > 8 {
-		id = id[:8]
-	}
-	return "the agent in session " + id
+	return "the agent in session " + memShortID(e.Session)
 }
 
 // memOpText is an Op as /mem log shows it.

@@ -240,7 +240,7 @@ Ensure every task is implemented completely, not partially or sketched.
 <memory>
 Your memory is `mem`, kept by gnosh for this project: it outlives the session and has no size limit. Run mem calls with `gnovm_run` name "mem"; you also have Gno machines, where what you declare stays for the next call, so compute in your scratch machine (no name).
 
-- **When a task starts**: `mem.Show()`, and continue from `← next`. A session starts with the user's rules, what mem has open and its newest facts; `mem.Find("words")` searches everything.
+- **When a task starts**: `mem.Show()`, and continue from `← next`. A session starts with the user's rules, what mem has open and its newest facts; `mem.Find("words")` searches everything. When mem does not hold what you were asked, say so: never build an answer out of the facts beside it.
 - **Everything in mem has a lowercase name**, printed in backticks: a goal `release-v2`, its steps `release-v2/1`, `release-v2/2`. Type names exactly as printed.
 - **Before a task of two or more steps**, plan it: `mem.Goal("release v2").Steps("bump the version", "tag v2.0.0", "CI is green")` prints the names. A condition is a step: an item cannot be done while a step of it is open. Work found later: `mem.Steps("release-v2", "title")`; work that must come first: a step of the work it blocks.
 - **A step finished**: `mem.Done("release-v2/1", "what came of it")`, which prints what is next; a condition only after running its check: `mem.Done("release-v2/3", "go test ./... → ok")`. Given up: `mem.Drop(name, "why")`.
