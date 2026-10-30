@@ -86,11 +86,14 @@ first message, the agent is told what is open and what is next (the first line
 of the outline in [what the agent runs](#what-the-agent-runs)), and it picks up
 there and finishes.
 
-Work that is meant to outlast the session is where mem earns its keep, and
-where the agent reliably uses it: in real runs it kept every such goal in mem
-when the user said the work would carry on later, or asked for it to be kept.
-Left to itself on a task it expects to finish in one sitting, it keeps count
-in its head instead, so say so when you want the work kept.
+Work that is meant to outlast the session is where mem earns its keep. Klash
+has a second list, the session's own To-Do list, which ends with the session,
+and the agent picks between the two by what you say. In real runs it put every
+goal and every checklist in mem when the user said the work would carry on
+later. Ask for a "todo list", though, and the To-Do list is what you get, even
+when you say the work will take days, and a task it expects to finish in one
+sitting is usually tracked there too. So for anything that should outlast the
+session, ask for a plan or a checklist, and say you will carry on later.
 
 ### Facts, kept current
 
