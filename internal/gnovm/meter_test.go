@@ -38,12 +38,12 @@ func TestCallMeterPerCallLimit(t *testing.T) {
 	require.Equal(t, storetypes.OutOfGasError{Descriptor: "b"}, v)
 	require.EqualValues(t, 101, g.used(), "gas is recorded before the panic, as in basicGasMeter")
 
-	// A new call measures from its own start; the lifetime keeps counting.
+	// A new call measures from its own start; the VM's total keeps counting.
 	g.begin(context.Background(), 100, time.Time{})
 	require.Zero(t, g.used())
 	g.ConsumeGas(10, "c")
 	require.EqualValues(t, 10, g.used())
-	require.EqualValues(t, 111, g.lifetime())
+	require.EqualValues(t, 111, g.consumed)
 }
 
 func TestCallMeterRejectsNegativeAndOverflow(t *testing.T) {
@@ -70,7 +70,7 @@ func TestCallMeterRefund(t *testing.T) {
 	// earlier call's gas, so used() cannot go negative.
 	g.RefundGas(1_000_000, "big")
 	require.Zero(t, g.used())
-	require.EqualValues(t, 500, g.lifetime())
+	require.EqualValues(t, 500, g.consumed)
 	require.False(t, g.IsPastLimit())
 }
 

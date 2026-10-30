@@ -216,7 +216,6 @@ type scenarioRun struct {
 	after                  []map[string]bool // project files after each turn
 	vms                    map[string]string // persistent VM name -> dump
 	checks                 []checkResult
-	err                    error
 	took                   time.Duration
 }
 

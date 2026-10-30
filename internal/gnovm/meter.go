@@ -90,9 +90,6 @@ func (g *callMeter) tripped() error {
 // used is the gas consumed since begin.
 func (g *callMeter) used() storetypes.Gas { return g.consumed - g.callStart }
 
-// lifetime is the gas consumed over the VM's life.
-func (g *callMeter) lifetime() storetypes.Gas { return g.consumed }
-
 func (g *callMeter) GasConsumed() storetypes.Gas { return g.used() }
 func (g *callMeter) Limit() storetypes.Gas       { return g.limit }
 func (g *callMeter) IsPastLimit() bool           { return g.used() > g.limit }
