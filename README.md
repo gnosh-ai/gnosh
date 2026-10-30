@@ -378,13 +378,15 @@ Claude Code's names work here too.
   one file, counts as read, as in Claude Code, so its next edit is not refused
   as an edit of a file it never read.
 - **`/loop`** keeps a session working on a task until it is done.
-- **`/goal <condition>`** sets a goal, as in Claude Code: the agent starts on
-  it, and each time its turn would end, a separate check by the small model
-  decides from the conversation whether the condition holds, keeping it at
-  work until it does. A goal met clears itself; `/goal` says what is set and
-  what the last check found, and `/goal clear` clears it. Every ten checks
-  that find it not met, the agent is asked whether there is a real reason to
-  stop, as with Stop hooks.
+- **`/goal <condition>`** keeps the agent working until the condition holds,
+  as in Claude Code, with the goal kept in mem: the condition becomes a goal
+  there, which the agent plans as steps, and as each turn ends mem says what
+  comes next. Once the agent closes the goal, the small model checks the
+  condition against what mem holds of it: met, the goal is cleared; not met,
+  it is reopened with the reason as a note, and the agent goes back to it.
+  `/goal` shows the condition, the goal's name and the last check, and
+  `/goal clear` clears it. `gnosh run --goal` does the same in one run and
+  says on stderr whether the goal was met.
 - **`/rewind`** (or `/checkpoint`, `/undo`, or Esc twice on an empty prompt)
   goes back to before one of your messages, as in Claude Code: it restores
   the files the agent's edit and write tools changed since then, the
