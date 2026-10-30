@@ -525,9 +525,9 @@ type readEntry struct {
 // catchUp applies the journal's entries after j's end to r, many to a
 // transaction, committing each batch with its stamp, so a catch-up cut
 // short at any point resumes from the last batch kept. It stops when its
-// slice is spent, saying to call again; it cuts a torn last line, the end
-// of an append that did not finish. j ends where the store does. It returns
-// how many entries it applied.
+// slice is spent with entries left, saying to call again; it cuts a torn
+// last line, the end of an append that did not finish. j ends where the
+// store does. It returns how many entries it applied.
 func (h *memHost) catchUp(r *memRealm, j *journal) (int, error) {
 	deadline := time.Now().Add(h.slice)
 	from := j.seq
@@ -555,7 +555,13 @@ func (h *memHost) catchUp(r *memRealm, j *journal) (int, error) {
 		batch, ops, ats = batch[:0], ops[:0], ats[:0]
 		return nil
 	}
+	spent := false
 	torn, err := readEntriesOf(j.path, j.size, j.seq, func(e memEntry, end int64, hash string) error {
+		// The slice is spent and an entry is left: the next call goes on.
+		// A catch-up whose last batch outran the slice is done all the same.
+		if spent {
+			return errCallAgain
+		}
 		batch = append(batch, readEntry{e, end, hash})
 		for _, op := range e.Ops {
 			ops = append(ops, op)
@@ -567,9 +573,7 @@ func (h *memHost) catchUp(r *memRealm, j *journal) (int, error) {
 		if err := flush(); err != nil {
 			return err
 		}
-		if time.Now().After(deadline) {
-			return errCallAgain
-		}
+		spent = time.Now().After(deadline)
 		return nil
 	})
 	if errors.Is(err, errCallAgain) {
