@@ -377,7 +377,9 @@ for the project in the directory it runs in. It needs no provider set up and
 never calls one, so it works with the model server down, in a fresh shell, or
 in a script on a machine with only Gnosh's data. It only reads: `undo`,
 `forget`, `redact` and `repair` are refused there, since changes to mem are
-`/mem`'s, in a session.
+`/mem`'s, in a session. What it refuses exits 1, so a script can tell: those,
+a name mem does not hold (`gnosh mem show no-such-item`), and a `find` with no
+words. A `find` that matches nothing is an answer, and exits 0.
 
 The notice sits in the TUI's status bar as gnosh starts, and comes again with
 the first prompt of each new session you open in it and with the first
