@@ -3,24 +3,25 @@
 </p>
 
 <p align="center">
+  <a href="#memory-that-runs"><img alt="Memory: in Gno" src="https://img.shields.io/badge/memory-in%20Gno-FED835?style=flat-square&labelColor=201F26"></a>
   <a href="#nothing-phones-home"><img alt="Telemetry: opt-in" src="https://img.shields.io/badge/telemetry-opt--in-6B50FF?style=flat-square&labelColor=201F26"></a>
   <a href="#local-models"><img alt="Models: hosted or local" src="https://img.shields.io/badge/models-hosted%20or%20local-FF60FF?style=flat-square&labelColor=201F26"></a>
   <a href="#coming-from-claude-code"><img alt="Speaks Claude Code" src="https://img.shields.io/badge/speaks-Claude%20Code-8B75FF?style=flat-square&labelColor=201F26"></a>
   <a href="./LICENSE.md"><img alt="License: GNO Network GPL v6" src="https://img.shields.io/badge/license-GNO%20Network%20GPL%20v6-605F6B?style=flat-square&labelColor=201F26"></a>
 </p>
 
-<p align="center"><strong>A security-first harness for coding agents, in your terminal.</strong><br>
-A fork of Charm's <a href="https://github.com/charmbracelet/crush">Crush</a> that closes the doors a coding agent usually leaves open.</p>
+<p align="center"><strong>A coding agent that remembers, in Gno.</strong><br>
+Klash runs the GnoVM, gno.land's interpreter, inside itself. The agent keeps its goals, what it found and the facts you gave it in a Gno machine on your disk, and a new session is told what is still open, so it can pick up where the last one stopped.</p>
 
-<p align="center"><strong>New: <a href="GNOMEM.md">GNOMEM</a>, the agent's memory in Gno.</strong> The agent keeps its task checklist and what it must remember in persistent Gno machines, and a new session picks up where the last one stopped. <a href="GNOMEM.md">See it work →</a></p>
+<p align="center">Security-first underneath: a fork of Charm's <a href="https://github.com/charmbracelet/crush">Crush</a> that closes the doors a coding agent usually leaves open.</p>
 
 <p align="center">
+  <a href="#memory-that-runs">Memory that runs</a> ·
   <a href="GNOMEM.md">GNOMEM</a> ·
   <a href="#security-first">Security first</a> ·
   <a href="#coming-from-claude-code">Coming from Claude Code</a> ·
   <a href="#what-else-changed-from-crush">What else changed</a> ·
   <a href="#built-for-gnoland">Built for gno.land</a> ·
-  <a href="#go-in-your-go-gnovm-machines">Go in your Go</a> ·
   <a href="#installation">Installation</a>
 </p>
 
@@ -36,6 +37,14 @@ Klash is a fork of Charm's [Crush](https://github.com/charmbracelet/crush):
 the same terminal UI, sessions, LSP and MCP support, and any model you like,
 from a hosted API to one running on your own machine. On top of that:
 
+- **Remembers, in Gno.** The agent keeps its goals and their steps, what it
+  tried and found, and the facts you told it on a board in a persistent Gno
+  machine. A new session is told what is open and which facts it holds:
+  [memory that runs](#memory-that-runs).
+- **Runs Go in Go.** The GnoVM, gno.land's interpreter, runs inside Klash:
+  named machines with memory caps, gas (1 gas is about 1 ns) and optional
+  persistence, in a worker process of their own. The agent works an answer out
+  in one instead of estimating it.
 - **Nothing phones home.** No usage metrics, no provider catalog fetch, no
   update check, unless you turn them on.
 - **Tool text can't pose as the conversation.** A model's control tokens in a
@@ -51,10 +60,117 @@ from a hosted API to one running on your own machine. On top of that:
 - **Knows Gno and gno.land.** Every signature waits for you to type the key's
   password, which the model never sees, and a session key caps what even a
   transaction you approved can spend.
-- **Runs Go in Go, and remembers in it.** The GnoVM, gno.land's interpreter,
-  runs inside Klash: named machines with memory caps, gas (1 gas is about
-  1 ns) and optional persistence, in a worker process of their own. The agent
-  keeps its checklist and memory in them: [GNOMEM](GNOMEM.md).
+
+## Memory that runs
+
+A model forgets. Each session starts empty, and a compaction throws away most
+of what came before. Klash gives the agent a board, `mem`, in a persistent Gno
+machine: goals and their steps, what it tried and found, and facts. It is typed
+data on your disk rather than a page of notes, and the agent asks it questions
+instead of re-reading it. [GNOMEM](GNOMEM.md) has the design and real runs.
+
+### Goals that outlive the session
+
+> **You:** Add a `Median` to the stats package, with tests. It's done when
+> `go test ./...` passes.
+
+The agent puts the goal on its board with the condition as a step of its own,
+and checks the steps off as it goes. A goal cannot be marked done while one of
+its steps is open, so "the tests pass" is something it has to reach, not
+something it can claim. When an approach fails, it notes why and re-plans:
+it drops that step and adds another.
+
+Stop halfway and start a new session tomorrow. With your first message, the
+agent is told what is open and what is next (the first line of the outline in
+[what the agent runs](#what-the-agent-runs)), so asked to continue, it picks up
+there.
+
+### Facts, kept current
+
+> **You:** Remember that we deploy with `make ship ENV=prod`, and that the
+> staging database is `db-stg-4`.
+>
+> *(a week later)* **You:** Staging's database moved to `db-stg-9`.
+
+A fact has a name, and every new session is told the names the board holds.
+So a fact that changes is set again under the same name, not kept twice, and
+"how do we deploy?", asked in any later session, is answered from the board.
+
+### What the agent runs
+
+These are the board's own calls as the agent makes them, and what each one
+shows it. A test runs this block against every change to Klash, so it stays
+true.
+
+```
+gnovm_run {"name": "mem", "code": "mem.Add(\"add Median\", \"write Median\", \"test it\", \"go test ./... passes\")"}
+  1
+  output:
+  added 1 "add Median": steps 2 "write Median", 3 "test it", 4 "go test ./... passes"
+gnovm_run {"name": "mem", "code": "mem.Done(2, \"stats.go:31\")"}
+  done 2 "write Median"; next: 3 "test it"
+gnovm_run {"name": "mem", "code": "mem.Facts[\"deploy cmd\"] = \"make ship ENV=prod\"\nmem.Facts[\"staging database\"] = \"db-stg-4\""}
+gnovm_run {"name": "mem", "code": "mem.Facts[\"staging database\"] = \"db-stg-9\""}
+gnovm_run {"name": "mem", "code": "mem.Show()"}
+  board: 3 open, 1 done · next: 3 "test it" · facts: deploy cmd, staging database
+  facts:
+    deploy cmd = make ship ENV=prod
+    staging database = db-stg-9
+  [ ] 1 add Median
+    [x] 2 write Median → stats.go:31
+    [ ] 3 test it  ← next
+    [ ] 4 go test ./... passes
+```
+
+Setting a fact again replaces it, so the board holds one staging database,
+the current one. Had the agent called `mem.Done(1)` while steps 3 and 4 were
+open, the call would have been refused and nothing from it kept. The outline's
+first line is what a new session is told along with its first prompt.
+
+### Go in your Go: the machines underneath
+
+The board is one machine among many. Klash carries the GnoVM, gno.land's
+interpreter for its Go dialect, and runs named virtual machines in it for the
+agent:
+
+- **Machines with limits.** Each has a name, a memory cap (1 to 64 MB), a gas
+  limit per call and its own nanoseconds per gas. Gas follows gno's
+  calibration, where 1 gas is about 1 ns of work, and a call that runs out of
+  gas, memory or time is stopped and keeps nothing.
+- **State that stays.** Declare, assign and evaluate across calls, as in a
+  REPL. Go-shaped input works as written, from a one-line expression to a
+  whole program; a program with `package main` and `func main` runs fresh each
+  time, like `go run`.
+- **Persistence when you want it.** A persistent machine keeps its state on
+  disk across restarts of Klash, as a journal of the calls that succeeded,
+  which another Klash on the same project catches up with. Other machines last
+  as long as the Klash process.
+- **Memory, managed.** Klash reads how much memory the host can give, cgroup
+  limits included, keeps the machines within a budget, and evicts the least
+  recently used to make room for a large task, rebuilding them from their
+  journals when they are next used.
+- **Out of harm's way.** The machines run in a worker process of their own,
+  which the out-of-memory killer takes first, and which Klash restarts if it
+  dies.
+
+The agent has four tools for them:
+
+- **`gnovm_run`** runs code and shows its value and output. With no name it
+  uses the session's own scratch machine.
+- **`gnovm_new`** makes a machine or changes its settings: memory, gas, ns per
+  gas, persistence, pinning, a description.
+- **`gnovm_list`** shows the host's memory, the budget, every machine, and the
+  packages a machine can import. The plan agent has it too.
+- **`gnovm_drop`** evicts a machine from memory, or deletes it after asking
+  you.
+
+The design, and every review of it, is in
+[internal/gnovm/DESIGN.md](internal/gnovm/DESIGN.md).
+
+This part of Klash is under the GNO Network General Public License, with
+Additional Terms (Strong Attribution): see
+[internal/gnovm/LICENSE.md](internal/gnovm/LICENSE.md). Built on
+[gno.land](https://gno.land).
 
 ## Security first
 
@@ -406,55 +522,6 @@ It adds tools for reading realms, packages, accounts and history. Its own
 safety rules confine its writes to local and test chains, keep mainnet
 read-only, and never hand it your key: to act as you, it proposes a session
 that you sign with gnokey yourself.
-
-### Go in your Go: GnoVM machines
-
-**[GNOMEM](GNOMEM.md)** is what the agent does with them: its task checklist
-and its memory live in persistent machines, with real runs to show it.
-
-Klash carries the GnoVM, gno.land's interpreter for its Go dialect, and runs
-named virtual machines in it for the agent:
-
-- **Machines with limits.** Each has a name, a memory cap (1 to 64 MB), a gas
-  limit per call and its own nanoseconds per gas. Gas follows gno's
-  calibration, where 1 gas is about 1 ns of work, and a call that runs out of
-  gas, memory or time is stopped and keeps nothing.
-- **State that stays.** Declare, assign and evaluate across calls, as in a
-  REPL. Go-shaped input works as written, from a one-line expression to a
-  whole program; a program with `package main` and `func main` runs fresh each
-  time, like `go run`.
-- **Persistence when you want it.** A persistent machine keeps its state on
-  disk across restarts of Klash, as a journal of the calls that succeeded,
-  which another Klash on the same project catches up with. Other machines last
-  as long as the Klash process.
-- **Memory, managed.** Klash reads how much memory the host can give, cgroup
-  limits included, keeps the machines within a budget, and evicts the least
-  recently used to make room for a large task, rebuilding them from their
-  journals when they are next used.
-- **Out of harm's way.** The machines run in a worker process of their own,
-  which the out-of-memory killer takes first, and which Klash restarts if it
-  dies.
-
-The agent has four tools for them:
-
-- **`gnovm_run`** runs code and shows its value and output. With no name it
-  uses the session's own scratch machine.
-- **`gnovm_new`** makes a machine or changes its settings: memory, gas, ns per
-  gas, persistence, pinning, a description.
-- **`gnovm_list`** shows the host's memory, the budget, every machine, and the
-  packages a machine can import. The plan agent has it too.
-- **`gnovm_drop`** evicts a machine from memory, or deletes it after asking
-  you.
-
-Coming next are goals: the harness keeps track of long-standing goals and
-their success conditions in a machine of their own, so they survive
-compaction and restarts. The design, and every review of it, is in
-[internal/gnovm/DESIGN.md](internal/gnovm/DESIGN.md).
-
-This part of Klash is under the GNO Network General Public License, with
-Additional Terms (Strong Attribution): see
-[internal/gnovm/LICENSE.md](internal/gnovm/LICENSE.md). Built on
-[gno.land](https://gno.land).
 
 ## Installation
 
