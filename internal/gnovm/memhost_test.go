@@ -483,6 +483,21 @@ func TestHostRunsMem(t *testing.T) {
 	require.ErrorContains(t, res.Err, "(mem's calls go one per line, with no comma after them)")
 	res = call(`mem.Fact("release/qa-signoff")`)
 	require.EqualError(t, res.Err, "mem.Fact takes 2 arguments, not 1: mem.Fact(name, text) sets a fact, and mem.Show(name) shows one")
+	// From the QA's release-waits-for-signoff on the box's Qwen: a step
+	// marked done on the plan, a question given a name, a name made from a
+	// title by hand. What a call takes, and what a Goal has, are read from
+	// gnomem's source (memAPI).
+	res = call(`mem.Goal("release 1.3.0").Steps("tag it", "sign off").Done("x")`)
+	require.ErrorContains(t, res.Err, "missing field Done in klash/gnomem/v2.Goal")
+	require.Contains(t, res.Notes, "a Goal, which mem.Goal(…) gives, has Steps, Wait, Start and Ask; Done is mem's: mem.Done(name, result...)")
+	res = call(`mem.Goal("release 1.3.0").Steps("tag it").Ask("release-1-3-0/1", "who signs?")`)
+	require.EqualError(t, res.Err, "a Goal's Ask takes 1 argument, not 2: mem.Goal(…).Ask(question), or mem.Ask(name, question) for an item by its name")
+	res = call("mem.Goal(\"release 1.3.0\").Steps(\"tag it\")\nmem.Done(\"release-1.3.0/1\", \"tagged\")")
+	require.ErrorContains(t, res.Err, "no item `release-1.3.0/1` (a name joins its words with \"-\": did you mean `release-1-3-0/1`?); nothing was kept")
+	res = call(`mem.Drop("ship")`)
+	require.EqualError(t, res.Err, "mem.Drop takes 2 arguments, not 1: mem.Drop(name, why)")
+	res = call(`mem.Frobnicate("x")`)
+	require.Contains(t, res.Notes, "mem's calls are Goal, Steps, Ask, Start, Done, Drop, Reopen, Note, Wait, Fact, Rule, Forget, Redact, JSON, Next, Show and Find")
 	res = call("import \"mem\"\nmem.Fact(\"cmd/test\", \"go test ./...\")")
 	require.NoError(t, res.Err)
 	require.Equal(t, "fact `cmd/test` is new\n", res.Output)

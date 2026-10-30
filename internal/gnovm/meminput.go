@@ -128,10 +128,7 @@ func memShowExpr(expr string) string {
 // msg, for the habits of older mems; "" for none.
 func memHint(code, msg string) string {
 	if m := memMissingRe.FindStringSubmatch(msg); m != nil {
-		if hint, ok := memMoved[m[1]]; ok {
-			return hint
-		}
-		return "mem's calls are Goal, Steps, Ask, Start, Done, Drop, Reopen, Note, Wait, Fact, Rule, Forget, Redact, Find, Show, Next and JSON"
+		return memMissing(m[1], m[2] == "Goal")
 	}
 	if strings.Contains(msg, "untyped Bigint as StringKind") {
 		return `items are named, not numbered: type the name mem printed in backticks, as mem.Done("release-v2/2", "…")`
@@ -151,7 +148,7 @@ func memHint(code, msg string) string {
 }
 
 var (
-	memMissingRe    = regexp.MustCompile(`missing field (\w+) in \*klash/gnomem/v2\.Mem`)
+	memMissingRe    = regexp.MustCompile(`missing field (\w+) in \*?klash/gnomem/v2\.(Mem|Goal)\b`)
 	memUndeclaredRe = regexp.MustCompile(`name (\w+) not declared`)
 	memAssignRe     = regexp.MustCompile(`(^|[^.\w])mem\s*:?=[^=]`)
 )

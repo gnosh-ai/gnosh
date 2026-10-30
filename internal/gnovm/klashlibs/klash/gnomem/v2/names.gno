@@ -273,6 +273,8 @@ func (m *Mem) miss(name string) string {
 		return "`" + name + "` is a fact, not an item; to change it: mem.Fact(\"" + name + "\", \"…\")"
 	case m.getRule(name) != nil:
 		return "`" + name + "` is a rule, not an item; to change it: mem.Rule(\"" + name + "\", \"…\")"
+	case m.formed(name) != "":
+		return "no item `" + name + "` (a name joins its words with \"-\": did you mean `" + m.formed(name) + "`?)"
 	case m.titled(name) != "":
 		return strconv.Quote(name) + " is a title, not a name: the goal with that title is `" + m.titled(name) + "`"
 	case m.slugged(goalOf(name)) != "":
@@ -292,6 +294,19 @@ func (m *Mem) miss(name string) string {
 		}
 	}
 	return "no item `" + name + "`; mem.Show() lists them"
+}
+
+// formed is name with each of its parts in a name's form, as
+// `release-1-3-0/1` for `release-1.3.0/1`, when that names an item; or "".
+func (m *Mem) formed(name string) string {
+	parts := strings.Split(name, "/")
+	for i, p := range parts {
+		parts[i] = nameForm(p)
+	}
+	if f := strings.Join(parts, "/"); f != name && m.get(f) != nil {
+		return f
+	}
+	return ""
 }
 
 // titled is the name of the open goal titled title, or "".
