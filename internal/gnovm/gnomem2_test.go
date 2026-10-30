@@ -43,7 +43,7 @@ func newMemStory(t *testing.T) *memStory {
 }
 
 func (s *memStory) run(who, code string, imports ...string) {
-	call, err := s.r.call(code, memContext{caller: who, holding: s.holding}, imports...)
+	call, err := s.r.commitNext(s.r.call(code, memContext{caller: who, holding: s.holding}, imports...))
 	s.out.WriteString("> " + who + ": " + code + "\n" + call.Output)
 	if err != nil {
 		s.out.WriteString("error: " + err.Error() + "\n")
@@ -140,7 +140,7 @@ func TestMemStory(t *testing.T) {
 	defer rebuilt.close()
 	rebuilt.clock = s.r.clock
 	for _, c := range s.calls {
-		require.NoError(t, rebuilt.apply(c.Ops, c.At))
+		require.NoError(t, rebuilt.applyNow(c.Ops, c.At))
 	}
 	s.check(rebuilt, "the rebuild")
 	for _, code := range []string{`println(mem.Show())`, `println(mem.JSON())`, `println(mem.Show("bump-gno-pin"))`} {

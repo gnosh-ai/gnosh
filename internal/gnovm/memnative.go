@@ -28,9 +28,10 @@ type memContext struct {
 	stdlibs.ExecContext
 	caller string
 	ops    *[]memOp
-	// pending and at are the Ops klash hands Apply, and their call's time.
-	pending []memOp
-	at      int64
+	// pending is the Ops klash hands Apply, and pendingAt each one's call's
+	// time.
+	pending   []memOp
+	pendingAt []int64
 	// today is the user's local date, 2026-10-29.
 	today string
 	// find and holding answer from mem's index and journal; nil finds
@@ -39,9 +40,15 @@ type memContext struct {
 	holding func(text string) (names, kinds []string, statements bool)
 }
 
-// memOp is one change to a mem, as gnomem's do hands it to klash.
+// memOp is one change to a mem, as gnomem's do hands it to klash and the
+// journal keeps it (gnomem's Op).
 type memOp struct {
-	Kind, Name, Field, Old, New, By string
+	Kind  string `json:"kind"`
+	Name  string `json:"name,omitempty"`
+	Field string `json:"field,omitempty"`
+	Old   string `json:"old,omitempty"`
+	New   string `json:"new,omitempty"`
+	By    string `json:"by,omitempty"`
 }
 
 // memNativeGas is what a mem native costs: a little bookkeeping in Go.
@@ -120,7 +127,7 @@ func memNative(name gno.Name) func(*gno.Machine) {
 			for i := range fields {
 				memPush(m, fields[i])
 			}
-			memPush(m, ctx.at)
+			memPush(m, ctx.pendingAt)
 		}
 	// The two that only format answer anywhere.
 	case "quote":

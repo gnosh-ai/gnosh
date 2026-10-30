@@ -23,9 +23,9 @@ func today() string
 // record hands klash an Op of this call.
 func record(kind, name, field, old, new, by string)
 
-// pending is the Ops klash hands Apply, field by field, and their call's
-// time.
-func pending() (kinds, names, fields, olds, news, bys []string, at int64)
+// pending is the Ops klash hands Apply, field by field, each with its
+// call's time.
+func pending() (kinds, names, fields, olds, news, bys []string, ats []int64)
 
 // find is klash's index, by words and by meaning: the best matches for
 // words, with their kinds ("item", "fact" or "rule").

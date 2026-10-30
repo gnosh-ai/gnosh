@@ -43,7 +43,7 @@ func TestMemRealmScale(t *testing.T) {
 	goals := (n - big - 1) / (steps + 1)
 	var ops []memOp
 	flush := func() {
-		require.NoError(t, r.apply(ops, time.Now().Unix()))
+		require.NoError(t, r.applyNow(ops, time.Now().Unix()))
 		ops = ops[:0]
 	}
 	start = time.Now()

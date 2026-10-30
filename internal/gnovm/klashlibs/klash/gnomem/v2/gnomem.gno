@@ -485,15 +485,16 @@ func (m *Mem) do(op Op) {
 	record(op.Kind, op.Name, op.Field, op.Old, op.New, op.By)
 }
 
-// Apply applies the Ops klash hands it, stamped with their call's time,
+// Apply applies the Ops klash hands it, each stamped with its call's time,
 // without recording them: klash rebuilds a Mem from its journal with it,
-// and undoes with it. It panics unless klash runs the input.
+// many entries at a time, and undoes with it. It panics unless klash runs
+// the input.
 func (m *Mem) Apply() {
 	if who := caller(); who != "klash" && who != "user" {
 		panic("only klash may apply Ops")
 	}
-	kinds, names, fields, olds, news, bys, at := pending()
+	kinds, names, fields, olds, news, bys, ats := pending()
 	for i := range kinds {
-		m.apply(Op{Kind: kinds[i], Name: names[i], Field: fields[i], Old: olds[i], New: news[i], By: bys[i]}, at)
+		m.apply(Op{Kind: kinds[i], Name: names[i], Field: fields[i], Old: olds[i], New: news[i], By: bys[i]}, ats[i])
 	}
 }

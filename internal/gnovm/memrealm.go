@@ -11,6 +11,7 @@ package gnovm
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -156,23 +157,58 @@ type memCall struct {
 	Ops    []memOp
 	// At is the call's time, which its Ops share.
 	At int64
+	// batch is what the call wrote, held back from the store until commit;
+	// nil for a read.
+	batch storetypes.Store
 }
 
-// run runs code as the body of a mem input's main, by caller, and commits
-// what it changed in one batch. A failed input keeps nothing, and an input
-// that made no Ops is a read: it must have written nothing either, since
-// only gnomem's do changes mem.
-func (r *memRealm) run(code, caller string, imports ...string) (memCall, error) {
-	return r.call(code, memContext{caller: caller}, imports...)
+// memStamp is what a store holds, kept in it under memStampKey and written
+// in the batch of each change: the layout and the gno version it was built
+// under, and the journal's generation and the entry it holds, with where
+// that entry's line ends and the line's hash.
+type memStamp struct {
+	Layout     int    `json:"layout"`
+	Gno        string `json:"gno"`
+	Generation string `json:"generation"`
+	Seq        int64  `json:"seq"`
+	End        int64  `json:"end"`
+	Hash       string `json:"hash,omitempty"`
 }
 
-// apply applies ops, made at time at, through gnomem's Apply, which records
-// nothing: they are the journal's already.
-func (r *memRealm) apply(ops []memOp, at int64) error {
-	_, err := r.call("mem.Apply()", memContext{caller: "klash", pending: ops, at: at})
-	return err
+// memStampKey keeps the stamp beside gno's own keys.
+var memStampKey = []byte("klash/stamp")
+
+// stamp is the store's stamp; ok is false for a store that has none yet.
+func (r *memRealm) stamp() (st memStamp, ok bool, err error) {
+	b := r.kv.Get(nil, memStampKey)
+	if b == nil {
+		return memStamp{}, false, nil
+	}
+	return st, true, json.Unmarshal(b, &st)
 }
 
+// commit writes what call changed to the store, with the stamp the store
+// then holds, in one batch: nothing of a call reaches the store before.
+func (r *memRealm) commit(call memCall, st memStamp) error {
+	b, err := json.Marshal(st)
+	if err != nil {
+		return err
+	}
+	call.batch.Set(nil, memStampKey, b)
+	call.batch.Write()
+	return nil
+}
+
+// apply applies ops, each made at its time in ats, through gnomem's Apply,
+// which records nothing: they are the journal's already.
+func (r *memRealm) apply(ops []memOp, ats []int64) (memCall, error) {
+	return r.call("mem.Apply()", memContext{caller: "klash", pending: ops, pendingAt: ats})
+}
+
+// call runs code as the body of a mem input's main, by ctx's caller. A
+// failed input keeps nothing, and an input that made no Ops is a read: it
+// must have written nothing either, since only gnomem's do changes mem.
+// What a call that made Ops wrote waits in its batch for commit.
 func (r *memRealm) call(code string, ctx memContext, imports ...string) (call memCall, err error) {
 	kv := cache.New(r.kv)
 	wc := &writeCounter{Store: kv}
@@ -214,7 +250,7 @@ func (r *memRealm) call(code string, ctx memContext, imports ...string) (call me
 		}
 		return call, nil
 	}
-	kv.Write()
+	call.batch = kv
 	return call, nil
 }
 

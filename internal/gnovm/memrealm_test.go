@@ -17,9 +17,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMemRealmPersists runs a mem input against the realm in a store on
-// disk, then opens the store again from a new base, as a new klash process
-// would, and finds what the first input made.
+// run runs code by caller and commits what it changed, stamped with the
+// next sequence: a mem without a journal, for tests.
+func (r *memRealm) run(code, caller string, imports ...string) (memCall, error) {
+	return r.commitNext(r.call(code, memContext{caller: caller}, imports...))
+}
+
+// applyNow applies ops made at time at, and commits them as run does.
+func (r *memRealm) applyNow(ops []memOp, at int64) error {
+	ats := make([]int64, len(ops))
+	for i := range ats {
+		ats[i] = at
+	}
+	_, err := r.commitNext(r.apply(ops, ats))
+	return err
+}
+
+func (r *memRealm) commitNext(call memCall, err error) (memCall, error) {
+	if err != nil || call.batch == nil {
+		return call, err
+	}
+	st, _, err := r.stamp()
+	if err != nil {
+		return call, err
+	}
+	st.Seq++
+	return call, r.commit(call, st)
+}
+
 // TestMemLayoutPinned fails when the sources that fix how a Mem is stored
 // change while memLayout stays the same. Bump memLayout, which rebuilds every
 // mem from its journal, and pin the new hash here.
@@ -44,6 +69,9 @@ func TestMemLayoutPinned(t *testing.T) {
 		"how a Mem is stored changed: make memLayout %d, and pin %d: %q here", memLayout+1, memLayout+1, got)
 }
 
+// TestMemRealmPersists runs a mem input against the realm in a store on
+// disk, then opens the store again from a new base, as a new klash process
+// would, and finds what the first input made.
 func TestMemRealmPersists(t *testing.T) {
 	dir := t.TempDir()
 	r, err := openMemRealm(newBase(), dir)

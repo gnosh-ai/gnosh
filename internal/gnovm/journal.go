@@ -10,6 +10,7 @@
 package gnovm
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
@@ -17,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -29,8 +31,9 @@ const journalVersion = 1
 const maxEntry = 256 << 10
 
 // journalHeader is a journal's first line. Generation is new whenever the
-// journal is created or rewritten (repair, compaction), so a VM built from
-// an older generation knows to rebuild rather than catch up.
+// journal is created or rewritten (repair, compaction, erasure), so a VM or
+// a store built from an older generation knows to rebuild rather than catch
+// up.
 type journalHeader struct {
 	Version    int       `json:"klash_gnovm_journal"`
 	Generation string    `json:"generation"`
@@ -38,7 +41,16 @@ type journalHeader struct {
 	// Gno is the gno version the journal was written under; a replay
 	// under another may not give the same state.
 	Gno string `json:"gno,omitempty"`
+	// Kind is "" for a VM's journal, "mem" for mem's (memjournal.go).
+	Kind string `json:"kind,omitempty"`
+	// Instance is mem's identity, made with it and kept through rewrites.
+	Instance string `json:"instance,omitempty"`
 }
+
+// journalEntry is a journal line after the header: a VM's entry, or mem's.
+type journalEntry interface{ seqNo() int64 }
+
+func (e entry) seqNo() int64 { return e.Seq }
 
 // entry is one successful call: the ops it ran, in order.
 type entry struct {
@@ -63,6 +75,7 @@ type journal struct {
 	path       string
 	generation string
 	gno        string
+	instance   string
 	size       int64
 	lastHash   string
 	seq        int64
@@ -79,9 +92,15 @@ func lineHash(line []byte) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// createJournal writes a new journal holding only its header, durably.
+// createJournal writes a new VM journal holding only its header, durably.
 func createJournal(path string, now time.Time) (*journal, error) {
-	hdr := journalHeader{Version: journalVersion, Generation: newGeneration(), Created: now.UTC(), Gno: stdlibVersion()}
+	return writeJournalHeader(path, journalHeader{Generation: newGeneration(), Created: now.UTC()})
+}
+
+// writeJournalHeader writes a new journal holding only hdr, durably, as
+// this build's format and gno version.
+func writeJournalHeader(path string, hdr journalHeader) (*journal, error) {
+	hdr.Version, hdr.Gno = journalVersion, stdlibVersion()
 	line, err := json.Marshal(hdr)
 	if err != nil {
 		return nil, err
@@ -90,13 +109,13 @@ func createJournal(path string, now time.Time) (*journal, error) {
 	if err := writeFileSync(path, line); err != nil {
 		return nil, err
 	}
-	return &journal{path: path, generation: hdr.Generation, gno: hdr.Gno, size: int64(len(line)), lastHash: lineHash(line)}, nil
+	return &journal{path: path, generation: hdr.Generation, gno: hdr.Gno, instance: hdr.Instance, size: int64(len(line)), lastHash: lineHash(line)}, nil
 }
 
 // errBrokenJournal marks a journal that cannot be read past some line.
 var errBrokenJournal = errors.New("journal is broken")
 
-// readJournal reads a whole journal. A torn last line (no newline, or not
+// readJournal reads a whole VM journal. A torn last line (no newline, or not
 // JSON) is reported as torn, to be cut by the caller under the VM's lock;
 // any other bad line makes the journal broken.
 func readJournal(path string) (j *journal, entries []entry, torn bool, err error) {
@@ -108,6 +127,11 @@ func readJournal(path string) (j *journal, entries []entry, torn bool, err error
 }
 
 func parseJournal(path string, data []byte) (j *journal, entries []entry, torn bool, err error) {
+	return parseJournalOf[entry](path, data, "")
+}
+
+// parseJournalOf parses a journal of the kind given, whose entries are E.
+func parseJournalOf[E journalEntry](path string, data []byte, kind string) (j *journal, entries []E, torn bool, err error) {
 	j = &journal{path: path}
 	off := 0
 	lineNo := 0
@@ -127,9 +151,12 @@ func parseJournal(path string, data []byte) (j *journal, entries []entry, torn b
 			if hdr.Version != journalVersion {
 				return nil, nil, false, fmt.Errorf("%w: format %d, want %d", errBrokenJournal, hdr.Version, journalVersion)
 			}
-			j.generation, j.gno = hdr.Generation, hdr.Gno
+			if hdr.Kind != kind {
+				return nil, nil, false, fmt.Errorf("%w: a %q journal, not %q", errBrokenJournal, hdr.Kind, kind)
+			}
+			j.generation, j.gno, j.instance = hdr.Generation, hdr.Gno, hdr.Instance
 		} else {
-			var e entry
+			var e E
 			if err := json.Unmarshal(line, &e); err != nil {
 				if off+nl+1 == len(data) {
 					// A torn final line can end in a newline when the
@@ -138,10 +165,10 @@ func parseJournal(path string, data []byte) (j *journal, entries []entry, torn b
 				}
 				return nil, nil, false, fmt.Errorf("%w: line %d: %v", errBrokenJournal, lineNo, err)
 			}
-			if e.Seq != j.seq+1 {
-				return nil, nil, false, fmt.Errorf("%w: line %d has seq %d after %d", errBrokenJournal, lineNo, e.Seq, j.seq)
+			if e.seqNo() != j.seq+1 {
+				return nil, nil, false, fmt.Errorf("%w: line %d has seq %d after %d", errBrokenJournal, lineNo, e.seqNo(), j.seq)
 			}
-			j.seq = e.Seq
+			j.seq = e.seqNo()
 			entries = append(entries, e)
 		}
 		off += nl + 1
@@ -173,7 +200,7 @@ var errSyncFailed = errors.New("journal sync failed")
 // append writes one entry durably. If the write fails, the journal is cut
 // back to where it was; if the sync fails, nothing is known about what
 // reached the disk, and the caller marks the VM broken.
-func (j *journal) append(e *entry) error {
+func (j *journal) append(e journalEntry) error {
 	line, err := json.Marshal(e)
 	if err != nil {
 		return err
@@ -197,7 +224,7 @@ func (j *journal) append(e *entry) error {
 	}
 	j.size += int64(len(line))
 	j.lastHash = lineHash(line)
-	j.seq = e.Seq
+	j.seq = e.seqNo()
 	return nil
 }
 
@@ -256,47 +283,119 @@ func (j *journal) readFrom() (tail []tailEntry, torn bool, err error) {
 	return readEntries(j.path, j.size, j.seq)
 }
 
-// readEntries reads a journal's entries after byte offset off, where the
+// readEntries reads a VM journal's entries after byte offset off, where the
 // entry before them has sequence number seq; off 0 means from the start,
 // past the header. Replay reads from where its VM stopped, so a replay in
 // slices does not read the whole journal for each slice.
 func readEntries(path string, off, seq int64) (tail []tailEntry, torn bool, err error) {
-	data, err := os.ReadFile(path)
+	torn, err = readEntriesOf(path, off, seq, func(e entry, end int64, hash string) error {
+		tail = append(tail, tailEntry{entry: e, end: end, hash: hash})
+		return nil
+	})
 	if err != nil {
 		return nil, false, err
 	}
+	return tail, torn, nil
+}
+
+// readJournalHeader reads only a journal's header, and its line.
+func readJournalHeader(path string) (hdr journalHeader, line []byte, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return hdr, nil, err
+	}
+	defer f.Close()
+	line, err = bufio.NewReader(f).ReadBytes('\n')
+	if err != nil {
+		return hdr, nil, fmt.Errorf("%w: no header", errBrokenJournal)
+	}
+	if err := json.Unmarshal(line, &hdr); err != nil || hdr.Generation == "" {
+		return hdr, nil, fmt.Errorf("%w: bad header", errBrokenJournal)
+	}
+	if hdr.Version != journalVersion {
+		return hdr, nil, fmt.Errorf("%w: format %d, want %d", errBrokenJournal, hdr.Version, journalVersion)
+	}
+	return hdr, line, nil
+}
+
+// lineEndsAt reports whether the journal line ending at byte end hashes to
+// hash: whether the journal is still the one a store was built from, up to
+// there.
+func lineEndsAt(path string, end int64, hash string) (bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return false, err
+	}
+	if end < 1 || end > st.Size() {
+		return false, nil
+	}
+	tail := make([]byte, min(end, maxEntry+1))
+	if _, err := f.ReadAt(tail, end-int64(len(tail))); err != nil {
+		return false, err
+	}
+	if tail[len(tail)-1] != '\n' {
+		return false, nil
+	}
+	start := bytes.LastIndexByte(tail[:len(tail)-1], '\n') + 1
+	return lineHash(tail[start:]) == hash, nil
+}
+
+// readEntriesOf calls each, in order, on a journal's entries after byte
+// offset off (0: from the start, past the header), where the entry before
+// them has sequence number seq; with where each line ends and its hash. It
+// reads from off on, a line at a time, so catching up costs what was
+// appended, not the journal. A torn last line is reported as torn. An error
+// from each stops it, and is returned.
+func readEntriesOf[E journalEntry](path string, off, seq int64, each func(e E, end int64, hash string) error) (torn bool, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return false, err
+	}
+	if st.Size() < off {
+		return false, fmt.Errorf("%w: shrank", errBrokenJournal)
+	}
+	r := bufio.NewReader(io.NewSectionReader(f, off, st.Size()-off))
 	if off == 0 {
-		nl := bytes.IndexByte(data, '\n')
-		if nl < 0 {
-			return nil, false, fmt.Errorf("%w: no header", errBrokenJournal)
+		hdr, err := r.ReadBytes('\n')
+		if err != nil {
+			return false, fmt.Errorf("%w: no header", errBrokenJournal)
 		}
-		off = int64(nl) + 1
+		off = int64(len(hdr))
 	}
-	if int64(len(data)) < off {
-		return nil, false, fmt.Errorf("%w: shrank", errBrokenJournal)
-	}
-	for off < int64(len(data)) {
-		nl := bytes.IndexByte(data[off:], '\n')
-		if nl < 0 {
-			return tail, true, nil
+	for {
+		line, err := r.ReadBytes('\n')
+		if errors.Is(err, io.EOF) {
+			return len(line) > 0, nil
 		}
-		end := off + int64(nl) + 1
-		line := data[off:end]
-		var e entry
+		if err != nil {
+			return false, err
+		}
+		var e E
 		if err := json.Unmarshal(line, &e); err != nil {
-			if end == int64(len(data)) {
-				return tail, true, nil
+			if _, end := r.Peek(1); errors.Is(end, io.EOF) {
+				return true, nil
 			}
-			return nil, false, fmt.Errorf("%w: %v", errBrokenJournal, err)
+			return false, fmt.Errorf("%w: %v", errBrokenJournal, err)
 		}
-		if e.Seq != seq+1 {
-			return nil, false, fmt.Errorf("%w: seq %d after %d", errBrokenJournal, e.Seq, seq)
+		if e.seqNo() != seq+1 {
+			return false, fmt.Errorf("%w: seq %d after %d", errBrokenJournal, e.seqNo(), seq)
 		}
-		seq = e.Seq
-		tail = append(tail, tailEntry{entry: e, end: end, hash: lineHash(line)})
-		off = end
+		seq = e.seqNo()
+		off += int64(len(line))
+		if err := each(e, off, lineHash(line)); err != nil {
+			return false, err
+		}
 	}
-	return tail, false, nil
 }
 
 // saw records a tail entry as seen.
