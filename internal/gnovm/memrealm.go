@@ -141,14 +141,26 @@ type memCall struct {
 // what it changed in one batch. A failed input keeps nothing, and an input
 // that made no Ops is a read: it must have written nothing either, since
 // only gnomem's do changes mem.
-func (r *memRealm) run(code, caller string, imports ...string) (call memCall, err error) {
+func (r *memRealm) run(code, caller string, imports ...string) (memCall, error) {
+	return r.call(code, memContext{caller: caller}, imports...)
+}
+
+// apply applies ops, made at time at, through gnomem's Apply, which records
+// nothing: they are the journal's already.
+func (r *memRealm) apply(ops []memOp, at int64) error {
+	_, err := r.call("mem.Apply()", memContext{caller: "klash", pending: ops, at: at})
+	return err
+}
+
+func (r *memRealm) call(code string, ctx memContext, imports ...string) (call memCall, err error) {
 	kv := cache.New(r.kv)
 	wc := &writeCounter{Store: kv}
 	tx := r.b.store.BeginTransaction(wc, wc, nil, nil)
 	tx.SetPackageGetter(nil)
 	var out bytes.Buffer
-	ctx := memContext{ExecContext: execContext(0, time.Now()), caller: caller, ops: &call.Ops}
+	ctx.ExecContext = execContext(0, time.Now())
 	ctx.OriginCaller = memRunAddr.Bech32()
+	ctx.ops = &call.Ops
 	defer func() {
 		call.Output = out.String()
 		if p := recover(); p != nil {
@@ -163,7 +175,7 @@ func (r *memRealm) run(code, caller string, imports ...string) (call memCall, er
 	defer m2.Release()
 	m2.SetActivePackage(pv)
 	m2.RunMain()
-	if len(call.Ops) == 0 {
+	if len(call.Ops) == 0 && ctx.pending == nil {
 		if wc.writes > 0 {
 			return call, fmt.Errorf("gnomem: an input that made no Ops wrote %d keys", wc.writes)
 		}

@@ -23,6 +23,9 @@ type memContext struct {
 	stdlibs.ExecContext
 	caller string
 	ops    *[]memOp
+	// pending and at are the Ops klash hands Apply, and their call's time.
+	pending []memOp
+	at      int64
 }
 
 // memOp is one change to a mem, as gnomem's do hands it to klash.
@@ -34,7 +37,7 @@ type memOp struct {
 var memNativeGas = gno.NativeGasInfo{Base: 1000, SlopeIdx: -1, SlopeKind: gno.SizeFlat}
 
 func init() {
-	for _, name := range []gno.Name{"caller", "record"} {
+	for _, name := range []gno.Name{"caller", "record", "pending"} {
 		info := memNativeGas
 		gno.RegisterNativeGas(memLibPath, name, &info)
 	}
@@ -62,6 +65,21 @@ func memNative(name gno.Name) func(*gno.Machine) {
 				New:   memArg(m, 4),
 				By:    memArg(m, 5),
 			})
+		}
+	case "pending":
+		return func(m *gno.Machine) {
+			ctx := memCallContext(m, "pending")
+			fields := make([][]string, 6)
+			for _, op := range ctx.pending {
+				for i, s := range []string{op.Kind, op.Name, op.Field, op.Old, op.New, op.By} {
+					fields[i] = append(fields[i], s)
+				}
+			}
+			for i := range fields {
+				m.PushValue(gno.Go2GnoValue(m.Alloc, m.Store, reflect.ValueOf(&fields[i]).Elem()))
+			}
+			at := ctx.at
+			m.PushValue(gno.Go2GnoValue(m.Alloc, m.Store, reflect.ValueOf(&at).Elem()))
 		}
 	}
 	return nil

@@ -107,20 +107,51 @@ func (m *Mem) Steps(name string, titles ...string) {
 	}
 }
 
-// Show returns mem as an outline, in the order items were added.
-func (m *Mem) Show() string {
+// Show returns mem as an outline, in the order items were added; given
+// names, those items with everything under them.
+func (m *Mem) Show(names ...string) string {
 	var sb strings.Builder
-	m.items.Iterate("", "", func(k string, v any) bool {
-		it := v.(*Todo)
+	line := func(k string, it *Todo) {
 		name := unkey(k)
 		depth := strings.Count(name, "/")
 		sb.WriteString(strings.Repeat("  ", depth) + mark(it.Status) + " `" + name + "` " + strconv.Quote(it.Title) + "\n")
-		return false
-	})
-	if sb.Len() == 0 {
-		return "mem is empty\n"
+	}
+	if len(names) == 0 {
+		m.items.Iterate("", "", func(k string, v any) bool {
+			line(k, v.(*Todo))
+			return false
+		})
+		if sb.Len() == 0 {
+			return "mem is empty\n"
+		}
+		return sb.String()
+	}
+	for _, name := range names {
+		it := m.get(name)
+		if it == nil {
+			sb.WriteString("no item `" + name + "`\n")
+			continue
+		}
+		line(key(name), it)
+		m.items.Iterate(key(name)+"/", key(name)+"/\xff", func(k string, v any) bool {
+			line(k, v.(*Todo))
+			return false
+		})
 	}
 	return sb.String()
+}
+
+// Apply applies the Ops klash hands it, stamped with their call's time,
+// without recording them: klash rebuilds a Mem from its journal with it,
+// and undoes with it. It panics unless klash runs the input.
+func (m *Mem) Apply() {
+	if caller() != "klash" {
+		panic("only klash may apply Ops")
+	}
+	kinds, names, fields, olds, news, bys, at := pending()
+	for i := range kinds {
+		m.apply(Op{Kind: kinds[i], Name: names[i], Field: fields[i], Old: olds[i], New: news[i], By: bys[i]}, at)
+	}
 }
 
 // String is Show(), so that println(mem) shows mem.
@@ -287,3 +318,7 @@ func caller() string
 
 // record hands klash an Op of this call.
 func record(kind, name, field, old, new, by string)
+
+// pending is the Ops klash hands Apply, field by field, and their call's
+// time.
+func pending() (kinds, names, fields, olds, news, bys []string, at int64)
