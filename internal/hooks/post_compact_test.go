@@ -67,7 +67,7 @@ func TestCompactSummaryOnlyInPostCompactPayloads(t *testing.T) {
 
 	for _, payload := range [][]byte{
 		BuildPreCompactPayload("s", "/w", PreCompactTriggerAuto, ""),
-		BuildPayload(EventPreToolUse, "s", "/w", "bash", `{}`),
+		marshalPayload(toolPayload(EventPreToolUse, "s", "/w", "bash", `{}`)),
 	} {
 		var got map[string]any
 		require.NoError(t, json.Unmarshal(payload, &got))

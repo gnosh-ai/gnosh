@@ -173,7 +173,7 @@ func TestReasonOnlyInSessionEndPayloads(t *testing.T) {
 	t.Parallel()
 
 	var payload map[string]any
-	require.NoError(t, json.Unmarshal(BuildPayload(EventPreToolUse, "sess", "/p", "bash", `{"command":"ls"}`), &payload))
+	require.NoError(t, json.Unmarshal(marshalPayload(toolPayload(EventPreToolUse, "sess", "/p", "bash", `{"command":"ls"}`)), &payload))
 	_, has := payload["reason"]
 	require.False(t, has)
 	require.NoError(t, json.Unmarshal(BuildSessionStartPayload("sess", "/p", "m", SessionStartSourceStartup), &payload))

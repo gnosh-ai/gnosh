@@ -125,7 +125,7 @@ func TestCustomInstructionsOnlyInPreCompactPayloads(t *testing.T) {
 	t.Parallel()
 
 	var payload map[string]any
-	require.NoError(t, json.Unmarshal(BuildPayload(EventPreToolUse, "sess", "/p", "bash", `{"command":"ls"}`), &payload))
+	require.NoError(t, json.Unmarshal(marshalPayload(toolPayload(EventPreToolUse, "sess", "/p", "bash", `{"command":"ls"}`)), &payload))
 	_, has := payload["custom_instructions"]
 	require.False(t, has)
 

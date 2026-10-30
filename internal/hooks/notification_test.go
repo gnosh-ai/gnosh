@@ -103,7 +103,7 @@ func TestNotificationFieldsOnlyInNotificationPayloads(t *testing.T) {
 	t.Parallel()
 
 	for _, payload := range [][]byte{
-		BuildPayload(EventPreToolUse, "s", "/w", "bash", `{}`),
+		marshalPayload(toolPayload(EventPreToolUse, "s", "/w", "bash", `{}`)),
 		BuildPostCompactPayload("s", "/w", PreCompactTriggerManual, "summary"),
 		BuildSessionEndPayload("s", "/w", SessionEndReasonClear),
 	} {

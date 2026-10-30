@@ -220,9 +220,9 @@ func splitFirst(s, sep string) []string {
 	return []string{before, after}
 }
 
-func TestBuildPayload(t *testing.T) {
+func TestToolPayload(t *testing.T) {
 	t.Parallel()
-	payload := BuildPayload(EventPreToolUse, "sess-1", "/work", "bash", `{"command":"ls"}`)
+	payload := marshalPayload(toolPayload(EventPreToolUse, "sess-1", "/work", "bash", `{"command":"ls"}`))
 	s := string(payload)
 	require.Contains(t, s, `"event":"`+EventPreToolUse+`"`)
 	require.Contains(t, s, `"tool_name":"bash"`)
@@ -235,9 +235,9 @@ func TestBuildPayload(t *testing.T) {
 func TestPayloadsCarryHookEventName(t *testing.T) {
 	t.Parallel()
 	for event, payload := range map[string][]byte{
-		EventPreToolUse:  BuildPayload(EventPreToolUse, "s", "/w", "bash", `{}`),
-		EventPostToolUse: BuildPostPayload("s", "/w", "bash", `{}`, "out", ""),
-		EventStop:        BuildStopPayload("s", "/w", "done", false),
+		EventPreToolUse:  marshalPayload(toolPayload(EventPreToolUse, "s", "/w", "bash", `{}`)),
+		EventPostToolUse: marshalPayload(postPayload("s", "/w", "bash", `{}`, "out", "")),
+		EventStop:        marshalPayload(stopPayload("s", "/w", "done", false)),
 	} {
 		var got struct {
 			Event         string `json:"event"`
@@ -590,7 +590,7 @@ func TestRunPostToolUse(t *testing.T) {
 }
 
 // tool_response carries the tool's metadata only when it is a JSON object.
-func TestBuildPostPayloadMetadata(t *testing.T) {
+func TestPostPayloadMetadata(t *testing.T) {
 	t.Parallel()
 
 	for metadata, want := range map[string]string{
@@ -603,7 +603,7 @@ func TestBuildPostPayloadMetadata(t *testing.T) {
 			Event        string          `json:"event"`
 			ToolResponse json.RawMessage `json:"tool_response"`
 		}
-		require.NoError(t, json.Unmarshal(BuildPostPayload("sess", "/cwd", "bash", `{}`, "out", metadata), &payload))
+		require.NoError(t, json.Unmarshal(marshalPayload(postPayload("sess", "/cwd", "bash", `{}`, "out", metadata)), &payload))
 		require.Equal(t, EventPostToolUse, payload.Event)
 		require.JSONEq(t, want, string(payload.ToolResponse), metadata)
 	}

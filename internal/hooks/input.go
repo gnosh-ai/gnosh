@@ -148,19 +148,9 @@ type ToolResponse struct {
 	Metadata json.RawMessage `json:"metadata,omitempty"`
 }
 
-// BuildPayload constructs the JSON stdin payload for a hook command.
-func BuildPayload(eventName, sessionID, cwd, toolName, toolInputJSON string) []byte {
-	return marshalPayload(toolPayload(eventName, sessionID, cwd, toolName, toolInputJSON))
-}
-
-// BuildPostPayload constructs the JSON stdin payload for an
-// EventPostToolUse hook: the tool call, plus what it returned. Metadata
-// that is not a JSON object is left out rather than passed on as
-// something a hook would have to guess at.
-func BuildPostPayload(sessionID, cwd, toolName, toolInputJSON, output, metadata string) []byte {
-	return marshalPayload(postPayload(sessionID, cwd, toolName, toolInputJSON, output, metadata))
-}
-
+// postPayload is the payload of an EventPostToolUse hook: the tool call,
+// plus what it returned. Metadata that is not a JSON object is left out
+// rather than passed on as something a hook would have to guess at.
 func postPayload(sessionID, cwd, toolName, toolInputJSON, output, metadata string) Payload {
 	p := toolPayload(EventPostToolUse, sessionID, cwd, toolName, toolInputJSON)
 	p.ToolResponse = &ToolResponse{Output: output}
@@ -275,6 +265,7 @@ func toolPayload(eventName, sessionID, cwd, toolName, toolInputJSON string) Payl
 	}
 }
 
+// marshalPayload is p as a hook command's JSON stdin.
 func marshalPayload(p Payload) []byte {
 	data, err := json.Marshal(p)
 	if err != nil {
@@ -283,13 +274,8 @@ func marshalPayload(p Payload) []byte {
 	return data
 }
 
-// BuildStopPayload constructs the JSON stdin payload for an EventStop
-// hook. There is no tool in play, so tool_name is empty and tool_input
-// is an empty object.
-func BuildStopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActive bool) []byte {
-	return marshalPayload(stopPayload(sessionID, cwd, lastAssistantMessage, stopHookActive))
-}
-
+// stopPayload is the payload of an EventStop hook. There is no tool in
+// play, so tool_name is empty and tool_input is an empty object.
 func stopPayload(sessionID, cwd, lastAssistantMessage string, stopHookActive bool) Payload {
 	return Payload{
 		Event:                EventStop,
