@@ -200,14 +200,14 @@ func mustMarshalConfig(cfg *Config) []byte {
 	return data
 }
 
-// PushPopCrushEnv lets a GNOSH_ or CRUSH_ prefixed variable stand in for
-// the unprefixed one while providers are configured, so that, e.g.,
-// GNOSH_OPENAI_API_KEY overrides OPENAI_API_KEY for this program alone.
-// GNOSH_, the name after the rename, wins over CRUSH_. The returned func
+// PushPopCrushEnv lets a GNOSH_, KLASH_ or CRUSH_ prefixed variable stand in
+// for the unprefixed one while providers are configured, so that, e.g.,
+// GNOSH_OPENAI_API_KEY overrides OPENAI_API_KEY for this program alone. The
+// newer name wins: GNOSH_ over KLASH_, KLASH_ over CRUSH_. The returned func
 // restores the previous values.
 func PushPopCrushEnv() func() {
 	overrides := make(map[string]string)
-	for _, prefix := range []string{"CRUSH_", "GNOSH_"} { // the later prefix wins
+	for _, prefix := range []string{"CRUSH_", "KLASH_", "GNOSH_"} { // the later prefix wins
 		for _, ev := range os.Environ() {
 			name, value, ok := strings.Cut(ev, "=")
 			if !ok {
@@ -603,6 +603,7 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 		configDir := filepath.Dir(GlobalConfig())
 		c.Options.GlobalContextPaths = []string{
 			filepath.Join(configDir, "GNOSH.md"),
+			filepath.Join(configDir, "KLASH.md"),
 			filepath.Join(configDir, "CRUSH.md"),
 			filepath.Join(filepath.Dir(configDir), "AGENTS.md"),
 		}
@@ -1011,11 +1012,11 @@ func lookupConfigs(cwd string) []string {
 // priority order within a directory. LookupBounded returns matches in
 // this order, and the later reverse + merge make the earliest listed
 // name win on conflict. So: .gnoshrc beats gnoshrc, both beat the JSON
-// configs, and .gnosh.json beats gnosh.json; each beats its name from
-// before the rename.
+// configs, and .gnosh.json beats gnosh.json; each beats its names from
+// before the renames.
 func projectConfigNames() []string {
 	var names []string
-	for _, name := range []string{appName, legacyAppName} {
+	for _, name := range appNames {
 		names = append(names, "."+name+"rc", name+"rc", "."+name+".json", name+".json")
 	}
 	return names
@@ -1294,26 +1295,23 @@ func migrateDisableNotifications() {
 }
 
 // projectDataDir is the data directory for a project in workingDir: the
-// closest .gnosh or .crush within the project, so that a .gnosh made
-// farther up (by a run at the repository root) cannot hide the sessions
-// in a closer .crush. Where there is neither, it is a new .gnosh in
-// workingDir, or the .crush already there: the lookup passes over the
-// home directory, where both would otherwise be missed.
+// closest .gnosh, .klash or .crush within the project, so that a .gnosh
+// made farther up (by a run at the repository root) cannot hide the
+// sessions in a closer .klash or .crush. Where there is none, it is a new
+// .gnosh in workingDir, or the older one already there: the lookup passes
+// over the home directory, where they would otherwise be missed.
 func projectDataDir(workingDir string) string {
-	if path, ok := fsext.LookupClosestBounded(workingDir, projectBoundary(workingDir), defaultDataDirectory, legacyDataDirectory); ok {
+	if path, ok := fsext.LookupClosestBounded(workingDir, projectBoundary(workingDir), appPaths("", ".", "")...); ok {
 		return path
 	}
-	return fsext.FirstExisting(
-		filepath.Join(workingDir, defaultDataDirectory),
-		filepath.Join(workingDir, legacyDataDirectory),
-	)
+	return fsext.FirstExisting(appPaths(workingDir, ".", "")...)
 }
 
 // LogFile returns the log file for logDir, a data directory's logs or a
-// server's cache directory: gnosh.log, or the crush.log from before the
-// rename to Gnosh where only that one exists.
+// server's cache directory: gnosh.log, or the klash.log or crush.log from
+// before the renames where only that one exists.
 func LogFile(logDir string) string {
-	return fsext.FirstExisting(filepath.Join(logDir, appName+".log"), filepath.Join(logDir, legacyAppName+".log"))
+	return fsext.FirstExisting(appPaths(logDir, "", ".log")...)
 }
 
 // GlobalConfig returns the global configuration file path for the application.
@@ -1324,35 +1322,43 @@ func GlobalConfig() string {
 	return configFileIn(appConfigDir(home.Config()))
 }
 
-// appDir is the program's directory under base: gnosh, or crush where only
-// that one exists.
+// appPaths are base joined with prefix+name+suffix for each of the
+// program's names, newest first; with base empty, they are just the names.
+func appPaths(base, prefix, suffix string) []string {
+	paths := make([]string, len(appNames))
+	for i, name := range appNames {
+		paths[i] = filepath.Join(base, prefix+name+suffix)
+	}
+	return paths
+}
+
+// appDir is the program's directory under base: gnosh, or klash or crush
+// where only that one exists.
 func appDir(base string) string {
-	return fsext.FirstExisting(filepath.Join(base, appName), filepath.Join(base, legacyAppName))
+	return fsext.FirstExisting(appPaths(base, "", "")...)
 }
 
 // appConfigDir is appDir for a directory that holds a config file, the
 // global config and global data directories: the one holding a config
-// file wins, gnosh before crush, and only where neither does is it
-// appDir's choice. A gnosh directory made for anything else (mkdir -p
-// ~/.config/gnosh/commands) must not take over from a crush one in use:
+// file wins, gnosh before klash before crush, and only where none does is
+// it appDir's choice. A gnosh directory made for anything else (mkdir -p
+// ~/.config/gnosh/commands) must not take over from an older one in use:
 // it would hide its config, and with it the hooks, MCP servers and
 // permissions, its shell config, templates, tools and skills, and in the
 // data directory the OAuth tokens.
 func appConfigDir(base string) string {
-	dir, legacy := filepath.Join(base, appName), filepath.Join(base, legacyAppName)
-	switch {
-	case hasConfigFile(dir):
-		return dir
-	case hasConfigFile(legacy):
-		return legacy
+	for _, dir := range appPaths(base, "", "") {
+		if hasConfigFile(dir) {
+			return dir
+		}
 	}
 	return appDir(base)
 }
 
 // hasConfigFile reports whether dir holds a JSON or shell config file under
-// either name.
+// any of the program's names.
 func hasConfigFile(dir string) bool {
-	for _, name := range []string{appName, legacyAppName} {
+	for _, name := range appNames {
 		for _, file := range []string{name + ".json", name + "rc"} {
 			if _, err := os.Stat(filepath.Join(dir, file)); err == nil {
 				return true
@@ -1362,28 +1368,31 @@ func hasConfigFile(dir string) bool {
 	return false
 }
 
-// configFileIn is the JSON config file in dir: gnosh.json, or crush.json
-// where only that one exists.
+// configFileIn is the JSON config file in dir: gnosh.json, or klash.json or
+// crush.json where only that one exists.
 func configFileIn(dir string) string {
-	return fsext.FirstExisting(filepath.Join(dir, appName+".json"), filepath.Join(dir, legacyAppName+".json"))
+	return fsext.FirstExisting(appPaths(dir, "", ".json")...)
 }
 
 // shellConfigSiblings returns the shell config paths that sit alongside a
-// given JSON config path (same directory): crushrc, then gnoshrc, so that
-// the new name wins where both exist. Both are listed even when missing, so
-// that creating either one is noticed. Used so global config locations pick
-// up a shell config, not just JSON.
+// given JSON config path (same directory): crushrc, klashrc, then gnoshrc,
+// so that the newest name wins where several exist. All are listed even
+// when missing, so that creating any one is noticed. Used so global config
+// locations pick up a shell config, not just JSON.
 func shellConfigSiblings(jsonPath string) []string {
-	dir := filepath.Dir(jsonPath)
-	return []string{filepath.Join(dir, legacyAppName+"rc"), filepath.Join(dir, appName+"rc")}
+	paths := appPaths(filepath.Dir(jsonPath), "", "rc")
+	slices.Reverse(paths) // oldest first: the later one wins
+	return paths
 }
 
 // isShellConfig reports whether a config path is a shell config (gnoshrc,
-// crushrc, or a hidden .gnoshrc or .crushrc), as opposed to a JSON config.
+// klashrc or crushrc, or a hidden one), as opposed to a JSON config.
 func isShellConfig(path string) bool {
-	switch filepath.Base(path) {
-	case appName + "rc", "." + appName + "rc", legacyAppName + "rc", "." + legacyAppName + "rc":
-		return true
+	base := filepath.Base(path)
+	for _, name := range appNames {
+		if base == name+"rc" || base == "."+name+"rc" {
+			return true
+		}
 	}
 	return false
 }
@@ -1528,9 +1537,10 @@ func GlobalSkillsDirs() []string {
 
 	configDir := appConfigDir(home.Config())
 	paths := []string{filepath.Join(configDir, "skills")}
-	// The skills directory under the other name too, gnosh's or crush's,
-	// after the one the config is in, so skills kept under either are found.
-	for _, name := range []string{appName, legacyAppName} {
+	// The skills directory under the other names too, gnosh's, klash's or
+	// crush's, after the one the config is in, so skills kept under any are
+	// found.
+	for _, name := range appNames {
 		if dir := filepath.Join(home.Config(), name); dir != configDir {
 			paths = append(paths, filepath.Join(dir, "skills"))
 		}
@@ -1565,6 +1575,7 @@ func GlobalSkillsDirs() []string {
 var projectSkillSubdirs = []string{
 	".agents/skills",
 	".gnosh/skills",
+	".klash/skills",
 	".crush/skills",
 	".claude/skills",
 	".cursor/skills",

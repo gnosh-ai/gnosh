@@ -247,17 +247,14 @@ func initGoose() error {
 	return gooseInitErr
 }
 
-// FileName returns the database file in dataDir: gnosh.db, or the crush.db
-// from before the rename to Gnosh where only that one exists, so that an
+// FileName returns the database file in dataDir: gnosh.db, or the klash.db
+// or crush.db from before the renames where only that one exists, so that an
 // existing data directory keeps its sessions.
 func FileName(dataDir string) string {
-	db := filepath.Join(dataDir, "gnosh.db")
-	if _, err := os.Stat(db); err == nil {
-		return db
+	for _, name := range []string{"gnosh.db", "klash.db", "crush.db"} {
+		if _, err := os.Stat(filepath.Join(dataDir, name)); err == nil {
+			return filepath.Join(dataDir, name)
+		}
 	}
-	legacy := filepath.Join(dataDir, "crush.db")
-	if _, err := os.Stat(legacy); err == nil {
-		return legacy
-	}
-	return db
+	return filepath.Join(dataDir, "gnosh.db")
 }

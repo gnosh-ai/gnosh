@@ -245,8 +245,8 @@ func runStats(cmd *cobra.Command, _ []string) error {
 }
 
 // crawlForStats crawls a directory recursively looking for session
-// databases: .gnosh/gnosh.db, or the .crush/ and crush.db names from
-// before the rename.
+// databases: .gnosh/gnosh.db, or the .klash/klash.db and .crush/crush.db
+// names from before the renames.
 func crawlForStats(ctx context.Context, rootDir string) ([]ProjectStats, error) {
 	var dbPaths []struct {
 		dbPath     string
@@ -263,9 +263,9 @@ func crawlForStats(ctx context.Context, rootDir string) ([]ProjectStats, error) 
 			return filepath.SkipDir
 		}
 
-		if !d.IsDir() && (d.Name() == "gnosh.db" || d.Name() == "crush.db") {
+		if !d.IsDir() && (d.Name() == "gnosh.db" || d.Name() == "klash.db" || d.Name() == "crush.db") {
 			dir := filepath.Dir(path)
-			if base := filepath.Base(dir); base == ".gnosh" || base == ".crush" {
+			if base := filepath.Base(dir); base == ".gnosh" || base == ".klash" || base == ".crush" {
 				projectDir := filepath.Dir(dir)
 				dbPaths = append(dbPaths, struct {
 					dbPath     string

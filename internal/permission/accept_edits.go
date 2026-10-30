@@ -25,12 +25,12 @@ var acceptEditsTools = map[string]bool{"edit": true, "multiedit": true, "write":
 var (
 	protectedDirs = []string{
 		".git", ".vscode", ".idea", ".husky", ".cargo", ".devcontainer", ".yarn", ".mvn",
-		".claude", ".gnosh", ".crush", ".ssh", ".gnupg",
+		".claude", ".gnosh", ".klash", ".crush", ".ssh", ".gnupg",
 	}
 	protectedFiles = []string{
 		".gitconfig", ".gitmodules", ".bashrc", ".bash_profile", ".bash_login", ".profile",
 		".zshrc", ".zshenv", ".zprofile", ".zlogin", ".npmrc", ".mcp.json", ".claude.json",
-		"gnosh.json", ".gnosh.json", "crush.json", ".crush.json",
+		"gnosh.json", ".gnosh.json", "klash.json", ".klash.json", "crush.json", ".crush.json",
 	}
 )
 

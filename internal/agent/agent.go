@@ -2778,13 +2778,11 @@ func restoredSkillsText(msgs []message.Message) string {
 }
 
 // skillFile is the SKILL.md at path: a built-in skill's from the binary,
-// another's from disk.
+// under any of its names, another's from disk.
 func skillFile(path string) (string, error) {
-	for _, prefix := range []string{skills.BuiltinPrefix, skills.LegacyBuiltinPrefix} {
-		if rest, ok := strings.CutPrefix(path, prefix); ok {
-			data, err := fs.ReadFile(skills.BuiltinFS(), "builtin/"+rest)
-			return string(data), err
-		}
+	if rest, ok := strings.CutPrefix(skills.CanonicalBuiltinPath(path), skills.BuiltinPrefix); ok {
+		data, err := fs.ReadFile(skills.BuiltinFS(), "builtin/"+rest)
+		return string(data), err
 	}
 	data, err := os.ReadFile(path)
 	return string(data), err

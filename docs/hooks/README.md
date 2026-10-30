@@ -957,11 +957,11 @@ The available environment variables are:
 | `GNOSH_SESSION_END_REASON`   | `SessionEnd` only: `clear`, `other` or `prompt_input_exit`, the same as the `reason` field in the payload. |
 | `GNOSH_INSTRUCTIONS_LOAD_REASON` | `InstructionsLoaded` only: `session_start`, `nested_traversal`, `include` or `compact`, the same as the `load_reason` field in the payload. |
 
-Gnosh was called Crush, so every `GNOSH_` variable above is also set under its
-`CRUSH_` name (`CRUSH_EVENT`, `CRUSH_TOOL_NAME`, and so on), and `CRUSH=1`
-beside `GNOSH=1`. Either works; the `CRUSH_` names stay for hooks written before
-the rename. `AGENT` and `AI_AGENT` still say `crush`, since other tools may
-match on that value.
+Gnosh was called Klash, and before that Crush, so every `GNOSH_` variable above
+is also set under its `KLASH_` and `CRUSH_` names (`KLASH_EVENT`,
+`CRUSH_EVENT`, and so on), and `KLASH=1` and `CRUSH=1` beside `GNOSH=1`. Any of
+them works; the old names stay for hooks written before the renames. `AGENT`
+and `AI_AGENT` still say `crush`, since other tools may match on that value.
 
 The `GNOSH`, `AGENT`, and `AI_AGENT` markers are also set by the `bash`
 tool, so a script can detect "am I running under Gnosh?" the same way in

@@ -21,10 +21,10 @@ var ErrDataDirLocked = errors.New("data directory already in use by another gnos
 
 // dataDirLockFile is the lock file inside the data directory. It lives
 // next to the database so users can `ls` and find it, and is named for
-// it: gnosh.lock beside gnosh.db, crush.lock beside the crush.db from
-// before the rename. A process from before the rename locks crush.lock
-// for crush.db, so a newer one sharing that database must lock the same
-// file, or both would open it at once.
+// it: gnosh.lock beside gnosh.db, klash.lock or crush.lock beside the
+// klash.db or crush.db from before the renames. A process from before a
+// rename locks the lock named for its database, so a newer one sharing that
+// database must lock the same file, or both would open it at once.
 func dataDirLockFile(dataDir string) string {
 	return strings.TrimSuffix(FileName(dataDir), ".db") + ".lock"
 }

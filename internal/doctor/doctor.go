@@ -186,7 +186,7 @@ func hookScriptProblem(command, dir string) string {
 	other := false
 	expanded := os.Expand(script, func(name string) string {
 		switch name {
-		case "CLAUDE_PROJECT_DIR", "GNOSH_PROJECT_DIR", "CRUSH_PROJECT_DIR":
+		case "CLAUDE_PROJECT_DIR", "GNOSH_PROJECT_DIR", "KLASH_PROJECT_DIR", "CRUSH_PROJECT_DIR":
 			return dir
 		}
 		other = true

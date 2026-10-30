@@ -43,8 +43,8 @@ func LoadShellConfig(ctx context.Context, path string, src []byte) ([]byte, erro
 
 	// Expose the running version so scripts can feature-detect, e.g.
 	// [[ "$GNOSH_VERSION" == "devel" ]] or branch on the release; scripts
-	// written before the rename read it as CRUSH_VERSION.
-	env := append(os.Environ(), "GNOSH_VERSION="+version.Version, "CRUSH_VERSION="+version.Version)
+	// written before the renames read it as KLASH_VERSION or CRUSH_VERSION.
+	env := append(os.Environ(), "GNOSH_VERSION="+version.Version, "KLASH_VERSION="+version.Version, "CRUSH_VERSION="+version.Version)
 
 	err := shell.Run(runCtx, shell.RunOptions{
 		Command: string(src),

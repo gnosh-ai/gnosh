@@ -10,11 +10,11 @@ import (
 )
 
 // prefixes are the environment variable prefixes the program is configured
-// through: CRUSH_*, and GNOSH_* for the name it is being renamed to.
-var prefixes = []string{"CRUSH_", "GNOSH_"}
+// through: GNOSH_*, and KLASH_* and CRUSH_* from before the renames.
+var prefixes = []string{"GNOSH_", "KLASH_", "CRUSH_"}
 
-// ClearConfigVars unsets every CRUSH_* and GNOSH_* variable in the process
-// environment. Run calls it; a package's TestMain should call Run.
+// ClearConfigVars unsets every GNOSH_*, KLASH_* and CRUSH_* variable in the
+// process environment. Run calls it; a package's TestMain should call Run.
 //
 // The program is configured through these variables, and everything it runs
 // inherits them — including `go test`, run from inside it by an agent

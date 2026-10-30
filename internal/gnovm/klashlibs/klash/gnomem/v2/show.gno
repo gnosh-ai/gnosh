@@ -380,8 +380,8 @@ func who(by string) string {
 		return "nobody"
 	case "user":
 		return "the user"
-	case "klash":
-		return "klash"
+	case "klash": // gnosh's own calls, recorded under its old name
+		return "gnosh"
 	case caller():
 		return "this session"
 	}

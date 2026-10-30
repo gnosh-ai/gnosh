@@ -62,32 +62,37 @@ func Names() []string {
 	return slices.Clone(names)
 }
 
-// legacyNames maps the names tools had before Crush was renamed Gnosh
-// to their names now, so that a config or hook naming the old one keeps
-// working.
-var legacyNames = map[string]string{
-	"crush_info": "gnosh_info",
-	"crush_logs": "gnosh_logs",
+// legacyNames are the names tools had before the renames, from Crush to
+// Klash to Gnosh, newest first, each with its name now, so that a config or
+// hook naming an old one keeps working.
+var legacyNames = []struct{ old, current string }{
+	{"klash_info", "gnosh_info"},
+	{"klash_logs", "gnosh_logs"},
+	{"crush_info", "gnosh_info"},
+	{"crush_logs", "gnosh_logs"},
 }
 
 // Canonical returns the current name of a built-in tool given by any of
 // its names. Any other name is returned as it is.
 func Canonical(name string) string {
-	if current, ok := legacyNames[name]; ok {
-		return current
+	for _, l := range legacyNames {
+		if l.old == name {
+			return l.current
+		}
 	}
 	return name
 }
 
-// LegacyName returns the name a built-in tool had before the rename, or
-// "" if it had no other.
-func LegacyName(name string) string {
-	for legacy, current := range legacyNames {
-		if current == name {
-			return legacy
+// LegacyNames returns the names a built-in tool had before the renames,
+// newest first, or none if it had no other.
+func LegacyNames(name string) []string {
+	var old []string
+	for _, l := range legacyNames {
+		if l.current == name {
+			old = append(old, l.old)
 		}
 	}
-	return ""
+	return old
 }
 
 // IsKnown reports whether name is a built-in tool, under its current name

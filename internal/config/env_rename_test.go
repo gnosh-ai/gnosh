@@ -10,8 +10,9 @@ import (
 )
 
 // Path settings read from the environment answer to their GNOSH_ names and
-// to the CRUSH_ names from before the rename, the GNOSH_ name winning.
-func TestPathSettingsAnswerToBothNames(t *testing.T) {
+// to the KLASH_ and CRUSH_ names from before the renames, the newer name
+// winning.
+func TestPathSettingsAnswerToEveryName(t *testing.T) {
 	inDir := func(d string) string { return filepath.Join(d, appName+".json") }
 	asIs := func(d string) string { return d }
 	for _, tc := range []struct {
@@ -25,9 +26,11 @@ func TestPathSettingsAnswerToBothNames(t *testing.T) {
 		{"SKILLS_DIR", func() string { return GlobalSkillsDirs()[0] }, asIs},
 	} {
 		t.Run(tc.setting, func(t *testing.T) {
-			old, newer := t.TempDir(), t.TempDir()
-			t.Setenv("CRUSH_"+tc.setting, old)
-			require.Equal(t, tc.want(old), tc.got(), "the name before the rename still works")
+			oldest, old, newer := t.TempDir(), t.TempDir(), t.TempDir()
+			t.Setenv("CRUSH_"+tc.setting, oldest)
+			require.Equal(t, tc.want(oldest), tc.got(), "the first name still works")
+			t.Setenv("KLASH_"+tc.setting, old)
+			require.Equal(t, tc.want(old), tc.got(), "the name before this one wins over it")
 			t.Setenv("GNOSH_"+tc.setting, newer)
 			require.Equal(t, tc.want(newer), tc.got(), "the new name wins")
 		})
@@ -35,7 +38,8 @@ func TestPathSettingsAnswerToBothNames(t *testing.T) {
 }
 
 // A prefixed variable stands in for the plain one while providers are
-// configured; GNOSH_ wins over CRUSH_, and the plain value comes back after.
+// configured; GNOSH_ wins over KLASH_, KLASH_ over CRUSH_, and the plain
+// value comes back after.
 func TestPushPopCrushEnvPrefersGnosh(t *testing.T) {
 	t.Setenv("PUSHPOP_TEST_KEY", "plain")
 	t.Setenv("CRUSH_PUSHPOP_TEST_KEY", "old")
@@ -44,6 +48,11 @@ func TestPushPopCrushEnvPrefersGnosh(t *testing.T) {
 	restore()
 	require.Equal(t, "plain", os.Getenv("PUSHPOP_TEST_KEY"))
 
+	t.Setenv("KLASH_PUSHPOP_TEST_KEY", "older")
+	restore = PushPopCrushEnv()
+	require.Equal(t, "older", os.Getenv("PUSHPOP_TEST_KEY"), "KLASH_ wins over CRUSH_")
+	restore()
+
 	t.Setenv("GNOSH_PUSHPOP_TEST_KEY", "new")
 	restore = PushPopCrushEnv()
 	require.Equal(t, "new", os.Getenv("PUSHPOP_TEST_KEY"), "GNOSH_ wins over CRUSH_")
@@ -51,11 +60,11 @@ func TestPushPopCrushEnvPrefersGnosh(t *testing.T) {
 	require.Equal(t, "plain", os.Getenv("PUSHPOP_TEST_KEY"))
 }
 
-// Directories and config files take the name Gnosh, but where only the one
-// from before the rename exists, that one is used, so an existing setup and
-// its sessions keep working without being moved. Once the new one exists,
-// it wins.
-func TestPathsPreferGnoshAndFallBackToCrush(t *testing.T) {
+// Directories and config files take the name Gnosh, but where only one from
+// before the renames exists, klash's or crush's, that one is used, so an
+// existing setup and its sessions keep working without being moved. Once
+// the new one exists, it wins.
+func TestPathsPreferGnoshAndFallBackToOlderNames(t *testing.T) {
 	mkdir := func(t *testing.T, parts ...string) string {
 		t.Helper()
 		p := filepath.Join(parts...)
@@ -92,6 +101,18 @@ func TestPathsPreferGnoshAndFallBackToCrush(t *testing.T) {
 		require.Equal(t, filepath.Join(xdg, "gnosh", "skills"), GlobalSkillsDirs()[0])
 	})
 
+	t.Run("global config from the klash days", func(t *testing.T) {
+		xdg := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", xdg)
+		t.Setenv("CRUSH_GLOBAL_CONFIG", "") // set by TestMain for isolation
+		mkdir(t, xdg, "crush")
+		touch(t, xdg, "crush", "crush.json")
+		mkdir(t, xdg, "klash")
+		klash := touch(t, xdg, "klash", "klash.json")
+		require.Equal(t, klash, GlobalConfig(), "klash's config wins over crush's")
+		require.Equal(t, filepath.Join(xdg, "klash", "skills"), GlobalSkillsDirs()[0])
+	})
+
 	t.Run("global config from a shell config alone", func(t *testing.T) {
 		xdg := t.TempDir()
 		t.Setenv("XDG_CONFIG_HOME", xdg)
@@ -121,6 +142,8 @@ func TestPathsPreferGnoshAndFallBackToCrush(t *testing.T) {
 		require.Equal(t, filepath.Join(xdg, "gnosh"), GlobalCacheDir())
 		old := mkdir(t, xdg, "crush")
 		require.Equal(t, old, GlobalCacheDir())
+		klash := mkdir(t, xdg, "klash")
+		require.Equal(t, klash, GlobalCacheDir(), "klash's before crush's")
 	})
 
 	t.Run("project data directory", func(t *testing.T) {
@@ -132,6 +155,9 @@ func TestPathsPreferGnoshAndFallBackToCrush(t *testing.T) {
 			{"fresh project", nil, ".gnosh"},
 			{"project from before the rename", []string{".crush"}, ".crush"},
 			{"both", []string{".crush", ".gnosh"}, ".gnosh"},
+			{"project from the klash days", []string{".klash"}, ".klash"},
+			{"klash's and crush's", []string{".crush", ".klash"}, ".klash"},
+			{"all three", []string{".crush", ".klash", ".gnosh"}, ".gnosh"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				workingDir := t.TempDir()
@@ -158,8 +184,8 @@ func TestPathsPreferGnoshAndFallBackToCrush(t *testing.T) {
 	})
 }
 
-// A log directory's log is gnosh.log, or the crush.log from before the
-// rename where only that one exists.
+// A log directory's log is gnosh.log, or the klash.log or crush.log from
+// before the renames where only that one exists.
 func TestLogFile(t *testing.T) {
 	t.Parallel()
 
@@ -167,6 +193,8 @@ func TestLogFile(t *testing.T) {
 	require.Equal(t, filepath.Join(dir, "gnosh.log"), LogFile(dir))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "crush.log"), nil, 0o644))
 	require.Equal(t, filepath.Join(dir, "crush.log"), LogFile(dir), "an existing log keeps growing")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "klash.log"), nil, 0o644))
+	require.Equal(t, filepath.Join(dir, "klash.log"), LogFile(dir), "klash's before crush's")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "gnosh.log"), nil, 0o644))
 	require.Equal(t, filepath.Join(dir, "gnosh.log"), LogFile(dir))
 }

@@ -11,11 +11,12 @@ purple and hot pink, with green and gold at the ends of every fade.
 
 writes banner.svg, divider-dark.svg, divider-light.svg, signoff.svg,
 avatar.svg, favicon.svg and og.html. The PNGs are screenshots of the last two in
-headless Chromium:
+Chrome's headless shell (a full Chrome's --headless counts its window frame
+in --window-size, and leaves a blank band at the bottom):
 
-    chromium --headless --hide-scrollbars --window-size=1280,640 \\
+    chrome-headless-shell --hide-scrollbars --window-size=1280,640 \\
         --screenshot=docs/brand/og.png docs/brand/og.html
-    chromium --headless --hide-scrollbars --window-size=512,512 \\
+    chrome-headless-shell --hide-scrollbars --window-size=512,512 \\
         --screenshot=docs/brand/avatar.png docs/brand/avatar.svg
 
 The stars are drawn from a fixed seed, so the files only change when this
@@ -58,8 +59,9 @@ MONO = "SFMono-Regular,Menlo,Consolas,'Liberation Mono','DejaVu Sans Mono',monos
 # Three rows of half-block text per letter, as in letterforms.go. A
 # stretchable letter repeats its middle column.
 LETTERS = {
-    "K": (["█ ▄▀", "█▀▄ ", "▀  ▀"], None),
-    "L": (["█", "█", "▀"], ([" ", " ", "▀"], 4, None)),
+    "G": (["▄▀▀▀▀", "█ ▀▀█", " ▀▀▀"], None),
+    "N": (["█▄  █", "█ ▀▄█", "▀   ▀"], None),
+    "O": (["▄▀▀▀▄", "█   █", " ▀▀▀"], None),
     "A": (["▄", "█", "▀"], (["▀", "▀", " "], 3, ["▄", "█", "▀"])),
     "S": (["▄", "▀", "▀"], (["▀", "▀", "▀"], 3, ["▀", "█", " "])),
     "H": (["█", "█", "▀"], ([" ", "▀", " "], 3, ["█", "█", "▀"])),
@@ -340,11 +342,11 @@ def signoff(W=1280, H=260, p=10):
 
 
 def avatar(S=512, p=60):
-    """The organisation's picture: the wordmark's K in space."""
+    """The organisation's picture: the wordmark's G in space."""
     rng = random.Random(3)
-    rows = letter_rows("K")
+    rows = letter_rows("G")
     on = pixels(rows)
-    word_w, word_h = 4 * p, 5 * p
+    word_w, word_h = 5 * p, 5 * p
     x0 = round((S - word_w) / 2)
     y0 = round((S - word_h) / 2) - 22
     keep = (x0 - 30, y0 - 30, x0 + word_w + 30, y0 + word_h + 30)
@@ -362,11 +364,11 @@ def avatar(S=512, p=60):
 
 
 def favicon(S=64, p=10):
-    """The tab icon: the K on a dark rounded square, readable on light tabs too."""
-    on = pixels(letter_rows("K"))
-    x0, y0 = (S - 4 * p) / 2, (S - 5 * p) / 2
+    """The tab icon: the G on a dark rounded square, readable on light tabs too."""
+    on = pixels(letter_rows("G"))
+    x0, y0 = (S - 5 * p) / 2, (S - 5 * p) / 2
     o = [svg_open(S, S, "Gnosh")]
-    o.append("<defs>" + word_defs(x0, y0, 4 * p, 5 * p) + "</defs>")
+    o.append("<defs>" + word_defs(x0, y0, 5 * p, 5 * p) + "</defs>")
     o.append(f'<rect width="{S}" height="{S}" rx="{S * 0.22:g}" fill="{NIGHT}"/>')
     o.append(f'<path d="{runs_path(on, x0, y0, p)}" fill="url(#word)"/>')
     o.append("</svg>")

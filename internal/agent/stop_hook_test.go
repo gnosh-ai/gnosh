@@ -317,14 +317,16 @@ func readFileForTest(t *testing.T, path string) string {
 	return string(raw)
 }
 
-// The stop marker from before the rename to Gnosh still counts, and is
-// stripped like the current one: a session or prompt older than the
-// rename may still have the agent write it.
+// The stop markers from before the renames still count, and are stripped
+// like the current one: a session or prompt older than a rename may still
+// have the agent write one.
 func TestLegacyStopMarker(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "<!-- GNOSH_STOP -->", StopMarker)
 	require.True(t, stopMarkerPresent("reason\n<!-- CRUSH_STOP -->"))
 	require.Equal(t, "reason", StripStopMarker("reason\n<!-- CRUSH_STOP -->"))
+	require.True(t, stopMarkerPresent("reason\n<!-- KLASH_STOP -->"))
+	require.Equal(t, "reason", StripStopMarker("reason\n<!-- KLASH_STOP -->"))
 	require.Equal(t, "reason", StripStopMarker("reason\n"+StopMarker))
 }

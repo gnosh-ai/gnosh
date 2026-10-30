@@ -12,14 +12,17 @@ import (
 // the View tool to distinguish embedded files from disk files.
 const BuiltinPrefix = "gnosh://skills/"
 
-// LegacyBuiltinPrefix is the prefix builtin skill files had before Crush
-// was renamed Gnosh. Old sessions and prompt templates still name files
-// under it, so it still resolves (see CanonicalBuiltinPath).
-const LegacyBuiltinPrefix = "crush://skills/"
+// legacyBuiltinPrefixes are the prefixes builtin skill files had before the
+// renames, from Crush to Klash to Gnosh. Old sessions and prompt templates
+// still name files under them, so they still resolve (see
+// CanonicalBuiltinPath).
+var legacyBuiltinPrefixes = []string{"klash://skills/", "crush://skills/"}
 
-// legacySkillNames maps builtin skills' names from before the rename to
+// legacySkillNames maps builtin skills' names from before the renames to
 // their names now.
 var legacySkillNames = map[string]string{
+	"klash-config": "gnosh-config",
+	"klash-hooks":  "gnosh-hooks",
 	"crush-config": "gnosh-config",
 	"crush-hooks":  "gnosh-hooks",
 }
@@ -34,21 +37,31 @@ func CanonicalSkillName(name string) string {
 }
 
 // IsBuiltinPath reports whether path names a builtin skill file, under
-// the current prefix or the one from before the rename.
+// the current prefix or one from before the renames.
 func IsBuiltinPath(path string) bool {
-	return strings.HasPrefix(path, BuiltinPrefix) || strings.HasPrefix(path, LegacyBuiltinPrefix)
+	_, ok := cutBuiltinPrefix(path)
+	return ok
+}
+
+// cutBuiltinPrefix is path without its builtin skill prefix, the current
+// one or one from before the renames.
+func cutBuiltinPrefix(path string) (string, bool) {
+	for _, prefix := range append([]string{BuiltinPrefix}, legacyBuiltinPrefixes...) {
+		if rest, ok := strings.CutPrefix(path, prefix); ok {
+			return rest, true
+		}
+	}
+	return "", false
 }
 
 // CanonicalBuiltinPath returns a builtin skill file's path under the
-// current prefix and skill name: crush://skills/crush-config/SKILL.md is
+// current prefix and skill name: klash://skills/klash-config/SKILL.md is
 // gnosh://skills/gnosh-config/SKILL.md. Other paths are returned as they
 // are.
 func CanonicalBuiltinPath(path string) string {
-	rest, ok := strings.CutPrefix(path, LegacyBuiltinPrefix)
+	rest, ok := cutBuiltinPrefix(path)
 	if !ok {
-		if rest, ok = strings.CutPrefix(path, BuiltinPrefix); !ok {
-			return path
-		}
+		return path
 	}
 	name, tail, found := strings.Cut(rest, "/")
 	name = CanonicalSkillName(name)

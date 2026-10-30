@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/agent/notify"
@@ -30,10 +31,10 @@ const stopHookReflectEvery = 10
 // comment, and the UI strips it before rendering (see StripStopMarker).
 const StopMarker = "<!-- GNOSH_STOP -->"
 
-// legacyStopMarker is the marker from before Crush was renamed Gnosh. An
-// agent may still write it, from a session or a prompt that predates the
-// rename, and it counts the same.
-const legacyStopMarker = "<!-- CRUSH_STOP -->"
+// stopMarkers are StopMarker and the markers from before the renames, from
+// Crush to Klash to Gnosh. An agent may still write an old one, from a
+// session or a prompt that predates a rename, and it counts the same.
+var stopMarkers = []string{StopMarker, "<!-- KLASH_STOP -->", "<!-- CRUSH_STOP -->"}
 
 // maxStopReasonLen bounds how much of the agent's reason is quoted in
 // the one-line status-bar warning. The full reason is in its reply.
@@ -221,14 +222,14 @@ func stopMarkerPresent(text string) bool {
 
 func stopMarkerLine(line string) bool {
 	marker := strings.TrimSpace(strings.Trim(strings.TrimSpace(line), "`"))
-	return marker == StopMarker || marker == legacyStopMarker
+	return slices.Contains(stopMarkers, marker)
 }
 
 // StripStopMarker removes lines consisting solely of StopMarker, so the
 // sentinel never shows in rendered output. Mentions inside prose are left
 // alone, matching stopMarkerPresent.
 func StripStopMarker(text string) string {
-	if !strings.Contains(text, StopMarker) && !strings.Contains(text, legacyStopMarker) {
+	if !slices.ContainsFunc(stopMarkers, func(m string) bool { return strings.Contains(text, m) }) {
 		return text
 	}
 	lines := strings.Split(text, "\n")

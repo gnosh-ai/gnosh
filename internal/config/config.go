@@ -23,17 +23,19 @@ import (
 	"github.com/invopop/jsonschema"
 )
 
-// The program is being renamed from Crush to Gnosh. Its directories and
-// config files take the new name, but where only the one from before the
-// rename exists, that one is used (see fsext.FirstExisting), so existing
-// setups and their sessions keep working without being moved.
+// The program has been renamed twice, from Crush to Klash and then to Gnosh.
+// Its directories and config files take the newest name, but where only one
+// from before a rename exists, that one is used (see fsext.FirstExisting), so
+// existing setups and their sessions keep working without being moved.
 const (
 	appName              = "gnosh"
-	legacyAppName        = "crush"
 	defaultDataDirectory = "." + appName
-	legacyDataDirectory  = "." + legacyAppName
 	defaultInitializeAs  = "AGENTS.md"
 )
+
+// appNames are the program's name and its names from before the renames,
+// newest first: the order every lookup prefers them in.
+var appNames = []string{appName, "klash", "crush"}
 
 var defaultContextPaths = []string{
 	".github/copilot-instructions.md",
@@ -49,6 +51,12 @@ var defaultContextPaths = []string{
 	"Gnosh.local.md",
 	"GNOSH.md",
 	"GNOSH.local.md",
+	"klash.md",
+	"klash.local.md",
+	"Klash.md",
+	"Klash.local.md",
+	"KLASH.md",
+	"KLASH.local.md",
 	"crush.md",
 	"crush.local.md",
 	"Crush.md",

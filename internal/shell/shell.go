@@ -43,6 +43,7 @@ const (
 func CrushEnvMarkers() []string {
 	return []string{
 		"GNOSH=1",
+		"KLASH=1",
 		"CRUSH=1",
 		"AGENT=crush",
 		"AI_AGENT=crush",

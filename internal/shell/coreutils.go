@@ -10,7 +10,7 @@ import (
 var useGoCoreUtils bool
 
 func init() {
-	// If GNOSH_CORE_UTILS (or CRUSH_CORE_UTILS) is set to either true or
+	// If GNOSH_CORE_UTILS (or KLASH_ or CRUSH_CORE_UTILS) is set to either true or
 	// false, respect that.
 	// By default, enable on Windows only.
 	if v, err := strconv.ParseBool(env.Getenv("GNOSH_CORE_UTILS")); err == nil {

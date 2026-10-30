@@ -62,9 +62,9 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 		}
 	}
 	titleLetterforms := []letterform{
-		LetterK,
-		LetterL,
-		LetterA,
+		LetterG,
+		LetterN,
+		LetterO,
 		LetterSAlt,
 		LetterH,
 	}

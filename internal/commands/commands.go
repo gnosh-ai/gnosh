@@ -122,15 +122,17 @@ func LoadMCPPrompts() ([]MCPPrompt, error) {
 	return commands, nil
 }
 
-// buildCommandSources lists where commands are read from. The gnosh and
-// crush user directories are both read, gnosh first: picking whichever
+// buildCommandSources lists where commands are read from. The gnosh, klash
+// and crush user directories are all read, gnosh first: picking whichever
 // exists let a commands directory made under the new name hide every
-// command in the old one.
+// command in an old one.
 func buildCommandSources(cfg *config.Config) []commandSource {
 	return []commandSource{
 		{path: filepath.Join(home.Config(), "gnosh", "commands"), prefix: userCommandPrefix},
+		{path: filepath.Join(home.Config(), "klash", "commands"), prefix: userCommandPrefix},
 		{path: filepath.Join(home.Config(), "crush", "commands"), prefix: userCommandPrefix},
 		{path: filepath.Join(home.Dir(), ".gnosh", "commands"), prefix: userCommandPrefix},
+		{path: filepath.Join(home.Dir(), ".klash", "commands"), prefix: userCommandPrefix},
 		{path: filepath.Join(home.Dir(), ".crush", "commands"), prefix: userCommandPrefix},
 		{path: filepath.Join(cfg.Options.DataDirectory, "commands"), prefix: projectCommandPrefix},
 	}

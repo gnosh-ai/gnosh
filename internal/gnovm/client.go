@@ -478,12 +478,13 @@ func sameFile(a, b string) bool {
 	return err1 == nil && err2 == nil && os.SameFile(sa, sb)
 }
 
-// workerEnv is the client's environment without the profiling switch:
-// two processes cannot serve pprof on one port.
+// workerEnv is the client's environment without the profiling switch,
+// under any of its names: two processes cannot serve pprof on one port.
 func workerEnv() []string {
 	var env []string
 	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, "GNOSH_PROFILE=") || strings.HasPrefix(kv, "CRUSH_PROFILE=") {
+		switch name, _, _ := strings.Cut(kv, "="); name {
+		case "GNOSH_PROFILE", "KLASH_PROFILE", "CRUSH_PROFILE":
 			continue
 		}
 		env = append(env, kv)

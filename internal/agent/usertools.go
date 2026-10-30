@@ -68,13 +68,13 @@ func applyUserTools(tools []fantasy.AgentTool) []fantasy.AgentTool {
 
 // userDescriptionFile reads the description file the user keeps for a
 // tool in dir: <name>.md or, where only that exists, the file named for
-// the tool's name from before the rename to Gnosh. path is where the file
+// one of the tool's names from before the renames. path is where the file
 // is, or where it would go.
 func userDescriptionFile(dir, name string) (path string, b []byte, err error) {
 	path = filepath.Join(dir, name+".md")
 	b, err = os.ReadFile(path)
 	if err != nil {
-		if legacy := tooldefs.LegacyName(name); legacy != "" {
+		for _, legacy := range tooldefs.LegacyNames(name) {
 			legacyPath := filepath.Join(dir, legacy+".md")
 			if lb, lerr := os.ReadFile(legacyPath); lerr == nil {
 				return legacyPath, lb, nil

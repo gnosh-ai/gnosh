@@ -11,12 +11,20 @@ agent skills.
 
 The module path is `github.com/charmbracelet/crush`.
 
-This is a fork of Charm's Crush, renamed Gnosh; the module path keeps the old
-name. Everything users see and touch says gnosh, and every crush name from
-before the rename still works (`crush.json`, `~/.config/crush`, `.crush/` and
-`crush.db`, `CRUSH_*` variables, `crush_logs`, `crush://skills/`). When adding or
-renaming a file, directory, variable, tool or skill name, keep reading the old
-one too.
+This is a fork of Charm's Crush, renamed Klash and then Gnosh; the module path
+keeps the first name. Everything users see and touch says gnosh, and every
+klash and crush name from before the renames still works (`klash.json` and
+`crush.json`, `~/.config/klash` and `~/.config/crush`, `.klash/` with
+`klash.db` and `.crush/` with `crush.db`, `KLASH_*` and `CRUSH_*` variables,
+`klash_logs` and `crush_logs`, `klash://skills/` and `crush://skills/`). When
+adding or renaming a file, directory, variable, tool or skill name, keep
+reading the old ones too.
+
+What is stored keeps its klash name for good: the Gno package paths under
+`klash/` and the realm `klash.local/r/mem`, which journals replay, and the
+strings in `internal/gnovm` that a mem stores or derives, such as `"klash"`,
+the name its journal records for gnosh's own calls.
+`scripts/rename-to-gnosh.py` lists them all.
 
 ## Architecture
 

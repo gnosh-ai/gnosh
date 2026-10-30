@@ -519,8 +519,8 @@ func TestFilter(t *testing.T) {
 	}
 }
 
-// Builtin skills were renamed with Crush to Gnosh; their old paths and
-// names, which old sessions and prompt templates hold, still resolve.
+// Builtin skills were renamed with the program; their old paths and names,
+// which old sessions and prompt templates hold, still resolve.
 func TestCanonicalBuiltinPath(t *testing.T) {
 	t.Parallel()
 
@@ -528,6 +528,8 @@ func TestCanonicalBuiltinPath(t *testing.T) {
 		"crush://skills/crush-config/SKILL.md": "gnosh://skills/gnosh-config/SKILL.md",
 		"crush://skills/crush-hooks":           "gnosh://skills/gnosh-hooks",
 		"crush://skills/jq/SKILL.md":           "gnosh://skills/jq/SKILL.md",
+		"klash://skills/klash-config/SKILL.md": "gnosh://skills/gnosh-config/SKILL.md",
+		"klash://skills/jq/SKILL.md":           "gnosh://skills/jq/SKILL.md",
 		"gnosh://skills/gnosh-config/SKILL.md": "gnosh://skills/gnosh-config/SKILL.md",
 		"gnosh://skills/crush-config/SKILL.md": "gnosh://skills/gnosh-config/SKILL.md",
 		"/home/me/skills/x/SKILL.md":           "/home/me/skills/x/SKILL.md",
@@ -535,8 +537,10 @@ func TestCanonicalBuiltinPath(t *testing.T) {
 		require.Equal(t, want, CanonicalBuiltinPath(in), in)
 	}
 	require.True(t, IsBuiltinPath("crush://skills/jq/SKILL.md"))
+	require.True(t, IsBuiltinPath("klash://skills/jq/SKILL.md"))
 	require.True(t, IsBuiltinPath("gnosh://skills/jq/SKILL.md"))
 	require.False(t, IsBuiltinPath("/skills/jq/SKILL.md"))
 	require.Equal(t, "gnosh-config", CanonicalSkillName("crush-config"))
+	require.Equal(t, "gnosh-config", CanonicalSkillName("klash-config"))
 	require.Equal(t, "jq", CanonicalSkillName("jq"))
 }

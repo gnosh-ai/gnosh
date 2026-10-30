@@ -123,8 +123,8 @@ the input/output contract is identical regardless of language.
 | `GNOSH_ENV_FILE`             | `SessionStart` only: the session's env file, also as `CLAUDE_ENV_FILE`; `export` lines added there (`>>`) run before each of the session's bash commands |
 | `GNOSH_SESSION_END_REASON`   | `SessionEnd` only: `clear`, `other` or `prompt_input_exit`, as in the payload's `reason` field |
 
-Each is also set under its `CRUSH_` name (`CRUSH_EVENT`, ...), the name before
-the rename; either works.
+Each is also set under its `KLASH_` and `CRUSH_` names (`KLASH_EVENT`,
+`CRUSH_EVENT`, ...), the names before the renames; any of them works.
 
 **JSON on stdin:**
 

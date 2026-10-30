@@ -35,6 +35,7 @@ var fastIgnoreDirs = map[string]bool{
 	".Spotlight-V100": true,
 	".fseventsd":      true,
 	".gnosh":          true,
+	".klash":          true,
 	".crush":          true,
 	"OrbStack":        true,
 	".local":          true,
@@ -110,18 +111,18 @@ var gitGlobalIgnorePatterns = sync.OnceValue(func() []gitignore.Pattern {
 })
 
 // crushGlobalIgnorePatterns returns patterns from the user's global
-// ignore files, ~/.config/gnosh/ignore and ~/.config/crush/ignore.
+// ignore files, ~/.config/gnosh/ignore and the klash and crush ones.
 var crushGlobalIgnorePatterns = sync.OnceValue(func() []gitignore.Pattern {
 	return globalIgnorePatterns(home.Config())
 })
 
 // globalIgnorePatterns reads the global ignore file under configDir by
-// both names, gnosh and the crush from before the rename. Both are read,
-// as both commands directories are: patterns add up, so one started under
-// the new name drops none of the old one's.
+// every name, gnosh and the klash and crush from before the renames. All
+// are read, as all commands directories are: patterns add up, so one
+// started under the new name drops none of an old one's.
 func globalIgnorePatterns(configDir string) []gitignore.Pattern {
 	var patterns []gitignore.Pattern
-	for _, app := range []string{"gnosh", "crush"} {
+	for _, app := range []string{"gnosh", "klash", "crush"} {
 		name := filepath.Join(configDir, app, "ignore")
 		bts, err := os.ReadFile(name)
 		if err != nil {
@@ -188,7 +189,7 @@ func (dl *directoryLister) getDirPatterns(dir string) []gitignore.Pattern {
 			domain = pathToComponents(relPath)
 		}
 
-		for _, ignoreFile := range []string{".gitignore", ".gnoshignore", ".crushignore"} {
+		for _, ignoreFile := range []string{".gitignore", ".gnoshignore", ".klashignore", ".crushignore"} {
 			ignPath := filepath.Join(dir, ignoreFile)
 			if content, err := os.ReadFile(ignPath); err == nil {
 				lines := strings.Split(string(content), "\n")

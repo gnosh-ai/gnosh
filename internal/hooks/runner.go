@@ -483,11 +483,11 @@ func (r *Runner) toolHooks(ctx context.Context, toolName string) []matchedHook {
 }
 
 // toolNames are the names a tool call's matchers are tested against: the
-// tool's, the name it had before the rename, and Claude Code's names for
+// tool's, the names it had before the renames, and Claude Code's names for
 // it, so that a hook written for Claude Code ("Bash", "Edit|Write",
 // "Read", "mcp__github__.*") matches what it matches there.
 func toolNames(ctx context.Context, toolName string) []string {
-	names := []string{toolName, tooldefs.LegacyName(toolName)}
+	names := append([]string{toolName}, tooldefs.LegacyNames(toolName)...)
 	names = append(names, tooldefs.ClaudeCodeNamesOf(toolName)...)
 	return append(names, toolAliases(ctx)...)
 }

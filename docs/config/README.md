@@ -103,10 +103,12 @@ Data directories (`~/.local/share/gnosh` on Unix-like systems and
 `%LOCALAPPDATA%\gnosh` on Windows) contain machine-owned JSON state. Gnosh does
 not discover or execute a `gnoshrc` from those locations.
 
-Gnosh was called Crush, and every crush name still works: `crushrc`,
-`crush.json`, `~/.config/crush`, `~/.local/share/crush`, a project's `.crush/`
-with its `crush.db`, and `CRUSH_*` variables. Where a gnosh one and a crush one
-both exist, the gnosh one wins; `~/.config/gnosh` and `~/.local/share/gnosh`
+Gnosh was called Klash, and before that Crush, and every klash and crush name
+still works: `klashrc` and `crushrc`, `klash.json` and `crush.json`,
+`~/.config/klash` and `~/.config/crush`, the same under `~/.local/share`, a
+project's `.klash/` or `.crush/` with its `klash.db` or `crush.db`, and
+`KLASH_*` and `CRUSH_*` variables. Where several exist, the newest name wins,
+gnosh's over klash's over crush's; `~/.config/gnosh` and `~/.local/share/gnosh`
 take over only once they hold a config file.
 
 > [!NOTE]

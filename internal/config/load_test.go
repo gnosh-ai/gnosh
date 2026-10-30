@@ -168,9 +168,9 @@ func TestLookupConfigs_BoundedByProject(t *testing.T) {
 		got := lookupConfigs(t.TempDir())
 		require.NotEmpty(t, got)
 		// The system-wide configs must be first so they have the lowest
-		// priority when configs are merged, the one from before the rename
-		// lowest of all.
-		require.Equal(t, []string{"/etc/crush/crush.json", "/etc/gnosh/gnosh.json"}, got[:2])
+		// priority when configs are merged, the ones from before the renames
+		// lowest of all, oldest first.
+		require.Equal(t, []string{"/etc/crush/crush.json", "/etc/klash/klash.json", "/etc/gnosh/gnosh.json"}, got[:3])
 	})
 }
 
@@ -445,14 +445,14 @@ func TestConfig_setDefaults(t *testing.T) {
 
 		sub := filepath.Join(repo, "sub")
 		require.NoError(t, os.Mkdir(sub, 0o755))
-		require.NoError(t, os.Mkdir(filepath.Join(sub, legacyDataDirectory), 0o755))
+		require.NoError(t, os.Mkdir(filepath.Join(sub, ".crush"), 0o755))
 
 		cfg := &Config{}
 		cfg.setDefaults(sub, "")
 
 		got, err := filepath.EvalSymlinks(cfg.Options.DataDirectory)
 		require.NoError(t, err)
-		want, err := filepath.EvalSymlinks(filepath.Join(sub, legacyDataDirectory))
+		want, err := filepath.EvalSymlinks(filepath.Join(sub, ".crush"))
 		require.NoError(t, err)
 		require.Equal(t, want, got)
 	})
@@ -460,7 +460,7 @@ func TestConfig_setDefaults(t *testing.T) {
 	t.Run("a .gnosh beats a .crush in the same directory", func(t *testing.T) {
 		dir := t.TempDir()
 		require.NoError(t, os.Mkdir(filepath.Join(dir, defaultDataDirectory), 0o755))
-		require.NoError(t, os.Mkdir(filepath.Join(dir, legacyDataDirectory), 0o755))
+		require.NoError(t, os.Mkdir(filepath.Join(dir, ".crush"), 0o755))
 
 		cfg := &Config{}
 		cfg.setDefaults(dir, "")

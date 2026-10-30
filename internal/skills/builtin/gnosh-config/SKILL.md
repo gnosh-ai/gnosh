@@ -28,10 +28,11 @@ from those locations.
 If a directory has both `gnoshrc` and `gnosh.json`, they merge (`gnoshrc` wins
 on conflicts) and Gnosh logs a warning.
 
-Gnosh was called Crush, and every crush name still works: `crushrc`,
-`crush.json`, `~/.config/crush`, a project's `.crush/`, `CRUSH_*` variables.
-Where a gnosh one and a crush one both exist, the gnosh one wins;
-`~/.config/gnosh` takes over from `~/.config/crush` only once it holds a config
+Gnosh was called Klash, and before that Crush, and every klash and crush name
+still works: `klashrc` and `crushrc`, `klash.json` and `crush.json`,
+`~/.config/klash` and `~/.config/crush`, a project's `.klash/` or `.crush/`,
+`KLASH_*` and `CRUSH_*` variables. Where several exist, the newest name wins;
+`~/.config/gnosh` takes over from an older one only once it holds a config
 file.
 
 ## gnoshrc at a glance
@@ -259,8 +260,8 @@ error, not a spelling of `PreToolUse`, and Gnosh refuses to start on it.
 | `GNOSH_TOOL_INPUT_COMMAND`   | Value of `command` from tool input (if present)   |
 | `GNOSH_TOOL_INPUT_FILE_PATH` | Value of `file_path` from tool input (if present) |
 
-Each is also set under its `CRUSH_` name (`CRUSH_EVENT`, ...), from before
-the rename; either works.
+Each is also set under its `KLASH_` and `CRUSH_` names (`KLASH_EVENT`,
+`CRUSH_EVENT`, ...), from before the renames; any of them works.
 
 ### Hook output
 

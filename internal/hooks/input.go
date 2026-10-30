@@ -591,9 +591,10 @@ func BuildEnv(eventName, toolName, sessionID, cwd, projectDir, toolInputJSON str
 }
 
 // hookVar sets a hook's environment variable under its GNOSH_ name and
-// under the CRUSH_ name that hooks written before the rename read.
+// under the KLASH_ and CRUSH_ names that hooks written before the renames
+// read.
 func hookVar(name, value string) []string {
-	return []string{"GNOSH_" + name + "=" + value, "CRUSH_" + name + "=" + value}
+	return []string{"GNOSH_" + name + "=" + value, "KLASH_" + name + "=" + value, "CRUSH_" + name + "=" + value}
 }
 
 // parseStdout parses the JSON output from a hook command's stdout.

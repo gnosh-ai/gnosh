@@ -561,9 +561,10 @@ install -m 755 gnosh ~/.local/bin/gnosh   # or anywhere on your PATH
 On Oracle Solaris, add `-tags sqlite3_dotlk` so the local database uses
 dot-file locking.
 
-Everything named `crush` keeps working. An existing `~/.config/crush`, a
-project's `.crush/`, a `crushrc` or `crush.json`, `CRUSH.md` and `CRUSH_*`
-variables are all still read, and where a `gnosh` one exists it wins.
+Everything named `klash` or `crush`, Gnosh's names before, keeps working. An
+existing `~/.config/crush`, a project's `.klash/` or `.crush/`, a `klashrc` or
+`crushrc`, a `klash.json` or `crush.json`, `CRUSH.md`, and `KLASH_*` and
+`CRUSH_*` variables are all still read, and where a `gnosh` one exists it wins.
 `gnosh dirs` shows which directories are in use.
 
 ## Getting started
@@ -672,15 +673,17 @@ may differ depending on your `XDG_CONFIG_HOME` value. Data directories such as
 `~/.local/share/gnosh` and `%LOCALAPPDATA%\gnosh` contain JSON state only; Gnosh
 does not execute a `gnoshrc` from them.)
 
-Gnosh was called Crush, and every crush name still works: `~/.config/crush`,
-`~/.local/share/crush`, `~/.cache/crush`, a project's `.crush/` data directory
-with its `crush.db`, and `crush.json`, `crushrc`, `.crushignore` and `CRUSH.md`.
-Wherever only the crush one exists, that one is used, so an existing setup and
-its sessions keep working without being moved; once the gnosh one exists, it
-wins. `~/.config/gnosh` and `~/.local/share/gnosh` count only once they hold a
-config file (`gnosh.json`, `crush.json`, `gnoshrc` or `crushrc`), so a `gnosh`
-folder made for something else doesn't hide the `crush` one in use. A project
-uses the closest `.gnosh/` or `.crush/` on the way up to its root.
+Gnosh was called Klash, and before that Crush, and every klash and crush name
+still works: `~/.config/klash` and `~/.config/crush`, the same under
+`~/.local/share` and `~/.cache`, a project's `.klash/` or `.crush/` data
+directory with its `klash.db` or `crush.db`, and `klash.json`, `klashrc`,
+`.klashignore` and `KLASH.md` with their crush twins. Wherever only an old one
+exists, that one is used, so an existing setup and its sessions keep working
+without being moved; where several exist, the newest name wins. `~/.config/gnosh`
+and `~/.local/share/gnosh` count only once they hold a config file
+(`gnosh.json` or `gnoshrc`, or the klash or crush one), so a `gnosh` folder
+made for something else doesn't hide an older one in use. A project uses the
+closest `.gnosh/`, `.klash/` or `.crush/` on the way up to its root.
 
 [xdg]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 
@@ -694,7 +697,8 @@ considered deprecated. See: [the config docs](./docs/config/) for details.
 > - `GNOSH_GLOBAL_DATA`
 >
 > Every `GNOSH_` environment variable in this document also works under its
-> `CRUSH_` name, from before the rename; when both are set, `GNOSH_` wins.
+> `KLASH_` and `CRUSH_` names, from before the renames; when several are set,
+> the newest wins.
 
 As an additional note, Gnosh also stores ephemeral data, such as application
 state, in one additional location. This is state and should not be edited by
@@ -1398,7 +1402,8 @@ than twenty.
 
 Sometimes you need to look at logs. Luckily, Gnosh logs all sorts of
 stuff. Logs are stored in `./.gnosh/logs/gnosh.log` relative to the project
-(or `./.crush/logs/crush.log` in a project from before the rename).
+(or `./.klash/logs/klash.log` or `./.crush/logs/crush.log` in a project from
+before the renames).
 
 The CLI also contains some helper commands to make perusing recent logs easier:
 
