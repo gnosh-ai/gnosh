@@ -1,19 +1,25 @@
 # GNOMEM: the agent's memory, in Gno
 
 Klash runs the GnoVM, gno.land's interpreter for its Go dialect, inside
-itself. The agent keeps its working state in Gno machines: its task
-checklist, the facts it was told to remember, and soon its goals and their
-success conditions. A machine holds typed data, and the code that works on
-that data, and it can be saved on disk. A new session, on a new day, asks the
-machine what is left to do. It does not re-read a page of notes.
+itself. The agent keeps its working state in a Gno machine: its goals and
+their steps, what it tried and found, and the facts it was told to remember.
+A machine holds typed data, and the code that works on that data, and it is
+saved on disk. A new session, on a new day, asks the machine what is next.
+It does not re-read a page of notes.
+
+Each project gets a persistent machine named `mem`, whose variable `mem` is
+the agent's board ([klash/gnomem/v1](internal/gnovm/klashlibs/klash/gnomem/v1/gnomem.gno)):
 
 ```
-gnovm_new  {"name": "tasks", "persist": true}
-gnovm_run  {"name": "tasks", "code": "type Task struct { Title string; Done bool }\nvar Tasks []Task\nfunc Add(t string) { Tasks = append(Tasks, Task{Title: t}) }\nfunc Done(i int) { Tasks[i].Done = true }\n..."}
-gnovm_run  {"name": "tasks", "code": "Done(0)\nprintln(Show())"}
-  [x] 0 implement Add
-  [ ] 1 implement Sub
-  ok · VM tasks · 74.3k of 1G gas (≈74µs at 1 ns/gas; ran 380µs) · memory 0.1 MB of 16.0 MB · kept as entry 3
+gnovm_run {"name": "mem", "code": "mem.Add(\"release v2; done when CI is green\", \"bump the version\", \"update CHANGELOG\", \"tag v2.0.0\")"}
+gnovm_run {"name": "mem", "code": "mem.Done(2, \"now 2.0.0\")"}
+  done 2 "bump the version"; next: 3 "update CHANGELOG"
+gnovm_run {"name": "mem", "code": "mem.Show()"}
+  board: 3 open, 1 done · next: 3 "update CHANGELOG" · changed 2026-10-30 01:12 UTC
+  [ ] 1 release v2; done when CI is green
+    [x] 2 bump the version → now 2.0.0
+    [ ] 3 update CHANGELOG  ← next
+    [ ] 4 tag v2.0.0
 ```
 
 ## Why this matters
@@ -63,16 +69,66 @@ and a dump of every persistent machine.
 
 ## How the agent uses it
 
-Klash's system prompt carries a short recipe, so the model needs no setup.
+Klash's system prompt carries a short recipe, so the model needs no setup:
+`mem` is made the first time it is used.
 
-- **At the start of a task**, `gnovm_list` shows the machines this project
-  already has.
-- **For a task of several steps**, the model declares a checklist once in a
-  persistent `tasks` machine and marks each step done as it finishes. Work
-  that stops halfway picks up from `Show()` in the next session.
-- **For facts that should outlive the session**, it uses a `memory` machine,
-  with `Remember` and `Recall`.
-- **For anything that needs computing**, it uses its scratch machine.
+- **At the start of a task**: `mem.Show()`, and continue from ← next.
+- **A task of two or more steps**: `mem.Add(goal, steps...)`, then
+  `mem.Done(id, what came of it)` as each finishes; Done answers with what is
+  next. A goal cannot be done while a step of it is open, so a success
+  condition is a step ("go test ./... passes").
+- **A question**: an item whose notes are its findings (`mem.Note(id, "the
+  claim — path:line")`) and whose result is its answer.
+- **Facts**: `mem.Facts["deploy cmd"] = "make ship ENV=prod"`.
+- **Anything that needs computing** runs in the session's scratch machine.
+
+## The board, as a foundation
+
+`klash/gnomem/v1` is deliberately small: two plain-data types and seven
+calls. Three independent reviews (minimalism, how a 27B model would use it,
+durability) shaped it.
+
+```go
+type Board struct {
+	Items   []Item            // by id; Items[0] is the root
+	Facts   map[string]string
+	Changed time.Time
+}
+
+type Item struct {
+	Title  string
+	Parent int
+	Status string   // "" open, "done", "dropped"
+	Result string   // a summary, an answer, or why it was dropped
+	Notes  []string // findings and attempts, oldest first
+}
+
+func New() *Board
+func (b *Board) Add(title string, steps ...string) int
+func (b *Board) Step(parent int, title string) int
+func (b *Board) Done(id int, result string) string // refuses while a step is open
+func (b *Board) Drop(id int, why string) string    // drops its open steps too
+func (b *Board) Reopen(id int) string
+func (b *Board) Note(id int, text string)
+func (b *Board) Show(ids ...int) string            // the outline, or items in full
+```
+
+- **Plain data.** `mem.Items[3].Title` and `mem.Facts["k"]` read directly.
+  Another package can build on the same items, or replace them: the board is
+  only the starting point.
+- **It only ever grows.** A persistent machine is rebuilt by running its calls
+  again, so what a call does may never change; a frozen test replays a fixed
+  board against golden files, and a change that breaks it belongs in
+  `klash/gnomem/v2`.
+- **Reading costs nothing to keep.** `mem.Show()` and `println(mem)` are
+  recognised as reads, once the machine confirms `mem` is a board, and are
+  not journaled: reading the board never wears out its journal.
+- **Short by construction.** Show's outline stays under about 3000 bytes:
+  closed items take one line each, older ones are counted, and the next item
+  is named in the header line.
+- **The harness's goals stay separate.** Planned harness-tracked goals keep
+  their own machine and their own checks, evaluated in Go, so nothing the
+  model writes on its board is taken as proof that a goal is met.
 
 ## The machines
 
@@ -112,7 +168,13 @@ now handles each case:
 - **Missing fields.** An error about a missing field lists the fields the
   struct has.
 - **Quiet results.** A trailing `fmt.Println(x)` shows its output, not the
-  call's results ("8, undefined"), and a nil value shows as `nil`.
+  call's results ("8, undefined"), and a nil value shows as `nil`. A value
+  that is a string of several lines is shown as it is, not as one quoted
+  line.
+- **Go's fmt.** Gno has no fmt. Klash's runs Go's own formatting natively, so
+  `%-10s`, `%5.2f`, `%+v` of a struct, `%v` of a slice or a map and `%w` in
+  Errorf all work as in Go. The earlier fmt printed "(unhandled)" for most of
+  them.
 - **Prompt reuse.** Klash keeps everything that changes from one session to
   the next (the date, the working directory, git status) out of the system
   prompt, so a local model server reuses the prompt it has already read. A

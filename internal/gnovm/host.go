@@ -15,6 +15,7 @@ package gnovm
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -776,26 +777,47 @@ func (h *Host) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 
 // ensureMem makes a project's mem VM if it has none, and reports whether it
 // did. Its first entry declares the board, so it replays like any other.
+// Two klash processes may race to make it: the loser uses the winner's, and
+// its own copy of the first entry is refused as a redeclaration.
 func (h *Host) ensureMem(ctx context.Context, project string) (bool, error) {
 	s, err := h.lookup(project, MemVM)
-	if err != nil || s != nil {
+	if err != nil {
 		return false, err
 	}
-	opts := h.defaultOptions()
-	opts.Persist = true
-	opts.Description = "your board: goals, steps, findings and facts (" + boardPkg + ")"
-	if s, err = h.create(project, MemVM, opts); err != nil {
-		return false, err
+	made := false
+	if s == nil {
+		opts := h.defaultOptions()
+		opts.Persist = true
+		opts.Description = "your board: goals, steps, findings and facts (" + boardPkg + ")"
+		if s, err = h.create(project, MemVM, opts); err != nil {
+			var ref *refusal
+			if !errors.As(err, &ref) {
+				return false, err
+			}
+			if s, err = h.lookup(project, MemVM); err != nil || s == nil {
+				return false, cmp.Or(err, error(ref))
+			}
+		} else {
+			made = true
+		}
+	}
+	if s.j != nil && s.j.seq > 0 {
+		return made, nil
 	}
 	res, err := h.runIn(ctx, s, RunRequest{Name: MemVM, Code: memPrelude, Req: "klash:mem"}, nil)
+	if err != nil && strings.Contains(err.Error(), "already declared") {
+		return made, nil
+	}
 	if err == nil && res.Err != nil {
 		err = res.Err
 	}
 	if err != nil {
-		_ = h.deleteVM(s)
+		if made {
+			_ = h.deleteVM(s)
+		}
 		return false, fmt.Errorf("making VM mem: %w", err)
 	}
-	return true, nil
+	return made, nil
 }
 
 // runIn runs a call in an existing VM, under its lock.

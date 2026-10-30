@@ -238,3 +238,26 @@ func TestMemV1IsFrozen(t *testing.T) {
 		require.Equal(t, string(want), value, "%s: klash/gnomem/v1 changed; the change belongs in v2", name)
 	}
 }
+
+func TestMemTwoKlashesMakeItOnce(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h1, h2 := newTestHost(t, dir), newTestHost(t, dir)
+	errs := make(chan error, 2)
+	for _, h := range []*Host{h1, h2} {
+		go func() {
+			res, err := h.Run(context.Background(), RunRequest{Project: "/proj", Session: "s", Name: MemVM, Code: `mem.Add("x")`})
+			if err == nil && res.Err != nil {
+				err = res.Err
+			}
+			errs <- err
+		}()
+	}
+	require.NoError(t, <-errs)
+	require.NoError(t, <-errs)
+	h3 := newTestHost(t, dir)
+	require.Equal(t, "2", run(t, h3, MemVM, `len(mem.Items) - 1`).Value)
+	list, err := h3.List("/proj")
+	require.NoError(t, err)
+	require.Equal(t, int64(3), list.VMs[0].Entries) // the board, then two adds
+}
