@@ -1,0 +1,31 @@
+=============== Oct 30, 2026 (UTC) ===============
+10:18:35.508530 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
+10:18:35.513748 db@open opening
+10:18:35.514155 version@stat F·[] S·0B[] Sc·[]
+10:18:35.514666 db@janitor F·2 G·0
+10:18:35.514693 db@open done T·895.377µs
+10:18:35.597987 db@close closing
+10:18:35.598063 db@close done T·73.548µs
+=============== Oct 30, 2026 (UTC) ===============
+10:19:31.503890 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
+10:19:31.507320 version@stat F·[] S·0B[] Sc·[]
+10:19:31.507377 db@open opening
+10:19:31.507438 journal@recovery F·1
+10:19:31.507539 journal@recovery recovering @1
+10:19:31.511420 memdb@flush created L0@2 N·88 S·12KiB "06d..e:2,v22":"pkg..ter,v21"
+10:19:31.514763 version@stat F·[1] S·12KiB[12KiB] Sc·[0.25]
+10:19:31.516891 db@janitor F·3 G·0
+10:19:31.516927 db@open done T·9.540466ms
+10:19:31.545863 db@close closing
+10:19:31.545944 db@close done T·79.279µs
+=============== Oct 30, 2026 (UTC) ===============
+10:19:52.359513 log@legend F·NumFile S·FileSize N·Entry C·BadEntry B·BadBlock Ke·KeyError D·DroppedEntry L·Level Q·SeqNum T·TimeElapsed
+10:19:52.359751 version@stat F·[1] S·12KiB[12KiB] Sc·[0.25]
+10:19:52.359768 db@open opening
+10:19:52.359816 journal@recovery F·1
+10:19:52.360029 journal@recovery recovering @3
+10:19:52.360136 version@stat F·[1] S·12KiB[12KiB] Sc·[0.25]
+10:19:52.372251 db@janitor F·3 G·0
+10:19:52.372288 db@open done T·12.512727ms
+10:19:52.381536 db@close closing
+10:19:52.381569 db@close done T·32.191µs

@@ -486,7 +486,10 @@ func (m *Mem) Next(name string) string
   Gnosh journals them. A failed call keeps nothing.
 - **The journal is the source.** mem's store, the realm in goleveldb, and its
   index, SQLite with full-text search, are built from the journal, and built
-  again from it after damage, an upgrade or an erasure. Two Gnosh processes
+  again from it after damage, an upgrade or an erasure. An upgrade keeps
+  everything an earlier Gnosh kept in mem. When one changes how mem is
+  stored, a Gnosh still running from before it stops using mem, with "a
+  newer gnosh wrote mem (…); restart gnosh to use it". Two Gnosh processes
   take turns through a lock. With an embedding server set, each row of the
   index also has a vector, kept in a file of its own under the hash of the
   text it was made from, so a vector is never stale.
