@@ -24,7 +24,36 @@ import (
 var (
 	undeclaredRe   = regexp.MustCompile(`name (\w+) not declared`)
 	missingFieldRe = regexp.MustCompile(`missing field (\w+) in ` + replPath + `\.(\w+)`)
+	// The GnoVM's words where Gno is not Go: a builtin's name taken, and
+	// an untyped constant shifted by a variable, which it types as an
+	// untyped bigint, then refuses an int for or crashes on.
+	shadowedBuiltinRe = regexp.MustCompile(`builtin identifiers cannot be shadowed: (\w+)`)
+	untypedBigintRe   = regexp.MustCompile(`<untyped> bigint|BigintValue`)
+	constShiftRe      = regexp.MustCompile(`\b\d+\s*<<\s*[A-Za-z_(]`)
 )
+
+// goHint says where a failed input relied on Go's way and Gno differs, in
+// words the GnoVM's own do not give. Jae's lane worked a backoff sum out in
+// the scratch VM with `cap := 30000` and `200 * (1 << (i - 1))`, both Go,
+// and spent minutes on the two errors (2026-10-30). ops are the failed
+// call's.
+func goHint(ops []op, err error) string {
+	msg := err.Error()
+	if m := shadowedBuiltinRe.FindStringSubmatch(msg); m != nil {
+		return fmt.Sprintf("Gno does not let a variable take a builtin's name, as Go does: rename %s", m[1])
+	}
+	if m := undeclaredRe.FindStringSubmatch(msg); m != nil && (m[1] == "min" || m[1] == "max" || m[1] == "clear") {
+		return fmt.Sprintf("Gno has no %s builtin, Go 1.21's: compare with if, or write a func", m[1])
+	}
+	if untypedBigintRe.MatchString(msg) {
+		for _, o := range ops {
+			if constShiftRe.MatchString(o.Stmts + o.File + o.Eval) {
+				return "Gno types a shift of an untyped constant by a variable wrongly (gnolang/gno#6393): give the constant a type, int(1) << n, or the variable one, var w int = …"
+			}
+		}
+	}
+	return ""
+}
 
 // compileHint says what a compile error most likely means, where the GnoVM's
 // own words led models to a second wrong try: a name that is a VM's, or is

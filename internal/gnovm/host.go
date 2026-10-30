@@ -15,6 +15,7 @@ package gnovm
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -855,7 +856,7 @@ func (h *Host) runResident(ctx context.Context, s *vmState, v *vm, req RunReques
 			return nil, runErr
 		}
 		res.Err = runErr
-		if hint := h.compileHint(s, ops, runErr); hint != "" {
+		if hint := cmp.Or(h.compileHint(s, ops, runErr), goHint(ops, runErr)); hint != "" {
 			res.Notes = append(res.Notes, hint)
 		}
 		return res, nil
