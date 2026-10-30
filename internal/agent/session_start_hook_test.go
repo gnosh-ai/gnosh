@@ -416,19 +416,19 @@ func TestRun_SessionStartBlockStillMarksSessionStarted(t *testing.T) {
 	require.Equal(t, "x\n", string(data), "the second prompt does not run the hooks again")
 }
 
-// A new session starts with the project's Gno board in view, when an item
-// on it is open: what is next goes with the first prompt, as SessionStart
-// hook output does, and stays in the history as it went out.
-func TestRun_BoardSummaryGoesWithTheFirstPrompt(t *testing.T) {
+// A new session starts with the project's mem in view, when it holds
+// anything: it goes with the first prompt, as SessionStart hook output does,
+// and stays in the history as it went out.
+func TestRun_MemBlockGoesWithTheFirstPrompt(t *testing.T) {
 	t.Parallel()
 
 	r := sessionStartAgent(t, false, "")
-	board := "<gno-board>\nYour board: 2 open, 1 done · next: 3 \"update CHANGELOG\"\n</gno-board>"
-	r.agent.boardSummary = func() string { return board }
+	block := "<mem>\nmem: 2 items open\nopen goals, newest first:\n- `release` \"release v2\" (1/2 done · 2h ago) next: `release/2` \"update CHANGELOG\"\n</mem>"
+	r.agent.memBlock = func() string { return block }
 	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "carry on"})
 	require.NoError(t, err)
 
-	want := "carry on\n\n" + message.PromptHookContext(board)
+	want := "carry on\n\n" + message.PromptHookContext(block)
 	prompts := r.model.recorded()
 	require.Len(t, prompts, 1)
 	first := userTexts(prompts[0])
@@ -440,5 +440,5 @@ func TestRun_BoardSummaryGoesWithTheFirstPrompt(t *testing.T) {
 	require.Len(t, prompts, 2)
 	texts := userTexts(prompts[1])
 	require.Contains(t, texts, want, "the first prompt goes out again as it did")
-	require.Equal(t, "and the tag", texts[len(texts)-1], "later prompts carry no board")
+	require.Equal(t, "and the tag", texts[len(texts)-1], "later prompts carry no block")
 }

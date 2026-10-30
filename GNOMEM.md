@@ -1,28 +1,29 @@
 # GNOMEM: the agent's memory, in Gno
 
 Klash runs the GnoVM, gno.land's interpreter for its Go dialect, inside
-itself. The agent keeps its working state in a Gno machine: its goals and
-their steps, what it tried and found, and the facts it was told to remember.
-A machine holds typed data, and the code that works on that data, and it is
-saved on disk. A new session, on a new day, asks the machine what is next.
-It does not re-read a page of notes.
+itself, and keeps the agent's memory there: the goals it is working on and
+their steps, what it tried and found, what it waits for, what it must ask
+you, the facts it was told to keep, and the rules you gave it. That memory,
+`mem`, is a Gno realm kept on disk for the project, with no size limit. A new
+session, on a new day, is told what mem holds and asks it what is next. It
+does not re-read a page of notes.
 
-Each project gets a persistent machine named `mem`, whose variable `mem`
-holds the agent's memory ([klash/gnomem/v1](internal/gnovm/klashlibs/klash/gnomem/v1/gnomem.gno)):
+Each project has one mem, shared by its worktrees and its sessions
+([klash/gnomem/v2](internal/gnovm/klashlibs/klash/gnomem/v2/gnomem.gno)):
 
 ```
-gnovm_run {"name": "mem", "code": "mem.Add(\"release v2\", \"bump the version\", \"tag v2.0.0\", \"CI is green\")"}
-  1
-  output:
-  added 1 "release v2": steps 2 "bump the version", 3 "tag v2.0.0", 4 "CI is green"
-gnovm_run {"name": "mem", "code": "mem.Done(2, \"now 2.0.0\")"}
-  done 2 "bump the version"; next: 3 "tag v2.0.0"
+gnovm_run {"name": "mem", "code": "mem.Goal(\"release v2\").Steps(\"bump the version\", \"tag v2.0.0\", \"CI is green\")"}
+  added goal `release-v2` "release v2"
+  added `release-v2/1` "bump the version", `release-v2/2` "tag v2.0.0", `release-v2/3` "CI is green"; next: `release-v2/1` "bump the version"
+gnovm_run {"name": "mem", "code": "mem.Done(\"release-v2/1\", \"now 2.0.0\")"}
+  done `release-v2/1` "bump the version" → now 2.0.0; next: `release-v2/2` "tag v2.0.0"
 gnovm_run {"name": "mem", "code": "mem.Show()"}
-  board: 3 open, 1 done · next: 3 "tag v2.0.0"
-  [ ] 1 release v2
-    [x] 2 bump the version → now 2.0.0
-    [ ] 3 tag v2.0.0  ← next
-    [ ] 4 CI is green
+  mem: 1 goal open
+  goals:
+    [ ] `release-v2` "release v2" (1/3 done · this session · just now)
+      [x] `release-v2/1` "bump the version" → now 2.0.0
+      [ ] `release-v2/2` "tag v2.0.0"  ← next
+      [ ] `release-v2/3` "CI is green"
 ```
 
 ## Why this matters
@@ -37,10 +38,11 @@ gnovm_run {"name": "mem", "code": "mem.Show()"}
   processes. It has a memory cap, and gas: 1 gas is about 1 ns of work. A
   call that runs out of either is stopped and keeps nothing. The machines run
   in a worker process of their own.
-- **Durable and checkable.** Every call that changes a persistent machine is
-  journaled, and replaying the journal rebuilds the same state, byte for
-  byte, after a crash or on another Klash. A torn journal tail is cut off, and
-  a damaged journal is reported, never run.
+- **Durable and checkable.** Every change to mem is journaled before it is
+  kept, and mem is rebuilt from its journal after a crash, an upgrade, or on
+  another Klash. A torn journal tail is cut off. An erasure writes the
+  journal again without the text, and rebuilds, so the text leaves every
+  file.
 - **Private.** Everything lives in Klash's data directory, on your machine.
 
 ## In use
@@ -58,29 +60,27 @@ step and adds the one that replaces it, so mem shows the plan as it now
 stands, and why it changed:
 
 ```
-gnovm_run {"name": "mem", "code": "mem.Add(\"build greet\", \"go.mod for module greet\", \"greet.go with Hello\", \"greet_test.go\", \"make test runs the tests\")"}
-  1
-  output:
-  added 1 "build greet": steps 2 "go.mod for module greet", 3 "greet.go with Hello", 4 "greet_test.go", 5 "make test runs the tests"
-gnovm_run {"name": "mem", "code": "mem.Done(2, \"module greet, go 1.22\")"}
-  done 2 "go.mod for module greet"; next: 3 "greet.go with Hello"
-gnovm_run {"name": "mem", "code": "mem.Note(5, \"make is not installed here\")\nmem.Drop(5, \"no make on this machine\")\nmem.Step(1, \"test.sh runs go test ./...\")"}
-  6
-  output:
-  dropped 5 "make test runs the tests"; next: 3 "greet.go with Hello"
-  added 6 "test.sh runs go test ./...", a step of 1 "build greet"
-gnovm_run {"name": "mem", "code": "mem.Show()"}
-  board: 4 open, 1 done, 1 dropped · next: 3 "greet.go with Hello"
-  [ ] 1 build greet
-    [x] 2 go.mod for module greet → module greet, go 1.22
-    [ ] 3 greet.go with Hello  ← next
-    [ ] 4 greet_test.go
-    [-] 5 make test runs the tests · dropped: no make on this machine (1 note)
-    [ ] 6 test.sh runs go test ./...
+gnovm_run {"name": "mem", "code": "mem.Goal(\"build greet\").Steps(\"go.mod for module greet\", \"greet.go with Hello\", \"greet_test.go\", \"make test runs the tests\")"}
+  added goal `build-greet` "build greet"
+  added `build-greet/1` "go.mod for module greet", `build-greet/2` "greet.go with Hello", `build-greet/3` "greet_test.go", `build-greet/4` "make test runs the tests"; next: `build-greet/1` "go.mod for module greet"
+gnovm_run {"name": "mem", "code": "mem.Done(\"build-greet/1\", \"module greet, go 1.22\")"}
+  done `build-greet/1` "go.mod for module greet" → module greet, go 1.22; next: `build-greet/2` "greet.go with Hello"
+gnovm_run {"name": "mem", "code": "mem.Note(\"build-greet/4\", \"make is not installed here\")\nmem.Drop(\"build-greet/4\", \"no make on this machine\")\nmem.Steps(\"build-greet\", \"test.sh runs go test ./...\")"}
+  noted on `build-greet/4` "make test runs the tests"
+  dropped `build-greet/4` "make test runs the tests"; next: `build-greet/2` "greet.go with Hello"
+  added `build-greet/5` "test.sh runs go test ./..."; next: `build-greet/2` "greet.go with Hello"
+gnovm_run {"name": "mem", "code": "mem.Show(\"build-greet\")"}
+  [ ] `build-greet` "build greet" (1/4 done)
+    made by this session, changed just now
+    [x] `build-greet/1` "go.mod for module greet" → module greet, go 1.22
+    [ ] `build-greet/2` "greet.go with Hello"  ← next
+    [ ] `build-greet/3` "greet_test.go"
+    [-] `build-greet/4` "make test runs the tests" → no make on this machine
+    [ ] `build-greet/5` "test.sh runs go test ./..."
 ```
 
-Tomorrow's session is given the outline's first line along with your first
-message, so it knows where the goal stands without being told.
+Tomorrow's session is told, with your first message, what mem has open and
+what is next, so it knows where the goal stands without being told.
 
 ### A knowledge base
 
@@ -91,27 +91,28 @@ message, so it knows where the goal stands without being told.
 >
 > *(any later session)* **You:** Where's the staging database?
 
-Each fact has a name, and every new session is told the names mem
-holds. So a fact that changes is set again under the name it already has,
-rather than added a second time to disagree with the first, and a question
-about one is answered by looking it up:
+Each fact has a name, any path you like (`staging/database`,
+`people/on-call`), and a new session is told the newest facts. So a fact that
+changes is set again under the name it already has, rather than added a
+second time to disagree with the first, and a question about one is answered
+by looking it up, by its name or by its words:
 
 ```
-gnovm_run {"name": "mem", "code": "mem.Facts[\"staging database\"] = \"db-stg-4\"\nmem.Facts[\"on-call engineer\"] = \"Dana\"\nmem.Facts[\"deploy cmd\"] = \"make ship ENV=prod\""}
-gnovm_run {"name": "mem", "code": "mem.Facts[\"staging database\"] = \"db-stg-9\""}
-gnovm_run {"name": "mem", "code": "mem.Facts[\"staging database\"]"}
-  "db-stg-9"
-gnovm_run {"name": "mem", "code": "mem.Show()"}
-  board: 0 open, 0 done · facts: deploy cmd, on-call engineer, staging database
-  facts:
-    deploy cmd = make ship ENV=prod
-    on-call engineer = Dana
-    staging database = db-stg-9
+gnovm_run {"name": "mem", "code": "mem.Fact(\"staging/database\", \"db-stg-4\")\nmem.Fact(\"people/on-call\", \"Dana\")\nmem.Fact(\"cmd/deploy\", \"make ship ENV=prod\")"}
+  fact `staging/database` is new
+  fact `people/on-call` is new
+  fact `cmd/deploy` is new
+gnovm_run {"name": "mem", "code": "mem.Fact(\"staging/database\", \"db-stg-9\")"}
+  fact `staging/database` changed (was "db-stg-4")
+gnovm_run {"name": "mem", "code": "mem.Find(\"stg\")"}
+  fact `staging/database` = db-stg-9
+gnovm_run {"name": "mem", "code": "mem.Find(\"deploy\")"}
+  fact `cmd/deploy` = make ship ENV=prod
 ```
 
-What the agent finds while it works is kept the same way, on the item it was
-working on: a question is an item, its notes are the findings, and its result
-is the answer.
+What the agent finds while it works is kept on the item it was working on,
+as notes, and a question for you is a step of its own (`mem.Ask`), which holds
+its goal until you answer.
 
 ### A reminder for next time
 
@@ -191,68 +192,77 @@ Klash's system prompt carries a short recipe, so the model needs no setup:
 `mem` is made the first time it is used.
 
 - **At the start of a session** the model is told, with its first prompt,
-  what mem has open and the names of its facts (`board: 2 open, 5 done
-  · next: 3 "update CHANGELOG" · facts: deploy cmd`), so it needs no tool call
-  to find earlier work; `mem.Show()` gives the whole outline. The line is
-  given whenever mem has an item open or holds a fact, and the model is
-  told to use mem only where the task at hand is part of it. Klash
-  rewrites that line after every change, and reading it starts nothing.
-- **A task of two or more steps**: `mem.Add(goal, steps...)`, then
-  `mem.Done(id, what came of it)` as each finishes; Done answers with what is
-  next. A goal cannot be done while a step of it is open, so a success
+  the rules you gave, what is due, what waits on you, the open goals with
+  what is next in each, and the newest facts; `mem.Show()` gives the whole
+  outline. Klash rewrites what it will be told after every change, and
+  reading it starts nothing.
+- **When a task starts**: `mem.Show()`, and carry on from `← next`.
+- **A task of two or more steps**: `mem.Goal("…").Steps("…", "…")`, then
+  `mem.Done(name, what came of it)` as each finishes; Done answers with what
+  is next. A goal cannot be done while a step of it is open, so a success
   condition is a step ("go test ./... passes").
-- **A question**: an item whose notes are its findings (`mem.Note(id, "the
-  claim — path:line")`) and whose result is its answer.
-- **Facts**: `mem.Facts["deploy cmd"] = "make ship ENV=prod"`; to change one,
-  set it again under the same name.
+- **Findings**: `mem.Note(name, "the claim, then path:line")`. **A question
+  for you**: `mem.Ask(name, "…")`, answered with Done.
+- **Later, or when something happens**: `mem.Goal("…").Wait("2026-12-01")`,
+  or `.Wait("PR #6399 merged")`.
+- **Facts and rules**: `mem.Fact("cmd/test", "go test -race ./...")`; a
+  standing instruction of yours, `mem.Rule("…", "…")`, is given to every
+  session.
 - **Anything that needs computing** runs in the session's scratch machine.
 
-## mem, as a foundation
+## mem, inside
 
-`klash/gnomem/v1` is deliberately small: two plain-data types and seven
-calls. Two rounds of independent review (minimalism, how a 27B model would use
-it, durability; then simplicity and an adversarial bug hunt) shaped it.
+`klash/gnomem/v2` keeps work, facts and rules in B+trees keyed by name, so a
+call loads only what it touches, and mem has no size limit.
 
 ```go
-type Board struct {
-	Items []Item            // by id; Items[0] is the root, so loop over Items[1:]
-	Facts map[string]string
+type Todo struct {
+	Title   string   // what to get done, or what is asked
+	Status  string   // "" while open; "done", "dropped" or "forgotten"
+	Result  string   // what came of it: the outcome, your answer, or why it was dropped
+	Wait    string   // a day ("2026-12-01") or words ("PR #6399 merged"); "" none
+	For     string   // "user": a question or request for you
+	Doing   string   // the session that started it
+	Notes   []string // findings and attempts, oldest first
+	// ...
 }
 
-type Item struct {
-	Title  string
-	Parent int
-	Status string   // "" while open; "done", "dropped" or another word closes it
-	Result string   // a summary, an answer, or why it was dropped
-	Notes  []string // findings and attempts, oldest first
-}
-
-func New() *Board
-func (b *Board) Add(title string, steps ...string) int // prints the ids it made
-func (b *Board) Step(parent int, title string) int
-func (b *Board) Done(id int, result ...string) // refuses while a step is open; prints what is next
-func (b *Board) Drop(id int, why string)    // drops its open steps too
-func (b *Board) Reopen(id int)              // and the steps dropped with it
-func (b *Board) Note(id int, text string)
-func (b *Board) Show(ids ...int) string     // the outline, or items in full
+func (m *Mem) Goal(title string, name ...string) Goal // .Steps(...), .Wait(...)
+func (m *Mem) Steps(name string, titles ...string)
+func (m *Mem) Ask(name, question string)
+func (m *Mem) Start(name string)
+func (m *Mem) Done(name string, result ...string)
+func (m *Mem) Drop(name, why string)
+func (m *Mem) Reopen(name string)
+func (m *Mem) Note(name, note string)
+func (m *Mem) Wait(name, until string)
+func (m *Mem) Fact(name, fact string)
+func (m *Mem) Rule(name, rule string)
+func (m *Mem) Forget(name string)
+func (m *Mem) Redact(secret string)
+func (m *Mem) Find(words string) string
+func (m *Mem) Show(names ...string) string
+func (m *Mem) Next(name string) string
 ```
 
-- **Plain data.** `mem.Items[3].Title` and `mem.Facts["k"]` read directly.
-  Another package can build on the same items, or replace them: this is
-  only the starting point.
-- **What a call stores never changes.** A persistent machine is rebuilt by
-  running its calls again, so a call never changes what it stores or the ids
-  it returns, and never refuses what it once accepted; it may store new
-  fields, refuse less, and print or show things differently. A frozen test
-  replays a fixed set of calls against a field-by-field dump that is never
-  rewritten; anything that breaks it is `klash/gnomem/v2`.
-- **Reading costs nothing to keep.** `mem.Show()`, `mem` on its own and
-  `println(mem)` are recognised as reads, once the machine confirms `mem` is a
-  v1 `Board`, and are not journaled: reading mem never wears out its
-  journal.
-- **Short by construction.** Show's outline stays under about 3000 bytes: the
-  header names the next item, facts come next, closed items take one line
-  each, and older ones, top-level or steps, are counted.
+- **Names, not numbers.** Everything has a lowercase name, printed in
+  backticks: a goal's comes from its title (`release-v2`), its steps are
+  numbered under it (`release-v2/1`), and a fact's or a rule's is any path
+  (`cmd/test`). A name is never reused, and a wrong one is answered with
+  what it should have been.
+- **One function changes mem.** A call only decides which changes (Ops) to
+  make; one function applies them, checking each against what is there, and
+  Klash journals them. A failed call keeps nothing.
+- **The journal is the source.** mem's store, the realm in goleveldb, and its
+  index, SQLite with full-text search, are built from the journal, and built
+  again from it after damage, an upgrade or an erasure. Two Klash processes
+  take turns through a lock.
+- **Erased means erased.** `mem.Redact(secret)` and `mem.Forget(name)` write
+  the journal again without the text and rebuild the store and the index,
+  so the text leaves every file mem has.
+- **Short by construction.** Show's outline stays under about 3000 bytes:
+  the rules, what is due, the open goals newest first (a long run of finished
+  steps folded into one line), the goals closed lately, and the newest facts.
 
 ## The machines
 
@@ -291,6 +301,9 @@ now handles each case:
   "tasks"`.
 - **Missing fields.** An error about a missing field lists the fields the
   struct has.
+- **Older habits.** A call to one of mem's former calls (`mem.Add`,
+  `mem.Facts[…]`), a number where a name goes, or an unquoted name is
+  answered with the call or the form that replaced it.
 - **Quiet results.** A trailing `fmt.Println(x)` shows its output, not the
   call's results ("8, undefined"), and a nil value shows as `nil`. A value
   that is a string of several lines is shown as it is, not as one quoted

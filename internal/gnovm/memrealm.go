@@ -11,9 +11,12 @@ package gnovm
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -72,9 +75,14 @@ type memRealm struct {
 	clock func() time.Time
 }
 
+// memPackages are the packages a mem input may import, preloaded into the
+// base: a mem call loads no package itself, since anything it loaded would
+// be written into mem's store.
+var memPackages = []string{memLibPath, "fmt", "strings", "strconv", "sort", "math", "errors", "time", "bytes", "unicode/utf8"}
+
 // openMemRealm opens the mem in dir, deploying the realm into a new store.
 func openMemRealm(b *base, dir string) (*memRealm, error) {
-	if _, err := b.ensure([]string{memLibPath}); err != nil {
+	if _, err := b.ensure(memPackages); err != nil {
 		return nil, err
 	}
 	// A mem call's transaction reads the libraries' objects and types from
@@ -200,16 +208,51 @@ func (r *memRealm) commit(call memCall, st memStamp) error {
 }
 
 // apply applies ops, each made at its time in ats, through gnomem's Apply,
-// which records nothing: they are the journal's already.
+// which records nothing: they are the journal's already. It may take as
+// long as a batch of a rebuild needs.
 func (r *memRealm) apply(ops []memOp, ats []int64) (memCall, error) {
-	return r.call("mem.Apply()", memContext{caller: "klash", pending: ops, pendingAt: ats})
+	return r.call("mem.Apply()", memContext{caller: "klash", pending: ops, pendingAt: ats, limit: memLimit{gas: maxGas, wall: 10 * time.Minute}})
 }
 
-// call runs code as the body of a mem input's main, by ctx's caller. A
-// failed input keeps nothing, and an input that made no Ops is a read: it
-// must have written nothing either, since only gnomem's do changes mem.
-// What a call that made Ops wrote waits in its batch for commit.
-func (r *memRealm) call(code string, ctx memContext, imports ...string) (call memCall, err error) {
+// What a mem call may use, unless its memContext says otherwise: about ten
+// seconds of work, a minute of wall clock, and 128 MB.
+const (
+	memGas      = 10_000_000_000
+	memWall     = time.Minute
+	memCapBytes = 128 << 20
+)
+
+// memLimit bounds a mem call: its gas, how long it may take, and what
+// cancels it. Zero values are the defaults above.
+type memLimit struct {
+	ctx  context.Context
+	gas  int64
+	wall time.Duration
+}
+
+// call runs a mem input, shaped as a program's main (shapeMemInput), by
+// ctx's caller, within ctx's limit. A failed input keeps nothing, and an
+// input that made no Ops is a read: it must have written nothing either,
+// since only gnomem's do changes mem. What a call that made Ops wrote
+// waits in its batch for commit.
+func (r *memRealm) call(code string, ctx memContext) (call memCall, err error) {
+	src, err := shapeMemInput(code)
+	if err != nil {
+		return call, err
+	}
+	lim := ctx.limit
+	if lim.ctx == nil {
+		lim.ctx = context.Background()
+	}
+	if lim.gas == 0 {
+		lim.gas = memGas
+	}
+	if lim.wall == 0 {
+		lim.wall = memWall
+	}
+	meter := &callMeter{}
+	meter.begin(lim.ctx, lim.gas, time.Now().Add(lim.wall))
+	defer meter.end()
 	kv := cache.New(r.kv)
 	wc := &writeCounter{Store: kv}
 	tx := r.b.store.BeginTransaction(wc, wc, nil, nil)
@@ -223,27 +266,40 @@ func (r *memRealm) call(code string, ctx memContext, imports ...string) (call me
 	if ctx.today == "" {
 		ctx.today = now.Format(time.DateOnly)
 	}
+	mpkg, bodyLine := memInput(src)
+	oneLine := !strings.Contains(strings.TrimSpace(code), "\n")
+	fail := func(msg string) {
+		// What the input printed before it failed may read as done; say
+		// plainly that none of it was kept.
+		if len(call.Ops) > 0 {
+			msg += "; nothing was kept"
+		}
+		call.Ops = nil
+		err = errors.New(msg)
+	}
 	defer func() {
 		call.Output = out.String()
 		if p := recover(); p != nil {
-			// What the input printed before it failed may read as done;
-			// say plainly that none of it was kept.
-			msg := memPanicText(p)
-			if len(call.Ops) > 0 {
-				msg += "; nothing was kept"
+			if terr := meter.tripped(); terr != nil {
+				fail(classifyTrip(terr).Error())
+			} else {
+				fail(memPanicText(p, bodyLine, oneLine))
 			}
-			call.Ops = nil
-			err = errors.New(msg)
 		}
 	}()
-	opts := gno.MachineOptions{Output: &out, Store: tx, Context: ctx, BoundedPanicRender: true}
+	opts := gno.MachineOptions{Output: &out, Store: tx, Context: ctx, BoundedPanicRender: true, GasMeter: meter, Alloc: gno.NewAllocator(memCapBytes)}
 	m := gno.NewMachineWithOptions(opts)
 	defer m.Release()
-	_, pv := m.RunMemPackage(memInput(code, imports...), false)
+	_, pv := m.RunMemPackage(mpkg, false)
 	m2 := gno.NewMachineWithOptions(opts)
 	defer m2.Release()
 	m2.SetActivePackage(pv)
 	m2.RunMain()
+	if terr := meter.tripped(); terr != nil {
+		// A trip the GnoVM recovered by itself still fails the call.
+		fail(classifyTrip(terr).Error())
+		return call, err
+	}
 	if len(call.Ops) == 0 && ctx.pending == nil {
 		if wc.writes > 0 {
 			return call, fmt.Errorf("gnomem: an input that made no Ops wrote %d keys", wc.writes)
@@ -254,18 +310,35 @@ func (r *memRealm) call(code string, ctx memContext, imports ...string) (call me
 	return call, nil
 }
 
-// memPanicText is a failed mem input's refusal as the model reads it: gno's
-// panic text, without its wrapping, on one line.
-func memPanicText(p any) string {
+// memPanicText is a failed mem input's refusal or error as the model reads
+// it: gno's panic text on one line, without its wrapping or the generated
+// package's path. A compile error's place is dropped for a one-line input,
+// and given as the input's line otherwise; bodyLine is the line of the
+// generated main.gno that the input's statements start on.
+func memPanicText(p any, bodyLine int, oneLine bool) string {
 	msg := fmt.Sprint(p)
+	if isAllocLimit(msg) {
+		return (&limitError{kind: "memory"}).Error()
+	}
 	for _, prefix := range []string{"unhandled panic: ", "panic: "} {
 		msg = strings.TrimPrefix(msg, prefix)
 	}
 	if i := strings.Index(msg, "\n"); i >= 0 {
 		msg = msg[:i]
 	}
+	msg = strings.ReplaceAll(msg, "klash.local/e/"+memRunAddr.String()+"/run/", "")
+	if m := memPlaceRe.FindStringSubmatch(msg); m != nil {
+		place := ""
+		if line, err := strconv.Atoi(m[1]); err == nil && !oneLine && line >= bodyLine {
+			place = "line " + strconv.Itoa(line-bodyLine+1) + ": "
+		}
+		msg = place + strings.TrimSuffix(msg[len(m[0]):], ":")
+	}
 	return msg
 }
+
+// memPlaceRe is where gno puts a compile error: main.gno:5:1-8: .
+var memPlaceRe = regexp.MustCompile(`^main\.gno:(\d+):[\d:-]+: `)
 
 // writeCounter counts the writes a call makes to its store.
 type writeCounter struct {
@@ -284,28 +357,53 @@ func (w *writeCounter) Delete(gctx *storetypes.GasContext, key []byte) {
 }
 
 // memInput is a mem input as gno.land runs a MsgRun: a private package at
-// the run path, whose main is code, with mem bound to the realm's Mem.
-// imports are import specs ("strings", `gnomem "klash/gnomem/v2"`).
-func memInput(code string, imports ...string) *std.MemPackage {
+// the run path, whose main is the input's, with mem bound to the realm's
+// Mem. It also returns the line of main.gno that main's statements start
+// on.
+func memInput(src memSource) (*std.MemPackage, int) {
 	path := "klash.local/e/" + memRunAddr.String() + "/run"
 	mod := &gnomod.File{Module: path, Gno: gno.GnoVerLatest, Private: true}
-	head := "package main\n\n"
-	for _, imp := range imports {
-		head += "import " + imp + "\n"
+	var main strings.Builder
+	main.WriteString("package main\n\n")
+	for _, imp := range src.imports {
+		main.WriteString("import " + imp + "\n")
 	}
+	for _, d := range src.decls {
+		main.WriteString("\n" + d + "\n")
+	}
+	main.WriteString("\nfunc main() {\n")
+	bodyLine := strings.Count(main.String(), "\n") + 1
+	main.WriteString(src.main + "}\n")
 	mpkg := &std.MemPackage{
 		Type: gno.MPUserProd,
 		Name: "main",
 		Path: path,
 		Files: []*std.MemFile{
-			{Name: "main.gno", Body: head + "\nfunc main() {\n" + code + "\n}\n"},
-			{Name: "mem.gno", Body: "package main\n\nimport memr \"" + memRealmPath + "\"\n\nvar mem = memr.M\n"},
+			{Name: "main.gno", Body: main.String()},
+			{Name: "mem.gno", Body: memBinding},
 		},
 	}
 	mpkg.SetFile("gnomod.toml", mod.WriteString())
 	mpkg.Sort()
-	return mpkg
+	return mpkg, bodyLine
 }
+
+// memBinding is the file klash adds to every mem input: mem, bound to the
+// realm's Mem, and how a trailing read of it is shown.
+const memBinding = `package main
+
+import memr "` + memRealmPath + `"
+
+var mem = memr.M
+
+// showMem_ prints what a trailing read of mem returned, ending its line.
+func showMem_(s string) {
+	if s != "" && s[len(s)-1] != '\n' {
+		s += "\n"
+	}
+	print(s)
+}
+`
 
 func memRealmMemPackage() *std.MemPackage {
 	mod := &gnomod.File{Module: memRealmPath, Gno: gno.GnoVerLatest}

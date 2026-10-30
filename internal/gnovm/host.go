@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"go/token"
-	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -38,14 +37,9 @@ import (
 )
 
 const (
-	// MemVM is the agent's board: a persistent VM klash makes on first
-	// use, whose first entry declares mem, a klash/gnomem/v1 Board.
+	// MemVM is the name the tools give mem, the agent's memory: not a VM
+	// but a realm on disk (memhost.go), made when first used.
 	MemVM = "mem"
-	// memPrelude is MemVM's first entry, made with request id
-	// memPreludeReq.
-	memPrelude = `import gnomem "` + boardPkg + `"
-var mem = gnomem.New()`
-	memPreludeReq = "klash:mem"
 
 	scratchPrefix = "scratch-"
 	// maxNamedVMs is how many named VMs a project may have; scratch VMs
@@ -66,8 +60,8 @@ var mem = gnomem.New()`
 	maxGas          = 100_000_000_000
 
 	// lockWait is the least a run waits for a VM another klash process is
-	// using: making a VM's first state, as mem's board, can outlast a short
-	// run's own wall-clock limit on a busy machine.
+	// using: another process's call, or its replay of a VM, can outlast a
+	// short run's own wall-clock limit on a busy machine.
 	lockWait = 30 * time.Second
 )
 
@@ -133,6 +127,7 @@ type Host struct {
 	opts    Options
 	base    *base
 	vms     map[string]*vmState // by project key + "/" + name
+	mems    map[string]*memHost // by directory (memDir)
 	clock   int64               // for least-recently-used eviction
 	release func()              // drops the client lock, if this host holds it
 	swept   map[string]bool     // project keys whose dead clients were swept
@@ -723,6 +718,9 @@ func (h *Host) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	}
 
 	name := req.Name
+	if name == MemVM {
+		return h.runMem(ctx, req)
+	}
 	if name == "scratch" && req.Session != "" {
 		name = ScratchName(req.Session)
 	}
@@ -738,11 +736,6 @@ func (h *Host) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	}
 	scratch := name == ScratchName(req.Session)
 	var notes []string
-	if name == MemVM {
-		if err := h.ensureMem(project); err != nil {
-			return nil, err
-		}
-	}
 
 	s, err := h.lookup(project, name)
 	if err != nil {
@@ -773,26 +766,6 @@ func (h *Host) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	return h.runIn(ctx, s, req, notes)
 }
 
-// ensureMem makes a project's mem VM if it has none. Its first use declares
-// the board (see runIn), under the VM's lock, so two klash processes racing
-// to make it end with one board.
-func (h *Host) ensureMem(project string) error {
-	s, err := h.lookup(project, MemVM)
-	if err != nil || s != nil {
-		return err
-	}
-	opts := h.defaultOptions()
-	opts.Persist = true
-	opts.Description = "your board: goals, steps, findings and facts (" + boardPkg + ")"
-	if _, err = h.create(project, MemVM, opts); err != nil {
-		var ref *refusal
-		if errors.As(err, &ref) {
-			return nil // another klash made it just now
-		}
-	}
-	return err
-}
-
 // runIn runs a call in an existing VM, under its lock.
 func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []string) (*RunResult, error) {
 	gas := req.Gas
@@ -821,22 +794,6 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 		return nil, err
 	}
 	h.touch(s)
-	if s.name == MemVM {
-		if s.j.seq == 0 {
-			// The board's first use declares it, in an entry of its own.
-			pre, err := h.runResident(ctx, s, v, RunRequest{Name: MemVM, Code: memPrelude, Req: memPreludeReq}, nil, gas, wall)
-			if err == nil && pre.Err != nil {
-				err = pre.Err
-			}
-			if err != nil {
-				return nil, fmt.Errorf("making the board in VM mem: %w", err)
-			}
-			notes = append(notes, "made VM mem, your board (persistent): mem.Show() shows it")
-		}
-		if !v.isBoard(MemVM) {
-			return nil, &refusal{"VM mem predates the board: its mem is not a " + boardPkg + " Board. Copy what you need from it into another VM, then delete it with gnovm_drop; the board is made again on its next use"}
-		}
-	}
 	return h.runResident(ctx, s, v, req, notes, gas, wall)
 }
 
@@ -864,9 +821,6 @@ func (h *Host) runResident(ctx context.Context, s *vmState, v *vm, req RunReques
 	if n := importedNote(imported); n != "" {
 		notes = append(notes, n)
 	}
-	if s.name == MemVM && prog.lhs[MemVM] {
-		return nil, &refusal{"mem is your board, and assigning to it would replace the board: change it with its methods (mem.Add, mem.Done, mem.Note, ...) or its fields (mem.Facts[\"k\"] = \"v\")"}
-	}
 	readOnly := readOnlyOps(v, prog, len(ops))
 	if err := h.checkLimits(s, ops, readOnly); err != nil {
 		return nil, err
@@ -882,17 +836,6 @@ func (h *Host) runResident(ctx context.Context, s *vmState, v *vm, req RunReques
 		// A board's outline is shown as it is, not as a quoted string.
 		if raw, err := strconv.Unquote(value); err == nil {
 			res.Value = strings.TrimRight(raw, "\n")
-		}
-	}
-	if runErr == nil && s.name == MemVM && req.Req != memPreludeReq && len(journaledOps(ops, readOnly)) > 0 {
-		check := &entry{Seq: e.Seq, Time: e.Time, Ops: []op{{Eval: MemVM + " == nil"}}}
-		isNil, _, err := v.apply(ctx, check, 50_000_000, time.Now().Add(5*time.Second), true)
-		if err != nil {
-			slog.Debug("gnovm: checking the board", "err", err)
-		}
-		if isNil == "true" {
-			s.res = nil
-			runErr = errors.New("mem is your board, and this call set it to nil, so nothing from it was kept")
 		}
 	}
 	if runErr != nil {
@@ -939,9 +882,6 @@ func (h *Host) runResident(ctx context.Context, s *vmState, v *vm, req RunReques
 	v.seq, v.offset = e.Seq, s.j.size
 	s.cost.add(e)
 	res.Journaled, res.Seq = true, e.Seq
-	if s.name == MemVM && req.Req != memPreludeReq {
-		h.writeBoardSummary(ctx, s, v, e.Time)
-	}
 	// A VM grows after it is admitted: keep the others within the budget.
 	for _, name := range h.enforceBudget(s) {
 		res.Notes = append(res.Notes, "evicted VM "+name+" from memory to make room (it is rebuilt when next used)")
@@ -1185,12 +1125,7 @@ func (h *Host) New(ctx context.Context, req NewRequest) (VMInfo, bool, error) {
 	}
 	project := projectKey(req.Project)
 	if req.Name == MemVM {
-		if req.Persist != nil && !*req.Persist {
-			return VMInfo{}, false, &refusal{"VM mem, your board, is always persistent"}
-		}
-		if err := h.ensureMem(project); err != nil {
-			return VMInfo{}, false, err
-		}
+		return VMInfo{}, false, &refusal{`mem is your memory, kept by klash and made when first used: run gnovm_run with name "mem"; it has no settings to change`}
 	}
 	s, err := h.lookup(project, req.Name)
 	if err != nil {
@@ -1326,6 +1261,9 @@ func (h *Host) countNamed(project string) (int, error) {
 func (h *Host) Drop(ctx context.Context, projectPath, name, action string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if name == MemVM {
+		return &refusal{"mem is your memory: it is never dropped; the user erases from it with /mem forget"}
+	}
 	project := projectKey(projectPath)
 	s, err := h.lookup(project, name)
 	if err != nil {
@@ -1402,7 +1340,13 @@ func (h *Host) List(projectPath string) (ListResult, error) {
 	if err != nil {
 		return out, err
 	}
+	if info, ok := h.memInfo(projectPath); ok {
+		out.VMs = append(out.VMs, info)
+	}
 	for _, s := range states {
+		if s.name == MemVM {
+			continue // a VM of v1's mem, left on disk
+		}
 		if s.j == nil && s.broken == nil {
 			if j, entries, _, err := readJournal(filepath.Join(s.dir, "journal.jsonl")); err == nil {
 				s.j = j
@@ -1444,6 +1388,9 @@ func (h *Host) info(s *vmState) VMInfo {
 func (h *Host) Kept(projectPath, name, req string) (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if name == MemVM {
+		return h.mem(projectPath).kept(req)
+	}
 	s, err := h.lookup(projectKey(projectPath), name)
 	if err != nil || s == nil {
 		return false, err
@@ -1468,6 +1415,10 @@ func (h *Host) Kept(projectPath, name, req string) (bool, error) {
 func (h *Host) Repair(ctx context.Context, projectPath, name string) (kept, cut int, err error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if name == MemVM {
+		kept, err := h.mem(projectPath).repair(ctx)
+		return kept, 0, err
+	}
 	s, err := h.lookup(projectKey(projectPath), name)
 	if err != nil {
 		return 0, 0, err

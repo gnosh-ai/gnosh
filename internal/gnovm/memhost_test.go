@@ -349,3 +349,120 @@ func TestMemHostTwoProcessesTakeTurns(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 10)
 }
+
+// gnovm_run name "mem" reaches mem through the host: a change is kept, a
+// trailing read is shown, an older mem's habit gets a hint, gnovm_new and
+// gnovm_drop refuse mem, gnovm_list and Kept know it, and a new session's
+// block says what it holds.
+func TestHostRunsMem(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestHost(t, dir)
+	ctx := context.Background()
+	call := func(code string) *RunResult {
+		t.Helper()
+		res, err := h.Run(ctx, RunRequest{Project: "/proj", Session: "s1", Name: MemVM, Code: code, Req: "req-" + code})
+		require.NoError(t, err, code)
+		return res
+	}
+	res := call(`mem.Goal("ship it").Steps("build", "test")`)
+	require.NoError(t, res.Err)
+	require.True(t, res.Journaled)
+	require.EqualValues(t, 1, res.Seq)
+	require.Contains(t, res.Output, "added goal `ship` \"ship it\"")
+
+	res = call(`mem.Show()`)
+	require.NoError(t, res.Err)
+	require.False(t, res.Journaled)
+	require.Contains(t, res.Output, "[ ] `ship/1` \"build\"  ← next")
+
+	res = call(`mem.Add("x", "y")`)
+	require.ErrorContains(t, res.Err, "missing field Add in *klash/gnomem/v2.Mem")
+	require.Contains(t, res.Notes, `mem.Goal("what to get done").Steps("a step", "another") plans a task, and names its steps after it`)
+	res = call(`mem.Done(1, "built")`)
+	require.Contains(t, res.Notes, `items are named, not numbered: type the name mem printed in backticks, as mem.Done("release-v2/2", "…")`)
+	res = call(`mem.Done(ship/1, "built")`)
+	require.Contains(t, res.Notes, `a name is a string: quote it, as mem.Done("release-v2/1", "…")`)
+
+	_, _, err := h.New(ctx, NewRequest{Project: "/proj", Name: MemVM})
+	require.ErrorContains(t, err, "mem is your memory")
+	require.ErrorContains(t, h.Drop(ctx, "/proj", MemVM, "delete"), "never dropped")
+
+	list, err := h.List("/proj")
+	require.NoError(t, err)
+	require.Len(t, list.VMs, 1)
+	require.Equal(t, MemVM, list.VMs[0].Name)
+	require.EqualValues(t, 1, list.VMs[0].Entries)
+	kept, err := h.Kept("/proj", MemVM, `req-mem.Goal("ship it").Steps("build", "test")`)
+	require.NoError(t, err)
+	require.True(t, kept)
+
+	block := MemBlock(dir, "/proj")
+	require.Contains(t, block, "<mem>\n")
+	require.Contains(t, block, "- `ship` \"ship it\" (0/2 done · ")
+	require.Contains(t, block, "next: `ship/1` \"build\"")
+	require.Empty(t, MemBlock(dir, "/elsewhere"))
+}
+
+// A repository's worktrees and subdirectories share one mem: it is keyed
+// by the git common dir.
+func TestMemRootIsTheRepository(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, ".git", "worktrees", "wt"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, ".git", "worktrees", "wt", "commondir"), []byte("../..\n"), 0o644))
+	wt := filepath.Join(t.TempDir(), "wt")
+	require.NoError(t, os.MkdirAll(filepath.Join(wt, "sub"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+filepath.Join(repo, ".git", "worktrees", "wt")+"\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "pkg", "deep"), 0o755))
+
+	want, err := filepath.EvalSymlinks(filepath.Join(repo, ".git"))
+	require.NoError(t, err)
+	for _, p := range []string{repo, filepath.Join(repo, "pkg", "deep"), wt, filepath.Join(wt, "sub")} {
+		require.Equal(t, want, memRoot(p), p)
+	}
+	outside := t.TempDir()
+	got, err := filepath.EvalSymlinks(outside)
+	require.NoError(t, err)
+	require.Equal(t, got, memRoot(outside), "outside git, the directory itself")
+}
+
+// The <mem> block a new session is given, from status.json: the user's
+// rules in full, first; then what is due on the session's day, though
+// status.json was written days before; what waits on the user; the open
+// goals with their next; and the newest facts. An empty mem gives none.
+func TestMemBlock(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	_, ok := readMemStatus(dir)
+	require.False(t, ok)
+	for _, q := range []memRequest{
+		{Code: `mem.Rule("push-after-landing", "push to GitHub only after landed:")`, User: true},
+		{Code: `mem.Goal("release v2").Steps("bump the version", "tag v2.0.0")`, Session: "s1"},
+		{Code: `mem.Ask("release-v2/2", "which key signs the <tag>?")`, Session: "s1"},
+		{Code: `mem.Goal("renew the TLS cert").Wait("2026-12-01")`, Session: "s1"},
+		{Code: `mem.Fact("cmd/test", "go test -race ./...")`, Session: "s1"},
+	} {
+		res, err := h.call(context.Background(), q)
+		require.NoError(t, err, res.Output)
+	}
+	st, ok := readMemStatus(dir)
+	require.True(t, ok)
+	require.EqualValues(t, 5, st.Seq)
+	require.Equal(t, "2026-10-30", st.Day)
+
+	block := memBlock(st, time.Date(2026, 12, 2, 9, 0, 0, 0, time.UTC))
+	require.Equal(t, "<mem>\n"+
+		"Rules the user gave you; follow them (the user's words today come first):\n"+
+		"- `push-after-landing` (set by the user, 2026-10-30): push to GitHub only after landed:\n"+
+		"From your memory (mem), kept by klash for this project: what you found and were told in earlier sessions. `mem.Show()` shows the outline; `mem.Find(\"words\")` searches everything.\n"+
+		"mem: 5 items open · 1 question for the user · 1 fact\n"+
+		"due: `renew-tls-cert` \"renew the TLS cert\" (since 2026-12-01)\n"+
+		"waiting on the user: `release-v2/2/1` \"which key signs the &lt;tag&gt;?\"\n"+
+		"open goals, newest first:\n"+
+		"- `renew-tls-cert` \"renew the TLS cert\" (32d ago) due since 2026-12-01\n"+
+		"- `release-v2` \"release v2\" (0/2 done · 32d ago) next: `release-v2/1` \"bump the version\"\n"+
+		"facts, newest first: `cmd/test` = go test -race ./...\n"+
+		"</mem>", block)
+}

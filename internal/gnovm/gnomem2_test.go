@@ -42,8 +42,8 @@ func newMemStory(t *testing.T) *memStory {
 	return s
 }
 
-func (s *memStory) run(who, code string, imports ...string) {
-	call, err := s.r.commitNext(s.r.call(code, memContext{caller: who, holding: s.holding}, imports...))
+func (s *memStory) run(who, code string) {
+	call, err := s.r.commitNext(s.r.call(code, memContext{caller: who, holding: s.holding}))
 	s.out.WriteString("> " + who + ": " + code + "\n" + call.Output)
 	if err != nil {
 		s.out.WriteString("error: " + err.Error() + "\n")
@@ -108,7 +108,7 @@ func TestMemStory(t *testing.T) {
 	// rest, and an outline folds a long run of closed steps.
 	s.run("s1", `mem.Goal("port the tests to gno").Steps("arith", "bytes", "crypto", "errors", "fmt", "io", "math", "sort", "strings", "time")`)
 	s.run("s1", `mem.Done("port-tests-gno", "all ported")`)
-	s.run("s1", `for i := 1; i <= 7; i++ { mem.Done("port-tests-gno/"+strconv.Itoa(i), "ported") }`, `"strconv"`)
+	s.run("s1", `for i := 1; i <= 7; i++ { mem.Done("port-tests-gno/"+strconv.Itoa(i), "ported") }`)
 	s.run("s1", `println(mem.Show("port-tests-gno"))`)
 	s.run("s1", `mem.Goal("tidy the docs").Steps("a", "b", "c", "d", "e", "f", "g")`)
 	s.run("s1", `mem.Drop("tidy-docs", "moved to the docs session")`)

@@ -82,9 +82,9 @@ something it can claim. When an approach fails, it notes why and re-plans:
 it drops that step and adds another.
 
 Start a new session tomorrow and say "let's carry on with Median". With your
-first message, the agent is told what is open and what is next (the first line
-of the outline in [what the agent runs](#what-the-agent-runs)), and it picks up
-there and finishes.
+first message, the agent is told what mem has open and what is next in each
+goal (see [what the agent runs](#what-the-agent-runs)), and it picks up there
+and finishes.
 
 Work that is meant to outlast the session is where mem earns its keep. Klash
 has a second list, the session's own To-Do list, which ends with the session,
@@ -125,29 +125,36 @@ shows it. A test runs this block against every change to Klash, so it stays
 true.
 
 ```
-gnovm_run {"name": "mem", "code": "mem.Add(\"add Median\", \"write Median\", \"test it\", \"go test ./... passes\")"}
-  1
-  output:
-  added 1 "add Median": steps 2 "write Median", 3 "test it", 4 "go test ./... passes"
-gnovm_run {"name": "mem", "code": "mem.Done(2, \"stats.go:31\")"}
-  done 2 "write Median"; next: 3 "test it"
-gnovm_run {"name": "mem", "code": "mem.Facts[\"deploy cmd\"] = \"make ship ENV=prod\"\nmem.Facts[\"staging database\"] = \"db-stg-4\""}
-gnovm_run {"name": "mem", "code": "mem.Facts[\"staging database\"] = \"db-stg-9\""}
+gnovm_run {"name": "mem", "code": "mem.Goal(\"add Median\").Steps(\"write Median\", \"test it\", \"go test ./... passes\")"}
+  added goal `add-median` "add Median"
+  added `add-median/1` "write Median", `add-median/2` "test it", `add-median/3` "go test ./... passes"; next: `add-median/1` "write Median"
+gnovm_run {"name": "mem", "code": "mem.Done(\"add-median/1\", \"stats.go:31\")"}
+  done `add-median/1` "write Median" → stats.go:31; next: `add-median/2` "test it"
+gnovm_run {"name": "mem", "code": "mem.Fact(\"cmd/deploy\", \"make ship ENV=prod\")\nmem.Fact(\"staging/database\", \"db-stg-4\")"}
+  fact `cmd/deploy` is new
+  fact `staging/database` is new
+gnovm_run {"name": "mem", "code": "mem.Fact(\"staging/database\", \"db-stg-9\")"}
+  fact `staging/database` changed (was "db-stg-4")
 gnovm_run {"name": "mem", "code": "mem.Show()"}
-  board: 3 open, 1 done · next: 3 "test it" · facts: deploy cmd, staging database
-  facts:
-    deploy cmd = make ship ENV=prod
-    staging database = db-stg-9
-  [ ] 1 add Median
-    [x] 2 write Median → stats.go:31
-    [ ] 3 test it  ← next
-    [ ] 4 go test ./... passes
+  mem: 1 goal open · 2 facts
+  goals:
+    [ ] `add-median` "add Median" (1/3 done · this session · just now)
+      [x] `add-median/1` "write Median" → stats.go:31
+      [ ] `add-median/2` "test it"  ← next
+      [ ] `add-median/3` "go test ./... passes"
+  facts, newest first:
+    `staging/database` = db-stg-9
+    `cmd/deploy` = make ship ENV=prod
 ```
 
-Setting a fact again replaces it, so mem holds one staging database,
-the current one. Had the agent called `mem.Done(1)` while steps 3 and 4 were
-open, the call would have been refused and nothing from it kept. The outline's
-first line is what a new session is told along with its first prompt.
+Everything in mem has a name, printed in backticks, which the agent types
+back exactly: a goal's name comes from its title, and its steps are numbered
+under it. Setting a fact again replaces it, so mem holds one staging database,
+the current one. Had the agent called `mem.Done("add-median")` while two of
+its steps were open, the call would have been refused, naming them, and
+nothing from it kept. A new session is told, with its first prompt, what mem
+holds: the rules you gave, what is due, what is open and next, and the newest
+facts.
 
 ### Go in your Go: the machines underneath
 

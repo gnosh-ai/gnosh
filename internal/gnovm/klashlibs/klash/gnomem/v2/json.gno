@@ -15,16 +15,22 @@ import (
 )
 
 // maxJSONGoals is how many open goals JSON() lists, newest first: more than
-// the <mem> block shows, and few enough to compute after every change.
-const maxJSONGoals = 20
+// the <mem> block shows, and few enough to compute after every change; and
+// maxJSONDays how many items waiting for a day.
+const (
+	maxJSONGoals = 20
+	maxJSONDays  = 50
+)
 
 // JSON returns, for klash and hooks, the goals with names, or with no names:
-// the counts, the rules, what is due today, the questions for the user, the
-// newest 20 open goals and the newest facts. A goal comes with its status,
-// result, wait, for and doing, who made it and when it changed, how many of
-// its steps are open and done, its next for caller(), and, when its next is
-// "", what holds back the open items Next passed over: "day", "user",
-// "words" or "session". Its steps are not listed: Show(name) shows them.
+// the counts, the rules, the open items waiting for a day (soonest first,
+// with the day, so a reader can tell what is due on any day), the questions
+// for the user, the newest 20 open goals and the newest facts. A goal comes
+// with its status, result, wait, for and doing, who made it and when it
+// changed, how many of its steps are open and done, its next for caller()
+// and that item's title, and, when its next is "", what holds back the open
+// items Next passed over: "day", "user", "words" or "session". Its steps
+// are not listed: Show(name) shows them.
 func (m *Mem) JSON(names ...string) string {
 	var j jsonWriter
 	j.open("{")
@@ -63,16 +69,18 @@ func (m *Mem) JSON(names ...string) string {
 		return false
 	})
 	j.close("]")
-	j.key("due")
+	j.key("days")
 	j.open("[")
-	m.days.Iterate("", today()+"|\xff", func(_ string, v any) bool {
+	i := 0
+	m.days.Iterate("", "", func(_ string, v any) bool {
 		n := v.(string)
 		j.open("{")
 		j.field("name", n)
 		j.field("title", m.get(n).Title)
 		j.field("wait", m.get(n).Wait)
 		j.close("}")
-		return false
+		i++
+		return i == maxJSONDays
 	})
 	j.close("]")
 	j.key("asks")
@@ -87,7 +95,7 @@ func (m *Mem) JSON(names ...string) string {
 	j.close("]")
 	j.key("goals")
 	j.open("[")
-	i := 0
+	i = 0
 	m.open.ReverseIterate("", "", func(_ string, v any) bool {
 		m.goalJSON(&j, v.(string))
 		i++
@@ -134,11 +142,15 @@ func (m *Mem) goalJSON(j *jsonWriter, name string) {
 	j.num(int64(g.OpenSteps))
 	j.key("steps_done")
 	j.num(int64(g.DoneSteps))
-	next := ""
+	next, nextTitle := "", ""
 	if g.Status != "forgotten" {
 		next = m.nextFor(name, g, session)
 	}
+	if next != "" {
+		nextTitle = m.get(next).Title
+	}
 	j.field("next", next)
+	j.field("next_title", nextTitle)
 	j.key("held")
 	j.open("[")
 	if next == "" && g.Status == "" {

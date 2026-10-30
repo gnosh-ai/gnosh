@@ -55,7 +55,7 @@ func (h *Host) compileHint(s *vmState, ops []op, err error) string {
 
 func (h *Host) undeclaredHint(s *vmState, name string) string {
 	if name == MemVM {
-		return `mem is your board, kept in VM mem: run this with name "mem"`
+		return `mem is your memory, kept by klash: run this with name "mem"`
 	}
 	if name == s.name {
 		return fmt.Sprintf("%s is this VM's name, not a value in it: use the names declared in it directly, without %s.", name, name)

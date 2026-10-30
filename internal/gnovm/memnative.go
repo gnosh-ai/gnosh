@@ -34,6 +34,8 @@ type memContext struct {
 	pendingAt []int64
 	// today is the user's local date, 2026-10-29.
 	today string
+	// limit bounds the call (memrealm.go).
+	limit memLimit
 	// find and holding answer from mem's index and journal; nil finds
 	// nothing. holding is also handed the Ops this call has made so far.
 	find    func(words string, max int) (names, kinds []string)

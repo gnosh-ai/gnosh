@@ -206,6 +206,10 @@ func statusLine(res *gnovm.RunResult) string {
 	case res.Program:
 		kept = "thrown away after"
 	}
+	if res.VM == gnovm.MemVM {
+		// mem is not a VM with a gas budget and a memory cap of its own.
+		return fmt.Sprintf("%s · mem · ran %s · %s", state, res.Wall.Round(time.Millisecond), kept)
+	}
 	return fmt.Sprintf("%s · %s · %s of %s gas (≈%s at %g ns/gas; ran %s) · memory %s of %s · %s",
 		state, vm, count(res.Gas), count(res.GasLimit), est.Round(time.Microsecond), res.NsPerGas,
 		res.Wall.Round(time.Microsecond), mb(res.MemUsed), mb(res.MemCap), kept)

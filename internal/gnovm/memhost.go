@@ -11,6 +11,7 @@ package gnovm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -99,7 +100,7 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 	case q.Session != "":
 		who, caller = "agent", q.Session
 	}
-	call, err := r.call(q.Code, memContext{caller: caller, find: x.finder(), holding: h.holding(j)})
+	call, err := r.call(q.Code, memContext{caller: caller, find: x.finder(), holding: h.holding(j), limit: memLimit{ctx: ctx}})
 	res := memResult{Output: call.Output, Ops: call.Ops, Notes: notes}
 	if err != nil || call.batch == nil {
 		return res, err
@@ -121,7 +122,48 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 	if err := r.commit(call, h.stamp(j)); err != nil {
 		return res, err
 	}
-	return res, x.apply([][]memOp{call.Ops}, h.indexStamp(j))
+	if err := x.apply([][]memOp{call.Ops}, h.indexStamp(j)); err != nil {
+		return res, err
+	}
+	h.writeStatus(r, j)
+	return res, nil
+}
+
+// memStatus is status.json: mem.JSON() as klash computed it for no session
+// after a change, with what it was computed for. Hooks read it, and so does
+// the <mem> block at a session's start, without opening mem.
+type memStatus struct {
+	Generation string `json:"generation"`
+	Seq        int64  `json:"seq"`
+	// Day is the user's local date it was computed on.
+	Day string          `json:"day"`
+	Mem json.RawMessage `json:"mem"`
+}
+
+const memStatusFile = "status.json"
+
+// writeStatus writes status.json for the store r as it holds j. It is best
+// effort: a reader of an old one sees mem as it was.
+func (h *memHost) writeStatus(r *memRealm, j *journal) {
+	call, err := r.call(`print(mem.JSON())`, memContext{caller: "klash"})
+	if err != nil {
+		slog.Warn("mem's status could not be computed", "error", err)
+		return
+	}
+	b, err := json.Marshal(memStatus{Generation: j.generation, Seq: j.seq, Day: h.now().Format(time.DateOnly), Mem: json.RawMessage(call.Output)})
+	if err != nil {
+		slog.Warn("mem's status could not be written", "error", err)
+		return
+	}
+	path := filepath.Join(h.dir, memStatusFile)
+	tmp := path + ".tmp"
+	err = os.WriteFile(tmp, b, 0o600)
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		slog.Warn("mem's status could not be written", "error", err)
+	}
 }
 
 // erase keeps an input that redacts or forgets, e: it writes the journal
@@ -143,14 +185,17 @@ func (h *memHost) erase(res memResult, j *journal, e *memEntry, er memErasure) (
 	}
 	res.Seq = e.Seq
 	res.Notes = append(res.Notes, "mem's journal was written again without what was erased; its store and index are built afresh from it")
-	h.removeOtherStores(filepath.Join(h.dir, "store-"+nj.generation))
+	// status.json may hold an old name, or the text.
+	_ = os.Remove(filepath.Join(h.dir, memStatusFile))
+	h.removeOtherGenerations(nj.generation)
 	r, j, _, err := h.open()
 	if err == nil {
-		r.close()
 		var x *memIndex
 		if x, err = h.openIndex(j); err == nil {
 			x.close()
+			h.writeStatus(r, j)
 		}
+		r.close()
 	}
 	var busy *busyError
 	if errors.As(err, &busy) {
@@ -297,7 +342,7 @@ func (h *memHost) open() (r *memRealm, j *journal, notes []string, err error) {
 		r.close()
 		return nil, nil, notes, err
 	}
-	h.removeOtherStores(dir)
+	h.removeOtherGenerations(hdr.Generation)
 	return r, j, notes, nil
 }
 
@@ -418,15 +463,15 @@ func (h *memHost) applyEach(r *memRealm, j *journal, batch []readEntry) error {
 	return nil
 }
 
-// removeOtherStores deletes the stores and indexes of other generations:
-// what an erasure or a repair left behind.
-func (h *memHost) removeOtherStores(keep string) {
-	gen := strings.TrimPrefix(filepath.Base(keep), "store-")
+// removeOtherGenerations deletes the stores and indexes of generations
+// other than gen (of every generation, for gen ""): what an erasure or a
+// repair left behind.
+func (h *memHost) removeOtherGenerations(gen string) {
 	ds, _ := os.ReadDir(h.dir)
 	for _, d := range ds {
 		name := d.Name()
-		other := strings.HasPrefix(name, "store-") && name != "store-"+gen ||
-			strings.HasPrefix(name, "index-") && !strings.HasPrefix(name, "index-"+gen+".db")
+		other := strings.HasPrefix(name, "store-") && (gen == "" || name != "store-"+gen) ||
+			strings.HasPrefix(name, "index-") && (gen == "" || !strings.HasPrefix(name, "index-"+gen+".db"))
 		if other {
 			_ = os.RemoveAll(filepath.Join(h.dir, name))
 		}
@@ -500,4 +545,151 @@ func (h *memHost) openIndex(j *journal) (*memIndex, error) {
 		return nil, err
 	}
 	return x, nil
+}
+
+// The Host's side of mem. The tools name mem as a VM, though it is a realm
+// on disk, kept by a memHost per project.
+
+// runMem runs a gnovm_run call against the project's mem.
+func (h *Host) runMem(ctx context.Context, req RunRequest) (*RunResult, error) {
+	start := time.Now()
+	res, err := h.mem(req.Project).call(ctx, memRequest{Code: req.Code, Session: req.Session, Req: req.Req})
+	out := &RunResult{VM: MemVM, Output: res.Output, Journaled: res.Seq > 0, Seq: res.Seq, Notes: res.Notes, Wall: time.Since(start)}
+	if err != nil {
+		var busy *busyError
+		var ref *refusal
+		var perr *parseError
+		if errors.As(err, &busy) || errors.As(err, &ref) || errors.As(err, &perr) {
+			return nil, err
+		}
+		if hint := memHint(req.Code, err.Error()); hint != "" {
+			out.Notes = append(out.Notes, hint)
+		}
+		out.Err = err
+	}
+	return out, nil
+}
+
+// mem is the project's mem, kept for the host's life.
+func (h *Host) mem(project string) *memHost {
+	dir := memDir(h.opts.Dir, project)
+	if h.mems == nil {
+		h.mems = map[string]*memHost{}
+	}
+	m := h.mems[dir]
+	if m == nil {
+		m = newMemHost(h.base, dir)
+		m.now = h.opts.Now
+		h.mems[dir] = m
+	}
+	m.b = h.base
+	return m
+}
+
+// memDir is where a project's mem lives under dir: keyed by the project's
+// repository (memRoot), not by its working directory.
+func memDir(dir, project string) string {
+	return filepath.Join(dir, projectKey(memRoot(project)), "mem")
+}
+
+// memRoot is what a project's mem is keyed by: its repository's git common
+// dir, so that a repository's worktrees and subdirectories share one mem;
+// outside git, the project's directory. Symlinks are resolved first.
+func memRoot(project string) string {
+	dir, err := filepath.EvalSymlinks(project)
+	if err != nil {
+		dir = filepath.Clean(project)
+	}
+	for d := dir; ; d = filepath.Dir(d) {
+		git := filepath.Join(d, ".git")
+		if fi, err := os.Stat(git); err == nil {
+			if fi.IsDir() {
+				return git
+			}
+			if common := gitCommonDir(git); common != "" {
+				return common
+			}
+		}
+		if filepath.Dir(d) == d {
+			return dir
+		}
+	}
+}
+
+// gitCommonDir reads a worktree's .git file ("gitdir: <path>") and that git
+// dir's commondir file, and returns the common dir they name; "" if they do
+// not.
+func gitCommonDir(gitFile string) string {
+	b, err := os.ReadFile(gitFile)
+	if err != nil {
+		return ""
+	}
+	gitdir, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "gitdir:")
+	if !ok {
+		return ""
+	}
+	gitdir = strings.TrimSpace(gitdir)
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Join(filepath.Dir(gitFile), gitdir)
+	}
+	common := gitdir
+	if b, err := os.ReadFile(filepath.Join(gitdir, "commondir")); err == nil {
+		common = strings.TrimSpace(string(b))
+		if !filepath.IsAbs(common) {
+			common = filepath.Join(gitdir, common)
+		}
+	}
+	if resolved, err := filepath.EvalSymlinks(common); err == nil {
+		return resolved
+	}
+	return filepath.Clean(common)
+}
+
+// memInfo is mem as gnovm_list shows it; ok is false while the project has
+// no mem yet.
+func (h *Host) memInfo(project string) (VMInfo, bool) {
+	dir := memDir(h.opts.Dir, project)
+	fi, err := os.Stat(filepath.Join(dir, "journal.jsonl"))
+	if err != nil {
+		return VMInfo{}, false
+	}
+	info := VMInfo{Name: MemVM, Options: VMOptions{Persist: true, Description: "your memory: goals, steps, facts and the user's rules (klash/gnomem/v2)"}, JournalSize: fi.Size()}
+	if st, ok := readMemStatus(dir); ok {
+		info.Entries = st.Seq
+	}
+	return info, true
+}
+
+// kept reports whether mem kept the call with request id req.
+func (h *memHost) kept(req string) (bool, error) {
+	found := false
+	_, err := readEntriesOf(filepath.Join(h.dir, "journal.jsonl"), 0, 0, func(e memEntry, _ int64, _ string) error {
+		found = found || e.Req == req
+		return nil
+	})
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return found, err
+}
+
+// repair deletes mem's store and index, under its lock, so that the next
+// call builds them afresh from the journal, the source, whose every entry
+// it keeps. It returns how many there are.
+func (h *memHost) repair(ctx context.Context) (int, error) {
+	release, err := h.lock(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	h.removeOtherGenerations("")
+	n := 0
+	_, err = readEntriesOf(filepath.Join(h.dir, "journal.jsonl"), 0, 0, func(memEntry, int64, string) error {
+		n++
+		return nil
+	})
+	if errors.Is(err, os.ErrNotExist) {
+		err = nil
+	}
+	return n, err
 }

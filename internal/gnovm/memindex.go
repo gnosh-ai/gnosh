@@ -19,7 +19,7 @@ import (
 )
 
 // memIndex is mem's index, index-<generation>.db beside the store: each
-// item's, fact's and rule's current text, searchable by words. It is a
+// item's, fact's and rule's name and current text, searchable by words. It is a
 // projection of the journal's Ops, kept by applying each Op as the store
 // does, so it needs nothing from the store, and is rebuilt from the journal
 // the same way. FTS5 with trigrams finds "flak" in "flakes"; secure-delete
@@ -32,7 +32,7 @@ type memIndex struct {
 const memIndexSchema = `
 CREATE TABLE IF NOT EXISTS stamp(id INTEGER PRIMARY KEY CHECK (id = 1), json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS names(id INTEGER PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL, UNIQUE(kind, name));
-CREATE VIRTUAL TABLE IF NOT EXISTS docs USING fts5(title, result, wait, notes, tokenize='trigram');
+CREATE VIRTUAL TABLE IF NOT EXISTS docs USING fts5(name, title, result, wait, notes, tokenize='trigram');
 INSERT INTO docs(docs, rank) VALUES('secure-delete', 1);
 `
 
@@ -169,8 +169,8 @@ func putRow(tx *sql.Tx, kind, name string, cols map[string]string) error {
 	} else if _, err := tx.Exec(`DELETE FROM docs WHERE rowid = ?`, id); err != nil {
 		return err
 	}
-	_, err = tx.Exec(`INSERT INTO docs(rowid, title, result, wait, notes) VALUES(?, ?, ?, ?, ?)`,
-		id, cols["title"], cols["result"], cols["wait"], cols["notes"])
+	_, err = tx.Exec(`INSERT INTO docs(rowid, name, title, result, wait, notes) VALUES(?, ?, ?, ?, ?, ?)`,
+		id, name, cols["title"], cols["result"], cols["wait"], cols["notes"])
 	return err
 }
 

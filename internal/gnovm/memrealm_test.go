@@ -19,8 +19,8 @@ import (
 
 // run runs code by caller and commits what it changed, stamped with the
 // next sequence: a mem without a journal, for tests.
-func (r *memRealm) run(code, caller string, imports ...string) (memCall, error) {
-	return r.commitNext(r.call(code, memContext{caller: caller}, imports...))
+func (r *memRealm) run(code, caller string) (memCall, error) {
+	return r.commitNext(r.call(code, memContext{caller: caller}))
 }
 
 // applyNow applies ops made at time at, and commits them as run does.
@@ -108,16 +108,13 @@ func TestMemRealmGuards(t *testing.T) {
 	_, err = r.run(`mem.Goal("ours")`, "sess-1")
 	require.NoError(t, err)
 
-	for _, tc := range []struct {
-		name, code, err string
-		imports         []string
-	}{
-		{"own", `x := gnomem.New(); x.Goal("theirs")`, "only mem's own Mem", []string{`gnomem "klash/gnomem/v2"`}},
-		{"copy", `x := *mem; x.Goal("theirs")`, "only mem's own Mem", nil},
-		{"revive", `revive(func() { mem.Goal("theirs"); panic("p") })`, "revive() not enabled", nil},
+	for _, tc := range []struct{ name, code, err string }{
+		{"own", "import gnomem \"klash/gnomem/v2\"\nx := gnomem.New(); x.Goal(\"theirs\")", "only mem's own Mem"},
+		{"copy", `x := *mem; x.Goal("theirs")`, "only mem's own Mem"},
+		{"revive", `revive(func() { mem.Goal("theirs"); panic("p") })`, "revive() not enabled"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := r.run(tc.code, "sess-1", tc.imports...)
+			_, err := r.run(tc.code, "sess-1")
 			require.ErrorContains(t, err, tc.err)
 		})
 	}
