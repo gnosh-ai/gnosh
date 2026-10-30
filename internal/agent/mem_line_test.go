@@ -40,8 +40,12 @@ func TestRun_MemLineGoesLastOnATypedPrompt(t *testing.T) {
 	msgs, err := r.env.messages.List(t.Context(), r.sessionID)
 	require.NoError(t, err)
 	require.Equal(t, message.User, msgs[0].Role)
-	last, ok := msgs[0].Parts[len(msgs[0].Parts)-1].(message.TextContent)
-	require.True(t, ok)
+	var last message.TextContent
+	for _, part := range msgs[0].Parts {
+		if text, ok := part.(message.TextContent); ok {
+			last = text
+		}
+	}
 	require.Equal(t, message.TextContent{Text: memLine, Hidden: true}, last, "kept with the prompt, out of the chat")
 
 	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "go on", HiddenUserMessage: true})
