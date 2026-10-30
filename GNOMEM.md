@@ -1,12 +1,11 @@
 # GNOMEM: the agent's memory, in Gno
 
-Gnosh runs the GnoVM, gno.land's interpreter for its Go dialect, inside
-itself, and keeps the agent's memory there: the goals it is working on and
-their steps, what it tried and found, what it waits for, what it must ask
-you, the facts it was told to keep, and the rules you gave it. That memory,
-`mem`, is a Gno realm kept on disk for the project, with no size limit. A new
-session, on a new day, is told what mem holds and asks it what is next. It
-does not re-read a page of notes.
+Gnosh runs the Gno VM in the AI harness, and keeps the agent's memory there:
+the goals it is working on and their steps, what it tried and found, what it
+waits for, what it must ask you, the facts it was told to keep, and the rules
+you gave it. That memory, `mem`, is a Gno realm kept on disk for the project,
+with no size limit. A new session, on a new day, is told what mem holds and
+asks it what is next. It does not re-read a page of notes.
 
 Each project has one mem, shared by its worktrees and its sessions
 ([klash/gnomem/v2](internal/gnovm/klashlibs/klash/gnomem/v2/gnomem.gno)):
