@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://klash.pro"><img src="docs/brand/banner.svg" width="100%" alt="Klash: a security-first harness for coding agents, in your terminal"></a>
+  <a href="https://klash.pro"><img src="docs/brand/banner.svg" width="100%" alt="Klash: a coding agent that remembers, in Gno"></a>
 </p>
 
 <p align="center">

@@ -272,7 +272,7 @@ def banner(W=1280, H=520, p=24):
     left = diagonals(lx0, x0 - cw, y0, 4, cw, ch)
     right = diagonals(x0 + word_w + cw, W + cw, y0, 4, cw, ch)
 
-    o = [svg_open(W, H, "Klash, a security-first harness for coding agents")]
+    o = [svg_open(W, H, "Klash, a coding agent that remembers, in Gno")]
     o.append(anim())
     o.append("<defs>")
     o.append(sky_defs())
@@ -285,7 +285,7 @@ def banner(W=1280, H=520, p=24):
     o.append(f'<path d="{left}{right}" stroke="url(#field)" stroke-width="2" fill="none"/>')
     ty = meta_y + ch * 0.66
     o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="{MONO}" font-size="21" fill="{GOLD}">klash.pro</text>')
-    o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="{MONO}" font-size="21" fill="{HAZE}">security-first agent harness</text>')
+    o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="{MONO}" font-size="21" fill="{HAZE}">a coding agent that remembers, in Gno</text>')
     o.append(layers)
     o.append("</g>")
     o.append(f'<rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="22" fill="none" stroke="{RIM}"/>')
