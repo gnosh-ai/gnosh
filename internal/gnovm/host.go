@@ -715,7 +715,7 @@ func (h *Host) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		name = ScratchName(req.Session)
 	}
 	if name == "" {
-		prog, err := normalize(req.Code, 1, nil)
+		prog, err := normalize(req.Code, 1, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -778,7 +778,7 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 	}
 	// Syntax errors are found before the VM is rebuilt, if it must be;
 	// the real split needs the VM's names (see normalize).
-	if _, err := normalize(req.Code, s.j.seq+1, nil); err != nil {
+	if _, err := normalize(req.Code, s.j.seq+1, nil, nil); err != nil {
 		return nil, err
 	}
 	v, rnotes, err := h.resident(ctx, s, wall)
@@ -787,13 +787,21 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 		return nil, err
 	}
 	h.touch(s)
-	prog, err := normalize(req.Code, s.j.seq+1, v.names())
+	prog, err := normalize(req.Code, s.j.seq+1, v.names(), nil)
 	if err != nil {
 		return nil, err
 	}
-	ops, err := h.importOps(v, prog)
+	if elsewhere := h.declaredElsewhere(s, prog.assigned); len(elsewhere) > 0 {
+		if prog, err = normalize(req.Code, s.j.seq+1, v.names(), elsewhere); err != nil {
+			return nil, err
+		}
+	}
+	ops, imported, err := h.importOps(v, prog)
 	if err != nil {
 		return nil, err
+	}
+	if n := importedNote(imported); n != "" {
+		notes = append(notes, n)
 	}
 	// A pure evaluation changes nothing, unless the VM has redeclared
 	// one of the builtins that made it look pure (checked again after the
@@ -820,6 +828,9 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 			return nil, runErr
 		}
 		res.Err = runErr
+		if hint := h.compileHint(s, ops, runErr); hint != "" {
+			res.Notes = append(res.Notes, hint)
+		}
 		return res, nil
 	}
 	e.WallNS, e.Gas = int64(res.Wall), used
@@ -895,20 +906,27 @@ func (h *Host) checkLimits(s *vmState, ops []op, pure bool) error {
 }
 
 // importOps prepends the input's imports to its ops, as import ops bound
-// package-wide, loading each package into the base first. An import the VM
-// already has is left out.
-func (h *Host) importOps(v *vm, prog *program) ([]op, error) {
-	paths := make([]string, 0, len(prog.imports))
-	for _, spec := range prog.imports {
+// package-wide, loading each package into the base first; with them, the
+// imports of packages the input uses without importing them (autoImports),
+// whose paths it returns. An import the VM already has is left out.
+func (h *Host) importOps(v *vm, prog *program) ([]op, []string, error) {
+	have := v.names()
+	for name := range v.imports {
+		have[name] = true
+	}
+	auto := autoImports(prog, have)
+	specs := append(prog.imports[:len(prog.imports):len(prog.imports)], auto...)
+	paths := make([]string, 0, len(specs))
+	for _, spec := range specs {
 		paths = append(paths, spec.Path)
 	}
 	names, err := h.base.ensure(paths)
 	if err != nil {
-		return nil, &refusal{err.Error()}
+		return nil, nil, &refusal{err.Error()}
 	}
 	var ops []op
 	seen := map[string]bool{}
-	for _, spec := range prog.imports {
+	for _, spec := range specs {
 		if spec.Name == "_" {
 			continue
 		}
@@ -922,7 +940,20 @@ func (h *Host) importOps(v *vm, prog *program) ([]op, error) {
 		seen[name+" "+spec.Path] = true
 		ops = append(ops, op{Import: &importOp{Name: name, Path: spec.Path}})
 	}
-	return append(ops, prog.ops...), nil
+	added := make([]string, 0, len(auto))
+	for _, spec := range auto {
+		added = append(added, spec.Path)
+	}
+	return append(ops, prog.ops...), added, nil
+}
+
+// importedNote tells the model which imports it was spared, so it learns
+// that it may leave them out.
+func importedNote(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	return "imported " + strings.Join(paths, ", ") + " for you"
 }
 
 // journaledOps drops a trailing eval that cannot change state: replaying it
@@ -947,12 +978,12 @@ func (h *Host) runProgram(ctx context.Context, req RunRequest) (*RunResult, erro
 	if _, err := h.admit(s); err != nil {
 		return nil, err
 	}
-	prog, err := normalize(req.Code, 1, nil)
+	prog, err := normalize(req.Code, 1, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 	v := newVM(h.base, int64(opts.MemoryMB)<<20)
-	ops, err := h.importOps(v, prog)
+	ops, imported, err := h.importOps(v, prog)
 	if err != nil {
 		return nil, err
 	}
@@ -961,6 +992,9 @@ func (h *Host) runProgram(ctx context.Context, req RunRequest) (*RunResult, erro
 	start := time.Now()
 	value, used, runErr := v.apply(ctx, e, gas, start.Add(wall), true)
 	res := &RunResult{VM: "(program)", Program: true, GasLimit: gas, NsPerGas: opts.NsPerGas, Wall: time.Since(start)}
+	if n := importedNote(imported); n != "" {
+		res.Notes = append(res.Notes, n)
+	}
 	res.Gas, res.Value, res.Output = used, value, v.out.String()
 	res.MemUsed, res.MemCap = v.memory()
 	var ref *refusal
@@ -1247,31 +1281,20 @@ func (h *Host) List(projectPath string) (ListResult, error) {
 	if h.base != nil {
 		out.BaseBytes = h.base.heap
 	}
-	seen := map[string]bool{}
-	for _, dir := range []string{filepath.Join(h.projectDir(project), "vms"), h.ephemeralRoot(project)} {
-		entries, err := os.ReadDir(dir)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return out, err
+	states, err := h.projectStates(project)
+	if err != nil {
+		return out, err
+	}
+	for _, s := range states {
+		if s.j == nil && s.broken == nil {
+			if j, entries, _, err := readJournal(filepath.Join(s.dir, "journal.jsonl")); err == nil {
+				s.j = j
+				s.cost = journalStats(entries)
+			} else {
+				s.broken = err
+			}
 		}
-		for _, e := range entries {
-			if !e.IsDir() || seen[e.Name()] {
-				continue
-			}
-			seen[e.Name()] = true
-			s, err := h.lookup(project, e.Name())
-			if err != nil || s == nil {
-				continue
-			}
-			if s.j == nil && s.broken == nil {
-				if j, entries, _, err := readJournal(filepath.Join(s.dir, "journal.jsonl")); err == nil {
-					s.j = j
-					s.cost = journalStats(entries)
-				} else {
-					s.broken = err
-				}
-			}
-			out.VMs = append(out.VMs, h.info(s))
-		}
+		out.VMs = append(out.VMs, h.info(s))
 	}
 	sort.Slice(out.VMs, func(i, j int) bool { return out.VMs[i].Name < out.VMs[j].Name })
 	return out, nil

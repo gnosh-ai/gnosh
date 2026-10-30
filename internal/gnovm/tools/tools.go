@@ -41,6 +41,7 @@ const maxResult = 30_000
 const runDescription = `Run Go-shaped code in a Gno virtual machine (the GnoVM, gno.land's interpreter for its Go dialect) and see its value and output.
 
 - Input can be an expression ("len(s) * 2"), statements ("x := 3; x++"), declarations (func, type, var, const, with methods; in any order), imports, or a mix; a trailing expression's value is shown, and println and fmt.Println output is returned.
+- Packages you use (fmt, strings, strconv, sort, ...) are imported for you, and x = v or x := v on a new name declares it.
 - State stays between calls in the same VM, like a REPL. With no name you get your session's scratch VM; code with a package clause (package main + func main) runs as a whole program in a fresh VM, like go run.
 - Redeclaring a name in a VM is refused: assign with =, use a new name, or pass reset: true (memory-only VMs).
 - Gas: 1 gas is about 1 ns of work; a call that runs out of gas, memory or time is stopped and keeps nothing (the VM is as it was before the call).

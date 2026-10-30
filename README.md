@@ -12,7 +12,10 @@
 <p align="center"><strong>A security-first harness for coding agents, in your terminal.</strong><br>
 A fork of Charm's <a href="https://github.com/charmbracelet/crush">Crush</a> that closes the doors a coding agent usually leaves open.</p>
 
+<p align="center"><strong>New: <a href="GNOMEM.md">GNOMEM</a>, the agent's memory in Gno.</strong> The agent keeps its task checklist and what it must remember in persistent Gno machines, and a new session picks up where the last one stopped. <a href="GNOMEM.md">See it work →</a></p>
+
 <p align="center">
+  <a href="GNOMEM.md">GNOMEM</a> ·
   <a href="#security-first">Security first</a> ·
   <a href="#coming-from-claude-code">Coming from Claude Code</a> ·
   <a href="#what-else-changed-from-crush">What else changed</a> ·
@@ -48,9 +51,10 @@ from a hosted API to one running on your own machine. On top of that:
 - **Knows Gno and gno.land.** Every signature waits for you to type the key's
   password, which the model never sees, and a session key caps what even a
   transaction you approved can spend.
-- **Runs Go in Go.** The GnoVM, gno.land's interpreter, runs inside Klash:
-  named machines with memory caps, gas (1 gas is about 1 ns) and optional
-  persistence, in a worker process of their own.
+- **Runs Go in Go, and remembers in it.** The GnoVM, gno.land's interpreter,
+  runs inside Klash: named machines with memory caps, gas (1 gas is about
+  1 ns) and optional persistence, in a worker process of their own. The agent
+  keeps its checklist and memory in them: [GNOMEM](GNOMEM.md).
 
 ## Security first
 
@@ -395,6 +399,9 @@ read-only, and never hand it your key: to act as you, it proposes a session
 that you sign with gnokey yourself.
 
 ### Go in your Go: GnoVM machines
+
+**[GNOMEM](GNOMEM.md)** is what the agent does with them: its task checklist
+and its memory live in persistent machines, with real runs to show it.
 
 Klash carries the GnoVM, gno.land's interpreter for its Go dialect, and runs
 named virtual machines in it for the agent:

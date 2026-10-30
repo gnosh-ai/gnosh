@@ -36,6 +36,10 @@ func newTestHost(t *testing.T, dir string) *Host {
 		Client: NewClientID(),
 		Probe:  func() (HostMemory, error) { return HostMemory{Total: 16 << 30, Available: 8 << 30}, nil },
 		Now:    testNow,
+		// A base measures the heap it grows by (base.ensure), and parallel
+		// tests' allocations land in each other's measurements: a fixed
+		// budget keeps that noise from refusing VMs.
+		BudgetBytes: 2 << 30,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = h.Close() })

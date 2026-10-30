@@ -428,7 +428,7 @@ func renderAt(tv gno.TypedValue, depth int) string {
 		tv = hiv.Value
 	}
 	if tv.T == nil {
-		return gno.BoundedSprintTV(tv, nil, maxValue)
+		return "nil" // the GnoVM says "undefined"
 	}
 	switch tv.T.Kind() {
 	case gno.StringKind:

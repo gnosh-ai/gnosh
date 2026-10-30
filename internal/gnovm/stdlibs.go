@@ -15,6 +15,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"sync"
 
 	gno "github.com/gnolang/gno/gnovm/pkg/gnolang"
 	"github.com/gnolang/gno/tm2/pkg/std"
@@ -137,6 +138,64 @@ func ImportablePackages() []string {
 		out = append(out, p)
 	}
 	return out
+}
+
+// libraryPackageName is the name the library at pkgPath declares in its
+// package clause, or "" if there is no such library.
+func libraryPackageName(pkgPath string) string {
+	for _, lib := range []struct {
+		fsys embed.FS
+		root string
+	}{{klashlibFS, "klashlibs"}, {stdlibFS, "stdlibs"}} {
+		dir := path.Join(lib.root, pkgPath)
+		entries, err := fs.ReadDir(lib.fsys, dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() || !isProdGno(e.Name()) {
+				continue
+			}
+			body, err := fs.ReadFile(lib.fsys, path.Join(dir, e.Name()))
+			if err != nil {
+				return ""
+			}
+			name, err := gno.PackageNameFromFileBody(path.Join(pkgPath, e.Name()), string(body))
+			if err != nil {
+				return ""
+			}
+			return string(name)
+		}
+	}
+	return ""
+}
+
+var (
+	importNamesOnce sync.Once
+	importNames     map[string]string
+)
+
+// importByName is the package an input means by name when it uses the name
+// without importing it: fmt, or one of ImportablePackages whose package name
+// it is. Where two share a name, the shorter path is meant (math/rand, not
+// crypto/chacha20/rand); a name that is also a Go package VMs refuse
+// (unsafe) is never imported.
+func importByName(name string) (string, bool) {
+	importNamesOnce.Do(func() {
+		importNames = map[string]string{}
+		for _, p := range append([]string{"fmt"}, ImportablePackages()...) {
+			n := libraryPackageName(p)
+			if n == "" || unavailablePackage(n) != "" {
+				continue
+			}
+			if old, ok := importNames[n]; ok && len(old) <= len(p) {
+				continue
+			}
+			importNames[n] = p
+		}
+	})
+	p, ok := importNames[name]
+	return p, ok
 }
 
 // isProdGno reports whether a file belongs in a production stdlib package:

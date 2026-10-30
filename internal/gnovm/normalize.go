@@ -10,11 +10,13 @@
 package gnovm
 
 import (
+	"cmp"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/scanner"
 	"go/token"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -115,6 +117,8 @@ type program struct {
 	// evalPure is set if the trailing eval cannot change any state, so it
 	// need not be journaled.
 	evalPure bool
+	// assigned lists the names an assignment declared (see normalize).
+	assigned []string
 }
 
 // normalize turns Go-shaped input into ops. Models write whole programs
@@ -135,11 +139,20 @@ type program struct {
 //     a declaration: a file's var initializer that depends on a name a :=
 //     statement declared makes the GnoVM panic, and data := ... followed by
 //     var r = f(data) is ordinary code. A := that reuses a name stays a
-//     statement, which gno runs as an assignment.
+//     statement, which gno runs as an assignment;
+//   - so does a top-level x, y = ... whose names are all new: models write
+//     tasks = []Task{...} for a first value as often as :=, and gno refuses
+//     an assignment to an undeclared name, which cost a round trip. Not
+//     when the right side uses a name (x = append(x, 1) needs an x), nor for
+//     a name in elsewhere, which another VM declares: there the model has
+//     most likely run the call in the wrong VM, and the failure says which
+//     VM has the name, where a declaration here would hide the mistake;
+//   - a trailing call to println or fmt.Print* stays a statement: its
+//     results (fmt.Println's byte count and nil error) are not worth showing.
 //
 // seq is the journal sequence number the input will have, and existing the
 // names the VM's package already has.
-func normalize(code string, seq int64, existing map[string]bool) (*program, error) {
+func normalize(code string, seq int64, existing, elsewhere map[string]bool) (*program, error) {
 	if len(code) > maxInput {
 		return nil, &refusal{fmt.Sprintf("the input is %d bytes; the most a call takes is %d", len(code), maxInput)}
 	}
@@ -200,7 +213,7 @@ func normalize(code string, seq int64, existing map[string]bool) (*program, erro
 		if st.kind != kindStmt {
 			continue
 		}
-		names, define, ok := shortDecl(toks, st.first)
+		names, define, ok := lhsNames(toks, st.first, token.DEFINE)
 		if !ok {
 			continue
 		}
@@ -226,6 +239,50 @@ func normalize(code string, seq int64, existing map[string]bool) (*program, erro
 		}
 		st.kind = kindDecl
 		st.rewrite = "var " + text(st.from, toks[define].off) + "=" + text(toks[define].off+len(":="), st.to)
+	}
+	// So do assignments to names declared nowhere: not in the VM, not by
+	// a := above, not by a declaration anywhere in the input.
+	var inputDecls map[string]bool
+	for i := range stmts {
+		st := &stmts[i]
+		if st.kind != kindStmt {
+			continue
+		}
+		names, assign, ok := lhsNames(toks, st.first, token.ASSIGN)
+		if !ok {
+			continue
+		}
+		if inputDecls == nil {
+			inputDecls = map[string]bool{}
+			for _, d := range stmts {
+				if d.kind == kindDecl && d.rewrite == "" {
+					for _, n := range declaredNames(text(d.from, d.to)) {
+						inputDecls[n] = true
+					}
+				}
+			}
+		}
+		fresh, old := 0, false
+		for _, n := range names {
+			switch {
+			case n == "_":
+			case existing[n] || declared[n] || inputDecls[n] || elsewhere[n]:
+				old = true
+			default:
+				fresh++
+			}
+		}
+		if old || fresh == 0 || usesAny(toks, assign+1, st.to, names) {
+			continue
+		}
+		for _, n := range names {
+			if n != "_" {
+				declared[n] = true
+				p.assigned = append(p.assigned, n)
+			}
+		}
+		st.kind = kindDecl
+		st.rewrite = "var " + text(st.from, toks[assign].off) + "=" + text(toks[assign].off+len("="), st.to)
 	}
 	// stmtText is a statement's text, as rewritten if it was.
 	stmtText := func(st topStmt) string {
@@ -312,21 +369,68 @@ type topStmt struct {
 	rewrite string
 }
 
-// shortDecl recognises a top-level a, b := ... starting at token i, and
-// returns its names and the index of its := token.
-func shortDecl(toks []tok, i int) (names []string, define int, ok bool) {
+// lhsNames recognises a top-level a, b := ... (op token.DEFINE) or a, b = ...
+// (op token.ASSIGN) starting at token i, and returns its names and the index
+// of its operator token.
+func lhsNames(toks []tok, i int, op token.Token) (names []string, at int, ok bool) {
 	for j := i; j < len(toks); j++ {
 		switch {
 		case (j-i)%2 == 0 && toks[j].t == token.IDENT:
 			names = append(names, toks[j].lit)
 		case (j-i)%2 == 1 && toks[j].t == token.COMMA:
-		case (j-i)%2 == 1 && toks[j].t == token.DEFINE:
+		case (j-i)%2 == 1 && toks[j].t == op:
 			return names, j, len(names) > 0
 		default:
 			return nil, 0, false
 		}
 	}
 	return nil, 0, false
+}
+
+// usesAny reports whether the tokens from index i up to byte offset end use
+// one of names (a field or method of that name, after a ".", is not a use).
+func usesAny(toks []tok, i, end int, names []string) bool {
+	for j := i; j < len(toks) && toks[j].off < end; j++ {
+		if toks[j].t != token.IDENT || toks[j-1].t == token.PERIOD {
+			continue
+		}
+		for _, n := range names {
+			if toks[j].lit == n {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// declaredNames lists the names top-level declarations declare (methods
+// declare none), or none if they do not parse.
+func declaredNames(decls string) []string {
+	f, err := parser.ParseFile(token.NewFileSet(), "", "package p;"+decls, parser.SkipObjectResolution)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, d := range f.Decls {
+		switch d := d.(type) {
+		case *ast.FuncDecl:
+			if d.Recv == nil {
+				out = append(out, d.Name.Name)
+			}
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				switch spec := spec.(type) {
+				case *ast.ValueSpec:
+					for _, n := range spec.Names {
+						out = append(out, n.Name)
+					}
+				case *ast.TypeSpec:
+					out = append(out, spec.Name.Name)
+				}
+			}
+		}
+	}
+	return out
 }
 
 // isMain reports whether a declaration is func main().
@@ -474,12 +578,89 @@ func splitTrailingExpr(stmts string) (before, expr string, pure, ok bool) {
 		return "", "", false, false
 	}
 	es, isExpr := body[len(body)-1].(*ast.ExprStmt)
-	if !isExpr {
+	if !isExpr || printCall(es.X) {
 		return "", "", false, false
 	}
 	base := fset.File(f.Pos()).Base() + len(prefix)
 	from, to := int(es.Pos())-base, int(es.End())-base
 	return stmts[:from], stmts[from:to], pureExpr(es.X), true
+}
+
+// printCall reports whether x calls print, println or fmt.Print*.
+func printCall(x ast.Expr) bool {
+	call, ok := x.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	switch fn := call.Fun.(type) {
+	case *ast.Ident:
+		return fn.Name == "print" || fn.Name == "println"
+	case *ast.SelectorExpr:
+		pkg, ok := fn.X.(*ast.Ident)
+		return ok && pkg.Name == "fmt" && strings.HasPrefix(fn.Sel.Name, "Print")
+	}
+	return false
+}
+
+// autoImports returns imports for the packages an input uses without
+// importing them: a name used as name.X that nothing declares (neither the
+// input, nor the VM, whose names are have) and that importByName knows.
+// Models leave out imports often (fmt above all), and each time it cost a
+// failed call and a round trip.
+func autoImports(p *program, have map[string]bool) []importSpec {
+	// One Go file holds the input's declarations, then its statements and
+	// evaluation in a function body, so the parser resolves every name the
+	// input itself declares, at any depth.
+	var b strings.Builder
+	b.WriteString("package p\n")
+	for _, o := range p.ops {
+		if o.File != "" {
+			b.WriteString(o.File + "\n")
+		}
+	}
+	b.WriteString("func _() {\n")
+	for _, o := range p.ops {
+		switch {
+		case o.Stmts != "":
+			b.WriteString(o.Stmts + "\n")
+		case o.Eval != "":
+			b.WriteString("_ = " + o.Eval + "\n")
+		}
+	}
+	b.WriteString("}\n")
+	f, err := parser.ParseFile(token.NewFileSet(), "", b.String(), 0)
+	if err != nil {
+		return nil // the VM reports the error
+	}
+	bound := map[string]bool{}
+	for _, spec := range p.imports {
+		name := spec.Name
+		if name == "" {
+			name = cmp.Or(libraryPackageName(spec.Path), path.Base(spec.Path))
+		}
+		bound[name] = true
+	}
+	unresolved := map[*ast.Ident]bool{}
+	for _, id := range f.Unresolved {
+		unresolved[id] = true
+	}
+	var out []importSpec
+	ast.Inspect(f, func(n ast.Node) bool {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		id, ok := sel.X.(*ast.Ident)
+		if !ok || !unresolved[id] || have[id.Name] || bound[id.Name] {
+			return true
+		}
+		if pkgPath, ok := importByName(id.Name); ok {
+			out = append(out, importSpec{Path: pkgPath})
+		}
+		bound[id.Name] = true
+		return true
+	})
+	return out
 }
 
 // pureBuiltins are the builtins and builtin-type conversions that cannot
