@@ -214,6 +214,9 @@ type SessionAgentCall struct {
 	// recallMem marks a prompt the user typed, which takes what mem holds
 	// close to it in meaning when it goes out, queued or not.
 	recallMem bool
+	// memLine marks a prompt the user sent a session that offers mem and
+	// Gno, which takes memLine last when it goes out, queued or not.
+	memLine bool
 	// channelMeta holds the attributes of the <channel> element a
 	// channel-originated turn was started with, parsed once at Run
 	// entry. It survives the auto-summarize continuation, whose Prompt
@@ -953,6 +956,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// once, as the prompt is sent; a queued copy runs again with its mark.
 	if !call.promptHooksRan {
 		call.recallMem = a.memRecall != nil && !call.HiddenUserMessage
+		call.memLine = !call.HiddenUserMessage && a.offersMem(ctx, call.Channel)
 	}
 	// Sent, with or without hooks: a queued copy of this call, or a
 	// continuation made from it, does not run them again, even if some
@@ -1303,7 +1307,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		maxOutputTokens = &call.MaxOutputTokens
 	}
 	result, err = agent.Stream(genCtx, fantasy.AgentStreamCall{
-		Prompt:           message.AppendPromptHookContext(message.PromptWithTextAttachments(call.Prompt, call.Attachments), promptHookBlock(call)),
+		Prompt:           message.AppendPromptHookContext(message.PromptWithTextAttachments(call.Prompt, call.Attachments), promptHookBlock(call), memLineBlock(call)),
 		Files:            files,
 		Messages:         history,
 		Headers:          sessionHeaders(call.SessionID),
@@ -2528,6 +2532,9 @@ func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentC
 	// part: the chat shows only what was typed, and the model reads it
 	// after the prompt whenever the conversation is rebuilt.
 	if block := promptHookBlock(call); block != "" {
+		parts = append(parts, message.TextContent{Text: block, Hidden: true})
+	}
+	if block := memLineBlock(call); block != "" {
 		parts = append(parts, message.TextContent{Text: block, Hidden: true})
 	}
 	msg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{

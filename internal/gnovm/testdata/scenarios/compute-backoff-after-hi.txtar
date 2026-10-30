@@ -1,0 +1,13 @@
+Thinks in Gno after small talk: compute-backoff's sum, asked as the second
+prompt of a session that opened with a greeting, as people start one. In
+a real session with thinking off, a "say 'hi'" first made the agent answer
+from its head, 198 s, with no machine; asked cold, as compute-backoff asks
+it, the agent used one. The answer is 111 s.
+
+-- prompt --
+say 'hi'
+-- prompt --
+A client retries a failed request with exponential backoff: it waits 200 ms before the first retry, doubles the wait each time, and never waits more than 30 s. How long after the first failure does the 10th retry go out?
+-- check --
+turn 2 tool gnovm_run >= 1
+answer last matches \A[^\n]*(\b111\b|111,?000)
