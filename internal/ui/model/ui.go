@@ -683,6 +683,7 @@ func (m *UI) Init() tea.Cmd {
 	if cmd := m.safeModeNotice(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	cmds = append(cmds, m.memNotice())
 	// load the user commands async
 	cmds = append(cmds, m.loadCustomCommands())
 	// Prime the memoized LSP state off-thread.
@@ -1215,7 +1216,11 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			sessions.Name(m.takeStartName())
 		}
 	case reportMsg:
-		m.dialog.OpenDialog(dialog.NewReport(m.com, msg.title, msg.report))
+		if msg.plain {
+			m.dialog.OpenDialog(dialog.NewTextReport(m.com, msg.title, msg.report))
+		} else {
+			m.dialog.OpenDialog(dialog.NewReport(m.com, msg.title, msg.report))
+		}
 	case branchedMsg:
 		cmds = append(cmds, m.loadSession(msg.branch.ID), util.ReportInfo(msg.said()))
 	case rewindPromptsMsg:
@@ -2631,6 +2636,9 @@ func (m *UI) handleDialogAction(action dialog.Action) tea.Cmd {
 	case dialog.ActionDoctorReport:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.doctorReport())
+	case dialog.ActionMem:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.memCommand(msg.Args))
 	case dialog.ActionExportConversation:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		m.dialog.CloseDialog(dialog.ExportID)
@@ -5820,6 +5828,9 @@ func (m *UI) builtinCommand(content string) (tea.Cmd, bool) {
 	if filename, ok := session.ParseExportCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
 		return m.exportConversation(filename), true
 	}
+	if args, ok := session.ParseMemCommand(content); ok && strings.HasPrefix(strings.TrimSpace(content), "/") {
+		return m.memCommand(args), true
+	}
 	return nil, false
 }
 
@@ -5886,9 +5897,11 @@ func (m *UI) openHooksReport() {
 	m.dialog.OpenDialog(dialog.NewReport(m.com, "Hooks", config.HooksReport(hooks)))
 }
 
-// reportMsg carries a report to show in the report dialog, titled title.
+// reportMsg carries a report to show in the report dialog, titled title:
+// Markdown, or plain text when plain.
 type reportMsg struct {
 	title, report string
+	plain         bool
 }
 
 // permissionsReport works out what the agent may do without asking, as
@@ -5914,6 +5927,34 @@ func (m *UI) doctorReport() tea.Cmd {
 			return util.ReportError(err)()
 		}
 		return reportMsg{title: "Doctor", report: report}
+	}
+}
+
+// memCommand runs /mem, the user's command for the project's mem, off the
+// update loop, and shows what it answers: mem's own text, kept as it is.
+func (m *UI) memCommand(args string) tea.Cmd {
+	sessionID := ""
+	if m.hasSession() {
+		sessionID = m.session.ID
+	}
+	return func() tea.Msg {
+		text, err := m.com.Workspace.MemCommand(context.Background(), sessionID, args)
+		if err != nil {
+			return util.ReportError(err)()
+		}
+		return reportMsg{title: "Mem", report: text, plain: true}
+	}
+}
+
+// memNotice tells the user as gnosh starts what in mem is due and what
+// waits on them, since the model, busy with the task at hand, may not.
+func (m *UI) memNotice() tea.Cmd {
+	return func() tea.Msg {
+		text, err := m.com.Workspace.MemNotice(context.Background())
+		if err != nil || text == "" {
+			return nil
+		}
+		return util.InfoMsg{Type: util.InfoTypeInfo, Msg: text, TTL: initTipTTL}
 	}
 }
 

@@ -245,6 +245,10 @@ func (c *Commands) HandleMsg(msg tea.Msg) Action {
 			if filename, ok := session.ParseExportCommand(c.input.Value()); ok && filename != "" && c.hasSession {
 				return ActionExportConversation{Filename: filename}
 			}
+			// And "mem" and what to do; "mem" alone is the Mem item.
+			if args, ok := session.ParseMemCommand(c.input.Value()); ok && args != "" {
+				return ActionMem{Args: args}
+			}
 			// "context" with anything after it (Claude Code's takes "all")
 			// is still the report.
 			if session.ParseContextCommand(c.input.Value()) {
@@ -542,6 +546,9 @@ func (c *Commands) defaultCommands() []*CommandItem {
 	commands = append(commands, NewCommandItem(c.com.Styles, "doctor_report", "Doctor", "", ActionDoctorReport{}).
 		WithAliases("doctor", "checkup").
 		WithDescription("Check the config, providers, models, hooks and programs gnosh runs with"))
+	commands = append(commands, NewCommandItem(c.com.Styles, "mem", "Mem", "", ActionMem{}).
+		WithAliases("mem").
+		WithDescription("What mem holds; type mem and find, show, log, undo, forget, redact or repair"))
 	commands = append(commands, NewCommandItem(c.com.Styles, "status_report", "Status", "", ActionStatusReport{}).
 		WithAliases("status").
 		WithDescription("Version, session, models, context, and the MCP and LSP servers, as Claude Code's /status shows them"))

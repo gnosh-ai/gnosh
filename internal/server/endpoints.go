@@ -481,6 +481,25 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Handle(c.handleGetWorkspaceDoctorReport),
 
+		apigen.Post("/v1/workspaces/{id}/mem").
+			Summary("Run /mem").
+			Description("Runs /mem, the user's command for the workspace's mem, as typed in a session, and answers what to show. The arguments come in the body, never the URL: /mem redact carries a secret.").
+			Tags("workspaces").
+			PathParam("id", "Workspace ID").
+			Accepts(proto.MemCommandRequest{}).
+			Responds(proto.MemText{}).
+			Fails(400, 404, 500).
+			Handle(c.handlePostWorkspaceMem),
+
+		apigen.Get("/v1/workspaces/{id}/mem/notice").
+			Summary("Mem notice").
+			Description("What the user is told of the workspace's mem as a session starts: what is due and what waits on them, in one line; empty when nothing is.").
+			Tags("workspaces").
+			PathParam("id", "Workspace ID").
+			Responds(proto.MemText{}).
+			Fails(404, 500).
+			Handle(c.handleGetWorkspaceMemNotice),
+
 		apigen.Get("/v1/workspaces/{id}/agent/context").
 			Summary("Context usage").
 			Description("What fills a session's context window, as the Markdown Claude Code's /context prints; session_id names the session, none a new one.").

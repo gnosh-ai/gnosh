@@ -161,6 +161,8 @@ gnosh run --continue "Follow up on your last response"
 				return setThinking(clientWs, enabled, cmd.OutOrStdout())
 			}
 			hideSpinner, traceTools := runOutputFlags(quiet, verbose)
+			notice, err := clientWs.MemNotice(ctx)
+			printMemNotice(cmd.ErrOrStderr(), notice, err)
 			return output.finish(runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, fork, name, output))
 		}
 
@@ -194,6 +196,7 @@ gnosh run --continue "Follow up on your last response"
 			return setThinking(ws, enabled, cmd.OutOrStdout())
 		}
 		hideSpinner, traceTools := runOutputFlags(quiet, verbose)
+		printMemNotice(cmd.ErrOrStderr(), appWs.App().MemNotice(), nil)
 		permissionMode := config.PermissionModeBypass // run accepts its session's permission requests
 		if mode, _ := permissionModeFlag(cmd); mode == config.PermissionModePlan {
 			permissionMode = config.PermissionModePlan
@@ -214,6 +217,15 @@ gnosh run --continue "Follow up on your last response"
 			})
 		}, output.message))
 	}),
+}
+
+// printMemNotice says on stderr, as a run starts, what in mem is due and
+// what waits on the user (notice, one line): the model, given another task,
+// may not say it.
+func printMemNotice(w io.Writer, notice string, err error) {
+	if err == nil && notice != "" {
+		_, _ = fmt.Fprintln(w, notice)
+	}
 }
 
 // runOutputFlags maps run's --quiet and --verbose to what a run shows on

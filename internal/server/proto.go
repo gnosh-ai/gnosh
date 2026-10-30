@@ -779,6 +779,33 @@ func (c *controllerV1) handleGetWorkspaceDoctorReport(w http.ResponseWriter, r *
 	jsonEncode(w, proto.DoctorReport{Markdown: report})
 }
 
+// handlePostWorkspaceMem runs /mem in the workspace's mem. Its arguments
+// are not logged, even when it fails: /mem redact carries a secret.
+func (c *controllerV1) handlePostWorkspaceMem(w http.ResponseWriter, r *http.Request) {
+	var req proto.MemCommandRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "failed to decode request")
+		return
+	}
+	text, err := c.backend.MemCommand(r.Context(), r.PathValue("id"), req.SessionID, req.Args)
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	jsonEncode(w, proto.MemText{Text: text})
+}
+
+// handleGetWorkspaceMemNotice reports what the user is told of the
+// workspace's mem as a session starts.
+func (c *controllerV1) handleGetWorkspaceMemNotice(w http.ResponseWriter, r *http.Request) {
+	text, err := c.backend.MemNotice(r.PathValue("id"))
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	jsonEncode(w, proto.MemText{Text: text})
+}
+
 // handleGetWorkspaceAgentContext reports what fills a session's context
 // window.
 func (c *controllerV1) handleGetWorkspaceAgentContext(w http.ResponseWriter, r *http.Request) {

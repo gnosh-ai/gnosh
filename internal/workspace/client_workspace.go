@@ -259,6 +259,14 @@ func (w *ClientWorkspace) DoctorReport(ctx context.Context) (string, error) {
 	return w.client.DoctorReport(ctx, w.workspaceID())
 }
 
+func (w *ClientWorkspace) MemCommand(ctx context.Context, sessionID, args string) (string, error) {
+	return w.client.MemCommand(ctx, w.workspaceID(), sessionID, args)
+}
+
+func (w *ClientWorkspace) MemNotice(ctx context.Context) (string, error) {
+	return w.client.MemNotice(ctx, w.workspaceID())
+}
+
 func (w *ClientWorkspace) ContextReport(ctx context.Context, sessionID string) (string, error) {
 	return w.client.AgentContextReport(ctx, w.workspaceID(), sessionID)
 }

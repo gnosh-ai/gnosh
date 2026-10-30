@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // ReportID is the identifier for the report dialog.
@@ -24,7 +25,9 @@ type Report struct {
 	com    *common.Common
 	title  string
 	report string
-	help   help.Model
+	// plain is a report of plain text, shown as it is, wrapped.
+	plain bool
+	help  help.Model
 	// offset is the first line shown, and lines how many the last Draw
 	// could show, for paging.
 	offset, lines int
@@ -101,12 +104,23 @@ func (d *Report) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	return nil
 }
 
+// NewTextReport creates a dialog titled title showing text as it is,
+// wrapped: an outline whose indentation Markdown would take for code.
+func NewTextReport(com *common.Common, title, text string) *Report {
+	d := NewReport(com, title, text)
+	d.plain = true
+	return d
+}
+
 // rendered is the report as the chat renders Markdown, at width; the
 // Markdown as written when the renderer fails. A line break made with two
 // trailing spaces, as /context writes its header after Claude Code's, is
 // lost by the renderer and ran its lines together, so it is a paragraph
 // break here.
 func (d *Report) rendered(width int) string {
+	if d.plain {
+		return ansi.Wrap(d.report, width, "")
+	}
 	r := common.MarkdownRenderer(d.com.Styles, width)
 	mu := common.LockMarkdownRenderer(r)
 	mu.Lock()

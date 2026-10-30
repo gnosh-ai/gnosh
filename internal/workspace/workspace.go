@@ -153,6 +153,13 @@ type Workspace interface {
 	// DoctorReport is the check of the setup that gnosh doctor prints,
 	// the Markdown /doctor shows, as Claude Code's /doctor checks it.
 	DoctorReport(ctx context.Context) (string, error)
+	// MemCommand runs /mem, the user's command for the project's mem,
+	// typed in the session, and returns what to show them. Its arguments
+	// never go into a log or a URL: /mem redact carries a secret.
+	MemCommand(ctx context.Context, sessionID, args string) (string, error)
+	// MemNotice is what the user is told of mem as a session starts: what
+	// is due and what waits on them, in one line; "" when nothing is.
+	MemNotice(ctx context.Context) (string, error)
 	// ContextReport is what fills the session's context window ("" for a
 	// new session), the Markdown Claude Code's /context prints.
 	ContextReport(ctx context.Context, sessionID string) (string, error)

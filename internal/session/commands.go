@@ -132,6 +132,12 @@ func ParseExportCommand(line string) (filename string, ok bool) {
 	return parseCommand(line, "export")
 }
 
+// ParseMemCommand reports whether line is gnosh's /mem command, with or
+// without the slash, and what follows it ("" to show mem).
+func ParseMemCommand(line string) (args string, ok bool) {
+	return parseCommand(line, "mem")
+}
+
 // ParseCompactCommand reports whether line is Claude Code's /compact
 // command, with or without the slash, and the instructions after it for
 // the summary ("" when none).

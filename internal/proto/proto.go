@@ -243,6 +243,20 @@ type DoctorReport struct {
 	Markdown string `json:"markdown"`
 }
 
+// MemCommandRequest is /mem as the user typed it in a session: its
+// arguments, which go in a body, never a URL, since /mem redact carries a
+// secret.
+type MemCommandRequest struct {
+	SessionID string `json:"session_id,omitempty"`
+	Args      string `json:"args"`
+}
+
+// MemText is what /mem shows, or the line mem's notice shows as a session
+// starts ("" when nothing is due or waits on the user).
+type MemText struct {
+	Text string `json:"text"`
+}
+
 // SummarizeRequest is the optional body of a summary request:
 // Instructions is the text given after /compact.
 type SummarizeRequest struct {

@@ -693,6 +693,43 @@ func (c *Client) DoctorReport(ctx context.Context, id string) (string, error) {
 	return report.Markdown, nil
 }
 
+// MemCommand runs /mem in the workspace's mem, as the user typed it in the
+// session, and returns what to show. args go in the body, never the URL:
+// /mem redact carries a secret.
+func (c *Client) MemCommand(ctx context.Context, id, sessionID, args string) (string, error) {
+	rsp, err := c.post(ctx, fmt.Sprintf("/workspaces/%s/mem", id), nil, jsonBody(proto.MemCommandRequest{SessionID: sessionID, Args: args}), http.Header{"Content-Type": []string{"application/json"}})
+	if err != nil {
+		return "", fmt.Errorf("failed to run /mem: %w", err)
+	}
+	return decodeMemText(rsp, "/mem")
+}
+
+// MemNotice is what the user is told of the workspace's mem as a session
+// starts: one line, or "".
+func (c *Client) MemNotice(ctx context.Context, id string) (string, error) {
+	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/mem/notice", id), nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get mem's notice: %w", err)
+	}
+	return decodeMemText(rsp, "mem's notice")
+}
+
+// decodeMemText reads what mem answered, or the error the server sent.
+func decodeMemText(rsp *http.Response, what string) (string, error) {
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		if msg := decodeErrorMessage(rsp.Body); msg != "" {
+			return "", errors.New(msg)
+		}
+		return "", fmt.Errorf("%s: status code %d", what, rsp.StatusCode)
+	}
+	var text proto.MemText
+	if err := json.NewDecoder(rsp.Body).Decode(&text); err != nil {
+		return "", fmt.Errorf("failed to decode %s: %w", what, err)
+	}
+	return text.Text, nil
+}
+
 // AgentContextReport is what fills a session's context window ("" for a
 // new session), the Markdown Claude Code's /context prints.
 func (c *Client) AgentContextReport(ctx context.Context, id, sessionID string) (string, error) {

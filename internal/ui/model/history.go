@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/session"
 )
 
 // promptHistoryLoadedMsg is sent when prompt history is loaded: the
@@ -72,15 +73,18 @@ func historyItems(messages []message.Message) (texts []string, times []int64) {
 }
 
 // clearPrompt empties the prompt, as Claude Code's Esc Esc does, keeping
-// what it held, a shell command with its "!", for Up to bring back.
+// what it held, a shell command with its "!", for Up to bring back; but
+// not a /mem redact, whose text is a secret.
 func (m *UI) clearPrompt() tea.Cmd {
 	prevHeight := m.textarea.Height()
 	text := m.textarea.Value()
 	if m.bangMode {
 		text = "!" + text
 	}
-	m.promptHistory.cleared = slices.Insert(m.promptHistory.cleared, 0, clearedPrompt{text: text, at: time.Now().Unix()})
-	m.promptHistory.cleared = m.promptHistory.cleared[:min(len(m.promptHistory.cleared), maxClearedPrompts)]
+	if args, ok := session.ParseMemCommand(text); !ok || !strings.HasPrefix(strings.TrimSpace(args), "redact") {
+		m.promptHistory.cleared = slices.Insert(m.promptHistory.cleared, 0, clearedPrompt{text: text, at: time.Now().Unix()})
+		m.promptHistory.cleared = m.promptHistory.cleared[:min(len(m.promptHistory.cleared), maxClearedPrompts)]
+	}
 	m.textarea.Reset()
 	m.historyReset()
 	return m.updateTextareaWithPrevHeight(nil, prevHeight)

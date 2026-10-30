@@ -107,6 +107,14 @@ func (w *AppWorkspace) DoctorReport(context.Context) (string, error) {
 	return doctor.Markdown(doctor.Report(w.store, exec.LookPath)), nil
 }
 
+func (w *AppWorkspace) MemCommand(ctx context.Context, sessionID, args string) (string, error) {
+	return w.app.MemCommand(ctx, sessionID, args)
+}
+
+func (w *AppWorkspace) MemNotice(context.Context) (string, error) {
+	return w.app.MemNotice(), nil
+}
+
 func (w *AppWorkspace) ContextReport(ctx context.Context, sessionID string) (string, error) {
 	if w.app.AgentCoordinator == nil {
 		return "", errors.New("agent coordinator not initialized")

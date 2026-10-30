@@ -139,6 +139,10 @@ type (
 	// ActionDoctorReport checks the setup gnosh runs with, as Claude Code's
 	// /doctor does.
 	ActionDoctorReport struct{}
+	// ActionMem runs /mem with Args ("" to show mem).
+	ActionMem struct {
+		Args string
+	}
 	// ActionExportConversation exports the conversation, as Claude Code's
 	// /export does: to the clipboard when Clipboard is set, else to the
 	// file Filename names, else as the export dialog asks.

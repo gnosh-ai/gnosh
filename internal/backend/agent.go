@@ -270,6 +270,32 @@ func (b *Backend) DoctorReport(workspaceID string) (string, error) {
 	return doctor.Markdown(doctor.Report(ws.Cfg, exec.LookPath)), nil
 }
 
+// MemCommand runs /mem in the workspace's mem, as the user typed it in the
+// session; see app.App.MemCommand.
+func (b *Backend) MemCommand(ctx context.Context, workspaceID, sessionID, args string) (string, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return "", err
+	}
+	if ws.App == nil {
+		return "", ErrAgentNotInitialized
+	}
+	return ws.MemCommand(ctx, sessionID, args)
+}
+
+// MemNotice is what the user is told of the workspace's mem as a session
+// starts; see app.App.MemNotice.
+func (b *Backend) MemNotice(workspaceID string) (string, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return "", err
+	}
+	if ws.App == nil {
+		return "", ErrAgentNotInitialized
+	}
+	return ws.MemNotice(), nil
+}
+
 // ContextReport is what fills a session's context window ("" for a new
 // session), the Markdown Claude Code's /context prints.
 func (b *Backend) ContextReport(ctx context.Context, workspaceID, sessionID string) (string, error) {
