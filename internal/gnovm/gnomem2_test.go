@@ -29,7 +29,7 @@ type memStory struct {
 	out   strings.Builder
 	calls []memCall
 	// holding answers Redact's question, as klash's journal would.
-	holding func(string) ([]string, []string, bool)
+	holding func(string, []memOp) ([]string, []string, bool)
 }
 
 func newMemStory(t *testing.T) *memStory {
@@ -112,7 +112,7 @@ func TestMemStory(t *testing.T) {
 	s.run("s1", `println(mem.Show("port-tests-gno"))`)
 	s.run("s1", `mem.Goal("tidy the docs").Steps("a", "b", "c", "d", "e", "f", "g")`)
 	s.run("s1", `mem.Drop("tidy-docs", "moved to the docs session")`)
-	s.holding = func(text string) ([]string, []string, bool) {
+	s.holding = func(text string, _ []memOp) ([]string, []string, bool) {
 		if text == "sk-live-4f9c2b" {
 			return []string{"bump-gno-pin"}, []string{"item"}, false
 		}

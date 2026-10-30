@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -66,8 +67,10 @@ type memResult struct {
 	Ops    []memOp
 	// Seq is the journal entry the input was kept as; 0 for a read.
 	Seq int64
-	// Notes say what klash did first: rebuilt the store, caught it up.
+	// Notes say what klash did besides: rebuilt the store, caught it up.
 	Notes []string
+	// Renamed is the goals an erasure renamed, old name to new.
+	Renamed map[string]string
 }
 
 // call runs one input against mem, under mem's lock, and keeps what it
@@ -84,6 +87,11 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 		return memResult{Notes: notes}, err
 	}
 	defer r.close()
+	x, err := h.openIndex(j)
+	if err != nil {
+		return memResult{Notes: notes}, err
+	}
+	defer x.close()
 	who, caller := "klash", "klash"
 	switch {
 	case q.User:
@@ -91,21 +99,107 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 	case q.Session != "":
 		who, caller = "agent", q.Session
 	}
-	call, err := r.call(q.Code, memContext{caller: caller})
+	call, err := r.call(q.Code, memContext{caller: caller, find: x.finder(), holding: h.holding(j)})
 	res := memResult{Output: call.Output, Ops: call.Ops, Notes: notes}
 	if err != nil || call.batch == nil {
 		return res, err
 	}
 	_, offset := time.Unix(call.At, 0).Zone()
 	e := &memEntry{Seq: j.seq + 1, Time: call.At, Offset: offset, Req: q.Req, Who: who, Session: q.Session, Code: q.Code, Ops: call.Ops}
+	if er, ok := erasureOf(call.Ops); ok {
+		r.close()
+		x.close()
+		return h.erase(res, j, e, er)
+	}
 	if err := j.append(e); err != nil {
 		res.Ops = nil
 		return res, err
 	}
 	res.Seq = e.Seq
-	// The entry is kept. If the store's write fails, the next call
-	// catches the store up from the journal.
-	return res, r.commit(call, h.stamp(j))
+	// The entry is kept. If the store's or the index's write fails, the
+	// next call catches it up from the journal.
+	if err := r.commit(call, h.stamp(j)); err != nil {
+		return res, err
+	}
+	return res, x.apply([][]memOp{call.Ops}, h.indexStamp(j))
+}
+
+// erase keeps an input that redacts or forgets, e: it writes the journal
+// again with what e erases gone from every entry, under a new generation,
+// as the commit point; deletes the store and the index, which hold the
+// text in their own files; and builds them afresh from the new journal, as
+// far as the call's slice goes (the next call goes on).
+func (h *memHost) erase(res memResult, j *journal, e *memEntry, er memErasure) (memResult, error) {
+	_, entries, _, err := readMemJournal(j.path)
+	if err != nil {
+		res.Ops = nil
+		return res, err
+	}
+	entries, res.Renamed = erase(append(entries, *e), er)
+	nj, err := rewriteMemJournal(j.path, j.instance, entries, h.now())
+	if err != nil {
+		res.Ops = nil
+		return res, err
+	}
+	res.Seq = e.Seq
+	res.Notes = append(res.Notes, "mem's journal was written again without what was erased; its store and index are built afresh from it")
+	h.removeOtherStores(filepath.Join(h.dir, "store-"+nj.generation))
+	r, j, _, err := h.open()
+	if err == nil {
+		r.close()
+		var x *memIndex
+		if x, err = h.openIndex(j); err == nil {
+			x.close()
+		}
+	}
+	var busy *busyError
+	if errors.As(err, &busy) {
+		err = nil
+	}
+	return res, err
+}
+
+// holding answers the holding native from mem's journal: the names whose
+// Ops ever held text (an item's, fact's or rule's text, or its name, as
+// typed or, for a name, in a name's form), with their kinds, and whether the
+// statements of a past input held it. ops are the call's own so far. It
+// reads the whole journal, for a rare act.
+func (h *memHost) holding(j *journal) func(text string, ops []memOp) (names, kinds []string, statements bool) {
+	return func(text string, ops []memOp) (names, kinds []string, statements bool) {
+		er := memErasure{secrets: []string{text}}
+		seen := map[string]bool{}
+		see := func(op memOp) {
+			target := opTarget(op)
+			name := op.Name
+			if target == "statements" {
+				return
+			}
+			held := er.holds(op.Old) || er.holds(op.New)
+			if target == "item" {
+				held = held || er.nameHolds(goalPart(name))
+			} else {
+				held = held || er.nameHolds(name)
+			}
+			if held && !seen[target+" "+name] {
+				seen[target+" "+name] = true
+				names, kinds = append(names, name), append(kinds, target)
+			}
+		}
+		_, err := readEntriesOf(j.path, 0, 0, func(e memEntry, _ int64, _ string) error {
+			for _, op := range e.Ops {
+				see(op)
+			}
+			statements = statements || er.holds(e.Code)
+			return nil
+		})
+		if err != nil {
+			slog.Warn("mem's journal could not be searched", "error", err)
+		}
+		for _, op := range ops {
+			see(op)
+		}
+		return names, kinds, statements
+	}
 }
 
 // lock takes mem's lock, waiting at most lockWait while another klash
@@ -324,13 +418,86 @@ func (h *memHost) applyEach(r *memRealm, j *journal, batch []readEntry) error {
 	return nil
 }
 
-// removeOtherStores deletes the stores of other generations: what an
-// erasure or a repair left behind.
+// removeOtherStores deletes the stores and indexes of other generations:
+// what an erasure or a repair left behind.
 func (h *memHost) removeOtherStores(keep string) {
+	gen := strings.TrimPrefix(filepath.Base(keep), "store-")
 	ds, _ := os.ReadDir(h.dir)
 	for _, d := range ds {
-		if p := filepath.Join(h.dir, d.Name()); d.IsDir() && strings.HasPrefix(d.Name(), "store-") && p != keep {
-			_ = os.RemoveAll(p)
+		name := d.Name()
+		other := strings.HasPrefix(name, "store-") && name != "store-"+gen ||
+			strings.HasPrefix(name, "index-") && !strings.HasPrefix(name, "index-"+gen+".db")
+		if other {
+			_ = os.RemoveAll(filepath.Join(h.dir, name))
 		}
 	}
+}
+
+// memIndexLayout is the layout of mem's index: a change to its schema or to
+// how Ops become rows is a new number, and an index of another is rebuilt.
+const memIndexLayout = 1
+
+func (h *memHost) indexStamp(j *journal) memStamp {
+	return memStamp{Layout: memIndexLayout, Generation: j.generation, Seq: j.seq, End: j.size, Hash: j.lastHash}
+}
+
+// openIndex opens the index of j's generation and brings it up to j, as
+// open does the store: from the entries it lacks, or, if it is of another
+// layout or not built from this journal, afresh from the whole journal.
+func (h *memHost) openIndex(j *journal) (*memIndex, error) {
+	path := filepath.Join(h.dir, "index-"+j.generation+".db")
+	x, err := openMemIndex(path)
+	if err != nil {
+		return nil, err
+	}
+	st, ok, err := x.stamp()
+	if err == nil && ok {
+		same := st.Layout == memIndexLayout && st.Generation == j.generation
+		if same {
+			same, err = lineEndsAt(j.path, st.End, st.Hash)
+		}
+		if err == nil && !same {
+			x.close()
+			for _, suffix := range []string{"", "-wal", "-shm"} {
+				_ = os.Remove(path + suffix)
+			}
+			if x, err = openMemIndex(path); err != nil {
+				return nil, err
+			}
+			ok = false
+		}
+	}
+	if err != nil {
+		x.close()
+		return nil, err
+	}
+	var off, seq int64
+	if ok {
+		off, seq = st.End, st.Seq
+	}
+	var batch [][]memOp
+	var last memStamp
+	n := 0
+	_, err = readEntriesOf(j.path, off, seq, func(e memEntry, end int64, hash string) error {
+		if e.Seq > j.seq {
+			return nil // past what the store holds
+		}
+		batch = append(batch, e.Ops)
+		n += len(e.Ops)
+		last = memStamp{Layout: memIndexLayout, Generation: j.generation, Seq: e.Seq, End: end, Hash: hash}
+		if n < memBatchOps {
+			return nil
+		}
+		err := x.apply(batch, last)
+		batch, n = nil, 0
+		return err
+	})
+	if err == nil && len(batch) > 0 {
+		err = x.apply(batch, last)
+	}
+	if err != nil {
+		x.close()
+		return nil, err
+	}
+	return x, nil
 }

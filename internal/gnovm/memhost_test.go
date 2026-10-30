@@ -10,12 +10,15 @@
 package gnovm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -211,6 +214,115 @@ func TestMemHostCutsATornTail(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, torn)
 	require.Len(t, entries, 2)
+}
+
+// mem.Find searches the index, which follows every change: titles, notes,
+// facts; a forgotten item leaves it. Deleted, it is built again from the
+// journal.
+func TestMemHostFinds(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	memOK(t, h, `mem.Goal("fix the CI").Steps("TestFoo flakes under -race")`)
+	memOK(t, h, `mem.Note("fix-ci/1", "only on the AI box")`)
+	memOK(t, h, `mem.Fact("cmd/test", "go test -race ./...")`)
+	find := func(words string) string {
+		t.Helper()
+		return memOK(t, h, `print(mem.Find("`+words+`"))`).Output
+	}
+	require.Contains(t, find("flak"), "`fix-ci/1`")
+	out := find("race")
+	require.Contains(t, out, "`fix-ci/1`")
+	require.Contains(t, out, "fact `cmd/test` = go test -race ./...")
+	require.Contains(t, find("box"), "`fix-ci/1`")
+	require.Contains(t, find("nothing here"), "nothing in mem matches")
+
+	memOK(t, h, `mem.Drop("fix-ci", "moved")`)
+	memOK(t, h, `mem.Forget("fix-ci")`)
+	require.Contains(t, find("flak"), "nothing in mem matches")
+
+	idx, err := filepath.Glob(filepath.Join(dir, "index-*"))
+	require.NoError(t, err)
+	require.NotEmpty(t, idx)
+	for _, p := range idx {
+		require.NoError(t, os.Remove(p))
+	}
+	require.Contains(t, find("race"), "fact `cmd/test`")
+}
+
+// requireNowhere fails the test if a file under dir holds text in any form
+// a file there would hold it: as typed, Go-quoted, or JSON-encoded either
+// way.
+func requireNowhere(t *testing.T, dir, text string) {
+	t.Helper()
+	forms := []string{text, quotedInner(text)}
+	for _, f := range forms[:2] {
+		b, err := json.Marshal(f)
+		require.NoError(t, err)
+		forms = append(forms, string(b[1:len(b)-1]))
+	}
+	require.NoError(t, filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		for _, f := range forms {
+			if bytes.Contains(b, []byte(f)) {
+				t.Errorf("%s holds %q", p, f)
+			}
+		}
+		return nil
+	}))
+}
+
+// Redact takes a secret out of every file of mem, with its quote, its
+// backslash and its newline: the journal is written again without it, and
+// the store and the index are built afresh.
+func TestMemHostRedacts(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	secret := "k3y\"\\x\nz9q"
+	lit := strconv.Quote(secret)
+	memOK(t, h, `mem.Goal("rotate the token")`)
+	memOK(t, h, `mem.Note("rotate-token", "it was " + `+lit+`)`)
+	memOK(t, h, `mem.Fact("tokens/old", "the old token: " + `+lit+`)`)
+	// Held in an input's code alone.
+	memOK(t, h, `token := `+lit+`; _ = token; mem.Goal("other work")`)
+	res, err := h.call(context.Background(), memRequest{Code: `mem.Redact(` + lit + `)`, User: true})
+	require.NoError(t, err, res.Output)
+	require.Contains(t, res.Output, "redacted it in 2 places")
+	requireNowhere(t, dir, secret)
+
+	out := memOK(t, h, `print(mem.Check()); println(mem.Show("rotate-token")); println(mem.Show("tokens/old"))`).Output
+	require.Contains(t, out, "note 1: it was (redacted)")
+	require.Contains(t, out, "the old token: (redacted)")
+}
+
+// Forget takes a goal's text, and its name, out of every file of mem; the
+// name is free again.
+func TestMemHostForgets(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	memOK(t, h, `mem.Goal("plan the surprise party").Steps("book the venue", "invite everyone")`)
+	memOK(t, h, `mem.Note("plan-surprise-party/1", "the venue is Moonlight Hall")`)
+	memOK(t, h, `mem.Done("plan-surprise-party/1", "booked Moonlight Hall")`)
+	memOK(t, h, `mem.Goal("buy milk")`)
+	memOK(t, h, `mem.Drop("plan-surprise-party", "called off")`)
+	res := memOK(t, h, `mem.Forget("plan-surprise-party")`)
+	require.Equal(t, map[string]string{"plan-surprise-party": "forgotten-1"}, res.Renamed)
+	for _, s := range []string{"surprise", "venue", "Moonlight", "invite everyone", "called off"} {
+		requireNowhere(t, dir, s)
+	}
+
+	out := memOK(t, h, `print(mem.Check()); println(mem.Show())`).Output
+	require.Contains(t, out, "`buy-milk` \"buy milk\"")
+	require.NotContains(t, out, "forgotten-1")
+	require.Contains(t, memOK(t, h, `mem.Goal("plan the surprise party")`).Output, "added goal `plan-surprise-party`")
 }
 
 // Two klash processes take turns through mem's lock, and every input is

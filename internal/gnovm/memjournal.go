@@ -10,8 +10,13 @@
 package gnovm
 
 import (
+	"encoding/json"
 	"os"
+	"slices"
+	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // mem's journal is the record of every input that changed mem: what ran,
@@ -58,4 +63,236 @@ func readMemJournal(path string) (j *journal, entries []memEntry, torn bool, err
 		return nil, nil, false, err
 	}
 	return parseJournalOf[memEntry](path, data, memJournalKind)
+}
+
+// The words erased text becomes in the journal, as in the store.
+const (
+	memRedacted  = "(redacted)"
+	memForgotten = "(forgotten)"
+)
+
+// memErasure is what one input erases: the texts it redacts, and the items
+// it forgets.
+type memErasure struct {
+	secrets   []string
+	forgotten map[string]bool
+}
+
+// erasureOf is what ops erase; ok is false when they erase nothing.
+func erasureOf(ops []memOp) (er memErasure, ok bool) {
+	for _, op := range ops {
+		switch op.Kind {
+		case "redact":
+			if !slices.Contains(er.secrets, op.Old) {
+				er.secrets = append(er.secrets, op.Old)
+			}
+			ok = true
+		case "forget":
+			if er.forgotten == nil {
+				er.forgotten = map[string]bool{}
+			}
+			er.forgotten[op.Name] = true
+			ok = true
+		}
+	}
+	return er, ok
+}
+
+// opTarget is what an Op names: an "item", "fact" or "rule"; or
+// "statements", for a redact of past inputs' code alone.
+func opTarget(op memOp) string {
+	switch {
+	case op.Kind == "fact" || op.Kind == "rule":
+		return op.Kind
+	case op.Kind == "redact":
+		return op.Field
+	}
+	return "item"
+}
+
+// holds reports whether s holds a secret, as typed or Go-quoted, as it sits
+// in statements.
+func (er memErasure) holds(s string) bool {
+	for _, t := range er.secrets {
+		if strings.Contains(s, t) || strings.Contains(s, quotedInner(t)) {
+			return true
+		}
+	}
+	return false
+}
+
+// nameHolds reports whether a name holds a secret, as typed or in a
+// name's form.
+func (er memErasure) nameHolds(name string) bool {
+	for _, t := range er.secrets {
+		if f := memNameForm(t); strings.Contains(name, t) || f != "" && strings.Contains(name, f) {
+			return true
+		}
+	}
+	return false
+}
+
+// scrub replaces each secret, as typed or Go-quoted, with "(redacted)".
+func (er memErasure) scrub(s string) string {
+	for _, t := range er.secrets {
+		s = strings.ReplaceAll(s, t, memRedacted)
+		if q := quotedInner(t); q != t {
+			s = strings.ReplaceAll(s, q, memRedacted)
+		}
+	}
+	return s
+}
+
+// erase rewrites mem's journal entries so that none holds what er erases:
+//   - each secret, typed or Go-quoted, becomes "(redacted)" in every Op's
+//     Old and New and in every input's statements; an entry whose Ops held
+//     one has its statements replaced whole, since a secret may sit in them
+//     escaped or split;
+//   - every non-empty Old and New of an Op naming a forgotten item becomes
+//     "(forgotten)", except a status set's, and redacts of it are dropped;
+//     an entry with such an Op has its statements replaced whole;
+//   - a goal that is forgotten, or whose name holds a secret, typed or in a
+//     name's form, is renamed forgotten-<n> in every entry; a fact or rule
+//     whose name holds a secret loses every Op.
+//
+// Kinds, fields, status words and who made what are left as they are. It
+// returns the entries, and the goals renamed: old name to new.
+func erase(entries []memEntry, er memErasure) ([]memEntry, map[string]string) {
+	renamed := map[string]string{}
+	next := 1
+	for _, e := range entries {
+		for _, op := range e.Ops {
+			if g := goalPart(op.Name); opTarget(op) == "item" && strings.HasPrefix(g, "forgotten-") {
+				if n, err := strconv.Atoi(strings.TrimPrefix(g, "forgotten-")); err == nil && n >= next {
+					next = n + 1
+				}
+			}
+		}
+	}
+	for _, e := range entries {
+		for _, op := range e.Ops {
+			g := goalPart(op.Name)
+			if opTarget(op) != "item" || renamed[g] != "" || strings.HasPrefix(g, "forgotten-") {
+				continue
+			}
+			if er.forgotten[g] || er.nameHolds(g) {
+				renamed[g] = "forgotten-" + strconv.Itoa(next)
+				next++
+			}
+		}
+	}
+	out := make([]memEntry, 0, len(entries))
+	for _, e := range entries {
+		wipe := ""
+		var ops []memOp
+		for _, op := range e.Ops {
+			switch target := opTarget(op); {
+			case (target == "fact" || target == "rule") && er.nameHolds(op.Name):
+				wipe = memRedacted
+				continue
+			case target == "item" && er.forgotten[op.Name]:
+				if op.Kind == "redact" {
+					wipe = memForgotten
+					continue
+				}
+				if op.Kind != "set" || op.Field != "status" {
+					if op.Old != "" {
+						op.Old = memForgotten
+					}
+					if op.New != "" {
+						op.New = memForgotten
+					}
+				}
+				if wipe == "" {
+					wipe = memForgotten
+				}
+			}
+			if er.holds(op.Old) || er.holds(op.New) {
+				op.Old, op.New = er.scrub(op.Old), er.scrub(op.New)
+				wipe = memRedacted
+			}
+			if g := goalPart(op.Name); opTarget(op) == "item" && renamed[g] != "" {
+				op.Name = renamed[g] + op.Name[len(g):]
+			}
+			ops = append(ops, op)
+		}
+		e.Ops = ops
+		if wipe != "" {
+			e.Code = wipe
+		} else {
+			e.Code = er.scrub(e.Code)
+		}
+		out = append(out, e)
+	}
+	return out, renamed
+}
+
+// rewriteMemJournal writes entries as mem's journal at path, under a new
+// generation and the same instance, durably and at once: the commit point
+// of an erasure. It returns the new journal.
+func rewriteMemJournal(path, instance string, entries []memEntry, now time.Time) (*journal, error) {
+	hdr := journalHeader{Version: journalVersion, Generation: newGeneration(), Created: now.UTC(), Gno: stdlibVersion(), Kind: memJournalKind, Instance: instance}
+	line, err := json.Marshal(hdr)
+	if err != nil {
+		return nil, err
+	}
+	data := append(line, '\n')
+	last := data
+	for _, e := range entries {
+		line, err := json.Marshal(e)
+		if err != nil {
+			return nil, err
+		}
+		last = append(line, '\n')
+		data = append(data, last...)
+	}
+	if err := writeFileSync(path, data); err != nil {
+		return nil, err
+	}
+	j := &journal{path: path, generation: hdr.Generation, gno: hdr.Gno, instance: instance, size: int64(len(data)), lastHash: lineHash(last)}
+	if len(entries) > 0 {
+		j.seq = entries[len(entries)-1].Seq
+	}
+	return j, nil
+}
+
+// goalPart is the goal an item's name is in: its first segment.
+func goalPart(name string) string {
+	g, _, _ := strings.Cut(name, "/")
+	return g
+}
+
+// quotedInner is s as it sits inside a Go-quoted string: strconv.Quote
+// without the quotes.
+func quotedInner(s string) string {
+	q := strconv.Quote(s)
+	return q[1 : len(q)-1]
+}
+
+// memNameForm is s in a name's form, as gnomem makes names (names.gno):
+// lowercase words of letters and digits, accents folded, joined by "-".
+func memNameForm(s string) string {
+	const from, to = "àáâãäåçèéêëìíîïñòóôõöùúûüýÿ", "aaaaaaceeeeiiiinooooouuuuyy"
+	var words []string
+	var w strings.Builder
+	flush := func() {
+		if w.Len() > 0 {
+			words = append(words, w.String())
+			w.Reset()
+		}
+	}
+	for _, r := range strings.ToLower(s) {
+		if i := strings.IndexRune(from, r); i >= 0 {
+			r = []rune(to)[utf8.RuneCountInString(from[:i])]
+		}
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			w.WriteRune(r)
+		case r == '\'' || r == '’':
+		default:
+			flush()
+		}
+	}
+	flush()
+	return strings.Join(words, "-")
 }

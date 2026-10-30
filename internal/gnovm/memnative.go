@@ -35,9 +35,9 @@ type memContext struct {
 	// today is the user's local date, 2026-10-29.
 	today string
 	// find and holding answer from mem's index and journal; nil finds
-	// nothing.
+	// nothing. holding is also handed the Ops this call has made so far.
 	find    func(words string, max int) (names, kinds []string)
-	holding func(text string) (names, kinds []string, statements bool)
+	holding func(text string, ops []memOp) (names, kinds []string, statements bool)
 }
 
 // memOp is one change to a mem, as gnomem's do hands it to klash and the
@@ -97,7 +97,7 @@ func memNative(name gno.Name) func(*gno.Machine) {
 			var names, kinds []string
 			statements := false
 			if ctx.holding != nil {
-				names, kinds, statements = ctx.holding(memArg(m, 0))
+				names, kinds, statements = ctx.holding(memArg(m, 0), *ctx.ops)
 			}
 			memPush(m, names)
 			memPush(m, kinds)
