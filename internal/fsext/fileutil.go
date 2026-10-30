@@ -86,18 +86,10 @@ func (w *FastGlobWalker) ShouldSkipDir(path string) bool {
 	return w.directoryLister.shouldIgnore(path, nil, true)
 }
 
-// GlobGitignoreAware globs files respecting gitignore.
-func GlobGitignoreAware(pattern string, cwd string, limit int) ([]string, bool, error) {
-	return globWithDoubleStar(context.Background(), pattern, cwd, limit, true)
-}
-
-// GlobGitignoreAwareCtx is like [GlobGitignoreAware] but stops early when ctx
-// is cancelled (e.g. on timeout), returning whatever was found so far.
-func GlobGitignoreAwareCtx(ctx context.Context, pattern, cwd string, limit int) ([]string, bool, error) {
-	return globWithDoubleStar(ctx, pattern, cwd, limit, true)
-}
-
-func globWithDoubleStar(ctx context.Context, pattern, searchPath string, limit int, gitignore bool) ([]string, bool, error) {
+// GlobGitignoreAware globs files respecting gitignore, newest first. It
+// stops early when ctx is cancelled (e.g. on timeout), returning whatever
+// was found so far.
+func GlobGitignoreAware(ctx context.Context, pattern, searchPath string, limit int) ([]string, bool, error) {
 	// Normalize pattern to forward slashes on Windows so their config can use
 	// backslashes
 	pattern = filepath.ToSlash(pattern)
@@ -121,15 +113,12 @@ func globWithDoubleStar(ctx context.Context, pattern, searchPath string, limit i
 			return nil // Skip files we can't access
 		}
 
-		isDir := d.IsDir()
-		if isDir {
-			if gitignore && walker.ShouldSkipDir(path) {
+		if d.IsDir() {
+			if walker.ShouldSkipDir(path) {
 				return filepath.SkipDir
 			}
-		} else {
-			if gitignore && walker.ShouldSkip(path) {
-				return nil
-			}
+		} else if walker.ShouldSkip(path) {
+			return nil
 		}
 
 		relPath, err := filepath.Rel(searchPath, path)
@@ -171,15 +160,6 @@ func globWithDoubleStar(ctx context.Context, pattern, searchPath string, limit i
 		results[i] = m.Path
 	}
 	return results, truncated || errors.Is(err, filepath.SkipAll), nil
-}
-
-// ShouldExcludeFile checks if a file should be excluded from processing
-// based on common patterns and ignore rules.
-func ShouldExcludeFile(rootPath, filePath string) bool {
-	info, err := os.Stat(filePath)
-	isDir := err == nil && info.IsDir()
-	return NewDirectoryLister(rootPath).
-		shouldIgnore(filePath, nil, isDir)
 }
 
 func PrettyPath(path string) string {
