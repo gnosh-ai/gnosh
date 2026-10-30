@@ -86,7 +86,8 @@ separate judge checks it against what mem shows of it and the end of the
 conversation. Met, you are told, as in a real run in the TUI: `Goal met:
 create release notes file (The agent wrote …/notes.md with content 'release
 notes' and verified …)`. Not met, the goal is reopened with the judge's
-reason as a note, and the agent goes back to it.
+reason as a note, you are told so, and the agent goes back to it; when
+what is missing is yours to do or decide, it asks you instead.
 
 ### A knowledge base
 

@@ -434,8 +434,9 @@ Claude Code's names work here too.
   comes next: the next step, or the end of the turn while the goal waits on
   you, a day or another session. Once the agent closes the goal, the small
   model checks the condition against what mem holds of it: met, the goal is
-  cleared; not met, it is reopened with the reason as a note, and the agent
-  goes back to it. `/goal` shows the condition, the goal's name and the last
+  cleared; not met, it is reopened with the reason as a note, you are told,
+  and the agent goes back to it, or asks you when what is missing is yours.
+  `/goal` shows the condition, the goal's name and the last
   check, and `/goal clear` clears it. `gnosh run --goal` does the same in one
   run, says on stderr whether the goal was met, and exits non-zero while it
   is still set.
