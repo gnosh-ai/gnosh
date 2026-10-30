@@ -27,6 +27,10 @@ type Lazy struct {
 	// by name, which recall leaves out (memrecall.go).
 	shownMu sync.Mutex
 	shown   map[string]map[string]bool
+	// snaps is the last snapshot recall read of each mem, by directory,
+	// kept while mem has not changed (memvectors.go).
+	snapMu sync.Mutex
+	snaps  map[string]memSnapshotEntry
 }
 
 // NewLazy returns a Lazy that acquires a client with opts when first used.

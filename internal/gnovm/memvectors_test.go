@@ -426,3 +426,100 @@ func TestMemQueries(t *testing.T) {
 	q = "one two three. four five six. seven eight nine. ten eleven twelve. more words here."
 	require.Len(t, memQueries(q), 1+memQueryParts)
 }
+
+// TestMemRecallScale times what recall does with each typed prompt at the
+// size GNOMEM_SCALE gives (rows: facts, with whole 1024-number vectors):
+// reading every row and vector under mem's lock, and ranking them against
+// a prompt of five clauses. It is skipped unless GNOMEM_SCALE is set; run it
+// on the devbox.
+func TestMemRecallScale(t *testing.T) {
+	n, _ := strconv.Atoi(os.Getenv("GNOMEM_SCALE"))
+	if n == 0 {
+		t.Skip("set GNOMEM_SCALE to a number of rows")
+	}
+	dir := t.TempDir()
+	path, err := createMemJournal(filepath.Join(dir, "journal.jsonl"), time.Now())
+	require.NoError(t, err)
+	hdr, _, err := readJournalHeader(filepath.Join(dir, "journal.jsonl"))
+	require.NoError(t, err)
+	_ = path
+	x, err := openMemIndex(filepath.Join(dir, "index-"+hdr.Generation+".db"))
+	require.NoError(t, err)
+	var ops []memOp
+	for i := range n {
+		ops = append(ops, memOp{Kind: "fact", Name: "group-" + strconv.Itoa(i%50) + "/fact-" + strconv.Itoa(i), New: "fact number " + strconv.Itoa(i) + " about something"})
+	}
+	require.NoError(t, x.apply([][]memOp{ops}, memStamp{Layout: memIndexLayout, Generation: hdr.Generation}))
+	rows, err := x.rows()
+	require.NoError(t, err)
+	require.NoError(t, x.close())
+	v, err := openMemVectors(memVectorsPath(dir, hdr.Generation))
+	require.NoError(t, err)
+	vec := func(seed int) []int8 {
+		out := make([]int8, 1024)
+		for i := range out {
+			out[i] = int8((seed*31 + i*17) % 255)
+		}
+		return out
+	}
+	for start := 0; start < len(rows); start += 1000 {
+		var hashes []string
+		var vecs [][]int8
+		for i := start; i < min(start+1000, len(rows)); i++ {
+			hashes, vecs = append(hashes, rows[i].hash()), append(vecs, vec(i))
+		}
+		require.NoError(t, v.put("scale-model", hashes, vecs))
+	}
+	require.NoError(t, v.close())
+
+	start := time.Now()
+	s, ok, err := readMemSnapshot(context.Background(), dir)
+	require.NoError(t, err)
+	require.True(t, ok)
+	read := time.Since(start)
+	qs := [][]int8{vec(1), vec(2), vec(3), vec(4), vec(5)}
+	start = time.Now()
+	near := s.nearest(qs, "scale-model", memRecallScore, "item", "fact")
+	t.Logf("%d rows: reading them and their vectors %v, ranking against 5 queries %v (%d over the score)", len(s.rows), read, time.Since(start), len(near))
+
+	// Recall's own read, kept between prompts while mem has not changed.
+	var l Lazy
+	for _, what := range []string{"recall's first read", "recall's next read, mem unchanged"} {
+		start = time.Now()
+		s, ok, err := l.snapshot(context.Background(), dir)
+		require.NoError(t, err)
+		require.True(t, ok)
+		read := time.Since(start)
+		start = time.Now()
+		s.nearest(qs, "scale-model", memRecallScore, "item", "fact")
+		t.Logf("%s %v, ranking %v", what, read, time.Since(start))
+	}
+}
+
+// Recall keeps what it read of mem between prompts, while mem has not
+// changed: a fact changed is recalled as it is now, and a redacted one
+// never again.
+func TestMemRecallKeepsNothingStale(t *testing.T) {
+	t.Parallel()
+	f := newFakeEmbedder(t)
+	_, l, mem := newRecallHost(t, f)
+	ctx := context.Background()
+	dir := memDir(l.opts.Dir, "/proj")
+	e := newMemEmbedder(f.URL + "/v1")
+	mem(`mem.Fact("cmd/test", "go test -race ./...")`)
+	require.NoError(t, fillMemVectorsNow(ctx, dir, e))
+	l.show("s1", []string{"-"}) // shown nothing of mem yet, the block aside
+	require.Contains(t, l.MemRecall(ctx, "/proj", "s1", "run the testing suite"), "go test -race")
+
+	mem(`mem.Fact("cmd/test", "make testing-check")`)
+	require.NoError(t, fillMemVectorsNow(ctx, dir, e))
+	l.show("s2", []string{"-"})
+	got := l.MemRecall(ctx, "/proj", "s2", "run the testing suite")
+	require.Contains(t, got, "make testing-check")
+	require.NotContains(t, got, "go test -race")
+
+	mem(`mem.Redact("testing-check")`)
+	require.NoError(t, fillMemVectorsNow(ctx, dir, e))
+	l.show("s3", []string{"-"})
+	require.NotContains(t, l.MemRecall(ctx, "/proj", "s3", "run the testing suite"), "testing-check")
+}
