@@ -328,7 +328,7 @@ included.
 
 These are real runs of Gnosh with the open-weight Qwen3.8-27B on a local
 llama.cpp server, one of each use case, on Gnosh's main branch as it stood
-between 12:04 and 13:45 UTC on 30 October 2026, with Qwen thinking as it does
+between 12:04 and 14:30 UTC on 30 October 2026, with Qwen thinking as it does
 by default and finding by meaning off. Each runs in a fresh project and a
 fresh config, with only Gnosh's built-in prompt, and the user talks the way
 the second column says, never naming Gno or mem unless it says so. The checks
@@ -338,7 +338,7 @@ the end.
 | Use case | What the user asks | Sessions | Checks passed |
 |---|---|---|---|
 | readme-goal | the README's goal: plan it as steps, do the first now, "we'll carry on in another session" | 2 | all 3 |
-| long-goal-sessions | a four-step plan kept in Gno, one step per session | 4 | 13 of 14 |
+| long-goal-sessions | a four-step plan kept in Gno, one step per session | 4 | all 14 |
 | resume-checklist | a checklist of four jobs, two now, the rest in a new session | 2 | all 8 |
 | goal-until-green | make `go test ./...` pass, keeping the goal and its condition in Gno | 1 | all 7 |
 | goal-replan | a goal whose first approach fails: note why, re-plan | 1 | all 5 |
@@ -356,24 +356,23 @@ the end.
 | recall-beyond-the-block | 32 facts, the first two asked for in other words | 3 | all 3 |
 | unknown-fact-honest | something it was never told | 2 | all 2 |
 | rule-from-the-user | "always run gofumpt …", then "What rules do you follow?" | 2 | all 3 |
-| forget-a-secret | a key kept, "forget it completely", then asked for | 3 | 5 of 6 |
+| forget-a-secret | a key kept, "forget it completely", then asked for | 3 | all 5 |
 | compute-primes | the exact sum of the first 1000 primes | 1 | all 2 |
 | compute-backoff | when the 10th retry of a backoff goes out | 1 | all 2 |
 
-- **long-goal-sessions**: the check that failed wanted the words "go test" in
-  the Makefile, which runs `$(GO) test ./...` with `GO` set to Go's full path.
-  The target works, and the check is being widened.
-- **forget-a-secret**: mem kept nothing of the key, and the third session
-  found nothing in it. It then went looking past the project, into the test
+- **forget-a-secret** failed a check on its first run: mem kept nothing of
+  the key, but the third session went looking past the project, into the test
   harness's own transcripts of the first session, and quoted the key from
   there. The harness now writes those only after the last session, and the
   built-in prompt tells the model that what you erased stays erased: it reads
   mem only through its calls, and never digs through Gnosh's data or
-  transcripts for what mem does not show.
+  transcripts for what mem does not show. Run again, it passed every check.
 - Main changed under the runs as work landed, and mem's layout moved to 3
   partway; the four use cases whose checks read mem after that were run again
   with a checker that reads the new layout: goal-replan, long-goal-sessions,
-  memory-update and forget-a-secret.
+  memory-update and forget-a-secret. long-goal-sessions and forget-a-secret ran
+  once more after two of their checks were found too strict and widened (a
+  Makefile's `$(GO) test`, an answer of "Not in mem").
 - Before mem v2 and one task list, a task meant for one sitting mostly went to
   the session's own To-Do list, gone in the next session (checklist-calc
   passed 2 of 8 runs), and the model never raised a reminder unasked beside
