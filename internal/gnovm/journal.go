@@ -258,12 +258,11 @@ func (j *journal) changed() (appended, rewritten bool, err error) {
 		return false, true, nil
 	}
 	// The line that ended at j.size must still be the one this process saw.
-	tail := make([]byte, min(j.size, maxEntry+1))
-	if _, err := f.ReadAt(tail, j.size-int64(len(tail))); err != nil {
+	line, err := lineEndingAt(f, j.size)
+	if err != nil {
 		return false, false, err
 	}
-	start := bytes.LastIndexByte(tail[:len(tail)-1], '\n') + 1
-	if lineHash(tail[start:]) != j.lastHash {
+	if lineHash(line) != j.lastHash {
 		return false, true, nil
 	}
 	return st.Size() > j.size, false, nil
@@ -334,15 +333,35 @@ func lineEndsAt(path string, end int64, hash string) (bool, error) {
 	if end < 1 || end > st.Size() {
 		return false, nil
 	}
-	tail := make([]byte, min(end, maxEntry+1))
-	if _, err := f.ReadAt(tail, end-int64(len(tail))); err != nil {
+	line, err := lineEndingAt(f, end)
+	if err != nil || line[len(line)-1] != '\n' {
 		return false, err
 	}
-	if tail[len(tail)-1] != '\n' {
-		return false, nil
+	return lineHash(line) == hash, nil
+}
+
+// lineEndingAt is the line of f that ends at offset end, its newline
+// included. It reads back as far as the line goes: a line may be longer
+// than maxEntry, since an erasure writes its entry with the journal, and
+// /mem redact of a text 5,000 steps held made one of 365 KB. Read only up
+// to maxEntry, that line could never be found again, so mem's store was
+// built afresh at every call, each taking longer than its slice.
+func lineEndingAt(f *os.File, end int64) ([]byte, error) {
+	var line []byte
+	for at := end; ; {
+		buf := make([]byte, min(at, 64<<10))
+		at -= int64(len(buf))
+		if _, err := f.ReadAt(buf, at); err != nil {
+			return nil, err
+		}
+		line = append(buf, line...)
+		if i := bytes.LastIndexByte(line[:len(line)-1], '\n'); i >= 0 {
+			return line[i+1:], nil
+		}
+		if at == 0 {
+			return line, nil
+		}
 	}
-	start := bytes.LastIndexByte(tail[:len(tail)-1], '\n') + 1
-	return lineHash(tail[start:]) == hash, nil
 }
 
 // readEntriesOf calls each, in order, on a journal's entries after byte

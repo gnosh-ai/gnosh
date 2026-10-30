@@ -105,6 +105,37 @@ func TestJournalNoticesAppendAndRewrite(t *testing.T) {
 	require.True(t, rewritten)
 }
 
+// A journal's last line may be longer than maxEntry: an erasure writes its
+// entry with the journal, past the cap on an append. It is found whole, so
+// a store stamped at it is kept rather than built afresh at every call.
+func TestJournalFindsALastLineLongerThanMaxEntry(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "journal.jsonl")
+	j, err := createJournal(path, time.Unix(0, 0))
+	require.NoError(t, err)
+	long := entryLine(t, 1, "a := \""+strings.Repeat("x", maxEntry+100<<10)+"\"")
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+	require.NoError(t, err)
+	_, err = f.WriteString(long)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	fi, err := os.Stat(path)
+	require.NoError(t, err)
+
+	ok, err := lineEndsAt(path, fi.Size(), lineHash([]byte(long)))
+	require.NoError(t, err)
+	require.True(t, ok, "the long last line is found whole")
+	ok, err = lineEndsAt(path, fi.Size(), lineHash([]byte(long[1:])))
+	require.NoError(t, err)
+	require.False(t, ok)
+
+	j.size, j.lastHash, j.seq = fi.Size(), lineHash([]byte(long)), 1
+	appended, rewritten, err := j.changed()
+	require.NoError(t, err)
+	require.False(t, appended)
+	require.False(t, rewritten, "the same long line, not a rewrite")
+}
+
 func TestRepairCutsAtTheFirstBadEntry(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
