@@ -154,6 +154,12 @@ func TestMemHostRebuildsAnOlderStore(t *testing.T) {
 	require.Equal(t, []string{"mem's store was rebuilt from its journal"}, res.Notes)
 	require.Equal(t, before, res.Output)
 
+	// A build on another gno version, which may store objects otherwise.
+	setStamp(func(st *memStamp) { st.Gno = "v0.0.0-other" })
+	res = memOK(t, h, `println(mem.JSON("keep-me"))`)
+	require.Equal(t, []string{"mem's store was rebuilt from its journal"}, res.Notes)
+	require.Equal(t, before, res.Output)
+
 	setStamp(func(st *memStamp) { st.Layout = memLayout + 1 })
 	_, err := h.call(context.Background(), memRequest{Code: `println(mem.Show())`})
 	var ref *refusal
@@ -300,6 +306,63 @@ func TestMemHostRedacts(t *testing.T) {
 	out := memOK(t, h, `print(mem.Check()); println(mem.Show("rotate-token")); println(mem.Show("tokens/old"))`).Output
 	require.Contains(t, out, "note 1: it was (redacted)")
 	require.Contains(t, out, "the old token: (redacted)")
+}
+
+// An erasure that crashed after writing the journal again, before it
+// deleted the store and the index that hold the text, is finished by the
+// next call: they are of the old generation, which the next open deletes.
+func TestMemHostFinishesACrashedErasure(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	const secret = "sk-crash-7f3e91"
+	memOK(t, h, `mem.Goal("rotate the key")`)
+	memOK(t, h, `mem.Note("rotate-key", "the old key was `+secret+`")`)
+	// copyPath copies a store's directory or an index's file.
+	copyPath := func(from, to string) {
+		t.Helper()
+		fi, err := os.Stat(from)
+		require.NoError(t, err)
+		if fi.IsDir() {
+			require.NoError(t, os.CopyFS(to, os.DirFS(from)))
+			return
+		}
+		b, err := os.ReadFile(from)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(to, b, 0o600))
+	}
+	saved := t.TempDir()
+	stores, err := filepath.Glob(filepath.Join(dir, "store-*"))
+	require.NoError(t, err)
+	indexes, err := filepath.Glob(filepath.Join(dir, "index-*"))
+	require.NoError(t, err)
+	old := append(stores, indexes...)
+	require.Len(t, stores, 1)
+	require.NotEmpty(t, indexes)
+	for _, p := range old {
+		copyPath(p, filepath.Join(saved, filepath.Base(p)))
+	}
+
+	res, err := h.call(context.Background(), memRequest{Code: `mem.Redact("` + secret + `")`, User: true})
+	require.NoError(t, err, res.Output)
+	requireNowhere(t, dir, secret)
+	// The crash: the old generation's store and index are back.
+	for _, p := range old {
+		copyPath(filepath.Join(saved, filepath.Base(p)), p)
+	}
+	held := false
+	require.NoError(t, filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := os.ReadFile(p)
+		held = held || bytes.Contains(b, []byte(secret))
+		return err
+	}))
+	require.True(t, held, "the old generation's files hold the secret again")
+
+	require.Contains(t, memOK(t, h, `mem.Show("rotate-key")`).Output, "note 1: the old key was (redacted)")
+	requireNowhere(t, dir, secret)
 }
 
 // Forget takes a goal's text, and its name, out of every file of mem; the
