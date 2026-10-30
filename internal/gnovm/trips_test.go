@@ -177,6 +177,37 @@ fmt.Println(x)`)
 	require.Equal(t, "hi\n", res.Output)
 }
 
+// A lone expression before the end is shown in its place, not dropped: a
+// model that ended with `waits` then `total` was shown the total alone and
+// made the terms up (QA, 2026-10-30). A call there stays a statement, its
+// results dropped as Go drops them.
+func TestLoneExpressionsAreShownInPlace(t *testing.T) {
+	t.Parallel()
+	h := newTestHost(t, t.TempDir())
+	run(t, h, "", `waits := []int{200, 400}
+total := 600`)
+	shown := run(t, h, "", `waits`).Value
+	require.NotEmpty(t, shown)
+
+	res := run(t, h, "", `println("waits:")
+waits
+println("total:")
+total`)
+	require.Equal(t, "waits:\n"+shown+"\ntotal:\n", res.Output)
+	require.Equal(t, "600", res.Value)
+
+	res = run(t, h, "", `func two() int { return 2 }
+two()
+two() + 1`)
+	require.Empty(t, res.Output)
+	require.Equal(t, "3", res.Value)
+
+	// An error after a lone expression names its own line.
+	res = runErr(t, h, "", `waits
+for i := 0; i < 1; i++ { nope() }`)
+	require.Contains(t, res.Err.Error(), ":2:")
+}
+
 func TestNilRendersAsNil(t *testing.T) {
 	t.Parallel()
 	h := newTestHost(t, t.TempDir())

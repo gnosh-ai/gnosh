@@ -139,7 +139,8 @@ type program struct {
 //     other in any order (main before its helpers, mutual recursion, a
 //     method before its type);
 //   - consecutive statements become one statement run;
-//   - a trailing lone expression becomes an eval, whose value is shown;
+//   - a lone expression that is not a call becomes an eval, whose value
+//     is shown in its place, and so does a trailing call;
 //   - a func main is renamed main_<seq> and called after everything else,
 //     so one VM can run many programs;
 //   - a top-level x, y := ... whose names are all new becomes var x, y = ...,
@@ -336,7 +337,17 @@ func normalize(code string, seq int64, existing, elsewhere map[string]bool) (*pr
 		p.ops = append(p.ops, op{Call: p.main})
 	}
 
-	// A trailing lone expression is evaluated, its value shown.
+	// A lone expression is evaluated, its value shown: one that is not a
+	// call wherever it stands (showLoneExprs), and a call at the end.
+	var ops []op
+	for _, o := range p.ops {
+		if o.Stmts == "" {
+			ops = append(ops, o)
+			continue
+		}
+		ops = append(ops, showLoneExprs(o)...)
+	}
+	p.ops = ops
 	if n := len(p.ops); n > 0 && p.ops[n-1].Stmts != "" {
 		last := &p.ops[n-1]
 		if before, expr, ok := splitTrailingExpr(last.Stmts); ok {
@@ -577,6 +588,41 @@ func parseImports(decl string) ([]importSpec, error) {
 		out = append(out, s)
 	}
 	return out, nil
+}
+
+// showLoneExprs splits a statement run at each lone expression in it that
+// is not a call, which becomes an eval, its value shown in its place. Go
+// refuses such a statement ("is not used"), so a model writes one to see
+// it; one that ended with `waits` then `total` was shown the total alone,
+// the waits dropped without a word, and made the terms up (QA,
+// 2026-10-30). A call stays a statement, its results dropped as Go drops
+// them.
+func showLoneExprs(o op) []op {
+	body, base := parseStmts(o.Stmts)
+	var ops []op
+	from := 0
+	for _, st := range body {
+		es, ok := st.(*ast.ExprStmt)
+		if !ok {
+			continue
+		}
+		if _, call := es.X.(*ast.CallExpr); call {
+			continue
+		}
+		start, end := int(es.Pos())-base, int(es.End())-base
+		if before := o.Stmts[from:start]; strings.TrimSpace(before) != "" {
+			ops = append(ops, op{Line: o.Line + strings.Count(o.Stmts[:from], "\n"), Stmts: before})
+		}
+		ops = append(ops, op{Eval: o.Stmts[start:end]})
+		from = end
+	}
+	if from == 0 {
+		return []op{o}
+	}
+	if rest := o.Stmts[from:]; strings.TrimSpace(rest) != "" {
+		ops = append(ops, op{Line: o.Line + strings.Count(o.Stmts[:from], "\n"), Stmts: rest})
+	}
+	return ops
 }
 
 // splitTrailingExpr splits statements whose last one is a lone expression

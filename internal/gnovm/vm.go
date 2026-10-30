@@ -287,8 +287,9 @@ func receiverName(x gno.Expr) string {
 	return x.String()
 }
 
-// run runs parsed ops in order, and returns the rendered value of an eval
-// op if render is set. If it fails, the VM is unusable, with one exception:
+// run runs parsed ops in order, and returns the rendered value of the last
+// op, an eval, if render is set; an eval before it writes its value to the
+// output in its place. If it fails, the VM is unusable, with one exception:
 // an input that is only an expression and fails to compile ran nothing (gno
 // preprocesses an expression before it pushes anything to run it), so a
 // typo does not cost a rebuild.
@@ -313,7 +314,7 @@ func (v *vm) run(parsed []parsedOp, render bool) (value string, err error) {
 			}
 		}
 	}()
-	for _, p := range parsed {
+	for i, p := range parsed {
 		switch {
 		case p.imp != nil:
 			v.m.RunDeclaration(p.imp)
@@ -332,8 +333,12 @@ func (v *vm) run(parsed []parsedOp, render bool) (value string, err error) {
 			}
 		case p.expr != nil:
 			tvs := v.m.Eval(p.expr)
-			if render {
+			switch {
+			case !render:
+			case i == len(parsed)-1:
 				value = renderValues(tvs)
+			default:
+				fmt.Fprintln(&v.out, renderValues(tvs))
 			}
 		}
 		// Declarations and stored closures keep their syntax trees
