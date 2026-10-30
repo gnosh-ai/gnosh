@@ -40,7 +40,7 @@ var repoRoot = filepath.Join("..", "..", "..")
 // and the fewest gnovm_run examples each must hold: a parser that silently
 // found nothing would otherwise pass by checking nothing.
 var checkedDocs = map[string]int{
-	"GNOMEM.md": 3,
+	"GNOMEM.md": 11,
 	"README.md": 5,
 }
 

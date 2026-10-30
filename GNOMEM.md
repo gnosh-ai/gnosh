@@ -43,6 +43,76 @@ gnovm_run {"name": "mem", "code": "mem.Show()"}
   a damaged journal is reported, never run.
 - **Private.** Everything lives in Klash's data directory, on your machine.
 
+## In use
+
+### A goal, carried across sessions
+
+> **You:** Build the `greet` package: a go.mod, `Hello` with a test, and a
+> `make test` that runs the tests. Do the first step now; we'll carry on
+> tomorrow.
+
+The agent puts the goal on its board with each part as a step, does the
+first, and marks it done with what came of it. When a step turns out to be
+wrong for this machine (there is no `make` here), it notes why, drops that
+step and adds the one that replaces it, so the board shows the plan as it now
+stands, and why it changed:
+
+```
+gnovm_run {"name": "mem", "code": "mem.Add(\"build greet\", \"go.mod for module greet\", \"greet.go with Hello\", \"greet_test.go\", \"make test runs the tests\")"}
+  1
+  output:
+  added 1 "build greet": steps 2 "go.mod for module greet", 3 "greet.go with Hello", 4 "greet_test.go", 5 "make test runs the tests"
+gnovm_run {"name": "mem", "code": "mem.Done(2, \"module greet, go 1.22\")"}
+  done 2 "go.mod for module greet"; next: 3 "greet.go with Hello"
+gnovm_run {"name": "mem", "code": "mem.Note(5, \"make is not installed here\")\nmem.Drop(5, \"no make on this machine\")\nmem.Step(1, \"test.sh runs go test ./...\")"}
+  6
+  output:
+  dropped 5 "make test runs the tests"; next: 3 "greet.go with Hello"
+  added 6 "test.sh runs go test ./...", a step of 1 "build greet"
+gnovm_run {"name": "mem", "code": "mem.Show()"}
+  board: 4 open, 1 done, 1 dropped · next: 3 "greet.go with Hello"
+  [ ] 1 build greet
+    [x] 2 go.mod for module greet → module greet, go 1.22
+    [ ] 3 greet.go with Hello  ← next
+    [ ] 4 greet_test.go
+    [-] 5 make test runs the tests · dropped: no make on this machine (1 note)
+    [ ] 6 test.sh runs go test ./...
+```
+
+Tomorrow's session is given the outline's first line along with your first
+message, so it knows where the goal stands without being told.
+
+### A knowledge base
+
+> **You:** Remember that staging's database is `db-stg-4`, the on-call
+> engineer is Dana, and we deploy with `make ship ENV=prod`.
+>
+> *(next week)* **You:** Staging moved to `db-stg-9`.
+>
+> *(any later session)* **You:** Where's the staging database?
+
+Each fact has a name, and every new session is told the names the board
+holds. So a fact that changes is set again under the name it already has,
+rather than added a second time to disagree with the first, and a question
+about one is answered by looking it up:
+
+```
+gnovm_run {"name": "mem", "code": "mem.Facts[\"staging database\"] = \"db-stg-4\"\nmem.Facts[\"on-call engineer\"] = \"Dana\"\nmem.Facts[\"deploy cmd\"] = \"make ship ENV=prod\""}
+gnovm_run {"name": "mem", "code": "mem.Facts[\"staging database\"] = \"db-stg-9\""}
+gnovm_run {"name": "mem", "code": "mem.Facts[\"staging database\"]"}
+  "db-stg-9"
+gnovm_run {"name": "mem", "code": "mem.Show()"}
+  board: 0 open, 0 done · facts: deploy cmd, on-call engineer, staging database
+  facts:
+    deploy cmd = make ship ENV=prod
+    on-call engineer = Dana
+    staging database = db-stg-9
+```
+
+What the agent finds while it works is kept the same way, on the item it was
+working on: a question is an item, its notes are the findings, and its result
+is the answer.
+
 ## See it work
 
 These are real runs of Klash with the open-weight Qwen3.8-27B on a local
@@ -76,17 +146,20 @@ Klash's system prompt carries a short recipe, so the model needs no setup:
 `mem` is made the first time it is used.
 
 - **At the start of a session** the model is told, with its first prompt,
-  what the board has open (`board: 2 open, 5 done · next: 3 "update
-  CHANGELOG"`), so it needs no tool call to find earlier work; `mem.Show()`
-  gives the whole outline. Klash rewrites that line after every change, and
-  reading it starts nothing.
+  what the board has open and the names of its facts (`board: 2 open, 5 done
+  · next: 3 "update CHANGELOG" · facts: deploy cmd`), so it needs no tool call
+  to find earlier work; `mem.Show()` gives the whole outline. The line is
+  given whenever the board has an item open or holds a fact, and the model is
+  told to use the board only where the task at hand is part of it. Klash
+  rewrites that line after every change, and reading it starts nothing.
 - **A task of two or more steps**: `mem.Add(goal, steps...)`, then
   `mem.Done(id, what came of it)` as each finishes; Done answers with what is
   next. A goal cannot be done while a step of it is open, so a success
   condition is a step ("go test ./... passes").
 - **A question**: an item whose notes are its findings (`mem.Note(id, "the
   claim — path:line")`) and whose result is its answer.
-- **Facts**: `mem.Facts["deploy cmd"] = "make ship ENV=prod"`.
+- **Facts**: `mem.Facts["deploy cmd"] = "make ship ENV=prod"`; to change one,
+  set it again under the same name.
 - **Anything that needs computing** runs in the session's scratch machine.
 
 ## The board, as a foundation
@@ -135,9 +208,6 @@ func (b *Board) Show(ids ...int) string     // the outline, or items in full
 - **Short by construction.** Show's outline stays under about 3000 bytes: the
   header names the next item, facts come next, closed items take one line
   each, and older ones, top-level or steps, are counted.
-- **The harness's goals stay separate.** Planned harness-tracked goals keep
-  their own machine and their own checks, evaluated in Go, so nothing the
-  model writes on its board is taken as proof that a goal is met.
 
 ## The machines
 
@@ -189,16 +259,6 @@ now handles each case:
   prompt, so a local model server reuses the prompt it has already read. A
   new session reads about 30 new tokens instead of 14,000, which took one to
   two minutes.
-
-## Coming next
-
-- **Goals.** The harness keeps long-standing goals in a machine of its own,
-  with success checks that it evaluates itself. A goal closes as met only
-  when its check passes. Open goals are put back in front of the model after
-  a compaction and in every new session, and `/goals` shows and manages them.
-- **Longer runs.** Goals that span sessions, compactions, crashes and
-  restarts; stop conditions; real-model runs against control runs with the
-  machines off.
 
 The full design, with every review of it, is in
 [internal/gnovm/DESIGN.md](internal/gnovm/DESIGN.md).
