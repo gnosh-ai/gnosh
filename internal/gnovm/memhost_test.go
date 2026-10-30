@@ -1000,3 +1000,49 @@ func TestMemOpensAMemAnEarlierBuildMade(t *testing.T) {
 		require.Len(t, s.rows, 1, name)
 	}
 }
+
+// A mem input that only called mem, failed by Go's own runtime under it, is
+// told the fault is gnosh's, and what to do: told only "runtime error:
+// index out of range [11] with length 10", the agent in Jae's lane spent
+// seven minutes searching the disk and mem's files (2026-10-30). The model's
+// own code failing in Gno is told as before. The earlier build's mem from
+// testdata, stamped as this build's, has its earlier Mem read as today's.
+func TestMemSaysWhenItFailsInsideGnosh(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.CopyFS(dir, os.DirFS(filepath.Join("testdata", "memupgrade", "empty-layout2"))))
+	hdr, line, err := readJournalHeader(filepath.Join(dir, "journal.jsonl"))
+	require.NoError(t, err)
+	stores, err := filepath.Glob(filepath.Join(dir, "store-*"))
+	require.NoError(t, err)
+	r, err := openMemRealm(newBase(), stores[0])
+	require.NoError(t, err)
+	require.NoError(t, r.setStamp(memStamp{Layout: memLayout, Gno: stdlibVersion(), Generation: hdr.Generation, End: int64(len(line)), Hash: lineHash(line)}))
+	require.NoError(t, r.close())
+
+	h := newTestMemHost(t, dir)
+	_, err = h.call(context.Background(), memRequest{Code: `mem.Fact("staging-db", "db-stg-7")`, Session: "s1"})
+	require.ErrorContains(t, err, "mem failed inside gnosh, not in your call: runtime error: index out of range")
+	require.ErrorContains(t, err, "This is a bug in gnosh: tell the user what failed, and go on without mem")
+
+	h = newTestMemHost(t, t.TempDir())
+	_, err = h.call(context.Background(), memRequest{Code: "x := []int{1}\n_ = x[5]", Session: "s1"})
+	require.EqualError(t, err, "runtime error: slice index out of bounds: 5 (len=1)", "the model's own code")
+}
+
+func TestMemOnlyCalls(t *testing.T) {
+	t.Parallel()
+	for code, want := range map[string]bool{
+		`mem.Show()`: true,
+		"mem.Fact(\"a/b\", \"c\")\nmem.Fact(\"d/e\", \"f\")":  true,
+		`mem.Goal("release v2").Steps("bump", "tag").Start()`: true,
+		`print(mem.Show("release-v2"))`:                       true,
+		"mem":                                                 true,
+		"x := []int{1}\n_ = x[5]":                             false,
+		`mem.Fact(name, "c")`:                                 false,
+		`for i := 0; i < 3; i++ { mem.Fact("a/b", "c") }`:     false,
+		"": false,
+	} {
+		require.Equal(t, want, memOnlyCalls(code), code)
+	}
+}

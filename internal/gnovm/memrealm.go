@@ -15,7 +15,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"log/slog"
 	"regexp"
+	"runtime"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -306,8 +312,15 @@ func (r *memRealm) call(code string, ctx memContext) (call memCall, err error) {
 	defer func() {
 		call.Output = out.String()
 		if p := recover(); p != nil {
+			_, inside := p.(runtime.Error)
+			inside = inside && memOnlyCalls(code)
+			if inside {
+				slog.Error("mem failed inside gnosh", "error", p, "stack", string(debug.Stack()))
+			}
 			if terr := meter.tripped(); terr != nil {
 				fail(classifyTrip(terr).Error())
+			} else if inside {
+				fail(memInsideText(p))
 			} else if msg := memPanicText(p, bodyLine, oneLine); memCommaJoined(code) && strings.Contains(msg, "expected 1 expression") {
 				fail(msg + " (mem's calls go one per line, with no comma after them)")
 			} else {
@@ -386,6 +399,63 @@ var (
 	memVPBlockRe  = regexp.MustCompile(`mem<VPBlock\(\d+,\d+\)>`)
 	memArgCountRe = regexp.MustCompile(`wrong argument count in call to (.+)\.(\w+); want (\d+) got (\d+)`)
 )
+
+// memInsideText is what a mem input that only called mem is told when Go's
+// own runtime failed under it, in gnosh or the GnoVM: the input did nothing
+// wrong. Told only "runtime error: index out of range [11] with length
+// 10", the agent in Jae's lane took it for its own to fix, and spent seven
+// minutes searching the disk, reading mem's files and the binary's
+// strings, and trying to drop mem, until he cancelled it (2026-10-30).
+func memInsideText(p any) string {
+	return "mem failed inside gnosh, not in your call: " + fmt.Sprint(p) + ". This is a bug in gnosh: tell the user what failed, and go on without mem; do not look through mem's files or the system to repair it"
+}
+
+// memOnlyCalls reports whether a mem input only calls mem: each statement
+// a call on mem, or a chain of calls off one, with literal arguments,
+// perhaps printed. Nothing of its own could fail.
+func memOnlyCalls(code string) bool {
+	f, err := parser.ParseFile(token.NewFileSet(), "", "package p\nfunc _() {\n"+code+"\n}\n", parser.SkipObjectResolution)
+	if err != nil || len(f.Decls) != 1 {
+		return false
+	}
+	fn, ok := f.Decls[0].(*ast.FuncDecl)
+	if !ok || len(fn.Body.List) == 0 {
+		return false
+	}
+	for _, s := range fn.Body.List {
+		e, ok := s.(*ast.ExprStmt)
+		if !ok || !onMem(e.X) {
+			return false
+		}
+	}
+	return true
+}
+
+// onMem reports whether x is mem, a call on it with literal arguments, a
+// chain of such calls, or print or println of them.
+func onMem(x ast.Expr) bool {
+	switch x := x.(type) {
+	case *ast.Ident:
+		return x.Name == "mem"
+	case *ast.CallExpr:
+		if id, ok := x.Fun.(*ast.Ident); ok && (id.Name == "print" || id.Name == "println") {
+			for _, a := range x.Args {
+				if !onMem(a) {
+					return false
+				}
+			}
+			return len(x.Args) > 0
+		}
+		for _, a := range x.Args {
+			if _, ok := a.(*ast.BasicLit); !ok {
+				return false
+			}
+		}
+		sel, ok := x.Fun.(*ast.SelectorExpr)
+		return ok && onMem(sel.X)
+	}
+	return false
+}
 
 // memNotKept names what a failed input's receipts said it added, and the
 // facts and rules they said it set, for its refusal: ", so `ship`, added
