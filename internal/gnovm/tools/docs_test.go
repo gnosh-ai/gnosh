@@ -432,6 +432,7 @@ var docPrompts = []struct{ doc, scenario string }{
 	{"GNOMEM.md", "rule-from-the-user.txtar"},
 	{"GNOMEM.md", "wait-on-a-merge.txtar"},
 	{"GNOMEM.md", "remind-on-a-date.txtar"},
+	{"GNOMEM.md", "release-signoff-closes.txtar"},
 }
 
 // quotedProse is a document's prose with block-quote markers, the **You:**
@@ -670,4 +671,18 @@ func TestDocTableRowsAreScenarios(t *testing.T) {
 			t.Logf("%s has no row in GNOMEM's table yet: run it and add one", name)
 		}
 	}
+}
+
+// TestDocUserWordVerdict: GNOMEM quotes the words gnosh itself puts before
+// the reason of a goal met on the user's word (userWordPrefix in
+// internal/agent/goal.go), so a change to them fails here.
+func TestDocUserWordVerdict(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join(repoRoot, "internal", "agent", "goal.go"))
+	require.NoError(t, err)
+	m := regexp.MustCompile(`const userWordPrefix = "([^"]+)"`).FindSubmatch(src)
+	require.NotNil(t, m, "internal/agent/goal.go no longer declares userWordPrefix: find what writes a verdict on the user's word now, and tie GNOMEM to it")
+	doc, err := os.ReadFile(filepath.Join(repoRoot, "GNOMEM.md"))
+	require.NoError(t, err)
+	assert.Contains(t, strings.Join(strings.Fields(string(doc)), " "), "("+strings.TrimSpace(string(m[1]))+" ",
+		"GNOMEM's verdict on the user's word no longer begins as gnosh writes it")
 }
