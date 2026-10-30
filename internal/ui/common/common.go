@@ -62,20 +62,14 @@ func planMarkerLine(line, marker string) bool {
 	return trimmed == marker
 }
 
-// StripPlanReadyMarker removes lines that consist solely of the plan-ready
-// sentinel (matching the detection rule of [PlanReadyMarkerPresent]) so the
-// marker never shows up in rendered chat output. Mentions of the marker
-// inside prose are left untouched. When the marker was wrapped in its own
-// code fence — ``` markers on the lines directly before and after — the
-// fence pair is removed with it so an empty code block is not left behind.
-func StripPlanReadyMarker(text string) string {
-	return stripPlanMarker(text, PlanReadyMarker)
-}
-
 // StripPlanMarkers removes both the plan-start and plan-ready sentinel lines.
 // Use it wherever rendered text could contain either marker, such as the plan
 // card (which strips the trailing ready marker and the leading start marker)
 // or an interrupted plan whose start marker never got its ready companion.
+// Only a line that is the marker alone goes, by the rule of
+// [PlanReadyMarkerPresent]; a mention inside prose stays. When the marker was
+// wrapped in its own code fence — ``` markers on the lines directly before
+// and after — the fence pair goes with it, so no empty code block is left.
 func StripPlanMarkers(text string) string {
 	return stripPlanMarker(stripPlanMarker(text, PlanStartMarker), PlanReadyMarker)
 }

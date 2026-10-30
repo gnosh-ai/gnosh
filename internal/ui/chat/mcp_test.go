@@ -3,9 +3,11 @@ package chat
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/crush/internal/diffdetect"
 )
 
-func TestLooksLikeDiff(t *testing.T) {
+func TestToolOutputDiffDetection(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -135,9 +137,9 @@ No hunk markers at all
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := looksLikeDiff(tt.content)
+			got := diffdetect.IsUnifiedDiff(tt.content)
 			if got != tt.want {
-				t.Errorf("looksLikeDiff() = %v, want %v", got, tt.want)
+				t.Errorf("IsUnifiedDiff() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -384,7 +386,7 @@ diff --git a/two.txt b/two.txt
 	}
 }
 
-func TestLooksLikeDiffVersusMarkdown(t *testing.T) {
+func TestToolOutputDiffDetectionVersusMarkdown(t *testing.T) {
 	t.Parallel()
 
 	// A unified diff should be detected as a diff, not markdown,
@@ -400,7 +402,7 @@ func TestLooksLikeDiffVersusMarkdown(t *testing.T) {
 		" Some content",
 	}, "\n")
 
-	if !looksLikeDiff(diffContent) {
-		t.Error("looksLikeDiff() should detect unified diff")
+	if !diffdetect.IsUnifiedDiff(diffContent) {
+		t.Error("IsUnifiedDiff() should detect unified diff")
 	}
 }

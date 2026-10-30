@@ -40,24 +40,24 @@ func TestPlanReadyMarkerPresent(t *testing.T) {
 	require.False(t, PlanReadyMarkerPresent("I will end with "+PlanReadyMarker+" when done."))
 }
 
-func TestStripPlanReadyMarker(t *testing.T) {
+func TestStripPlanMarkers_ReadyMarkerLines(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "plan", StripPlanReadyMarker("plan\n"+PlanReadyMarker))
-	require.Equal(t, "plan\nnote", StripPlanReadyMarker("plan\n  "+PlanReadyMarker+"  \nnote"))
+	require.Equal(t, "plan", StripPlanMarkers("plan\n"+PlanReadyMarker))
+	require.Equal(t, "plan\nnote", StripPlanMarkers("plan\n  "+PlanReadyMarker+"  \nnote"))
 	// Mentions inside prose are left untouched.
 	prose := "I will end with " + PlanReadyMarker + " when done."
-	require.Equal(t, prose, StripPlanReadyMarker(prose))
-	require.Equal(t, "no marker here", StripPlanReadyMarker("no marker here"))
+	require.Equal(t, prose, StripPlanMarkers(prose))
+	require.Equal(t, "no marker here", StripPlanMarkers("no marker here"))
 	// Inline-code backticks around the marker are stripped with it.
-	require.Equal(t, "plan", StripPlanReadyMarker("plan\n`"+PlanReadyMarker+"`"))
+	require.Equal(t, "plan", StripPlanMarkers("plan\n`"+PlanReadyMarker+"`"))
 	// A fence wrapping only the marker is removed whole, so no empty code
 	// block is left behind.
-	require.Equal(t, "plan", StripPlanReadyMarker("plan\n```\n"+PlanReadyMarker+"\n```"))
+	require.Equal(t, "plan", StripPlanMarkers("plan\n```\n"+PlanReadyMarker+"\n```"))
 	// A real code block above the marker keeps its fences.
 	require.Equal(t,
 		"plan\n```go\nfmt.Println(1)\n```",
-		StripPlanReadyMarker("plan\n```go\nfmt.Println(1)\n```\n"+PlanReadyMarker))
+		StripPlanMarkers("plan\n```go\nfmt.Println(1)\n```\n"+PlanReadyMarker))
 }
 
 func TestPlanStartMarkerPresent(t *testing.T) {
