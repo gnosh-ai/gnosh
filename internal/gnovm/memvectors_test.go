@@ -10,9 +10,11 @@
 package gnovm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"hash/fnv"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -547,4 +549,37 @@ func TestMemRecallSeesAFillThatKeepsTheCount(t *testing.T) {
 	require.Equal(t, 1, n, "as many vectors as before: the new text's in, the old one's out")
 	l.show("s2", []string{"-"})
 	require.Contains(t, l.MemRecall(ctx, "/proj", "s2", "run the testing suite"), "make testing-check")
+}
+
+// A text the server refuses (too long for its batch, say) is sent again
+// cut, and one it still refuses is passed over: it does not keep every row
+// after it from its vector, nor the fill from ending.
+func TestMemFillPassesOverARefusedText(t *testing.T) {
+	t.Parallel()
+	f := newFakeEmbedder(t)
+	refuse := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Input []string `json:"input"`
+		}
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &in)
+		for _, text := range in.Input {
+			if strings.Contains(text, "unembeddable") {
+				http.Error(w, "input is too large to process", http.StatusInternalServerError)
+				return
+			}
+		}
+		r.Body = io.NopCloser(bytes.NewReader(b))
+		f.Config.Handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(refuse.Close)
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	h.embed = newMemEmbedder(refuse.URL + "/v1")
+	memOK(t, h, `mem.Fact("logs/crash", "unembeddable stack trace")`)
+	memOK(t, h, `mem.Fact("cmd/test", "go test ./...")`)
+	memOK(t, h, `mem.Fact("cmd/build", "make build")`)
+	require.NoError(t, fillMemVectorsNow(context.Background(), dir, h.embed))
+	n, _ := memVectorCount(t, dir)
+	require.Equal(t, 2, n, "every row but the refused one")
 }

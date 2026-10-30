@@ -63,8 +63,11 @@ const (
 	// how long the request may take.
 	memEmbedBatch = 32
 	memFillWait   = time.Minute
-	// memEmbedMax cuts what is embedded to about 500 tokens.
+	// memEmbedMax cuts what is embedded to about 500 tokens, and
+	// memQueryMax each part of a search: a prompt of pasted logs is
+	// searched by its start.
 	memEmbedMax = 2000
+	memQueryMax = 1000
 	// memQuery goes before a search's words, as Qwen3-Embedding wants of a
 	// query; what is searched is embedded as it is.
 	memQuery = "Instruct: Given a request to a coding agent, retrieve the notes from its memory that bear on it\nQuery:"
@@ -130,7 +133,7 @@ func (e *memEmbedder) query(ctx context.Context, words string) ([][]int8, string
 	defer cancel()
 	var texts []string
 	for _, q := range memQueries(words) {
-		texts = append(texts, memQuery+memCut(q, memEmbedMax))
+		texts = append(texts, memQuery+memCut(q, memQueryMax))
 	}
 	vecs, model, err := e.embed(ctx, texts)
 	if err != nil {
@@ -238,7 +241,7 @@ func memCut(s string, n int) string {
 
 // memRow is a row of mem's index: an item, fact or rule, with its text.
 type memRow struct {
-	kind, name, title, result, notes, status string
+	kind, name, title, result, wait, notes, status string
 }
 
 // text is what a row is embedded as: its name and text, then its result
@@ -762,11 +765,13 @@ func fillMemVectors(dir string, e *memEmbedder) {
 }
 
 // fillMemVectorsNow makes the vectors mem in dir lacks, a batch at a time,
-// until it lacks none, and then deletes those of texts no row has any more.
-// It holds mem's lock only to read and to write, and stops when the
-// generation changes: an erasure starts the vectors afresh, and what it
-// erased is never embedded after it.
+// until it lacks none the server will make, and then deletes those of texts
+// no row has any more. It holds mem's lock only to read and to write, and
+// checks the journal's generation just before each batch goes out and
+// again before it is kept: an erasure starts the vectors afresh, and what
+// it erased is not sent to the server after it.
 func fillMemVectorsNow(ctx context.Context, dir string, e *memEmbedder) error {
+	refused := map[string]bool{}
 	for {
 		var gen string
 		var todo []memRow
@@ -781,7 +786,7 @@ func fillMemVectorsNow(ctx context.Context, dir string, e *memEmbedder) error {
 				return err
 			}
 			for _, r := range rows {
-				if h := r.hash(); !have[h] {
+				if h := r.hash(); !have[h] && !refused[h] {
 					have[h] = true
 					todo = append(todo, r)
 				}
@@ -799,23 +804,69 @@ func fillMemVectorsNow(ctx context.Context, dir string, e *memEmbedder) error {
 		for len(todo) > 0 {
 			batch := todo[:min(len(todo), memEmbedBatch)]
 			todo = todo[len(batch):]
-			texts := make([]string, len(batch))
-			hashes := make([]string, len(batch))
-			for i, r := range batch {
-				texts[i], hashes[i] = r.text(), r.hash()
+			if hdr, _, err := readJournalHeader(filepath.Join(dir, "journal.jsonl")); err != nil || hdr.Generation != gen {
+				return err
 			}
-			ectx, cancel := context.WithTimeout(ctx, memFillWait)
-			vecs, model, err := e.embed(ectx, texts)
-			cancel()
+			texts := make([]string, len(batch))
+			for i, r := range batch {
+				texts[i] = r.text()
+			}
+			vecs, model, err := e.embedEach(ctx, texts)
 			if err != nil {
 				return err
 			}
+			var hashes []string
+			var made [][]int8
+			for i, r := range batch {
+				if vecs[i] == nil {
+					refused[r.hash()] = true
+					continue
+				}
+				hashes, made = append(hashes, r.hash()), append(made, vecs[i])
+			}
 			kept, err := atMem(ctx, dir, gen, func(_ string, _ *memIndex, v *memVectors) error {
-				return v.put(model, hashes, vecs)
+				return v.put(model, hashes, made)
 			})
 			if err != nil || !kept {
 				return err
 			}
 		}
 	}
+}
+
+// embedEach is embed for a fill: when the server refuses the batch, each
+// text is sent alone, and one it refuses alone is sent again cut to a
+// quarter (a server's batch can be shorter than memEmbedMax's tokens; a
+// text of code or logs runs long). A text it still refuses has no vector,
+// and nil in its place; when it refuses them all, it is down, and that is
+// the error.
+func (e *memEmbedder) embedEach(ctx context.Context, texts []string) ([][]int8, string, error) {
+	embed := func(texts []string) ([][]int8, string, error) {
+		ectx, cancel := context.WithTimeout(ctx, memFillWait)
+		defer cancel()
+		return e.embed(ectx, texts)
+	}
+	vecs, model, err := embed(texts)
+	if err == nil || len(texts) == 1 && len(texts[0]) <= memEmbedMax/4 {
+		return vecs, model, err
+	}
+	vecs = make([][]int8, len(texts))
+	made := 0
+	for i, t := range texts {
+		for _, try := range []string{t, memCut(t, memEmbedMax/4)} {
+			one, m, err1 := embed([]string{try})
+			if err1 == nil {
+				vecs[i], model = one[0], m
+				made++
+				break
+			}
+			if len(try) <= memEmbedMax/4 {
+				break
+			}
+		}
+	}
+	if made == 0 {
+		return nil, "", err
+	}
+	return vecs, model, nil
 }

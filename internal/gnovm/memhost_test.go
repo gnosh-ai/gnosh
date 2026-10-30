@@ -834,3 +834,36 @@ func TestMemStatusIsAHookInterface(t *testing.T) {
 	_, err = os.Stat(filepath.Dir(elsewhere))
 	require.ErrorIs(t, err, os.ErrNotExist, "naming it makes nothing")
 }
+
+// A goal whose title runs on past another's, "Support json|yaml" past
+// "Support json", is not taken for it: titles are matched whole.
+func TestMemTitlesMatchWhole(t *testing.T) {
+	t.Parallel()
+	h := newTestMemHost(t, t.TempDir())
+	memOK(t, h, `mem.Goal("Support json|yaml", "json-yaml")`)
+	res := memOK(t, h, `mem.Goal("Support json")`)
+	require.Contains(t, res.Output, "added goal `support-json`")
+	_, err := h.call(context.Background(), memRequest{Code: `mem.Goal("support JSON")`, Session: "s1"})
+	require.ErrorContains(t, err, "`support-json` \"Support json\"")
+}
+
+// A status.json of another generation, as a crash in an erasure could
+// leave, is not read: it may show what the erasure took.
+func TestMemStatusOfAnotherGenerationIsNotRead(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	memOK(t, h, `mem.Fact("cmd/test", "go test ./...")`)
+	_, ok := readMemStatus(dir)
+	require.True(t, ok)
+	b, err := os.ReadFile(filepath.Join(dir, memStatusFile))
+	require.NoError(t, err)
+	var st memStatus
+	require.NoError(t, json.Unmarshal(b, &st))
+	st.Generation = "an-older-one"
+	b, err = json.Marshal(st)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, memStatusFile), b, 0o600))
+	_, ok = readMemStatus(dir)
+	require.False(t, ok)
+}

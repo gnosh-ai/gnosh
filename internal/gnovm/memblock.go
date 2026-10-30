@@ -232,6 +232,11 @@ func readMemStatus(dir string) (st memStatus, ok bool) {
 	if err != nil || json.Unmarshal(b, &st) != nil {
 		return memStatus{}, false
 	}
+	// One of another generation is from before an erasure, which may have
+	// taken what it shows: it is not read.
+	if hdr, _, err := readJournalHeader(filepath.Join(dir, "journal.jsonl")); err != nil || hdr.Generation != st.Generation {
+		return memStatus{}, false
+	}
 	return st, true
 }
 

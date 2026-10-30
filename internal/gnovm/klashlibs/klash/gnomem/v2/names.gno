@@ -336,11 +336,15 @@ func like(suggestion, example string) string {
 // titled is the name of the open goal titled title, or "": one lookup in
 // the titles index.
 func (m *Mem) titled(title string) string {
-	found := ""
-	want := sameTitle(title) + "|"
-	m.titles.Iterate(want, want+"\xff", func(_ string, v any) bool {
-		found = v.(string)
-		return true
+	// Keys run title, "|", name: a title with a "|" of its own, "Support
+	// json|yaml", falls in the range of "Support json", so each is
+	// compared whole.
+	found, want := "", sameTitle(title)
+	m.titles.Iterate(want+"|", want+"|\xff", func(_ string, v any) bool {
+		if n := v.(string); sameTitle(m.get(n).Title) == want {
+			found = n
+		}
+		return found != ""
 	})
 	return found
 }

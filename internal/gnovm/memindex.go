@@ -269,7 +269,7 @@ func (x *memIndex) holding(words []string, max int) ([]memRow, error) {
 	var out []memRow
 	for i := len(rows) - 1; i >= 0 && len(out) < max; i-- {
 		r := rows[i]
-		text := r.name + "\n" + r.title + "\n" + r.result + "\n" + r.notes
+		text := r.name + "\n" + r.title + "\n" + r.result + "\n" + r.wait + "\n" + r.notes
 		if !slices.ContainsFunc(res, func(re *regexp.Regexp) bool { return !re.MatchString(text) }) {
 			out = append(out, memRow{kind: r.kind, name: r.name})
 		}
@@ -279,7 +279,7 @@ func (x *memIndex) holding(words []string, max int) ([]memRow, error) {
 
 // rows is every row of the index, in the order they were made.
 func (x *memIndex) rows() ([]memRow, error) {
-	rows, err := x.db.Query(`SELECT n.kind, n.name, d.title, d.result, d.notes, d.status FROM names n JOIN docs d ON d.rowid = n.id ORDER BY n.id`)
+	rows, err := x.db.Query(`SELECT n.kind, n.name, d.title, d.result, d.wait, d.notes, d.status FROM names n JOIN docs d ON d.rowid = n.id ORDER BY n.id`)
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +287,7 @@ func (x *memIndex) rows() ([]memRow, error) {
 	var out []memRow
 	for rows.Next() {
 		var r memRow
-		if err := rows.Scan(&r.kind, &r.name, &r.title, &r.result, &r.notes, &r.status); err != nil {
+		if err := rows.Scan(&r.kind, &r.name, &r.title, &r.result, &r.wait, &r.notes, &r.status); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

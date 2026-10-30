@@ -251,6 +251,12 @@ func (h *memHost) erase(res memResult, j *journal, e *memEntry, er memErasure) (
 	}
 	entries, gone := erase(append(entries, *e), er)
 	res.Renamed, res.Erased = gone.Renamed, &gone
+	// status.json may hold an old name, or the text: it goes before the
+	// journal is written again, so no crash between the two leaves it.
+	if err := os.Remove(filepath.Join(h.dir, memStatusFile)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		res.Ops = nil
+		return res, err
+	}
 	nj, err := rewriteMemJournal(j.path, j.instance, entries, h.now())
 	if err != nil {
 		res.Ops = nil
@@ -258,8 +264,6 @@ func (h *memHost) erase(res memResult, j *journal, e *memEntry, er memErasure) (
 	}
 	res.Seq = e.Seq
 	res.Notes = append(res.Notes, "mem's journal was written again without what was erased; its store and index are built afresh from it")
-	// status.json may hold an old name, or the text.
-	_ = os.Remove(filepath.Join(h.dir, memStatusFile))
 	h.removeOtherGenerations(nj.generation)
 	r, j, _, err := h.open()
 	if err == nil {
@@ -453,8 +457,10 @@ func (h *memHost) open() (r *memRealm, j *journal, notes []string, err error) {
 // "" when nothing does.
 func (h *memHost) checkRebuild(r *memRealm, j *journal) string {
 	var differs []string
-	if call, err := r.call(`print(mem.Check())`, memContext{caller: "klash"}); err != nil || call.Output != "" {
-		differs = append(differs, "its check found "+strconv.Quote(strings.TrimSpace(call.Output+fmt.Sprint(err))))
+	if call, err := r.call(`print(mem.Check())`, memContext{caller: "klash"}); err != nil {
+		differs = append(differs, "its check failed: "+err.Error())
+	} else if call.Output != "" {
+		differs = append(differs, "its check found "+strconv.Quote(strings.TrimSpace(call.Output)))
 	}
 	if st, ok := readMemStatus(h.dir); ok && st.Generation == j.generation && st.Seq == j.seq {
 		var before, after struct {
