@@ -265,28 +265,6 @@ func (v *vm) names() map[string]bool {
 	return have
 }
 
-// boardPkg is the package whose Board reads (Show, String) change nothing.
-const boardPkg = "klash/gnomem/v1"
-
-// isBoard reports whether the package's variable name is a gnomem Board
-// (or a pointer to one): its Show and String only read.
-func (v *vm) isBoard(name string) (ok bool) {
-	defer func() {
-		if recover() != nil {
-			ok = false
-		}
-	}()
-	if !v.names()[name] {
-		return false
-	}
-	t := v.pn.GetStaticTypeOf(v.m.Store, gno.Name(name))
-	if pt, isPtr := t.(*gno.PointerType); isPtr {
-		t = pt.Elt
-	}
-	dt, isDecl := t.(*gno.DeclaredType)
-	return isDecl && dt.PkgPath == boardPkg && dt.Name == "Board"
-}
-
 // shadowsBuiltin reports whether the package declares a name that
 // normalize takes for a pure builtin, so an evaluation that calls it may
 // change state after all.

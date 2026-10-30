@@ -116,14 +116,9 @@ type program struct {
 	main string
 	// readOnly marks the ops that only read, aligned with ops: they change
 	// nothing, so they need not be journaled. An eval is read-only if it is
-	// pure, or reads a gnomem board; statements are, if they only print
-	// literals and boards. The VM must confirm that each of reads names a
-	// board (vm.isBoard), and that no builtin is redeclared.
+	// pure; statements are, if they only print literals. The VM must
+	// confirm that no builtin is redeclared.
 	readOnly []bool
-	reads    []string
-	// boardEval is set if the trailing eval reads a board: its value, the
-	// outline, is shown as it is rather than quoted.
-	boardEval bool
 	// usesFmt is set if a read-only op prints with fmt, which counts as a
 	// read only if the VM's fmt is the real package.
 	usesFmt bool
@@ -620,33 +615,20 @@ func (p *program) addLHS(names []string) {
 	}
 }
 
-// readOnlyEval reports whether an eval only reads: it is pure, or reads a
-// board (boardRead).
+// readOnlyEval reports whether an eval only reads: it is pure.
 func (p *program) readOnlyEval(expr string) bool {
 	x, err := parser.ParseExpr(expr)
-	if err != nil {
-		return false
-	}
-	if pureExpr(x) {
-		return true
-	}
-	if recv, ok := boardRead(x); ok {
-		p.reads = append(p.reads, recv)
-		p.boardEval = true
-		return true
-	}
-	return false
+	return err == nil && pureExpr(x)
 }
 
-// printsOnly reports whether statements only print: each is a call of
-// print, println or fmt.Print*, whose operands are literals or boards
-// (printing a board runs its String method, which reads).
+// printsOnly reports whether statements only print literals: each is a
+// call of print, println or fmt.Print* whose operands are literals. (A
+// value printed may have a String method that changes state.)
 func (p *program) printsOnly(stmts string) bool {
 	body, _ := parseStmts(stmts)
 	if len(body) == 0 {
 		return false
 	}
-	var reads []string
 	for _, st := range body {
 		es, ok := st.(*ast.ExprStmt)
 		if !ok || !printCall(es.X) {
@@ -656,51 +638,12 @@ func (p *program) printsOnly(stmts string) bool {
 			p.usesFmt = true
 		}
 		for _, a := range es.X.(*ast.CallExpr).Args {
-			switch a := a.(type) {
-			case *ast.BasicLit:
-			case *ast.Ident:
-				reads = append(reads, a.Name)
-			default:
-				recv, ok := boardRead(a)
-				if !ok {
-					return false
-				}
-				reads = append(reads, recv)
+			if _, lit := a.(*ast.BasicLit); !lit {
+				return false
 			}
 		}
 	}
-	p.reads = append(p.reads, reads...)
 	return true
-}
-
-// boardRead recognises a read of a gnomem board: R.Show(ids...) with pure
-// arguments, or R.String(). It returns R, which the VM must confirm is a
-// board.
-func boardRead(x ast.Expr) (string, bool) {
-	call, ok := x.(*ast.CallExpr)
-	if !ok {
-		return "", false
-	}
-	sel, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok {
-		return "", false
-	}
-	recv, ok := sel.X.(*ast.Ident)
-	if !ok {
-		return "", false
-	}
-	switch sel.Sel.Name {
-	case "String":
-		return recv.Name, len(call.Args) == 0
-	case "Show":
-		for _, a := range call.Args {
-			if !pureExpr(a) {
-				return "", false
-			}
-		}
-		return recv.Name, true
-	}
-	return "", false
 }
 
 // printCall reports whether x calls print, println or fmt.Print*.

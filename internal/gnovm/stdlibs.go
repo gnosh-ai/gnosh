@@ -129,8 +129,8 @@ func libraryPaths() []string {
 
 // ImportablePackages lists the packages a VM may import, besides fmt: the
 // standard library less what VMs refuse (see unavailablePackage) and the
-// internal packages, and gnosh's own for models (klash/gnomem/v1,
-// klash/bptree/v0; klash/gnomem/v2 is mem's realm's alone).
+// internal packages, and gnosh's own for models (klash/bptree/v0;
+// klash/gnomem/v2 is mem's realm's alone).
 func ImportablePackages() []string {
 	var out []string
 	for _, p := range libraryPaths() {

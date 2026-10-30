@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go/token"
 	"math"
 	"os"
 	"path/filepath"
@@ -815,11 +814,6 @@ func (h *Host) runResident(ctx context.Context, s *vmState, v *vm, req RunReques
 			return nil, err
 		}
 	}
-	// A board on its own shows as its outline, not as a dump of its fields.
-	if n := len(prog.ops); n > 0 && token.IsIdentifier(prog.ops[n-1].Eval) && v.isBoard(prog.ops[n-1].Eval) {
-		prog.ops[n-1].Eval += ".Show()"
-		prog.boardEval = true
-	}
 	ops, imported, err := h.importOps(v, prog)
 	if err != nil {
 		return nil, err
@@ -838,12 +832,6 @@ func (h *Host) runResident(ctx context.Context, s *vmState, v *vm, req RunReques
 	res.Wall = time.Since(start)
 	res.Gas, res.Value, res.Output = used, value, v.out.String()
 	res.MemUsed, res.MemCap = v.memory()
-	if prog.boardEval && readOnly != nil {
-		// A board's outline is shown as it is, not as a quoted string.
-		if raw, err := strconv.Unquote(value); err == nil {
-			res.Value = strings.TrimRight(raw, "\n")
-		}
-	}
 	if runErr != nil {
 		// Nothing is journaled, and a VM that ran code is rebuilt.
 		if v.unusable {
@@ -1003,8 +991,7 @@ func journaledOps(ops []op, readOnly []bool) []op {
 
 // readOnlyOps marks the ops of an input, after its n-len(prog.ops) import
 // ops, that only read (see program.readOnly), or returns nil if none may be
-// trusted to: when the VM has redeclared a builtin that made one look pure,
-// or a board read's receiver is not a gnomem board.
+// trusted to: when the VM has redeclared a builtin that made one look pure.
 func readOnlyOps(v *vm, prog *program, n int) []bool {
 	if v.shadowsBuiltin() {
 		return nil
@@ -1013,11 +1000,6 @@ func readOnlyOps(v *vm, prog *program, n int) []bool {
 	// state, is not the package.
 	if prog.usesFmt && v.imports["fmt"] != "fmt" {
 		return nil
-	}
-	for _, name := range prog.reads {
-		if !v.isBoard(name) {
-			return nil
-		}
 	}
 	ro := make([]bool, n)
 	copy(ro[n-len(prog.ops):], prog.readOnly)

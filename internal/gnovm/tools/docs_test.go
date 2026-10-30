@@ -31,7 +31,7 @@ import (
 // call shows the model: everything above the status line. The status line
 // (gas and time, which vary from run to run) and notes are left out. Each
 // block runs on a fresh project, call by call, through the real tool, so a
-// change to what the board prints names the example that no longer says what
+// change to what mem prints names the example that no longer says what
 // Gnosh does. Every call in a block is checked, so one run lists every
 // example that has drifted, not only the first.
 //
