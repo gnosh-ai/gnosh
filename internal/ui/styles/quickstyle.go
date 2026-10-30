@@ -958,6 +958,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Files.SectionTitle = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
 	s.Files.EmptyMessage = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
 	s.Files.TruncationHint = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
+	s.Files.ArtifactLabel = lipgloss.NewStyle().Foreground(o.fgBase)
 
 	// Sidebar
 	s.Sidebar.SessionTitle = lipgloss.NewStyle().Foreground(o.fgMoreSubtle)

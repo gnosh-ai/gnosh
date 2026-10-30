@@ -5,10 +5,16 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/ui/attachments"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/dialog"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -110,9 +116,9 @@ func TestArtifactList(t *testing.T) {
 		arts := []SessionArtifact{
 			{Label: "hebrew ad video", Target: "~/Downloads/video_a_v5.mp4", CreatedAt: 1},
 		}
-		got := stripANSI(artifactList(st, arts, 60, 10, noPending))
-		require.Contains(t, got, "hebrew ad video")
-		require.Contains(t, got, "video_a_v5.mp4")
+		got, _ := artifactList(st, arts, 60, 10, noPending)
+		require.Contains(t, stripANSI(got), "hebrew ad video")
+		require.Contains(t, stripANSI(got), "video_a_v5.mp4")
 	})
 
 	t.Run("every line fits the sidebar width", func(t *testing.T) {
@@ -121,8 +127,8 @@ func TestArtifactList(t *testing.T) {
 		arts := []SessionArtifact{
 			{Label: "a very long deliverable label that overflows the column", Target: "https://example.com/a/very/long/url/that/keeps/going", CreatedAt: 1},
 		}
-		got := stripANSI(artifactList(st, arts, 12, 10, noPending))
-		for _, line := range strings.Split(got, "\n") {
+		got, _ := artifactList(st, arts, 12, 10, noPending)
+		for _, line := range strings.Split(stripANSI(got), "\n") {
 			require.LessOrEqual(t, lipgloss.Width(line), 12, "line exceeds sidebar width: %q", line)
 		}
 	})
@@ -135,27 +141,237 @@ func TestArtifactList(t *testing.T) {
 			{Label: "beta", Target: "/b", CreatedAt: 2},
 			{Label: "gamma", Target: "/c", CreatedAt: 1},
 		}
-		got := stripANSI(artifactList(st, arts, 40, 2, noPending))
-		require.Contains(t, got, "alpha")
-		require.Contains(t, got, "beta")
-		require.NotContains(t, got, "gamma")
-		require.Contains(t, got, "and 1 more")
+		got, rows := artifactList(st, arts, 40, 2, noPending)
+		require.Contains(t, stripANSI(got), "alpha")
+		require.Contains(t, stripANSI(got), "beta")
+		require.NotContains(t, stripANSI(got), "gamma")
+		require.Contains(t, stripANSI(got), "and 1 more")
+		require.Len(t, rows, 2, "only what is shown can be clicked")
 	})
 
-	t.Run("applies nebula styling", func(t *testing.T) {
+	// Jae, 2026-10-30: "i don't like how 'hebrew ad video' is
+	// multicolored". The label is one color, not a fade of many.
+	t.Run("the label is one color", func(t *testing.T) {
 		t.Parallel()
 		st := minimalFileStyles()
-		arts := []SessionArtifact{{Label: "deliverable", Target: "/x.mp4", CreatedAt: 1}}
-		got := artifactList(st, arts, 60, 10, noPending)
-		require.NotEqual(t, stripANSI(got), got, "label should be color-styled (gradient), not plain text")
+		arts := []SessionArtifact{{Label: "hebrew ad video", Target: "/x.mp4", CreatedAt: 1}}
+		got, _ := artifactList(st, arts, 60, 10, noPending)
+		label := strings.Split(got, "\n")[0]
+		require.Contains(t, stripANSI(label), "hebrew ad video")
+		require.Equal(t, 1, strings.Count(label, "\x1b[38;"), "one foreground color for the whole label: %q", label)
 	})
 
 	t.Run("max items zero returns empty", func(t *testing.T) {
 		t.Parallel()
 		st := minimalFileStyles()
-		got := artifactList(st, []SessionArtifact{{Label: "x", Target: "/x"}}, 40, 0, noPending)
+		got, rows := artifactList(st, []SessionArtifact{{Label: "x", Target: "/x"}}, 40, 0, noPending)
 		require.Empty(t, got)
+		require.Empty(t, rows)
 	})
+}
+
+// servedURL is where the artifact server serves a video, as long as the
+// URLs it hands out are.
+const servedURL = "http://127.0.0.1:7777/0123456789abcdef0123456789abcdef/video_a_v14e.mp4"
+
+// textLines is what the user reads of rendered: its lines, without
+// styling or hyperlinks, and without the indent under the marker.
+func textLines(rendered string) []string {
+	var out []string
+	for _, line := range strings.Split(ansi.Strip(rendered), "\n") {
+		out = append(out, strings.TrimSpace(line))
+	}
+	return out
+}
+
+// Jae, 2026-10-30: "the file name is clipped with '...'". A URL or path
+// too long for the sidebar wraps onto more lines, at its slashes, and is
+// never cut short.
+func TestArtifactList_ShowsTheWholeURLAndPath(t *testing.T) {
+	t.Parallel()
+
+	st := minimalFileStyles()
+	path := "/root/renders/fromhebrew-ad/final/video_a_v14e_with_captions.mp4"
+	arts := []SessionArtifact{
+		{Label: "hebrew ad video", Target: "/root/renders/video_a_v14e.mp4", URL: servedURL, CreatedAt: 2},
+		{Label: "captioned video", Target: path, CreatedAt: 1},
+	}
+	// 29 is the sidebar's content width.
+	got, rows := artifactList(st, arts, 29, 10, noPending)
+	lines := textLines(got)
+	require.NotContains(t, ansi.Strip(got), "…", "nothing is cut short")
+	for _, line := range strings.Split(ansi.Strip(got), "\n") {
+		require.LessOrEqual(t, lipgloss.Width(line), 29, "line exceeds the sidebar: %q", line)
+	}
+
+	require.Len(t, rows, 2)
+	url := lines[rows[0].first+1 : rows[0].last+1]
+	require.Greater(t, len(url), 1, "the URL is longer than a line, so it wraps")
+	require.Equal(t, servedURL, strings.Join(url, ""), "all of the URL is shown, in order")
+	require.Equal(t, "http://127.0.0.1:7777/", url[0], "it breaks at a slash where it can")
+	require.Equal(t, "video_a_v14e.mp4", url[len(url)-1][strings.LastIndex(url[len(url)-1], "/")+1:], "the file name is whole")
+
+	shown := lines[rows[1].first+1 : rows[1].last+1]
+	require.Equal(t, path, strings.Join(shown, ""))
+}
+
+// Every line of an artifact with a URL — its label and each piece of the
+// URL — links to the whole URL, so a terminal that knows hyperlinks opens
+// it from whichever line is clicked. A path links nowhere: it only means
+// something on this machine.
+func TestArtifactList_EveryPieceOfAURLLinksToAllOfIt(t *testing.T) {
+	t.Parallel()
+
+	st := minimalFileStyles()
+	arts := []SessionArtifact{
+		{Label: "hebrew ad video", Target: "/root/renders/video_a_v14e.mp4", URL: servedURL, CreatedAt: 2},
+		{Label: "script", Target: "/home/crush/src/fromhebrewad/script.md", CreatedAt: 1},
+	}
+	got, rows := artifactList(st, arts, 29, 10, noPending)
+	scr := uv.NewScreenBuffer(29, lipgloss.Height(got))
+	uv.NewStyledString(got).Draw(scr, scr.Bounds())
+
+	// links is where each character of line y links to, past the marker
+	// and its space.
+	links := func(y int) (urls []string) {
+		for x := 2; x < 29; x++ {
+			if c := scr.CellAt(x, y); c != nil && strings.TrimSpace(c.Content) != "" {
+				urls = append(urls, c.Link.URL)
+			}
+		}
+		return urls
+	}
+	for y := rows[0].first; y <= rows[0].last; y++ {
+		urls := links(y)
+		require.NotEmpty(t, urls, "line %d is empty", y)
+		for _, u := range urls {
+			require.Equal(t, servedURL, u, "line %d links to the wrong place", y)
+		}
+	}
+	for y := rows[1].first; y <= rows[1].last; y++ {
+		for _, u := range links(y) {
+			require.Empty(t, u, "a path is not a link")
+		}
+	}
+}
+
+// sidebarUI is a UI whose sidebar shows three artifacts — one served at a
+// URL, one with only a path, one still pending — drawn on scr.
+func sidebarUI(t *testing.T, height int) (*UI, uv.ScreenBuffer) {
+	t.Helper()
+	u := newTestUI()
+	u.height = height
+	u.dialog = dialog.NewOverlay()
+	u.attachments = attachments.New(attachments.NewRenderer(u.com.Styles.Attachments), attachments.Keymap{})
+	u.com.Workspace = &exportWorkspace{dir: t.TempDir()}
+	u.session = &session.Session{ID: "s1", Title: "hebrew ad"}
+	u.sessionArtifacts = []SessionArtifact{
+		{Label: "hebrew ad video", Target: "/root/renders/video_a_v14e.mp4", URL: servedURL, CreatedAt: 3},
+		{Label: "script", Target: "/home/crush/src/fromhebrewad/script.md", CreatedAt: 2},
+		{Label: "subtitles", Pending: true, CreatedAt: 1},
+	}
+	u.updateLayoutAndSize()
+	return u, drawSidebarOf(u)
+}
+
+// drawSidebarOf draws u's sidebar as the UI does, on a screen of u's size.
+func drawSidebarOf(u *UI) uv.ScreenBuffer {
+	scr := uv.NewScreenBuffer(u.width, u.height)
+	u.updateSidebarScrollState()
+	u.drawSidebar(scr, u.layout.sidebar)
+	return scr
+}
+
+// rowShowing is the screen row on which the sidebar shows text, or -1.
+func rowShowing(u *UI, scr uv.ScreenBuffer, text string) int {
+	area := u.layout.sidebar
+	for y := area.Min.Y; y < area.Max.Y; y++ {
+		var b strings.Builder
+		for x := area.Min.X; x < area.Max.X; x++ {
+			if c := scr.CellAt(x, y); c != nil {
+				b.WriteString(c.Content)
+			}
+		}
+		if strings.Contains(b.String(), text) {
+			return y
+		}
+	}
+	return -1
+}
+
+// recordCopies makes copying to the clipboard record what it was given
+// instead, for the rest of the test.
+func recordCopies(t *testing.T) *[]string {
+	t.Helper()
+	var copied []string
+	prev := copyToClipboard
+	copyToClipboard = func(text, _ string) tea.Cmd {
+		copied = append(copied, text)
+		return nil
+	}
+	t.Cleanup(func() { copyToClipboard = prev })
+	return &copied
+}
+
+// Jae, 2026-10-30: "is it possible to make the sidebar artifact url
+// clickable? or at least click url to copy to clipboard so i can paste on
+// my browser?" A click on any line of an artifact copies what opens it:
+// its URL, or its path when nothing serves it. A pending artifact, and a
+// line that is no artifact's, copy nothing.
+func TestSidebarClickCopiesTheArtifact(t *testing.T) {
+	copied := recordCopies(t)
+	u, scr := sidebarUI(t, 45)
+	click := func(text string, button uv.MouseButton) []string {
+		t.Helper()
+		y := rowShowing(u, scr, text)
+		require.GreaterOrEqual(t, y, 0, "the sidebar does not show %q", text)
+		*copied = nil
+		_, _ = u.Update(tea.MouseClickMsg(tea.Mouse{X: u.layout.sidebar.Min.X + 3, Y: y, Button: button}))
+		return *copied
+	}
+
+	for _, text := range []string{"hebrew ad video", "http://127.0.0.1:7777/", "video_a_v14e.mp4"} {
+		require.Equal(t, []string{servedURL}, click(text, uv.MouseLeft), "a click on %q", text)
+	}
+	require.Empty(t, click("video_a_v14e.mp4", uv.MouseRight), "only the left button copies")
+	require.Equal(t, []string{"/home/crush/src/fromhebrewad/script.md"}, click("script.md", uv.MouseLeft))
+	require.Empty(t, click("subtitles", uv.MouseLeft), "a pending artifact has nothing to copy")
+	require.Empty(t, click("Artifacts", uv.MouseLeft))
+	require.Empty(t, click("Modified Files", uv.MouseLeft))
+}
+
+// The sidebar's content scrolls under its logo, and a click still finds
+// the artifact it lands on.
+func TestSidebarClickFindsTheArtifactWhenScrolled(t *testing.T) {
+	copied := recordCopies(t)
+	u, _ := sidebarUI(t, 31)
+	require.True(t, u.sidebarScrollable, "the test needs a sidebar that scrolls")
+
+	scrolled := 0
+	for offset := 0; offset <= u.sidebarMaxOffsetVal; offset++ {
+		u.sidebarOffset = offset
+		scr := drawSidebarOf(u)
+		y := rowShowing(u, scr, "script.md")
+		if y < 0 {
+			continue
+		}
+		*copied = nil
+		_, _ = u.Update(tea.MouseClickMsg(tea.Mouse{X: u.layout.sidebar.Min.X + 3, Y: y, Button: uv.MouseLeft}))
+		require.Equal(t, []string{"/home/crush/src/fromhebrewad/script.md"}, *copied, "scrolled %d lines", offset)
+		if offset > 0 {
+			scrolled++
+		}
+	}
+	require.NotZero(t, scrolled, "no click landed on a scrolled sidebar")
+}
+
+// What a click copied is said in words, naming the artifact.
+func TestArtifactCopied(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, `Copied the URL of "hebrew ad video": `+servedURL,
+		artifactCopied(SessionArtifact{Label: "hebrew ad video", Target: "/v.mp4", URL: servedURL}))
+	require.Equal(t, `Copied the path of "script" (it has no URL): /s.md`,
+		artifactCopied(SessionArtifact{Label: "script", Target: "/s.md"}))
 }
 
 // artifactResult is the tool's answer to a recorded artifact, which
@@ -263,12 +479,12 @@ func TestArtifactList_PendingShowsTheAnimation(t *testing.T) {
 
 	st := minimalFileStyles()
 	arts := []SessionArtifact{{Label: "hebrew ad video", Pending: true, CreatedAt: 1}}
-	got := stripANSI(artifactList(st, arts, 60, 10, func(label string) string {
+	got, _ := artifactList(st, arts, 60, 10, func(label string) string {
 		require.Equal(t, "hebrew ad video", label, "each pending artifact animates under its own label")
 		return "@#$sodF"
-	}))
-	require.Contains(t, got, "hebrew ad video")
-	require.Contains(t, got, "@#$sodF")
+	})
+	require.Contains(t, stripANSI(got), "hebrew ad video")
+	require.Contains(t, stripANSI(got), "@#$sodF")
 }
 
 // The animations are kept per pending label and let go once the

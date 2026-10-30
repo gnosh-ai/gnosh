@@ -306,6 +306,7 @@ type Styles struct {
 		SectionTitle   lipgloss.Style // "Modified Files" heading
 		EmptyMessage   lipgloss.Style // "None" placeholder when no files
 		TruncationHint lipgloss.Style // "…and N more" message
+		ArtifactLabel  lipgloss.Style // an artifact's name in the sidebar's Artifacts section
 	}
 
 	// Chat

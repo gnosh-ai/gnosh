@@ -423,6 +423,10 @@ type UI struct {
 	sidebarContentWidth     int    // available width for sidebar content
 	sidebarDrawLogo         string // logo to render (may differ from sidebarLogo for short heights)
 
+	// sidebarArtifacts is the lines of sidebarContent each artifact
+	// takes, for a click on the sidebar to find the one it landed on.
+	sidebarArtifacts []artifactRows
+
 	// Notification state
 	notifyBackend       notification.Backend
 	notifyWindowFocused bool
@@ -1604,6 +1608,8 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						cmds = append(cmds, cmd)
 					}
 				}
+			} else if cmd := m.copyArtifactAt(msg); cmd != nil {
+				cmds = append(cmds, cmd)
 			}
 		}
 

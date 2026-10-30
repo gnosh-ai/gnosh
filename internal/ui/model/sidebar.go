@@ -73,12 +73,7 @@ func (m *UI) updateSidebarScrollState() {
 		}), "")
 	}
 
-	var logoRect, contentRect image.Rectangle
-	layout.Vertical(
-		layout.Len(lipgloss.Height(sidebarLogo)),
-		layout.Fill(1),
-	).Split(m.layout.sidebar).Assign(&logoRect, &contentRect)
-
+	_, contentRect := sidebarRects(m.layout.sidebar, sidebarLogo)
 	contentHeight := contentRect.Dy()
 
 	// Render all items without truncation; virtual scrolling handles overflow.
@@ -86,7 +81,7 @@ func (m *UI) updateSidebarScrollState() {
 	mcpSection := m.mcpInfo(contentWidth, mcpCount(m.com.Config().MCP.Sorted(), m.mcpStates), true)
 	skillsSection := m.skillsInfo(contentWidth, len(m.skillStatusItems()), true)
 	filesSection := m.filesInfo(m.com.Workspace.WorkingDir(), contentWidth, fileChangeCount(m.sessionFiles), true)
-	artifactsSection := m.artifactsInfo(contentWidth, len(m.sessionArtifacts), true)
+	artifactsSection, artifactRows := m.artifactsInfo(contentWidth, len(m.sessionArtifacts), true)
 
 	// Build the scrollable content. The Artifacts section sits above the
 	// modified files, and only appears once the agent has tagged one.
@@ -98,7 +93,15 @@ func (m *UI) updateSidebarScrollState() {
 		m.modelInfo(contentWidth),
 		"",
 	}
+	m.sidebarArtifacts = m.sidebarArtifacts[:0]
 	if len(m.sessionArtifacts) > 0 {
+		// Where each artifact lands in the content, for a click to find.
+		top := lipgloss.Height(lipgloss.JoinVertical(lipgloss.Left, parts...))
+		for _, r := range artifactRows {
+			r.first += top
+			r.last += top
+			m.sidebarArtifacts = append(m.sidebarArtifacts, r)
+		}
 		parts = append(parts, artifactsSection, "")
 	}
 	parts = append(parts,
@@ -147,11 +150,7 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 	contentHeight := m.sidebarContentHeight
 	totalLines := m.sidebarTotalLines
 
-	var logoRect, contentRect image.Rectangle
-	layout.Vertical(
-		layout.Len(lipgloss.Height(sidebarLogo)),
-		layout.Fill(1),
-	).Split(area).Assign(&logoRect, &contentRect)
+	logoRect, contentRect := sidebarRects(area, sidebarLogo)
 
 	// Slice visible lines.
 	end := min(m.sidebarOffset+contentHeight, totalLines)
@@ -190,6 +189,16 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 			uv.NewStyledString(scrollbar).Draw(scr, scrollbarArea)
 		}
 	}
+}
+
+// sidebarRects splits the sidebar's area into the fixed logo at its top
+// and, under it, the part its content scrolls in.
+func sidebarRects(area image.Rectangle, logo string) (logoRect, contentRect image.Rectangle) {
+	layout.Vertical(
+		layout.Len(lipgloss.Height(logo)),
+		layout.Fill(1),
+	).Split(area).Assign(&logoRect, &contentRect)
+	return logoRect, contentRect
 }
 
 // fileChangeCount returns the number of session files with non-zero additions

@@ -297,7 +297,16 @@ or failed without saying so. The ones you will notice:
   deliverables the agent produced — a rendered video to open, a report, a URL
   to share. The agent tags one with the `artifact` tool; re-using a label
   replaces the old entry, so the sidebar shows the latest version of a thing,
-  not every version it went through.
+  not every version it went through. Klash serves each one at a URL on
+  `127.0.0.1:7777` (the `artifact_server` option moves it or turns it off).
+  When Klash runs on another machine, `LocalForward 7777 127.0.0.1:7777` in
+  your `~/.ssh/config` entry for it brings those URLs to yours.
+- Click an artifact to copy its URL and paste it into your browser. In a
+  terminal that shows hyperlinks every line of it is also a link, opened the
+  way the terminal opens links (<kbd>Cmd</kbd>-click in Ghostty and iTerm2).
+  Inside tmux, each takes a line of `~/.tmux.conf`:
+  `set -g set-clipboard on` for the copy, and
+  `set -as terminal-features ",xterm*:hyperlinks"` for the link.
 - <kbd>Tab</kbd> cycles focus editor → chat → sidebar, so you can scroll the
   sidebar to read its artifacts and changed files from the keyboard.
 - <kbd>Ctrl</kbd>+<kbd>b</kbd> toggles the sidebar. Inside tmux that is also

@@ -4,15 +4,19 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"image"
 	"slices"
+	"strconv"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/anim"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -185,9 +189,18 @@ func (m *UI) upsertArtifactsFromMessage(msg message.Message) bool {
 	return true
 }
 
+// artifactRows is where an artifact is drawn in the Artifacts list: its
+// first and last line, so that a click on any line of it finds it.
+type artifactRows struct {
+	first, last int
+	artifact    SessionArtifact
+}
+
 // artifactsInfo renders the Artifacts section for the sidebar: each
-// deliverable's label with its path or URL beneath it, newest first.
-func (m *UI) artifactsInfo(width, maxItems int, isSection bool) string {
+// deliverable's label with its URL or path beneath it, newest first. It
+// also reports the lines each artifact took, counted from the section's
+// first line.
+func (m *UI) artifactsInfo(width, maxItems int, isSection bool) (string, []artifactRows) {
 	t := m.com.Styles
 
 	title := t.Files.SectionTitle.Render("Artifacts")
@@ -195,64 +208,141 @@ func (m *UI) artifactsInfo(width, maxItems int, isSection bool) string {
 		title = common.Section(t, "Artifacts", width)
 	}
 	list := t.Files.EmptyMessage.Render("None")
+	var rows []artifactRows
 	if len(m.sessionArtifacts) > 0 {
-		list = artifactList(t, m.sessionArtifacts, width, maxItems, m.pendingArtifactFrame)
+		list, rows = artifactList(t, m.sessionArtifacts, width, maxItems, m.pendingArtifactFrame)
 	}
-	return lipgloss.NewStyle().Width(width).Render(fmt.Sprintf("%s\n\n%s", title, list))
+	// The list starts under the title and a blank line.
+	top := lipgloss.Height(title) + 1
+	for i := range rows {
+		rows[i].first += top
+		rows[i].last += top
+	}
+	return lipgloss.NewStyle().Width(width).Render(fmt.Sprintf("%s\n\n%s", title, list)), rows
 }
 
 // artifactList renders the artifacts newest-first, truncating to maxItems
-// with a "…and N more" hint. Each entry is two lines — a sparkle marker and
-// the label, then the path or URL beneath it. The label fades through the
-// Crush wordmark's purple→hot-pink nebula (flipped row to row so the list
-// scintillates); the marker is a sparing faint-green sparkle for a file or
-// faint-gold for a link, and a link's target is underlined.
-func artifactList(t *styles.Styles, arts []SessionArtifact, width, maxItems int, pending func(label string) string) string {
+// with a "…and N more" hint, and reports the lines each one took. An entry
+// is a sparkle marker and the label in one plain color, then what the user
+// opens beneath it: the URL the artifact is served at, or its path when
+// nothing serves it. Neither is cut short: what does not fit wraps onto
+// more lines, a URL or path at its slashes. Every line of an entry with a
+// URL links to the whole URL, so a terminal that knows hyperlinks opens it
+// from whichever line is clicked. The marker alone is colored, sparingly:
+// faint gold for a URL the user can open from their own machine, faint
+// green for a path that only means something on this one.
+func artifactList(t *styles.Styles, arts []SessionArtifact, width, maxItems int, pending func(label string) string) (string, []artifactRows) {
 	if maxItems <= 0 {
-		return ""
+		return "", nil
 	}
-	grad1, grad2 := t.Header.LogoGradFromColor, t.Header.LogoGradToColor
-	dim := t.Files.TruncationHint
-	link := dim.Underline(true)
+	textWidth := max(width-2, 1)
+	link := t.Files.Path.Underline(true)
 
 	var lines []string
-	shown := 0
+	var rows []artifactRows
 	for i, a := range arts {
-		if shown >= maxItems {
+		if i >= maxItems {
 			break
 		}
-		// Sparing green/yellow: a faint sparkle marks the kind — green for a
-		// file, gold for a link — faded, not solid, against the nebula.
 		marker := t.Files.Additions.Render("✦")
-		open := a.Open()
-		openText := ansi.Truncate(open, max(width-2, 1), "…")
-		target := "  " + dim.Render(openText)
+		label := t.Files.ArtifactLabel
+		var target []string
 		switch {
 		case a.Pending:
 			// Nothing to open yet: where the target will go, the
 			// scrambling glyphs say the agent is making it.
-			marker = dim.Render("✦")
-			target = "  " + ansi.Truncate(pending(a.Label), max(width-2, 1), "")
+			marker = t.Files.TruncationHint.Render("✦")
+			target = []string{ansi.Truncate(pending(a.Label), textWidth, "")}
 		case a.IsURL || a.URL != "":
-			// Gold for something the user can open from anywhere, green
-			// for a path that only means something on this machine.
 			marker = t.LSP.WarningDiagnostic.Render("✦")
-			target = "  " + link.Hyperlink(open, "id=artifact").Render(openText)
+			open := a.Open()
+			// One id for all the lines, so the terminal takes them for
+			// one link.
+			id := "id=artifact-" + strconv.Itoa(i)
+			label = label.Hyperlink(open, id)
+			linked := link.Hyperlink(open, id)
+			for _, piece := range wrapArtifact(open, textWidth) {
+				target = append(target, linked.Render(piece))
+			}
+		default:
+			for _, piece := range wrapArtifact(a.Target, textWidth) {
+				target = append(target, t.Files.Path.Render(piece))
+			}
 		}
-		// Scintillate: flip the nebula's direction row to row.
-		c1, c2 := grad1, grad2
-		if i%2 == 1 {
-			c1, c2 = grad2, grad1
+		first := len(lines)
+		for j, piece := range wrapArtifact(a.Label, textWidth) {
+			lead := "  "
+			if j == 0 {
+				lead = marker + " "
+			}
+			lines = append(lines, lead+label.Render(piece))
 		}
-		label := styles.ApplyForegroundGrad(lipgloss.NewStyle(), ansi.Truncate(a.Label, max(width-2, 1), "…"), c1, c2)
-		lines = append(lines, marker+" "+label, target)
-		shown++
+		for _, piece := range target {
+			lines = append(lines, "  "+piece)
+		}
+		rows = append(rows, artifactRows{first: first, last: len(lines) - 1, artifact: a})
 	}
 	if len(arts) > maxItems {
 		remaining := len(arts) - maxItems
-		lines = append(lines, dim.Render(fmt.Sprintf("…and %d more", remaining)))
+		lines = append(lines, t.Files.TruncationHint.Render(fmt.Sprintf("…and %d more", remaining)))
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+	return lipgloss.JoinVertical(lipgloss.Left, lines...), rows
+}
+
+// wrapArtifact breaks s into lines at most width cells wide, at its spaces
+// and at the slashes of a URL or path, so that a long one is shown whole
+// rather than cut off; a run with neither is broken where it must be.
+func wrapArtifact(s string, width int) []string {
+	return strings.Split(ansi.Wrap(s, width, "/"), "\n")
+}
+
+// copyToClipboard is common.CopyToClipboard, a variable so a test can see
+// what a click on an artifact copies without writing the clipboard of the
+// machine it runs on.
+var copyToClipboard = common.CopyToClipboard
+
+// artifactAt is the artifact the sidebar shows at the screen point x, y,
+// if any. The content scrolls under the fixed logo, so the point's row is
+// a line of the content, counted from where it is scrolled to.
+func (m *UI) artifactAt(x, y int) (SessionArtifact, bool) {
+	if m.session == nil || m.isCompact {
+		return SessionArtifact{}, false
+	}
+	_, content := sidebarRects(m.layout.sidebar, m.sidebarDrawLogo)
+	if !image.Pt(x, y).In(content) {
+		return SessionArtifact{}, false
+	}
+	line := m.sidebarOffset + y - content.Min.Y
+	for _, r := range m.sidebarArtifacts {
+		if line >= r.first && line <= r.last {
+			return r.artifact, true
+		}
+	}
+	return SessionArtifact{}, false
+}
+
+// copyArtifactAt copies the artifact under a left click in the sidebar —
+// the URL it is served at, or its path when nothing serves it — so the
+// user can paste it into a browser on their own machine: Klash usually
+// runs on another, where it cannot open anything for them. A pending
+// artifact has nothing to copy yet.
+func (m *UI) copyArtifactAt(msg tea.MouseClickMsg) tea.Cmd {
+	if msg.Button != uv.MouseLeft {
+		return nil
+	}
+	a, ok := m.artifactAt(msg.X, msg.Y)
+	if !ok || a.Pending {
+		return nil
+	}
+	return copyToClipboard(a.Open(), artifactCopied(a))
+}
+
+// artifactCopied says what a click on an artifact put on the clipboard.
+func artifactCopied(a SessionArtifact) string {
+	if a.IsURL || a.URL != "" {
+		return fmt.Sprintf("Copied the URL of %q: %s", a.Label, a.Open())
+	}
+	return fmt.Sprintf("Copied the path of %q (it has no URL): %s", a.Label, a.Open())
 }
 
 // pendingArtifactFrame renders this frame of the animation shown where a
