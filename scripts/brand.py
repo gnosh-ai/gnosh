@@ -58,6 +58,13 @@ MONO = "SFMono-Regular,Menlo,Consolas,'Liberation Mono','DejaVu Sans Mono',monos
 # The line beside gnosh.ai on the banner and the sign-off.
 LINE = "an AI harness that thinks in Gno"
 
+
+def line_size(width, gap=2.3):
+    """The font size at which gnosh.ai, then LINE, fill width with a little
+    more than two spaces between them (Jae, 2026-10-30). A cell of MONO's
+    fonts is 0.6 em."""
+    return width / ((len("gnosh.ai") + gap + len(LINE)) * 0.6)
+
 # ── Letterforms ──────────────────────────────────────────────────────────
 # Three rows of half-block text per letter, as in letterforms.go. A
 # stretchable letter repeats its middle column.
@@ -289,8 +296,9 @@ def banner(W=1280, H=520, p=24):
     o.append(sky(rng, W, H, keep, 165, twinkle=True))
     o.append(f'<path d="{left}{right}" stroke="url(#field)" stroke-width="2" fill="none"/>')
     ty = meta_y + ch * 0.66
-    o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="{MONO}" font-size="21" fill="{GOLD}">gnosh.ai</text>')
-    o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="{MONO}" font-size="21" fill="{HAZE}">{LINE}</text>')
+    size = fmt(line_size(word_w))
+    o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="{MONO}" font-size="{size}" fill="{GOLD}">gnosh.ai</text>')
+    o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="{MONO}" font-size="{size}" fill="{HAZE}">{LINE}</text>')
     o.append(layers)
     o.append("</g>")
     o.append(f'<rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="22" fill="none" stroke="{RIM}"/>')
@@ -309,7 +317,7 @@ def divider(light=False, W=1280, H=24):
     return "".join(o)
 
 
-def signoff(W=1280, H=260, p=12):
+def signoff(W=1280, H=260, p=14):
     """The sidebar's compact logo, as a closing mark: fields above and below,
     without stars, as the TUI draws it."""
     rng = random.Random(11)
@@ -336,8 +344,9 @@ def signoff(W=1280, H=260, p=12):
     o.append('<g clip-path="url(#frame)">')
     o.append(sky(rng, W, H, keep, 90, twinkle=True))
     o.append(f'<path d="{fields}" stroke="url(#field)" stroke-width="1.4" fill="none"/>')
-    o.append(f'<text x="{x0}" y="{fmt(meta_y + ch * 0.72)}" font-family="{MONO}" font-size="13" fill="{GOLD}">gnosh.ai</text>')
-    o.append(f'<text x="{x0 + word_w}" y="{fmt(meta_y + ch * 0.72)}" text-anchor="end" font-family="{MONO}" font-size="13" fill="{HAZE}">{LINE}</text>')
+    size = fmt(line_size(word_w))
+    o.append(f'<text x="{x0}" y="{fmt(meta_y + ch * 0.72)}" font-family="{MONO}" font-size="{size}" fill="{GOLD}">gnosh.ai</text>')
+    o.append(f'<text x="{x0 + word_w}" y="{fmt(meta_y + ch * 0.72)}" text-anchor="end" font-family="{MONO}" font-size="{size}" fill="{HAZE}">{LINE}</text>')
     o.append(word_layers(on, x0, y0, p))
     o.append("</g>")
     o.append(f'<rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="22" fill="none" stroke="{RIM}"/>')
