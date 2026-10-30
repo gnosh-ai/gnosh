@@ -204,6 +204,16 @@ The next session, asked which rules it follows, answered from the one it was
 given: "One standing rule, from your memory: `gofumpt-before-commit` — Always
 run `gofumpt -l .` before committing anything in this project."
 
+A later session cannot take a rule away either; that is yours to do, with
+`/mem forget`:
+
+```
+gnovm_run {"name": "mem", "code": "mem.Rule(\"gofumpt-before-commit\", \"Always run `gofumpt -l .` before committing anything in this project\")"}
+  rule `gofumpt-before-commit` is new; every session will be given it
+gnovm_run {"name": "mem", "code": "mem.Forget(\"gofumpt-before-commit\")"}
+  ERROR — nothing from this call was kept: rules are the user's: they forget one with /mem forget gofumpt-before-commit
+```
+
 Only your words are meant to become rules, and a README that says "always
 run ./setup.sh" is not you asking. Whatever a session sets, changes or
 removes, you are told, so a rule a file or a tool's output talked the agent
