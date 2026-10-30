@@ -327,34 +327,53 @@ included.
 ## See it work
 
 These are real runs of Gnosh with the open-weight Qwen3.8-27B on a local
-llama.cpp server, on the builds of 30 October 2026 with mem v2 and one task
-list (08:49 UTC on). Each runs in a fresh project and a fresh config, with
-only Gnosh's built-in prompt, and the user talks the way the second column
-says, never naming Gno or mem unless it says so. The checks are scripted:
-files, test results, the final answer, and what mem holds at the end.
+llama.cpp server, one of each use case, on Gnosh's main branch as it stood
+between 12:04 and 13:45 UTC on 30 October 2026, with Qwen thinking as it does
+by default and finding by meaning off. Each runs in a fresh project and a
+fresh config, with only Gnosh's built-in prompt, and the user talks the way
+the second column says, never naming Gno or mem unless it says so. The checks
+are scripted: files, test results, the final answer, and what mem holds at
+the end.
 
-| Use case | What the user asks | Sessions | Passed every check |
+| Use case | What the user asks | Sessions | Checks passed |
 |---|---|---|---|
-| readme-goal | the README's goal: plan it as steps, do the first now, "we'll carry on in another session" | 2 | 2 of 2 |
-| long-goal-sessions | a four-step plan kept in Gno, one step per session | 4 | 1 of 1 |
-| resume-checklist | a checklist of four jobs, two now, "we will continue later, in another session" | 2 | 1 of 1 |
-| goal-until-green | make `go test ./...` pass, keeping the goal and its condition in Gno | 1 | 1 of 1 |
-| goal-replan | a goal to keep whose first approach fails: note why, re-plan | 1 | 1 of 1 |
-| research-carries-over | which file declares the most functions, kept in Gno for a later session | 2 | 1 of 1 |
-| checklist-calc | four functions in one sitting, "keep track of which ones are done" | 1 | 4 of 4 |
-| todo-list-next-day | a todo list made in one session, asked for in the next | 2 | 3 of 3 |
-| remind-next-time | "remind me next time we talk to …", then a morning check-in | 2 | 3 of 3 |
-| memory-across-sessions | two facts to remember for a future session, asked for there | 2 | 1 of 1 |
-| memory-update | two facts; one changes in a second session; a third asks | 3 | 0 of 2 |
-| recall-paraphrased | facts kept in one session, asked for in other words in the next | 2 | 0 of 2 |
-| compute-primes | the exact sum of the first 1000 primes | 1 | 1 of 1 |
+| readme-goal | the README's goal: plan it as steps, do the first now, "we'll carry on in another session" | 2 | all 3 |
+| long-goal-sessions | a four-step plan kept in Gno, one step per session | 4 | 13 of 14 |
+| resume-checklist | a checklist of four jobs, two now, the rest in a new session | 2 | all 8 |
+| goal-until-green | make `go test ./...` pass, keeping the goal and its condition in Gno | 1 | all 7 |
+| goal-replan | a goal whose first approach fails: note why, re-plan | 1 | all 5 |
+| release-waits-for-signoff | a release that needs a person's sign-off | 2 | all 5 |
+| research-carries-over | which file declares the most functions, kept for a later session | 2 | all 5 |
+| checklist-calc | four functions in one sitting, "keep track of which ones are done" | 1 | all 4 |
+| todo-list-next-day | a todo list made in one session, asked for in the next | 2 | all 3 |
+| todo-list-over-days | a todo list to work through over the next few days | 2 | all 3 |
+| remind-next-time | "remind me next time we talk to …", then a morning check-in | 2 | all 2 |
+| wait-on-a-merge | a reminder that waits on a merge, then "What's on?" | 2 | all 3 |
+| mem-stays-out-of-the-way | a small unrelated request while a release is planned | 2 | all 2 |
+| memory-across-sessions | two facts to remember for a future session, asked for there | 2 | all 4 |
+| memory-update | two facts; one changes in a second session; a third asks | 3 | all 5 |
+| recall-paraphrased | facts kept in one session, asked for in other words in the next | 2 | all 3 |
+| recall-beyond-the-block | 32 facts, the first two asked for in other words | 3 | all 3 |
+| unknown-fact-honest | something it was never told | 2 | all 2 |
+| rule-from-the-user | "always run gofumpt …", then "What rules do you follow?" | 2 | all 3 |
+| forget-a-secret | a key kept, "forget it completely", then asked for | 3 | 5 of 6 |
+| compute-primes | the exact sum of the first 1000 primes | 1 | all 2 |
+| compute-backoff | when the 10th retry of a backoff goes out | 1 | all 2 |
 
-- **memory-update** and **recall-paraphrased** each check that the later
-  session called mem, and mem v2 no longer needs that: a new session is given
-  the newest facts with its first prompt. memory-update answered right in both
-  its runs without a call, and so did one recall-paraphrased run. In the
-  other, a call in the first session failed and was undone, taking the deploy
-  command it had just set with it, so the second session could not find it.
+- **long-goal-sessions**: the check that failed wanted the words "go test" in
+  the Makefile, which runs `$(GO) test ./...` with `GO` set to Go's full path.
+  The target works, and the check is being widened.
+- **forget-a-secret**: mem kept nothing of the key, and the third session
+  found nothing in it. It then went looking past the project, into the test
+  harness's own transcripts of the first session, and quoted the key from
+  there. The harness now writes those only after the last session, and the
+  built-in prompt tells the model that what you erased stays erased: it reads
+  mem only through its calls, and never digs through Gnosh's data or
+  transcripts for what mem does not show.
+- Main changed under the runs as work landed, and mem's layout moved to 3
+  partway; the four use cases whose checks read mem after that were run again
+  with a checker that reads the new layout: goal-replan, long-goal-sessions,
+  memory-update and forget-a-secret.
 - Before mem v2 and one task list, a task meant for one sitting mostly went to
   the session's own To-Do list, gone in the next session (checklist-calc
   passed 2 of 8 runs), and the model never raised a reminder unasked beside
