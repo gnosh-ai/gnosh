@@ -586,6 +586,12 @@ but not raise it, and cannot set `in_process`. Lands with the worker (phase
 
 ## 19. GNOMEM: the agent's board (added 2026-10-30)
 
+> **Superseded (2026-10-30).** mem v2 replaced the board the same day: gnomem v2
+> in a realm on disk, with a journal of Ops, a store and an index (MEMPLAN; the
+> user's guide is GNOMEM.md). `klash/gnomem/v1`, its read-only board reads and
+> `summary.txt` are deleted. This section, and Appendices E and F, stay as the
+> record of the design v2 replaced.
+
 Real-model scenario runs (`testdata/scenarios`, `TestScenarios`) showed that
 with a short recipe in the system prompt the model keeps its checklist and
 memory in persistent VMs, but writes its own structs each session (about 400
