@@ -420,6 +420,7 @@ var docPrompts = []struct{ doc, scenario string }{
 	{"GNOMEM.md", "remind-next-time.txtar"},
 	{"README.md", "memory-update.txtar"},
 	{"GNOMEM.md", "recall-paraphrased.txtar"},
+	{"README.md", "compute-backoff.txtar"},
 }
 
 // quotedProse is a document's prose with block-quote markers, the **You:**

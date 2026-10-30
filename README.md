@@ -40,7 +40,7 @@ from a hosted API to one running on your own machine. On top of that:
 - **Thinks in Gno.** The Gno VM runs inside Gnosh: named machines with
   memory caps, gas (1 gas is about 1 ns) and optional persistence, in a worker
   process of their own. The agent works an answer out in one instead of
-  estimating it.
+  estimating it: [the machines underneath](#thinks-in-gno-the-machines-underneath).
 - **Plans in Gno.** The agent plans a task as a goal in `mem`, with its
   steps, and a goal cannot be marked done while a step of it is open, so "the
   tests pass" is something it has to reach. `/goal <condition>` keeps it at
@@ -194,7 +194,25 @@ numbered under it, and a fact's name is any path the agent gives it. A new
 session is told, with its first prompt, what mem holds: the rules you gave,
 what is due, what is open and next, and the newest facts.
 
-### Go in your Go: the machines underneath
+### Thinks in Gno: the machines underneath
+
+> **You:** A client retries a failed request with exponential backoff: it
+> waits 200 ms before the first retry, doubles the wait each time, and never
+> waits more than 30 s. How long after the first failure does the 10th retry
+> go out?
+
+The agent works it out in the session's scratch machine instead of adding it
+up in its head:
+
+```
+gnovm_run {"code":"\nd := 200\ntotal := 0\nfor i := 1; i <= 10; i++ {\n    if d > 30000 { d = 30000 }\n    total += d\n    d *= 2\n}\nfmt.Println(total, \"ms\")\n"}
+  111000 ms
+```
+
+and answers "111 s (1 min 51 s)". In real runs with Qwen thinking, as it does
+by default, it used a machine and got 111 s every time (4 of 4). With its
+thinking turned off it once did the sum in its head and said 110.8 s: the
+arithmetic a machine is there for.
 
 `mem` is one machine among many. Gnosh carries the GnoVM, gno.land's
 interpreter for its Go dialect, and runs named virtual machines in it for the
