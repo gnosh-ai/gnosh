@@ -140,10 +140,12 @@ From your memory (mem), what may bear on what the user just wrote, found by mean
 ```
 
 The agent answered "Lin Wei does QA sign-off on every release." in 11 seconds.
-Meaning has a cut-off, and some questions fall under it: asked "How do I push
-this to production, and who has to check it first?", the two facts it needed
-scored 0.48 and 0.45 against recall's 0.52, nothing came with the prompt, and
-the agent found both by searching mem, in eight calls. Measured on a 30-row
+Meaning has a cut-off, and some questions fall under it. Asked "How do I push
+this to production, and who has to check it first?", the whole question
+scored under recall's 0.52 for both facts it needed (0.48 and 0.45), so each
+part is searched as well: the first part brought the deploy command, the
+second brought nothing, and the agent found the sign-off by searching mem,
+answering both in five calls. Measured on a 30-row
 mem with 26 prompts, 13 of the 16 that mem had an answer for were given it,
 and none of the 10 without one got anything. These runs used
 Qwen3-Embedding-0.6B, on a CPU.
