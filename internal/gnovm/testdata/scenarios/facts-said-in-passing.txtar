@@ -1,0 +1,15 @@
+A fact said in passing, not asked to be kept: while asking for a typo fix,
+the user mentions that staging moved. The fix is made, and a later session
+asked for the staging address knows it, which it can only have from mem.
+
+-- project/README.md --
+# Acme
+
+We recieve webhooks at /hooks.
+-- prompt --
+Fix the typo in README.md, "recieve" should be "receive". By the way, our staging server moved last week, it's staging2.acme.test now.
+-- prompt-new --
+What's the address of our staging server?
+-- check --
+file README.md contains receive
+answer last contains staging2.acme.test
