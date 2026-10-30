@@ -1,6 +1,6 @@
 Facts given in one session are asked for in another in different words: the
-new session has to find them by meaning, not by the words they were stored
-under.
+new session has to connect the question to them, from what mem shows it at
+the start or by searching mem. recall-beyond-the-block makes it search.
 
 -- prompt --
 Remember for later: our deploy command is make ship ENV=prod, and Lin Wei does QA sign-off on every release.
@@ -8,6 +8,5 @@ Remember for later: our deploy command is make ship ENV=prod, and Lin Wei does Q
 How do I push this to production, and who has to check it first?
 -- check --
 turn 1 tool gnovm_run >= 1
-turn 2 tool gnovm_run >= 1
 answer last contains make ship
 answer last contains Lin

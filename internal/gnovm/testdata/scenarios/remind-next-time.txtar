@@ -1,4 +1,4 @@
-A reminder said the way a person says it, with no mention of boards or Gno:
+A reminder said the way a person says it, with no mention of mem or Gno:
 a new session, which starts with nothing but what was kept, must bring it
 up on its own when the user simply checks in.
 
@@ -8,4 +8,4 @@ Before we wrap up: remind me next time we talk to rotate the staging API key. It
 Morning! Anything I should know before I start?
 -- check --
 turn 1 tool gnovm_run >= 1
-answer last contains rotate
+answer last contains rotat

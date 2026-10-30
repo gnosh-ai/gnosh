@@ -41,8 +41,8 @@
   - "/(macos|osx|darwin)/i"
 "os: windows":
   - "/(windows|win10|win11|win32|wsl|scoop|winget)/i"
-"panic / gnosh":
-  - "/(panic|gnosh|segfault)/i"
+"panic / crash":
+  - "/(panic|crash|segfault)/i"
 "provider: anthropic claude":
   - "/(anthropic|claude)/i"
 "provider: avian":
