@@ -1,5 +1,5 @@
 The README's goal example, word for word: a goal said the way a person says
-it, with no mention of Gno, boards or mem, only that the work carries on in
+it, with no mention of Gno or mem, only that the work carries on in
 another session. The first session must keep the goal in mem and do one
 step; a new session, which has only what was kept, must carry on to done.
 

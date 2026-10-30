@@ -38,7 +38,7 @@ func TestParse(t *testing.T) {
 	}
 }
 -- prompt --
-Make `go test ./...` pass by fixing parse.go, not the test. Keep the goal on your board, note each approach you try and why it fails, and re-plan when one does not work.
+Make `go test ./...` pass by fixing parse.go, not the test. Keep the goal in mem, note each approach you try and why it fails, and re-plan when one does not work.
 -- check --
 cmd go test ./...
 file parse_test.go contains "0b101": 5
