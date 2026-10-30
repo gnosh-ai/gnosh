@@ -145,41 +145,38 @@ done that (0 of 7).
 ## See it work
 
 These are real runs of Gnosh with the open-weight Qwen3.8-27B on a local
-llama.cpp server, from every build of 30 October 2026 that had mem (from
-01:08 UTC on). Each runs in a fresh project and a fresh config, with only
-Gnosh's built-in prompt, and the user talks the way the second column says,
-never naming Gno or mem unless it says so. The checks are scripted: files,
-test results, the final answer, and what mem holds at the end.
+llama.cpp server, on the builds of 30 October 2026 with mem v2 and one task
+list (08:49 UTC on). Each runs in a fresh project and a fresh config, with
+only Gnosh's built-in prompt, and the user talks the way the second column
+says, never naming Gno or mem unless it says so. The checks are scripted:
+files, test results, the final answer, and what mem holds at the end.
 
 | Use case | What the user asks | Sessions | Passed every check |
 |---|---|---|---|
-| readme-goal | the README's goal: plan it as steps, do the first now, "we'll carry on in another session" | 2 | 3 of 3 |
-| long-goal-sessions | a four-step plan kept in Gno, one step per session | 4 | 3 of 3 |
-| resume-checklist | a checklist of four jobs, two now, "we will continue later, in another session" | 2 | 3 of 3 |
-| goal-until-green | make `go test ./...` pass, keeping the goal and its condition in Gno | 1 | 3 of 3 |
-| goal-replan | a goal to keep whose first approach fails: note why, re-plan | 1 | 2 of 2 |
-| research-carries-over | which file declares the most functions, kept in Gno for a later session | 2 | 3 of 3 |
-| memory-across-sessions | two facts to remember for a future session, asked for there | 2 | 3 of 3 |
-| memory-update | two facts; one changes in a second session; a third asks | 3 | 2 of 3 |
-| recall-paraphrased | facts kept in one session, asked for in other words in the next | 2 | 3 of 3 |
-| remind-next-time | "remind me next time we talk to …", then a morning check-in | 2 | 5 of 6 |
-| compute-primes | the exact sum of the first 1000 primes | 1 | 3 of 3 |
-| checklist-calc | four functions in one sitting, "keep track of which ones are done" | 1 | 2 of 8 |
-| todo-list-next-day | a todo list made in one session, asked for in the next | 2 | 2 of 2 |
+| readme-goal | the README's goal: plan it as steps, do the first now, "we'll carry on in another session" | 2 | 2 of 2 |
+| long-goal-sessions | a four-step plan kept in Gno, one step per session | 4 | 1 of 1 |
+| resume-checklist | a checklist of four jobs, two now, "we will continue later, in another session" | 2 | 1 of 1 |
+| goal-until-green | make `go test ./...` pass, keeping the goal and its condition in Gno | 1 | 1 of 1 |
+| goal-replan | a goal to keep whose first approach fails: note why, re-plan | 1 | 1 of 1 |
+| research-carries-over | which file declares the most functions, kept in Gno for a later session | 2 | 1 of 1 |
+| checklist-calc | four functions in one sitting, "keep track of which ones are done" | 1 | 4 of 4 |
+| todo-list-next-day | a todo list made in one session, asked for in the next | 2 | 3 of 3 |
+| remind-next-time | "remind me next time we talk to …", then a morning check-in | 2 | 3 of 3 |
+| memory-across-sessions | two facts to remember for a future session, asked for there | 2 | 1 of 1 |
+| memory-update | two facts; one changes in a second session; a third asks | 3 | 0 of 2 |
+| recall-paraphrased | facts kept in one session, asked for in other words in the next | 2 | 0 of 2 |
+| compute-primes | the exact sum of the first 1000 primes | 1 | 1 of 1 |
 
-- **memory-update** failed once in a way its check then missed: a session
-  stored the moved database under a second name beside the old one. That
-  run is why a new session is now told the names of the facts mem holds,
-  and why the check now counts them.
-- **remind-next-time**: one of its six runs failed by keeping the reminder
-  in a MEMORY.md file of its own instead of mem (the reminder still came
-  back). Another is counted as the pass it was, though its check, which
-  looks for "rotate", missed an answer that said the key "needs rotating".
-- **checklist-calc** and **todo-list-next-day** ran while Gnosh still had
-  a second list, the session's own To-Do list, which ended with the session:
-  a task meant for one sitting mostly went there. That list is gone now
-  (f6e71b31), and mem is the agent's
-  [one list](README.md#goals-that-outlive-the-session).
+- **memory-update** and **recall-paraphrased** each check that the later
+  session called mem, and mem v2 no longer needs that: a new session is given
+  the newest facts with its first prompt. memory-update answered right in both
+  its runs without a call, and so did one recall-paraphrased run. In the
+  other, a call in the first session failed and was undone, taking the deploy
+  command it had just set with it, so the second session could not find it.
+- Before mem v2 and one task list, a task meant for one sitting mostly went to
+  the session's own To-Do list, gone in the next session (checklist-calc
+  passed 2 of 8 runs), and the model never raised a reminder unasked beside
+  other work (0 of 7).
 
 Before the built-in prompt, the model never kept a checklist in a machine,
 and it put memory in a MEMORY.md file. The use cases are txtar files in
