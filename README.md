@@ -81,7 +81,7 @@ its steps is open, so "the tests pass" is something it has to reach, not
 something it can claim. When an approach fails, it notes why and re-plans:
 it drops that step and adds another.
 
-Start a new session tomorrow and say "let's carry on with Median". With your
+Start a new session tomorrow and say "Let's carry on with Median." With your
 first message, the agent is told what mem has open and what is next in each
 goal (see [what the agent runs](#what-the-agent-runs)), and it picks up there
 and finishes.

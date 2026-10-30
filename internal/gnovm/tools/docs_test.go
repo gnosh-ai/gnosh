@@ -317,8 +317,8 @@ func TestDocLinkProblems(t *testing.T) {
 }
 
 // docPrompts binds a user's words quoted in a document to the real-model
-// scenario that shows Klash doing what the document says it does: the
-// scenario's first prompt must appear in the document word for word. Change
+// scenario that shows Klash doing what the document says it does: every
+// prompt of the scenario must appear in the document word for word. Change
 // the example and this fails until the scenario says the same, and is run.
 var docPrompts = []struct{ doc, scenario string }{
 	{"README.md", "readme-goal.txtar"},
@@ -340,17 +340,39 @@ func quotedProse(text string) string {
 	return strings.Join(strings.Fields(b.String()), " ")
 }
 
+// scenarioPrompts are a scenario's prompts, the first session's and each
+// new session's, in order, each on one line.
+func scenarioPrompts(txtar string) []string {
+	var out []string
+	for _, sec := range strings.Split("\n"+txtar, "\n-- ")[1:] {
+		name, body, _ := strings.Cut(sec, " --\n")
+		if name == "prompt" || name == "prompt-new" {
+			out = append(out, strings.Join(strings.Fields(body), " "))
+		}
+	}
+	return out
+}
+
 func TestDocPromptsAreScenarios(t *testing.T) {
 	for _, p := range docPrompts {
 		text, err := os.ReadFile(filepath.Join(repoRoot, p.doc))
 		require.NoError(t, err)
 		sc, err := os.ReadFile(filepath.Join(repoRoot, "internal", "gnovm", "testdata", "scenarios", p.scenario))
 		require.NoError(t, err)
-		_, rest, ok := strings.Cut(string(sc), "-- prompt --\n")
-		require.True(t, ok, "%s has no prompt", p.scenario)
-		prompt, _, _ := strings.Cut(rest, "\n-- ")
-		prompt = strings.Join(strings.Fields(prompt), " ")
-		assert.Contains(t, quotedProse(string(text)), prompt,
-			"%s no longer quotes %s's prompt word for word: change the scenario to match, and run it", p.doc, p.scenario)
+		prompts := scenarioPrompts(string(sc))
+		require.NotEmpty(t, prompts, "%s has no prompt", p.scenario)
+		quoted := quotedProse(string(text))
+		for _, prompt := range prompts {
+			assert.Contains(t, quoted, prompt,
+				"%s no longer quotes %s word for word: change the scenario to match, and run it", p.doc, p.scenario)
+		}
 	}
+}
+
+// TestDocScenarioPrompts pins scenarioPrompts: every session's prompt, in
+// order, each on one line, and nothing from the other sections.
+func TestDocScenarioPrompts(t *testing.T) {
+	require.Equal(t, []string{"first, said once.", "second", "third one"}, scenarioPrompts(
+		"A description.\n\n-- project/go.mod --\nmodule x\n-- prompt --\nfirst,\nsaid once.\n"+
+			"-- prompt-new --\nsecond\n-- check --\nanswer last contains x\n-- prompt-new --\nthird   one\n"))
 }
