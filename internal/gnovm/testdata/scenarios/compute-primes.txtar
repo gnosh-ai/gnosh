@@ -5,4 +5,3 @@ What is the sum of the first 1000 prime numbers? Compute it exactly; don't estim
 -- check --
 tool gnovm_run >= 1
 answer last matches 3,?682,?913
--- baseline --

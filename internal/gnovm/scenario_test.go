@@ -30,8 +30,8 @@ import (
 )
 
 // TestScenarios runs the use cases in testdata/scenarios against a real
-// klash and a real model, with each prompt variant in testdata/prompts
-// appended to klash's system prompt (and "v0", none), and writes what
+// klash and a real model, with klash's own system prompt ("v0") and with
+// each prompt variant in testdata/prompts appended to it, and writes what
 // happened: each turn's tool calls and answer, each check, and what the
 // persistent Gno machines hold at the end.
 //
@@ -43,7 +43,8 @@ import (
 //	GNOVM_SCENARIO_KLASH     the klash to run (required)
 //	GNOVM_SCENARIO_HOME      whose config to copy (default $HOME)
 //	GNOVM_SCENARIO_OUT       where runs and reports go (default a temp dir)
-//	GNOVM_SCENARIO_VARIANTS  comma-separated, e.g. "v0,v1-hint" (default all)
+//	GNOVM_SCENARIO_VARIANTS  comma-separated, e.g. "v0" (default v0 and
+//	                         every testdata/prompts file)
 //	GNOVM_SCENARIO_ONLY      a regexp on scenario names
 //	GNOVM_SCENARIO_MODEL     a model for klash run -m
 //	GNOVM_SCENARIO_REASONING the large model's reasoning level (default
@@ -54,7 +55,9 @@ import (
 //	                         the checks are reported: the scenarios measure
 //	                         the model and the prompt as much as klash)
 //
-// Run it with -test.parallel to match the model server's lanes.
+// Run it with -test.parallel below the model server's slots, so that live
+// sessions keep one: a conversation whose slot another request takes
+// re-reads all of itself on its next step.
 func TestScenarios(t *testing.T) {
 	klash := os.Getenv("GNOVM_SCENARIO_KLASH")
 	if klash == "" {
@@ -62,7 +65,7 @@ func TestScenarios(t *testing.T) {
 	}
 	home := cmp.Or(os.Getenv("GNOVM_SCENARIO_HOME"), os.Getenv("HOME"))
 	out := cmp.Or(os.Getenv("GNOVM_SCENARIO_OUT"), t.TempDir())
-	var variants []string
+	variants := []string{"v0"}
 	prompts, _ := filepath.Glob("testdata/prompts/*.md")
 	for _, p := range prompts {
 		variants = append(variants, strings.TrimSuffix(filepath.Base(p), ".md"))
@@ -92,14 +95,7 @@ func TestScenarios(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", file, err)
 		}
-		runVariants := variants
-		if sc.baseline && os.Getenv("GNOVM_SCENARIO_VARIANTS") == "" {
-			// The baseline, no prompt at all, runs only where a scenario
-			// asks for it: elsewhere it shows only that the model does
-			// not reach for the machines unasked.
-			runVariants = append([]string{"v0"}, variants...)
-		}
-		for _, variant := range runVariants {
+		for _, variant := range variants {
 			t.Run(name+"/"+variant, func(t *testing.T) {
 				t.Parallel()
 				r := &scenarioRun{scenario: name, variant: variant, dir: filepath.Join(out, name+"-"+variant+"-"+stamp)}
@@ -125,8 +121,6 @@ type scenario struct {
 	turns  []turnSpec
 	files  map[string]string
 	checks []string
-	// baseline is set by a "baseline" section: run with no prompt too.
-	baseline bool
 }
 
 type turnSpec struct {
@@ -170,8 +164,6 @@ func parseScenario(path string) (*scenario, error) {
 			}
 		case strings.HasPrefix(name, "project/"):
 			sc.files[strings.TrimPrefix(name, "project/")] = body
-		case name == "baseline":
-			sc.baseline = true
 		default:
 			return nil, fmt.Errorf("unknown section %q", name)
 		}
@@ -252,6 +244,12 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, klash, home, reasoning str
 		}
 		if !ts.fresh && session != "" {
 			args = append(args, "--session", session)
+		} else {
+			// A named session gets no title request. On the AI box the
+			// title requests of runs started together took every server
+			// slot first, wiping the prompts cached there, and each run
+			// then re-read its whole prompt: 1-2 minutes, not seconds.
+			args = append(args, "-n", fmt.Sprintf("%s %s %d", r.scenario, r.variant, i+1))
 		}
 		if appendPrompt != "" {
 			args = append(args, "--append-system-prompt-file", appendPrompt)
