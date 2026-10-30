@@ -1,0 +1,110 @@
+> s1: mem.Fact("cmd/test", "x")
+fact `cmd/test` is new
+> s1: mem.Fact("a", "x")
+fact `a` is new
+> s1: mem.Fact("x1", "x")
+fact `x1` is new
+> s1: mem.Fact("2fa/setup", "x")
+fact `2fa/setup` is new
+> s1: mem.Fact("api/rate-limit", "x")
+fact `api/rate-limit` is new
+> s1: mem.Fact("models/qwen3-27b", "x")
+fact `models/qwen3-27b` is new
+> s1: mem.Fact("a/b/c/d", "x")
+fact `a/b/c/d` is new
+> s1: mem.Fact("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "x")
+fact `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` is new
+> s1: mem.Fact("", "x")
+error: a fact needs a name, like `cmd/test`
+> s1: mem.Fact("Cmd/Test", "x")
+error: names are lowercase: `cmd/test`
+> s1: mem.Fact("CMD", "x")
+error: names are lowercase: `cmd`
+> s1: mem.Fact("cmd test", "x")
+error: `cmd test` is not a name: a fact's name is lowercase words joined by "-" and "/", like `cmd-test`
+> s1: mem.Fact("cmd.test", "x")
+error: `cmd.test` is not a name: a fact's name is lowercase words joined by "-" and "/", like `cmd-test`
+> s1: mem.Fact("cmd_test", "x")
+error: `cmd_test` is not a name: a fact's name is lowercase words joined by "-" and "/", like `cmd-test`
+> s1: mem.Fact("cmd//test", "x")
+error: `cmd//test` is not a name: a fact's name is lowercase words joined by "-" and "/", like `cmd/test`
+> s1: mem.Fact("/cmd", "x")
+error: `/cmd` is not a name: a fact's name is lowercase words joined by "-" and "/", like `cmd`
+> s1: mem.Fact("cmd/", "x")
+error: `cmd/` is not a name: a fact's name is lowercase words joined by "-" and "/", like `cmd`
+> s1: mem.Fact("-cmd", "x")
+error: `-cmd` is not a name: a fact's name is lowercase words joined by "-" and "/", like `cmd`
+> s1: mem.Fact("cmd-", "x")
+error: `cmd-` is not a name: a fact's name is lowercase words joined by "-" and "/", like `cmd`
+> s1: mem.Fact("cmd--test", "x")
+error: `cmd--test` is not a name: a fact's name is lowercase words joined by "-" and "/", like `cmd-test`
+> s1: mem.Fact("123", "x")
+error: `123` is not a name: a fact's name is lowercase words joined by "-" and "/", the first with a letter in it, like `cmd/test`
+> s1: mem.Fact("1/cmd", "x")
+error: `1/cmd` is not a name: a fact's name is lowercase words joined by "-" and "/", the first with a letter in it, like `cmd/test`
+> s1: mem.Fact("café/menu", "x")
+error: `café/menu` is not a name: a fact's name is lowercase words joined by "-" and "/", like `cafe/menu`
+> s1: mem.Fact("naïve", "x")
+error: `naïve` is not a name: a fact's name is lowercase words joined by "-" and "/", like `naive`
+> s1: mem.Fact("cmd\ttest", "x")
+error: "cmd\ttest" is not a name: a fact's name is lowercase words joined by "-" and "/", like `cmd-test`
+> s1: mem.Fact("\xff\xfe", "x")
+error: "\xff\xfe" is not a name: a fact's name is lowercase words joined by "-" and "/", like `cmd/test`
+> s1: mem.Fact("日本", "x")
+error: `日本` is not a name: a fact's name is lowercase words joined by "-" and "/", like `cmd/test`
+> s1: mem.Fact("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "x")
+error: a fact's name is at most 64 bytes
+> user: mem.Rule("No-Emoji", "no emoji in commit messages")
+error: names are lowercase: `no-emoji`
+> user: mem.Rule("style/emoji", "no emoji in commit messages")
+rule `style/emoji` is new; every session will be given it
+> s1: mem.Goal("ship it", "Ship-It")
+error: names are lowercase: `ship-it`
+> s1: mem.Goal("ship it", "ship it")
+error: `ship it` is not a name: a goal's name is lowercase words joined by "-", like `ship-it`
+> s1: mem.Goal("ship it", "ship/it")
+error: a goal's name has no "/" (`ship/it` would be a step of `ship`): try `ship-it`
+> s1: mem.Goal("ship it", "ship-it")
+added goal `ship-it` "ship it"
+> s1: mem.Goal("renew the cert", "renew-cert")
+added goal `renew-cert` "renew the cert"
+> s1: mem.Wait("renew-cert", "2026-12-01")
+`renew-cert` "renew the cert" waits until 2026-12-01
+> s1: mem.Wait("renew-cert", "PR #6399 merged")
+`renew-cert` "renew the cert" waits for: PR #6399 merged
+> s1: mem.Wait("renew-cert", "the user signs off")
+`renew-cert` "renew the cert" waits for: the user signs off
+> s1: mem.Wait("renew-cert", "")
+`renew-cert` "renew the cert" no longer waits
+> s1: mem.Wait("renew-cert", "Dec 1")
+error: write a day as 2026-12-01 (today is Thu 2026-10-29)
+> s1: mem.Wait("renew-cert", "December 1st")
+error: write a day as 2026-12-01 (today is Thu 2026-10-29)
+> s1: mem.Wait("renew-cert", "tomorrow")
+error: write a day as 2026-10-30 (today is Thu 2026-10-29)
+> s1: mem.Wait("renew-cert", "next week")
+error: write a day as 2026-11-05 (today is Thu 2026-10-29)
+> s1: mem.Wait("renew-cert", "in 2 days")
+error: write a day as 2026-10-31 (today is Thu 2026-10-29)
+> s1: mem.Wait("renew-cert", "+3d")
+error: write a day as 2026-11-01 (today is Thu 2026-10-29)
+> s1: mem.Wait("renew-cert", "12/01")
+error: write a day as 2026-12-01 (today is Thu 2026-10-29)
+> s1: mem.Wait("renew-cert", "1/12/2026")
+error: write a day as 2026-12-01 (today is Thu 2026-10-29)
+> s1: mem.Wait("renew-cert", "until 2026-12-01")
+error: write a day as 2026-12-01 (today is Thu 2026-10-29)
+> s1: mem.Wait("renew-cert", "Monday")
+error: write a day as 2026-11-02 (today is Thu 2026-10-29)
+> s1: mem.Wait("renew-cert", "eod")
+error: write a day as 2026-10-29 (today is Thu 2026-10-29)
+> s1: mem.Wait("renew-cert", "2026-02-30")
+error: "2026-02-30" is not on the calendar (today is Thu 2026-10-29)
+> s1: mem.Wait("renew-cert", "2026-13-01")
+error: "2026-13-01" is not on the calendar (today is Thu 2026-10-29)
+> s1: mem.Wait("renew-cert", "2026-10-01")
+error: 2026-10-01 is past (today is Thu 2026-10-29): give a day still to come, or Done the item
+> s1: mem.Wait("renew-cert", "renew-cert")
+error: a wait is a day or words, not an item: to wait for `renew-cert`, make this work a step of it, or say it in words
+> s1: mem.Wait("renew-cert", "ship-it")
+error: a wait is a day or words, not an item: to wait for `ship-it`, make this work a step of it, or say it in words

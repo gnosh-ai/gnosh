@@ -12,6 +12,7 @@ package gnovm
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -60,6 +61,44 @@ func (s *memStory) check(r *memRealm, after string) {
 	check, err := r.run(`print(mem.Check())`, "klash")
 	require.NoError(s.t, err)
 	require.Empty(s.t, check.Output, "after %s", after)
+}
+
+// TestMemGrammars is the golden list of the names and waits mem takes, and
+// of what it says to each it refuses (MEMPLAN §12):
+// testdata/gnomem/v2/grammar.golden, which GNOMEM_V2_WRITE=1 rewrites. A
+// fact's, a rule's and a goal's given name follow one grammar; a wait is a
+// day written 2026-12-01, or words, and a day written any other way is
+// refused, naming today.
+func TestMemGrammars(t *testing.T) {
+	s := newMemStory(t)
+	for _, name := range []string{
+		"cmd/test", "a", "x1", "2fa/setup", "api/rate-limit", "models/qwen3-27b", "a/b/c/d", strings.Repeat("a", 64),
+		"", "Cmd/Test", "CMD", "cmd test", "cmd.test", "cmd_test", "cmd//test", "/cmd", "cmd/", "-cmd", "cmd-",
+		"cmd--test", "123", "1/cmd", "café/menu", "naïve", "cmd\ttest", "\xff\xfe", "日本", strings.Repeat("a", 65),
+	} {
+		s.run("s1", `mem.Fact(`+strconv.Quote(name)+`, "x")`)
+	}
+	s.run("user", `mem.Rule("No-Emoji", "no emoji in commit messages")`)
+	s.run("user", `mem.Rule("style/emoji", "no emoji in commit messages")`)
+	for _, name := range []string{"Ship-It", "ship it", "ship/it", "ship-it"} {
+		s.run("s1", `mem.Goal("ship it", `+strconv.Quote(name)+`)`)
+	}
+	s.run("s1", `mem.Goal("renew the cert", "renew-cert")`)
+	for _, wait := range []string{
+		"2026-12-01", "PR #6399 merged", "the user signs off", "",
+		"Dec 1", "December 1st", "tomorrow", "next week", "in 2 days", "+3d", "12/01", "1/12/2026",
+		"until 2026-12-01", "Monday", "eod", "2026-02-30", "2026-13-01", "2026-10-01", "renew-cert", "ship-it",
+	} {
+		s.run("s1", `mem.Wait("renew-cert", `+strconv.Quote(wait)+`)`)
+	}
+
+	golden := filepath.Join("testdata", "gnomem", "v2", "grammar.golden")
+	if os.Getenv("GNOMEM_V2_WRITE") != "" {
+		require.NoError(t, os.WriteFile(golden, []byte(s.out.String()), 0o644))
+	}
+	want, err := os.ReadFile(golden)
+	require.NoError(t, err)
+	require.Equal(t, string(want), s.out.String())
 }
 
 // TestMemStory runs a story through every call of gnomem v2, and checks

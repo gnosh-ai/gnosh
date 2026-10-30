@@ -175,8 +175,10 @@ func (m *Mem) newGoalName(title string, given ...string) string {
 			panic("the title comes first, then the name: mem.Goal(" + strconv.Quote(n) + ", \"" + title + "\")")
 		case strings.Contains(n, "/"):
 			panic("a goal's name has no \"/\" (`" + n + "` would be a step of `" + parentOf(n) + "`): try `" + nameForm(n) + "`")
+		case strings.ToLower(n) != n && validName(strings.ToLower(n)):
+			panic("names are lowercase: `" + strings.ToLower(n) + "`")
 		case !validName(n):
-			panic("`" + n + "` is not a name: a goal's name is lowercase words joined by \"-\", like `" + goalName(n) + "`")
+			panic(named(n) + " is not a name: a goal's name is lowercase words joined by \"-\"" + like(nameForm(n), "release-v2"))
 		case len(n) > maxGoalName || strings.Count(n, "-") >= 4:
 			panic("a goal's name is at most 4 words and " + strconv.Itoa(maxGoalName) + " bytes; the title comes first: mem.Goal(\"" + title + "\", \"" + goalName(n) + "\")")
 		case reserved[n] || forgottenName(n):
@@ -232,7 +234,11 @@ func (m *Mem) checkName(name, kind string) {
 	case strings.ToLower(name) != name && validName(strings.ToLower(name)):
 		panic("names are lowercase: `" + strings.ToLower(name) + "`")
 	case !validName(name):
-		panic("`" + name + "` is not a name: a " + kind + "'s name is lowercase words joined by \"-\" and \"/\", like `" + nameForm(name) + "`")
+		example := "cmd/test"
+		if kind == "rule" {
+			example = "push-after-landing"
+		}
+		panic(named(name) + " is not a name: a " + kind + "'s name is lowercase words joined by \"-\" and \"/\"" + like(pathForm(name), example))
 	case len(name) > maxName:
 		panic("a " + kind + "'s name is at most " + strconv.Itoa(maxName) + " bytes")
 	}
@@ -299,14 +305,44 @@ func (m *Mem) miss(name string) string {
 // formed is name with each of its parts in a name's form, as
 // `release-1-3-0/1` for `release-1.3.0/1`, when that names an item; or "".
 func (m *Mem) formed(name string) string {
-	parts := strings.Split(name, "/")
-	for i, p := range parts {
-		parts[i] = nameForm(p)
-	}
-	if f := strings.Join(parts, "/"); f != name && m.get(f) != nil {
+	if f := pathForm(name); f != name && m.get(f) != nil {
 		return f
 	}
 	return ""
+}
+
+// pathForm is s with each part between "/" in a name's form, and the empty
+// parts dropped: `cmd/test` for "cmd//test", `cafe/menu` for "café/menu".
+func pathForm(s string) string {
+	var parts []string
+	for _, p := range strings.Split(s, "/") {
+		if f := nameForm(p); f != "" {
+			parts = append(parts, f)
+		}
+	}
+	return strings.Join(parts, "/")
+}
+
+// named is a name as a refusal shows it: in backticks, or Go-quoted when it
+// holds what would not show, a tab or a byte that is not UTF-8.
+func named(name string) string {
+	if q := strconv.Quote(name); q[1:len(q)-1] != name {
+		return q
+	}
+	return "`" + name + "`"
+}
+
+// like ends a refusal of a name with the name it might have been, or, when
+// it has none, an example; and says so when its first part lacks a letter,
+// as a name's must have.
+func like(suggestion, example string) string {
+	switch {
+	case validName(suggestion):
+		return ", like `" + suggestion + "`"
+	case suggestion != "":
+		return ", the first with a letter in it, like `" + example + "`"
+	}
+	return ", like `" + example + "`"
 }
 
 // titled is the name of the open goal titled title, or "".

@@ -172,7 +172,8 @@ func yesterday() string {
 // suggestDay is the day s most likely means, written as a day, for a
 // refusal to offer: "Dec 1" is the next Dec 1, "tomorrow" is tomorrow, "in
 // 3 days" is three days on, "next Monday" is the next Monday, "11/03" is
-// Nov 3. Anything else gets a week from today, as an example.
+// Nov 3, "1/12/2026" whichever of Jan 12 and Dec 1 is still to come, "eod"
+// today, "eow" Friday. Anything else gets a week from today, as an example.
 func suggestDay(s string) string {
 	t := today()
 	low := strings.ToLower(strings.TrimSpace(s))
@@ -197,8 +198,12 @@ func suggestDay(s string) string {
 			dayNum = n
 		}
 		switch {
-		case w == "today":
+		case w == "today" || w == "tonight" || w == "eod":
 			return t
+		case w == "eow":
+			return nextWeekday(t, 4)
+		case w == "weekend":
+			return nextWeekday(t, 5)
 		case w == "tomorrow":
 			return shiftDay(t, 1)
 		case w == "in" && i+2 < len(ws):
@@ -226,6 +231,10 @@ func suggestDay(s string) string {
 			if mo >= 1 && mo <= 12 && d >= 1 && d <= 31 {
 				return nextDate(t, mo, d)
 			}
+		case strings.Count(w, "/") == 2 && digitsAnd(w, "/"), strings.Count(w, "-") == 2 && digitsAnd(w, "-"):
+			if d := numericDay(w, t); d != "" {
+				return d
+			}
 		}
 		for wi, wd := range weekdays[:7] {
 			if w == wd || (len(w) >= 3 && strings.HasPrefix(wd, w)) {
@@ -237,6 +246,40 @@ func suggestDay(s string) string {
 		return nextDate(t, month, dayNum)
 	}
 	return shiftDay(t, 7)
+}
+
+// numericDay is a day written in three numbers, year first (2026/12/1) or
+// last (1/12/2026, as m/d or d/m): the first reading that is on the
+// calendar and not before day t; "" for none.
+func numericDay(w, t string) string {
+	var n [3]int
+	for i, p := range strings.FieldsFunc(w, func(r rune) bool { return r == '/' || r == '-' }) {
+		n[i], _ = strconv.Atoi(p)
+	}
+	var readings [][3]int // year, month, day
+	switch {
+	case n[0] >= 1000:
+		readings = [][3]int{{n[0], n[1], n[2]}}
+	case n[2] >= 1000:
+		readings = [][3]int{{n[2], n[0], n[1]}, {n[2], n[1], n[0]}}
+	}
+	for _, r := range readings {
+		if r[1] < 1 || r[1] > 12 || r[2] < 1 || r[2] > 31 {
+			continue
+		}
+		d := strconv.Itoa(r[0]) + "-" + pad2(r[1]) + "-" + pad2(r[2])
+		if isDay(d) && onCalendar(d) && d >= t {
+			return d
+		}
+	}
+	return ""
+}
+
+func pad2(n int) string {
+	if n < 10 {
+		return "0" + strconv.Itoa(n)
+	}
+	return strconv.Itoa(n)
 }
 
 // nextDate is the next month/day on or after day t.
