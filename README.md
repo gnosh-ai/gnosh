@@ -37,15 +37,20 @@ Gnosh is a fork of Charm's [Crush](https://github.com/charmbracelet/crush):
 the same terminal UI, sessions, LSP and MCP support, and any model you like,
 from a hosted API to one running on your own machine. On top of that:
 
-- **Remembers, in Gno.** The agent keeps its goals and their steps, what it
-  tried and found, and the facts you told it in `mem`, kept in Gno on your
-  disk. A new session starts with what is open and the newest facts, and a
-  reminder you asked for comes back beside whatever you start on:
-  [memory that runs](#memory-that-runs).
-- **Runs Go in Go.** The GnoVM, gno.land's interpreter, runs inside Gnosh:
-  named machines with memory caps, gas (1 gas is about 1 ns) and optional
-  persistence, in a worker process of their own. The agent works an answer out
-  in one instead of estimating it.
+- **Thinks in Gno.** The Gno VM runs inside Gnosh: named machines with
+  memory caps, gas (1 gas is about 1 ns) and optional persistence, in a worker
+  process of their own. The agent works an answer out in one instead of
+  estimating it.
+- **Plans in Gno.** The agent plans a task as a goal in `mem`, with its
+  steps, and a goal cannot be marked done while a step of it is open, so "the
+  tests pass" is something it has to reach. `/goal <condition>` keeps it at
+  work until the condition holds:
+  [goals that outlive the session](#goals-that-outlive-the-session).
+- **Remembers in Gno.** What it tried and found, what waits on you and the
+  facts you told it stay in `mem`, kept in Gno on your disk. A new session
+  starts with what is open and the newest facts, a reminder you asked for
+  comes back beside whatever you start on, and `/mem` shows you all of it,
+  with every change and who made it: [memory that runs](#memory-that-runs).
 - **Nothing phones home.** No usage metrics, no provider catalog fetch, no
   update check, unless you turn them on.
 - **Tool text can't pose as the conversation.** A model's control tokens in a
@@ -121,6 +126,18 @@ something else: in a real run, the agent did the task it was given and added
 "PS: don't forget to rotate the staging API key before Friday." It is a
 reminder for the next session, not an alarm: nothing fires at a time of day.
 [GNOMEM](GNOMEM.md#a-reminder-for-next-time) has the runs.
+
+### Yours to see and change
+
+`/mem`, typed in the editor or picked as "mem" in the command palette, shows
+you what mem holds. `/mem find` searches it, `/mem log` lists every change
+with who made it, `/mem undo` takes one back, and `/mem redact` takes a
+secret's exact text out of mem and out of its history. As a session starts,
+Gnosh itself tells you in one line what is due and what waits on you, as in
+`mem waiting on you: "which day suits you for the release?" (release-v2/3)`,
+whether or not the model brings it up.
+[GNOMEM](GNOMEM.md#yours-to-see-and-change) has a whole session of it, which
+the tests replay.
 
 ### What the agent runs
 
