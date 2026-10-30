@@ -139,6 +139,14 @@ func (g Goal) Ask(question string) Goal {
 	return g
 }
 
+// Note records a finding on the goal, as mem.Note does, so that why or
+// when goes with the plan: mem.Goal("…").Note("it expires Friday"). A
+// model reached for it before it was there.
+func (g Goal) Note(note string) Goal {
+	g.m.Note(g.Name, note)
+	return g
+}
+
 // Bind is the goal the user's /goal binds a session to: the open goal
 // titled title, matched as Goal matches titles, or else a new one, made by
 // the user. replacing is the goal the session's earlier /goal added, if

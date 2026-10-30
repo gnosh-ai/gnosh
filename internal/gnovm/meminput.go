@@ -193,7 +193,7 @@ var (
 var memMoved = map[string]string{
 	"Add":      `mem.Goal("what to get done").Steps("a step", "another") plans a task, and names its steps after it`,
 	"Step":     `mem.Steps("goal-name", "a step") adds a step to an item`,
-	"Remind":   `mem.Goal("what to do").Wait("2026-12-01") waits for a day; mem.Ask("", "…") is something for the user`,
+	"Remind":   `a reminder for the user is a question for them, which every session raises: mem.Goal("what to do").Ask("…"); one for a day waits for it: mem.Goal("what to do").Wait("2026-12-01")`,
 	"Remember": `mem.Fact("name", "text") keeps a fact, and mem.Show("name") reads it back`,
 	"Facts":    `mem.Fact("name", "text") keeps a fact, and mem.Show("name") reads it back`,
 	"Items":    `mem.Show("name") shows an item, and mem.JSON("name") gives it as JSON`,
