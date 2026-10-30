@@ -16,6 +16,11 @@ Gnosh runs the <a href="https://github.com/gnolang/gno">Gno</a> VM in the AI har
 <p align="center">Security-first underneath: a fork of Charm's <a href="https://github.com/charmbracelet/crush">Crush</a> that closes the doors a coding agent usually leaves open.</p>
 
 <p align="center">
+  <a href="https://gnosh.ai/gnosh-demo.mp4"><img src="https://gnosh.ai/gnosh-demo.jpg" width="100%" alt="Gnosh in a terminal: click to play a 106-second real run"></a><br>
+  <sub>A real run on Qwen3.8-27B on a home AI box, the waiting cut short: Gnosh works out a retry backoff in a Gno VM, plans a Median function as a goal in <code>mem</code> and does its first step, then a new session picks the goal up and finishes it, and <code>/mem</code> shows what was kept. Click to play (106 s).</sub>
+</p>
+
+<p align="center">
   <a href="#memory-that-runs">Memory that runs</a> ·
   <a href="GNOMEM.md">GNOMEM</a> ·
   <a href="#security-first">Security first</a> ·
