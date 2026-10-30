@@ -89,14 +89,14 @@ func memBlock(st memStatus, now time.Time) string {
 	}
 	b.WriteString("mem: " + strings.Join(head, " · ") + "\n")
 	if len(due) > 0 {
-		b.WriteString("due: " + strings.Join(due, "; ") + "\n")
+		b.WriteString("due: " + memFew(due, len(due)) + "\n")
 	}
 	if len(m.Asks) > 0 {
 		var asks []string
 		for _, a := range m.Asks {
 			asks = append(asks, memRef(a.Name, a.Title))
 		}
-		b.WriteString("waiting on the user: " + strings.Join(asks, "; ") + "\n")
+		b.WriteString("waiting on the user: " + memFew(asks, m.Counts.ForUser) + "\n")
 	}
 	cut := false
 	for i, g := range m.Goals {
@@ -172,6 +172,20 @@ func memLine(s string, n int) string {
 }
 
 func utf8RuneStart(b byte) bool { return b&0xC0 != 0x80 }
+
+// maxMemBlockList is how many due items, or questions for the user, the
+// block names; memFew says how many more there are.
+const maxMemBlockList = 10
+
+// memFew is the first maxMemBlockList of list, of all of total, joined,
+// with how many more mem.Show() lists.
+func memFew(list []string, total int) string {
+	if len(list) <= maxMemBlockList && total <= len(list) {
+		return strings.Join(list, "; ")
+	}
+	list = list[:min(len(list), maxMemBlockList)]
+	return strings.Join(list, "; ") + "; and " + strconv.Itoa(max(total, len(list))-len(list)) + " more (mem.Show() lists them)"
+}
 
 func memPlural(n int, what string) string {
 	if n == 1 {

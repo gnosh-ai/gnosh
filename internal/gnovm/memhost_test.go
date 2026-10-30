@@ -631,6 +631,27 @@ func TestMemBlock(t *testing.T) {
 		"</mem>", block)
 }
 
+// The block names at most ten due items and ten questions for the user,
+// and how many more there are: its size is capped (MEMPLAN §3 row 82).
+func TestMemBlockCapsItsLists(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	code := `mem.Goal("ask the user things")`
+	for i := 1; i <= 14; i++ {
+		code += "\n" + `mem.Ask("ask-user-things", "question ` + strconv.Itoa(i) + `?")`
+	}
+	res, err := h.call(context.Background(), memRequest{Code: code, Session: "s1"})
+	require.NoError(t, err, res.Output)
+	st, ok := readMemStatus(dir)
+	require.True(t, ok)
+	block := memBlock(st, time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC))
+	line := block[strings.Index(block, "waiting on the user: "):]
+	line = line[:strings.Index(line, "\n")]
+	require.Equal(t, 10, strings.Count(line, "`ask-user-things/"), line)
+	require.True(t, strings.HasSuffix(line, "; and 4 more (mem.Show() lists them)"), line)
+}
+
 // The user is told at a session's start what in mem is due that day and
 // what waits on them; nothing, when nothing does.
 func TestMemNotice(t *testing.T) {

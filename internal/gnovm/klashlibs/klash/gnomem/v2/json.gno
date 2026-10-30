@@ -16,10 +16,12 @@ import (
 
 // maxJSONGoals is how many open goals JSON() lists, newest first: more than
 // the <mem> block shows, and few enough to compute after every change; and
-// maxJSONDays how many items waiting for a day.
+// maxJSONDays and maxJSONAsks how many items waiting for a day, and
+// questions for the user (counts.for_user counts them all).
 const (
 	maxJSONGoals = 20
 	maxJSONDays  = 50
+	maxJSONAsks  = 50
 	maxJSONSteps = 100
 )
 
@@ -88,12 +90,14 @@ func (m *Mem) JSON(names ...string) string {
 	j.close("]")
 	j.key("asks")
 	j.open("[")
+	i = 0
 	m.asks.Iterate("", "", func(n string, _ any) bool {
 		j.open("{")
 		j.field("name", n)
 		j.field("title", m.get(n).Title)
 		j.close("}")
-		return false
+		i++
+		return i == maxJSONAsks
 	})
 	j.close("]")
 	j.key("goals")
