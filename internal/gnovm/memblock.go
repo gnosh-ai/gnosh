@@ -217,3 +217,51 @@ func MemBlock(dir, project string) string {
 
 // MemBlock is MemBlock for this Lazy's directory.
 func (l *Lazy) MemBlock(project string) string { return MemBlock(l.opts.Dir, project) }
+
+// MemNotice is what the user is told at a session's start, by gnosh itself
+// rather than the model, which may not raise it: what in mem is due today,
+// and what waits on the user. "" when nothing is.
+func MemNotice(dir, project string) string {
+	st, ok := readMemStatus(memDir(dir, project))
+	if !ok {
+		return ""
+	}
+	return memNotice(st, time.Now())
+}
+
+// MemNotice is MemNotice for this Lazy's directory.
+func (l *Lazy) MemNotice(project string) string { return MemNotice(l.opts.Dir, project) }
+
+func memNotice(st memStatus, now time.Time) string {
+	var m memJSON
+	if json.Unmarshal(st.Mem, &m) != nil {
+		return ""
+	}
+	today := now.Format(time.DateOnly)
+	var parts []string
+	var due []string
+	for _, d := range m.Days {
+		if d.Wait <= today {
+			due = append(due, memNoticeRef(d.Name, d.Title)+" (since "+d.Wait+")")
+		}
+	}
+	if len(due) > 0 {
+		parts = append(parts, "due: "+strings.Join(due, "; "))
+	}
+	if len(m.Asks) > 0 {
+		var asks []string
+		for _, a := range m.Asks {
+			asks = append(asks, memNoticeRef(a.Name, a.Title))
+		}
+		parts = append(parts, "waiting on you: "+strings.Join(asks, "; "))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "mem " + strings.Join(parts, " · ")
+}
+
+// memNoticeRef names an item for the user: its title, then its name.
+func memNoticeRef(name, title string) string {
+	return strconv.Quote(memLine(title, 80)) + " (" + name + ")"
+}

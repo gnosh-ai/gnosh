@@ -466,3 +466,30 @@ func TestMemBlock(t *testing.T) {
 		"facts, newest first: `cmd/test` = go test -race ./...\n"+
 		"</mem>", block)
 }
+
+// The user is told at a session's start what in mem is due that day and
+// what waits on them; nothing, when nothing does.
+func TestMemNotice(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	for _, code := range []string{
+		`mem.Goal("renew the TLS cert").Wait("2026-12-01")`,
+		`mem.Goal("plan the release").Ask("which day suits you?")`,
+		`mem.Fact("cmd/test", "go test ./...")`,
+	} {
+		res, err := h.call(context.Background(), memRequest{Code: code, Session: "s1"})
+		require.NoError(t, err, res.Output)
+	}
+	st, ok := readMemStatus(dir)
+	require.True(t, ok)
+	require.Equal(t, `mem waiting on you: "which day suits you?" (plan-release/1)`,
+		memNotice(st, time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)))
+	require.Equal(t, `mem due: "renew the TLS cert" (renew-tls-cert) (since 2026-12-01) · waiting on you: "which day suits you?" (plan-release/1)`,
+		memNotice(st, time.Date(2026, 12, 2, 9, 0, 0, 0, time.UTC)))
+
+	res, err := h.call(context.Background(), memRequest{Code: `mem.Done("plan-release/1", "Tuesday")`, User: true})
+	require.NoError(t, err, res.Output)
+	st, _ = readMemStatus(dir)
+	require.Empty(t, memNotice(st, time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)), "nothing due, nothing waiting")
+}
