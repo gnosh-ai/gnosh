@@ -55,7 +55,7 @@ func (a *App) memRulesNotice(_ context.Context, sessionID string, rules []gnovm.
 		msg := "mem: this session "
 		switch {
 		case r.Text == "":
-			msg += "removed the rule `" + r.Name + "`, which every session followed as yours"
+			msg += "removed the rule `" + r.Name + "`, which every session followed as yours. If you did not ask for it, /mem log shows the change and /mem undo reverses it"
 		case r.Was == "":
 			msg += "set a rule every session will follow as yours: `" + r.Name + "` = " + quote(r.Text) + ". If you did not ask for it, /mem forget " + r.Name + " removes it"
 		default:

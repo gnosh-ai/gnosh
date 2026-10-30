@@ -932,9 +932,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// goes with the prompt as hook output does: hidden after its text, so
 	// a rebuilt conversation matches the server's cache. A queued copy
 	// carries it; a continuation does not ask again. A channel's message
-	// gets none, as the user's own sessions do: its sender may not be the
-	// user, and recall would hand it mem's facts unasked (MEMPLAN §3 row
-	// 73 treats channels as main sessions; that is Jae's call to make).
+	// gets none, though the user's own sessions do: its sender may not be
+	// the user, and recall would hand it mem's facts unasked (MEMPLAN §3
+	// row 73 treats channels as main sessions; that is Jae's call to make).
 	if a.memRecall != nil && !call.HiddenUserMessage && !call.promptHooksRan && call.Channel == "" {
 		if recall := a.memRecall(ctx, call.SessionID, call.Prompt); recall != "" {
 			call.promptHookContext = joinHookContext(call.promptHookContext, recall)
