@@ -5259,6 +5259,11 @@ func (m *UI) setInputMode(target uiInputMode) tea.Cmd {
 	}
 }
 
+// implementPlanPrompt is what leaving plan mode to carry out the plan
+// sends, hidden: the plan goes on mem first, so its steps are kept, shown
+// in the task list, and survive the session.
+const implementPlanPrompt = "Implement the plan. First put it on mem as a goal with its steps (`mem.Goal(\"…\").Steps(\"…\", \"…\")`), then work through them."
+
 // applyModeSwitch finalizes an input-mode switch once the backend has
 // settled. On error the previous mode is kept so the editor never claims a
 // mode the server's active agent does not match.
@@ -5270,7 +5275,7 @@ func (m *UI) applyModeSwitch(msg modeSwitchedMsg) []tea.Cmd {
 	m.setEditorPrompt(m.yoloModeCached())
 	var cmds []tea.Cmd
 	if msg.continueSessionID != "" && m.session != nil && m.session.ID == msg.continueSessionID {
-		cmds = append(cmds, m.sendMessageInternal("Implement the plan.", true))
+		cmds = append(cmds, m.sendMessageInternal(implementPlanPrompt, true))
 	}
 	switch {
 	case msg.mode == uiInputModePlan:

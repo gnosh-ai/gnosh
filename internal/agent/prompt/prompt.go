@@ -526,7 +526,8 @@ func (p *Prompt) promptData(ctx context.Context, provider, model string, store *
 		IsGitRepo:  isGit,
 		Platform:   platform,
 		Machine:    config.LocalMachine(),
-		Date:       p.now().Format("1/2/2006"),
+		// ISO, as Claude Code shows it: the model copies it into mem.Wait.
+		Date: p.now().Format(time.DateOnly),
 
 		AvailSkillXML: availSkillXML,
 		Skills:        allSkills,

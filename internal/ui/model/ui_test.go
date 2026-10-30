@@ -678,7 +678,7 @@ func TestPlanHandoffConfirm_ClearsPendingAndSwitchesMode(t *testing.T) {
 			}
 		}
 	}
-	require.Equal(t, []string{"Implement the plan."}, ws.runPrompts)
+	require.Equal(t, []string{implementPlanPrompt}, ws.runPrompts)
 	require.Equal(t, []bool{true}, ws.runHidden)
 }
 
