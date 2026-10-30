@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -186,9 +185,9 @@ for i := 0; i < 40; i++ {
 func TestMemV1IsFrozen(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	// Its own clock: the shared one's times depend on the other tests.
-	var tick atomic.Int64
-	clock := func() time.Time { return time.Unix(1_800_000_000, 0).Add(time.Duration(tick.Add(1)) * time.Second) }
+	// A clock that stands still: the shared one's times depend on the other
+	// tests, and a ticking one on how often the host reads it.
+	clock := func() time.Time { return time.Unix(1_800_000_000, 0) }
 	host := func() *Host {
 		h, err := NewHost(Options{
 			Dir: dir, Client: NewClientID(), Now: clock, BudgetBytes: 2 << 30,
@@ -260,4 +259,26 @@ func TestMemTwoKlashesMakeItOnce(t *testing.T) {
 	list, err := h3.List("/proj")
 	require.NoError(t, err)
 	require.Equal(t, int64(3), list.VMs[0].Entries) // the board, then two adds
+}
+
+// A mem VM keeps its board's first line in a file, so a new session can be
+// told what is open without a worker or a rebuild.
+func TestMemBoardSummary(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestHost(t, dir)
+	run(t, h, MemVM, `mem.Show()`)
+	require.Empty(t, BoardSummary(dir, "/proj"), "an empty board says nothing")
+
+	run(t, h, MemVM, memBoard)
+	got := changedRe.ReplaceAllString(BoardSummary(dir, "/proj"), "changed (time)")
+	require.Equal(t, "<gno-board>\nYour board, kept from earlier sessions in the Gno machine mem: "+
+		`board: 3 open, 2 done · next: 3 "update CHANGELOG" · changed (time)`+
+		". `mem.Show()` (gnovm_run name \"mem\") shows it; work on it only if this task is part of it.\n</gno-board>", got)
+
+	// Reads leave it as it is; a change rewrites it.
+	run(t, h, MemVM, `mem.Show()`)
+	run(t, h, MemVM, `mem.Drop(1, "postponed")`)
+	require.Empty(t, BoardSummary(dir, "/proj"), "nothing open, nothing said")
+	require.Empty(t, BoardSummary(dir, "/elsewhere"))
 }

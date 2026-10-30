@@ -313,6 +313,8 @@ type sessionAgent struct {
 	// goals are the sessions' goals, shared with the coordinator that sets
 	// them; nil, there are none (see goalContinuation).
 	goals *csync.Map[string, Goal]
+	// boardSummary is SessionAgentOptions.BoardSummary.
+	boardSummary func() string
 	// idleCompaction holds each session's idle-compaction timer, armed
 	// when a turn ends and stopped when the next starts; idleCompactAfter
 	// is how long it waits (see armIdleCompaction).
@@ -421,6 +423,9 @@ type SessionAgentOptions struct {
 	// Goals are the sessions' goals (see Goal), shared by a coordinator's
 	// agents, which set them; nil, there are none.
 	Goals *csync.Map[string, Goal]
+	// BoardSummary says what the project's Gno board (gnovm.BoardSummary)
+	// has open, for a new session's first prompt; nil or "", nothing.
+	BoardSummary func() string
 }
 
 func NewSessionAgent(
@@ -467,6 +472,7 @@ func NewSessionAgent(
 		sessionStarts:         sessionStarts,
 		instructionsLoaded:    instructionsLoaded,
 		goals:                 opts.Goals,
+		boardSummary:          opts.BoardSummary,
 	}
 }
 
@@ -1148,6 +1154,16 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	if !hasUserTextMessage(msgs) && currentSession.ParentSessionID == "" {
 		titleCtx := context.WithoutCancel(ctx)
 		go a.GenerateTitle(titleCtx, call.SessionID, call.Prompt)
+		// A new session starts with the project's board in view when an
+		// item on it is open: the model sees what is next without a tool
+		// call. It goes with the prompt, as SessionStart hook output does,
+		// so the system prompt stays the same for the server's cache.
+		if a.boardSummary != nil {
+			if board := a.boardSummary(); board != "" {
+				call.promptHookContext = joinHookContext(call.promptHookContext, board)
+				call.carriesSessionStart = true
+			}
+		}
 	}
 
 	// A conversation already past the point at which it is compacted, as

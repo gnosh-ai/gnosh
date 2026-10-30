@@ -415,3 +415,30 @@ func TestRun_SessionStartBlockStillMarksSessionStarted(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "x\n", string(data), "the second prompt does not run the hooks again")
 }
+
+// A new session starts with the project's Gno board in view, when an item
+// on it is open: what is next goes with the first prompt, as SessionStart
+// hook output does, and stays in the history as it went out.
+func TestRun_BoardSummaryGoesWithTheFirstPrompt(t *testing.T) {
+	t.Parallel()
+
+	r := sessionStartAgent(t, false, "")
+	board := "<gno-board>\nYour board: 2 open, 1 done · next: 3 \"update CHANGELOG\"\n</gno-board>"
+	r.agent.boardSummary = func() string { return board }
+	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "carry on"})
+	require.NoError(t, err)
+
+	want := "carry on\n\n" + message.PromptHookContext(board)
+	prompts := r.model.recorded()
+	require.Len(t, prompts, 1)
+	first := userTexts(prompts[0])
+	require.Equal(t, want, first[len(first)-1])
+
+	_, err = r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "and the tag"})
+	require.NoError(t, err)
+	prompts = r.model.recorded()
+	require.Len(t, prompts, 2)
+	texts := userTexts(prompts[1])
+	require.Contains(t, texts, want, "the first prompt goes out again as it did")
+	require.Equal(t, "and the tag", texts[len(texts)-1], "later prompts carry no board")
+}

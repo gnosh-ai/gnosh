@@ -43,9 +43,11 @@ const (
 	// MemVM is the agent's board: a persistent VM klash makes on first
 	// use, whose first entry declares mem, a klash/gnomem/v1 Board.
 	MemVM = "mem"
-	// memPrelude is MemVM's first entry.
+	// memPrelude is MemVM's first entry, made with request id
+	// memPreludeReq.
 	memPrelude = `import gnomem "` + boardPkg + `"
 var mem = gnomem.New()`
+	memPreludeReq = "klash:mem"
 
 	scratchPrefix = "scratch-"
 	// maxNamedVMs is how many named VMs a project may have; scratch VMs
@@ -804,7 +806,7 @@ func (h *Host) ensureMem(ctx context.Context, project string) (bool, error) {
 	if s.j != nil && s.j.seq > 0 {
 		return made, nil
 	}
-	res, err := h.runIn(ctx, s, RunRequest{Name: MemVM, Code: memPrelude, Req: "klash:mem"}, nil)
+	res, err := h.runIn(ctx, s, RunRequest{Name: MemVM, Code: memPrelude, Req: memPreludeReq}, nil)
 	if err != nil && strings.Contains(err.Error(), "already declared") {
 		return made, nil
 	}
@@ -922,6 +924,9 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 	v.seq, v.offset = e.Seq, s.j.size
 	s.cost.add(e)
 	res.Journaled, res.Seq = true, e.Seq
+	if s.name == MemVM && req.Req != memPreludeReq {
+		h.writeBoardSummary(ctx, s, v, e.Time)
+	}
 	// A VM grows after it is admitted: keep the others within the budget.
 	for _, name := range h.enforceBudget(s) {
 		res.Notes = append(res.Notes, "evicted VM "+name+" from memory to make room (it is rebuilt when next used)")

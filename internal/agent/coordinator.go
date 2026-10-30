@@ -387,6 +387,15 @@ const onDemandContextLimit = 40000
 // session gives nothing: what is given is recorded per session. A
 // relative filePath, as lsp_replace_symbol passes on as the model wrote
 // it, is taken from the working directory.
+// boardSummary is how a main agent tells a new session what the project's
+// Gno board has open; a sub-agent's sessions are not told.
+func (c *coordinator) boardSummary(isSubAgent bool) func() string {
+	if c.gnovms == nil || isSubAgent {
+		return nil
+	}
+	return func() string { return c.gnovms.BoardSummary(c.cfg.WorkingDir()) }
+}
+
 func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePath string) string {
 	if c.subdirectoryGiven == nil || sessionID == "" {
 		return ""
@@ -1072,6 +1081,7 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		SessionStarts:         c.sessionStarts,
 		InstructionsLoaded:    c.instructionsLoaded,
 		Goals:                 c.goals,
+		BoardSummary:          c.boardSummary(isSubAgent),
 		DisableAutoSummarize:  c.cfg.Config().Options.DisableAutoSummarize,
 		DisableIdleCompaction: c.cfg.Config().Options.DisableIdleCompaction,
 		IsYolo:                c.permissions.SkipRequests(),
