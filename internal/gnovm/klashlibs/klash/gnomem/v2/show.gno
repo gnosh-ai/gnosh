@@ -19,6 +19,7 @@ const (
 	maxShow       = 3000 // about the most Show or Find writes
 	maxShowClosed = 5    // closed goals Show lists
 	maxShowFacts  = 10   // facts Show lists
+	maxShowGroup  = 20   // facts and rules Show("group") lists
 	maxLine       = 160  // bytes of a result, wait or fact a line shows
 	maxList       = 5    // names a receipt lists before "and N more"
 	maxRun        = 5    // closed steps in a row an outline lists before folding them
@@ -300,17 +301,31 @@ func (m *Mem) showName(sb *strings.Builder, name string) {
 	if shown {
 		return
 	}
+	// A group: its facts and rules with their text, as Show lists facts,
+	// so reading one needs no other call.
 	var under []string
-	m.facts.Iterate(name+"/", name+"/\xff", func(n string, _ any) bool {
-		under = append(under, "fact `"+n+"`")
-		return len(under) == 50
+	more := 0
+	m.facts.Iterate(name+"/", name+"/\xff", func(n string, v any) bool {
+		if len(under) == maxShowGroup {
+			more++
+			return false
+		}
+		under = append(under, "  `"+n+"` = "+line(v.(*Fact).Text, maxLine))
+		return false
 	})
-	m.rules.Iterate(name+"/", name+"/\xff", func(n string, _ any) bool {
-		under = append(under, "rule `"+n+"`")
-		return len(under) == 100
+	m.rules.Iterate(name+"/", name+"/\xff", func(n string, v any) bool {
+		if len(under) == maxShowGroup {
+			more++
+			return false
+		}
+		under = append(under, "  rule `"+n+"` = "+line(v.(*Rule).Text, maxLine))
+		return false
 	})
 	if len(under) > 0 {
-		sb.WriteString("under `" + name + "/`: " + strings.Join(under, ", ") + "\n")
+		sb.WriteString("under `" + name + "/`:\n" + strings.Join(under, "\n") + "\n")
+		if more > 0 {
+			sb.WriteString("  … " + strconv.Itoa(more) + " more: mem.Show(\"" + name + "/…\") shows one\n")
+		}
 		return
 	}
 	sb.WriteString(m.miss(name) + "\n")

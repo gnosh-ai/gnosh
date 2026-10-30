@@ -353,8 +353,22 @@ func memPanicText(p any, bodyLine int, oneLine bool) string {
 	if strings.Contains(msg, "missing ',' before newline in argument list") {
 		msg += " (a call over several lines needs a comma after its last argument too, as in Go)"
 	}
+	// gno names the realm's variable mem<VPBlock(3,1)>; and a fact or a
+	// rule read with its setter is told how to read one.
+	msg = memVPBlockRe.ReplaceAllString(msg, "mem")
+	if m := memArgCountRe.FindStringSubmatch(msg); m != nil {
+		msg = "mem." + m[1] + " takes " + m[2] + " arguments, not " + m[3]
+		if (m[1] == "Fact" || m[1] == "Rule") && m[3] == "1" {
+			msg += ": mem." + m[1] + "(name, text) sets a " + strings.ToLower(m[1]) + ", and mem.Show(name) shows one"
+		}
+	}
 	return msg
 }
+
+var (
+	memVPBlockRe  = regexp.MustCompile(`mem<VPBlock\(\d+,\d+\)>`)
+	memArgCountRe = regexp.MustCompile(`wrong argument count in call to mem\.(\w+); want (\d+) got (\d+)`)
+)
 
 // memNotKept names what a failed input's receipts said it added, and the
 // facts and rules they said it set, for its refusal: ", so `ship`, added

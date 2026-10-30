@@ -89,7 +89,10 @@ facts, newest first:
   [x] `release-v2/3` "CI is green" → go test ./... → ok
 
 > s1: println(mem.Show("cmd"))
-under `cmd/`: fact `cmd/build`, fact `cmd/test`, fact `cmd/tests`
+under `cmd/`:
+  `cmd/build` = make build
+  `cmd/test` = go test -race ./...
+  `cmd/tests` = go test ./internal/...
 
 > s1: mem.Forget("release-v2")
 forgot `release-v2` and its 4 steps; gnosh erases their text from its files

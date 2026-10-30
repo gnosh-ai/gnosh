@@ -472,6 +472,8 @@ func TestHostRunsMem(t *testing.T) {
 	require.Contains(t, res.Notes, "mem.Goal(…) gives a Goal, not a name: pass its name, g.Name, or the name mem printed in backticks")
 	res = call(`mem.List("ship")`)
 	require.Contains(t, res.Notes, `mem.Show() lists what mem holds, and mem.Show("name") shows a goal with its steps`)
+	res = call(`mem.Fact("release/qa-signoff")`)
+	require.EqualError(t, res.Err, "mem.Fact takes 2 arguments, not 1: mem.Fact(name, text) sets a fact, and mem.Show(name) shows one")
 	res = call("import \"mem\"\nmem.Fact(\"cmd/test\", \"go test ./...\")")
 	require.NoError(t, res.Err)
 	require.Equal(t, "fact `cmd/test` is new\n", res.Output)
@@ -537,7 +539,7 @@ func TestMemShowGroupsHiddenFacts(t *testing.T) {
 	require.Contains(t, out, "  `notes/n01` = y\n")
 	require.NotContains(t, out, "`cmd/deploy` =")
 	require.Contains(t, out, "  … 5 more facts, in `cmd/` (1), `infra/` (2), `people/` (1), `staging-db`: mem.Show(\"cmd\") lists a group\n")
-	require.Contains(t, memOK(t, h, `mem.Show("infra")`).Output, "under `infra/`: fact `infra/a`, fact `infra/b`")
+	require.Contains(t, memOK(t, h, `mem.Show("infra")`).Output, "under `infra/`:\n  `infra/a` = x\n  `infra/b` = x\n")
 	require.Equal(t, "nothing in mem matches \"production\": Find matches the words as they were stored; mem.Show() lists 0 goals, 0 rules and the newest 10 of 15 facts, with the groups of the rest\n",
 		memOK(t, h, `mem.Find("production")`).Output)
 }
