@@ -47,8 +47,12 @@ func TestNewCoordinatorUsesTheSystemPromptFlags(t *testing.T) {
 		require.NoError(t, err)
 		coord := c.(*coordinator)
 		require.NoError(t, coord.readyWg.Wait())
-		return coord.agents[config.AgentCoder].(*sessionAgent).systemPrompt.Get(),
-			coord.agents[config.AgentPlan].(*sessionAgent).systemPrompt.Get()
+		// The <env> block goes to the conversation, not the system prompt
+		// (prompt.SplitEnv); put it back where it stood, to read the whole.
+		whole := func(a *sessionAgent) string {
+			return strings.Replace(a.systemPrompt.Get(), envPointerText, a.environment.Get(), 1)
+		}
+		return whole(coord.agents[config.AgentCoder].(*sessionAgent)), whole(coord.agents[config.AgentPlan].(*sessionAgent))
 	}
 
 	coder, plan := prompts("", "")
@@ -207,11 +211,13 @@ func TestRebuildSystemPromptsNamesAnAddedDir(t *testing.T) {
 	require.NoError(t, err)
 	coord := c.(*coordinator)
 	require.NoError(t, coord.readyWg.Wait())
-	coder := func() string { return coord.agents[config.AgentCoder].(*sessionAgent).systemPrompt.Get() }
+	// The working directories are in the <env> block, which the agents send
+	// as the first user message (prompt.SplitEnv).
+	coder := func() string { return coord.agents[config.AgentCoder].(*sessionAgent).environment.Get() }
 	task := func() string {
 		coord.agentMu.RLock()
 		defer coord.agentMu.RUnlock()
-		return coord.taskAgents[config.AgentCoder].agent.(*sessionAgent).systemPrompt.Get()
+		return coord.taskAgents[config.AgentCoder].agent.(*sessionAgent).environment.Get()
 	}
 	require.NotContains(t, coder(), "Additional working directories")
 	require.Contains(t, task(), "Working directory: ")
@@ -222,7 +228,14 @@ func TestRebuildSystemPromptsNamesAnAddedDir(t *testing.T) {
 	require.NoError(t, coord.RebuildSystemPrompts(t.Context()))
 	require.Contains(t, coder(), "\nAdditional working directories: /src/gno\n")
 	require.Contains(t, task(), "\nAdditional working directories: /src/gno\n")
-	plan := coord.agents[config.AgentPlan].(*sessionAgent).systemPrompt.Get()
-	require.Contains(t, plan, "\nAdditional working directories: /src/gno\n")
-	require.True(t, strings.HasPrefix(plan, "You are Klash in plan mode"))
+	planAgent := coord.agents[config.AgentPlan].(*sessionAgent)
+	require.Contains(t, planAgent.environment.Get(), "\nAdditional working directories: /src/gno\n")
+	require.True(t, strings.HasPrefix(planAgent.systemPrompt.Get(), "You are Klash in plan mode"))
+	require.NotContains(t, planAgent.systemPrompt.Get(), "Working directory: ", "the system prompt is the same in every session")
 }
+
+// envPointerText is the line prompt.SplitEnv leaves where <env> was.
+var envPointerText = func() string {
+	rest, _ := prompt.SplitEnv("<env>x</env>")
+	return rest
+}()

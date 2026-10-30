@@ -4,4 +4,5 @@ A one-off computation: does the model run it in a Gno machine and get it right?
 What is the sum of the first 1000 prime numbers? Compute it exactly; don't estimate.
 -- check --
 tool gnovm_run >= 1
-answer last contains 3682913
+answer last matches 3,?682,?913
+-- baseline --

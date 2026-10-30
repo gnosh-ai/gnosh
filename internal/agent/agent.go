@@ -247,6 +247,9 @@ type SessionAgent interface {
 	// ToolNames names the tools the agent offers the model.
 	ToolNames() []string
 	SetSystemPrompt(systemPrompt string)
+	// SetEnvironment sets the <env> block the agent sends as the first
+	// user message of every request (see prompt.SplitEnv).
+	SetEnvironment(env string)
 	Cancel(sessionID string)
 	CancelAll()
 	IsSessionBusy(sessionID string) bool
@@ -289,8 +292,11 @@ type sessionAgent struct {
 	largeModel         *csync.Value[Model]
 	smallModel         *csync.Value[Model]
 	systemPromptPrefix *csync.Value[string]
-	systemPrompt       *csync.Value[string]
-	tools              *csync.Slice[fantasy.AgentTool]
+	// environment is the <env> block taken out of the system prompt, sent
+	// as the first user message instead (prompt.SplitEnv).
+	environment  *csync.Value[string]
+	systemPrompt *csync.Value[string]
+	tools        *csync.Slice[fantasy.AgentTool]
 
 	isSubAgent bool
 	agentType  string // see SessionAgentOptions.AgentType
@@ -432,6 +438,7 @@ func NewSessionAgent(
 		largeModel:            csync.NewValue(opts.LargeModel),
 		smallModel:            csync.NewValue(opts.SmallModel),
 		systemPromptPrefix:    csync.NewValue(opts.SystemPromptPrefix),
+		environment:           csync.NewValue(""),
 		systemPrompt:          csync.NewValue(opts.SystemPrompt),
 		isSubAgent:            opts.IsSubAgent,
 		agentType:             opts.AgentType,
@@ -2421,6 +2428,12 @@ If not, please feel free to ignore. Again do not mention this message to the use
 			),
 		))
 	}
+	// The environment comes after the system prompt and the tools, which
+	// stay the same from one session to the next, so a local model server
+	// reuses them (prompt.SplitEnv).
+	if env := a.environment.Get(); env != "" {
+		history = append(history, fantasy.NewUserMessage(env))
+	}
 	// Collect all tool call IDs present in assistant messages, then index
 	// every tool result by its call ID. Tool results are re-emitted right
 	// after the assistant message that requested them instead of at their
@@ -3344,6 +3357,10 @@ func (a *sessionAgent) ToolNames() []string {
 
 func (a *sessionAgent) SetSystemPrompt(systemPrompt string) {
 	a.systemPrompt.Set(systemPrompt)
+}
+
+func (a *sessionAgent) SetEnvironment(env string) {
+	a.environment.Set(env)
 }
 
 func (a *sessionAgent) Model() Model {

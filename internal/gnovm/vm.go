@@ -423,6 +423,10 @@ func renderValue(tv gno.TypedValue) string { return renderAt(tv, 0) }
 // renderAt follows one pointer, so &P{1, 2} shows as that rather than as a
 // bare pointer kind, and names a struct's declared type.
 func renderAt(tv gno.TypedValue, depth int) string {
+	// A package variable a closure captures is boxed in a heap item.
+	if hiv, ok := tv.V.(*gno.HeapItemValue); ok {
+		tv = hiv.Value
+	}
 	if tv.T == nil {
 		return gno.BoundedSprintTV(tv, nil, maxValue)
 	}

@@ -46,6 +46,10 @@ import (
 //	GNOVM_SCENARIO_VARIANTS  comma-separated, e.g. "v0,v1-hint" (default all)
 //	GNOVM_SCENARIO_ONLY      a regexp on scenario names
 //	GNOVM_SCENARIO_MODEL     a model for klash run -m
+//	GNOVM_SCENARIO_REASONING the large model's reasoning level (default
+//	                         "nothink": these runs measure tool use, and
+//	                         Qwen's thinking is most of their time); "" keeps
+//	                         the user's
 //	GNOVM_SCENARIO_STRICT=1  fail the test when a check fails (by default
 //	                         the checks are reported: the scenarios measure
 //	                         the model and the prompt as much as klash)
@@ -58,13 +62,17 @@ func TestScenarios(t *testing.T) {
 	}
 	home := cmp.Or(os.Getenv("GNOVM_SCENARIO_HOME"), os.Getenv("HOME"))
 	out := cmp.Or(os.Getenv("GNOVM_SCENARIO_OUT"), t.TempDir())
-	variants := []string{"v0"}
+	var variants []string
 	prompts, _ := filepath.Glob("testdata/prompts/*.md")
 	for _, p := range prompts {
 		variants = append(variants, strings.TrimSuffix(filepath.Base(p), ".md"))
 	}
 	if v := os.Getenv("GNOVM_SCENARIO_VARIANTS"); v != "" {
 		variants = strings.Split(v, ",")
+	}
+	reasoning, setReasoning := os.LookupEnv("GNOVM_SCENARIO_REASONING")
+	if !setReasoning {
+		reasoning = "nothink"
 	}
 	only := regexp.MustCompile(cmp.Or(os.Getenv("GNOVM_SCENARIO_ONLY"), "."))
 	files, err := filepath.Glob("testdata/scenarios/*.txtar")
@@ -84,14 +92,21 @@ func TestScenarios(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", file, err)
 		}
-		for _, variant := range variants {
+		runVariants := variants
+		if sc.baseline && os.Getenv("GNOVM_SCENARIO_VARIANTS") == "" {
+			// The baseline, no prompt at all, runs only where a scenario
+			// asks for it: elsewhere it shows only that the model does
+			// not reach for the machines unasked.
+			runVariants = append([]string{"v0"}, variants...)
+		}
+		for _, variant := range runVariants {
 			t.Run(name+"/"+variant, func(t *testing.T) {
 				t.Parallel()
 				r := &scenarioRun{scenario: name, variant: variant, dir: filepath.Join(out, name+"-"+variant+"-"+stamp)}
 				mu.Lock()
 				results = append(results, r)
 				mu.Unlock()
-				r.run(t, sc, klash, home)
+				r.run(t, sc, klash, home, reasoning)
 				for _, c := range r.checks {
 					if !c.ok && os.Getenv("GNOVM_SCENARIO_STRICT") == "1" {
 						t.Errorf("check failed: %s (%s)", c.line, c.got)
@@ -110,6 +125,8 @@ type scenario struct {
 	turns  []turnSpec
 	files  map[string]string
 	checks []string
+	// baseline is set by a "baseline" section: run with no prompt too.
+	baseline bool
 }
 
 type turnSpec struct {
@@ -153,6 +170,8 @@ func parseScenario(path string) (*scenario, error) {
 			}
 		case strings.HasPrefix(name, "project/"):
 			sc.files[strings.TrimPrefix(name, "project/")] = body
+		case name == "baseline":
+			sc.baseline = true
 		default:
 			return nil, fmt.Errorf("unknown section %q", name)
 		}
@@ -190,7 +209,7 @@ type checkResult struct {
 	ok        bool
 }
 
-func (r *scenarioRun) run(t *testing.T, sc *scenario, klash, home string) {
+func (r *scenarioRun) run(t *testing.T, sc *scenario, klash, home, reasoning string) {
 	start := time.Now()
 	defer func() { r.took = time.Since(start) }()
 	project := filepath.Join(r.dir, "project")
@@ -203,6 +222,9 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, klash, home string) {
 	copyIfThere(t, filepath.Join(home, ".config", "crush", "crushrc"), filepath.Join(cfg, "crush", "crushrc"))
 	for _, f := range []string{"providers.json", "metrics-consent.json", "crush.json"} {
 		copyIfThere(t, filepath.Join(home, ".local", "share", "crush", f), filepath.Join(data, "crush", f))
+	}
+	if reasoning != "" {
+		setLargeModelReasoning(t, filepath.Join(data, "crush", "crush.json"), reasoning)
 	}
 	for name, body := range sc.files {
 		path := filepath.Join(project, name)
@@ -261,6 +283,43 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, klash, home string) {
 		r.checks = append(r.checks, r.check(line, project, env))
 	}
 	writeReport(t, r, sc)
+}
+
+// setLargeModelReasoning sets the large model's reasoning level in a copied
+// crush.json (options.reasoning, keyed "provider/model").
+func setLargeModelReasoning(t *testing.T, path, level string) {
+	cfg := map[string]any{}
+	if b, err := os.ReadFile(path); err == nil {
+		if err := json.Unmarshal(b, &cfg); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+	}
+	models, _ := cfg["models"].(map[string]any)
+	large, _ := models["large"].(map[string]any)
+	provider, _ := large["provider"].(string)
+	model, _ := large["model"].(string)
+	if provider == "" || model == "" {
+		t.Logf("no large model in %s; reasoning left as it is", path)
+		return
+	}
+	options, _ := cfg["options"].(map[string]any)
+	if options == nil {
+		options = map[string]any{}
+		cfg["options"] = options
+	}
+	levels, _ := options["reasoning"].(map[string]any)
+	if levels == nil {
+		levels = map[string]any{}
+		options["reasoning"] = levels
+	}
+	levels[provider+"/"+model] = level
+	b, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func copyIfThere(t *testing.T, from, to string) {

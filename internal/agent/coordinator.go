@@ -25,6 +25,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/hyper"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/prompt"
+	promptpkg "github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
@@ -1100,7 +1101,9 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		if err != nil {
 			return err
 		}
+		systemPrompt, env := promptpkg.SplitEnv(systemPrompt)
 		result.SetSystemPrompt(systemPrompt)
+		result.SetEnvironment(env)
 		return nil
 	})
 
@@ -1876,7 +1879,9 @@ func (c *coordinator) RebuildSystemPrompts(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		systemPrompt, env := promptpkg.SplitEnv(systemPrompt)
 		a.agent.SetSystemPrompt(systemPrompt)
+		a.agent.SetEnvironment(env)
 	}
 	return nil
 }
