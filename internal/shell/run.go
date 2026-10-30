@@ -300,13 +300,15 @@ type execMiddleware = func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc
 //     script exec's rather than the outer path-prefixed wrapper;
 //  3. block list;
 //  4. tool names (a Gnosh tool run as a command is told to be called);
-//  5. optional Go coreutils (only when useGoCoreUtils is on).
+//  5. missing commands (told what to do instead of searching for them);
+//  6. optional Go coreutils (only when useGoCoreUtils is on).
 func standardHandlers(blockFuncs []BlockFunc) []execMiddleware {
 	handlers := []execMiddleware{
 		builtinHandler(),
 		scriptDispatchHandler(blockFuncs),
 		blockHandler(blockFuncs),
 		toolNameHandler(),
+		missingCommandHandler(),
 	}
 	if useGoCoreUtils && coreUtilsExecHandler != nil {
 		handlers = append(handlers, coreUtilsExecHandler)
@@ -375,4 +377,32 @@ func toolNameHandler() execMiddleware {
 			return err
 		}
 	}
+}
+
+// missingCommandHandler returns middleware that says what to do when the
+// shell cannot find a command by name. Told only "executable file not
+// found", or nothing by `command -v`, agents searched the whole disk for
+// it with `find /`, a prompt line against it notwithstanding: a note under
+// the failure is read before the next call (QA, 2026-10-30).
+func missingCommandHandler() execMiddleware {
+	return func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+		return func(ctx context.Context, args []string) error {
+			err := next(ctx, args)
+			if len(args) == 0 || ExitCode(err) != 127 || strings.Contains(args[0], "/") || tooldefs.IsKnown(args[0]) {
+				return err
+			}
+			hc := interp.HandlerCtx(ctx)
+			if _, lookErr := interp.LookPathDir(hc.Dir, hc.Env, args[0]); lookErr == nil {
+				return err
+			}
+			fmt.Fprintln(hc.Stderr, MissingCommandNote(args[0]))
+			return err
+		}
+	}
+}
+
+// MissingCommandNote is what an agent is told of a command that is not
+// installed.
+func MissingCommandNote(name string) string {
+	return name + " is not installed here: use another way if there is one, or ask the user where it is or how to get it; do not search the disk for it."
 }

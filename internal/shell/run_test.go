@@ -269,6 +269,17 @@ func TestRun_ToolNameAsCommand(t *testing.T) {
 	if code != 127 || strings.Contains(stderr, "Gnosh tool") {
 		t.Fatalf("a missing command that names no tool: exit %d, stderr %q", code, stderr)
 	}
+	// It is told what to do instead of searching the disk for it, and a
+	// tool's name is told to call the tool instead.
+	if !strings.Contains(stderr, MissingCommandNote("no_such_command_here")) {
+		t.Fatalf("a missing command is not told what to do: %q", stderr)
+	}
+	if _, stderr, _ = run("job_kill 077", nil); strings.Contains(stderr, "is not installed here") {
+		t.Fatalf("a tool's name is told it is missing: %q", stderr)
+	}
+	if _, stderr, _ = run("./no_such_script.sh", nil); strings.Contains(stderr, "is not installed here") {
+		t.Fatalf("a missing file is told it is not installed: %q", stderr)
+	}
 
 	// Go's coreutils, the default on Windows, run ls in process, off the
 	// PATH: an ls that worked is no cue to call the ls tool.

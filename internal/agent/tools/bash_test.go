@@ -139,6 +139,22 @@ func TestBashTool_ToolNameAsCommand(t *testing.T) {
 	require.Contains(t, resp.Content, "job_kill is a Gnosh tool, not a shell command: call the job_kill tool instead.")
 }
 
+// A command that is not installed, or a lookup that finds nothing, is told
+// what to do: agents searched the whole disk for a missing tool with
+// `find /` (QA's replan scenario, 2026-10-30).
+func TestBashTool_MissingCommand(t *testing.T) {
+	workingDir := t.TempDir()
+	tool := newBashToolForTest(workingDir)
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
+	note := shell.MissingCommandNote("no-such-lint")
+	for _, command := range []string{"no-such-lint app.sh", "command -v no-such-lint", "which no-such-lint"} {
+		resp := runBashTool(t, tool, ctx, BashParams{Description: "check the linter", Command: command})
+		require.Contains(t, resp.Content, note, command)
+	}
+	resp := runBashTool(t, tool, ctx, BashParams{Description: "check the shell", Command: "command -v sh"})
+	require.NotContains(t, resp.Content, "is not installed here", "a lookup that finds it")
+}
+
 type recordingPermissionService struct {
 	*pubsub.Broker[permission.PermissionRequest]
 	requestCount int
