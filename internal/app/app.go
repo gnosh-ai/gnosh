@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -1313,7 +1312,7 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 	}
 	if app.gnovms == nil {
 		app.gnovms = gnovm.NewLazy(gnovm.ClientOptions{Options: gnovm.Options{
-			Dir:        filepath.Join(filepath.Dir(config.GlobalConfigData()), "gnovm"),
+			Dir:        GnoVMDir(),
 			Embeddings: app.config.Config().Options.MemEmbeddingsURL,
 		}})
 		hooks.SetMemStatusPath(app.gnovms.MemStatusPath)

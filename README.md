@@ -150,7 +150,8 @@ Gnosh itself tells you in one line what is due and what waits on you, as in
 `mem waiting on you: "which day suits you for the release?" (release-v2/3)`,
 whether or not the model brings it up. And when a session sets, changes or
 removes a rule, which every later session follows as yours, Gnosh warns you
-and says how to undo it.
+and says how to undo it. From a terminal, `gnosh mem` (and `gnosh mem show`,
+`find` and `log`) prints the same with no model.
 [GNOMEM](GNOMEM.md#yours-to-see-and-change) has a whole session of it, which
 the tests replay.
 

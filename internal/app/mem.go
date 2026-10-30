@@ -3,15 +3,23 @@ package app
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strconv"
 
 	"github.com/charmbracelet/crush/internal/agent/notify"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/gnovm"
 	"github.com/charmbracelet/crush/internal/pubsub"
 )
 
 // errNoGnoVMs is the answer about mem before the GnoVM machines are set up.
 var errNoGnoVMs = errors.New("mem is not set up: the agent is not ready")
+
+// GnoVMDir is where gnosh keeps its GnoVM machines and every project's mem,
+// beside its global data.
+func GnoVMDir() string {
+	return filepath.Join(filepath.Dir(config.GlobalConfigData()), "gnovm")
+}
 
 // MemCommand runs /mem, the user's command for the project's mem, typed in
 // the session sessionID ("" for none), and returns what to show them. The

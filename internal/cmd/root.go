@@ -87,6 +87,7 @@ func init() {
 		loginCmd,
 		statsCmd,
 		sessionCmd,
+		memCmd,
 		doctorCmd,
 	)
 }
