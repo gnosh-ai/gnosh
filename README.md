@@ -398,12 +398,14 @@ Claude Code's names work here too.
 - **`/goal <condition>`** keeps the agent working until the condition holds,
   as in Claude Code, with the goal kept in mem: the condition becomes a goal
   there, which the agent plans as steps, and as each turn ends mem says what
-  comes next. Once the agent closes the goal, the small model checks the
-  condition against what mem holds of it: met, the goal is cleared; not met,
-  it is reopened with the reason as a note, and the agent goes back to it.
-  `/goal` shows the condition, the goal's name and the last check, and
-  `/goal clear` clears it. `gnosh run --goal` does the same in one run and
-  says on stderr whether the goal was met.
+  comes next: the next step, or the end of the turn while the goal waits on
+  you, a day or another session. Once the agent closes the goal, the small
+  model checks the condition against what mem holds of it: met, the goal is
+  cleared; not met, it is reopened with the reason as a note, and the agent
+  goes back to it. `/goal` shows the condition, the goal's name and the last
+  check, and `/goal clear` clears it. `gnosh run --goal` does the same in one
+  run, says on stderr whether the goal was met, and exits non-zero while it
+  is still set.
 - **`/rewind`** (or `/checkpoint`, `/undo`, or Esc twice on an empty prompt)
   goes back to before one of your messages, as in Claude Code: it restores
   the files the agent's edit and write tools changed since then, the
