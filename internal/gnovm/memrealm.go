@@ -50,7 +50,8 @@ const memLibPath = "klash/gnomem/v2"
 // apply.gno, bptree v0 and the realm's source fix how a Mem is stored, and
 // TestMemLayoutPinned pins their hash to this number: changing them means a
 // new number, and a store of an older one is rebuilt from its journal.
-const memLayout = 2
+// 3 indexes open goals by title, items waiting for words, and fact groups.
+const memLayout = 3
 
 // memLayoutFiles are the library sources memLayout covers.
 var memLayoutFiles = []string{

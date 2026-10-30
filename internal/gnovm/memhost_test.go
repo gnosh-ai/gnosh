@@ -690,6 +690,25 @@ func TestMemBlockCapsItsLists(t *testing.T) {
 	require.True(t, strings.HasSuffix(line, "; and 4 more (mem.Show() lists them)"), line)
 }
 
+// A goal that waits for something said in words stays in the block when
+// newer goals push it out of the open goals listed (MEMPLAN §3 row 47).
+func TestMemBlockNamesWhatWaitsForWords(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	memOK(t, h, `mem.Goal("bump the gno pin").Wait("PR #6399 merged")`)
+	code := ""
+	for i := 1; i <= 25; i++ {
+		code += `mem.Goal("task number ` + strconv.Itoa(i) + `")` + "\n"
+	}
+	memOK(t, h, code)
+	st, ok := readMemStatus(dir)
+	require.True(t, ok)
+	block := memBlock(st, time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC))
+	require.Contains(t, block, "waiting for something said: `bump-gno-pin` \"bump the gno pin\" (PR #6399 merged)\n")
+	require.NotContains(t, block, "- `bump-gno-pin`", "not among the newest goals listed")
+}
+
 // The user is told at a session's start what in mem is due that day and
 // what waits on them; nothing, when nothing does.
 func TestMemNotice(t *testing.T) {

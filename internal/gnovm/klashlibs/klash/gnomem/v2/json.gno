@@ -22,13 +22,14 @@ const (
 	maxJSONGoals = 20
 	maxJSONDays  = 50
 	maxJSONAsks  = 50
+	maxJSONWords = 50
 	maxJSONSteps = 100
 )
 
 // JSON returns, for gnosh and hooks, the goals with names, or with no names:
 // the counts, the rules, the open items waiting for a day (soonest first,
-// with the day, so a reader can tell what is due on any day), the questions
-// for the user, the newest 20 open goals and the newest facts. A goal comes
+// with the day, so a reader can tell what is due on any day), those
+// waiting for words (by name, with the words), the questions for the user, the newest 20 open goals and the newest facts. A goal comes
 // with its status, result, wait, for and doing, who made it and when it
 // changed, how many of its steps are open and done, its next for caller()
 // and that item's title, and, when its next is "", what holds back the open
@@ -86,6 +87,19 @@ func (m *Mem) JSON(names ...string) string {
 		j.close("}")
 		i++
 		return i == maxJSONDays
+	})
+	j.close("]")
+	j.key("words")
+	j.open("[")
+	i = 0
+	m.words.Iterate("", "", func(n string, _ any) bool {
+		j.open("{")
+		j.field("name", n)
+		j.field("title", m.get(n).Title)
+		j.field("wait", m.get(n).Wait)
+		j.close("}")
+		i++
+		return i == maxJSONWords
 	})
 	j.close("]")
 	j.key("asks")

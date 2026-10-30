@@ -30,6 +30,7 @@ type memJSON struct {
 		Changed        int64
 	} `json:"rules"`
 	Days  []struct{ Name, Title, Wait string } `json:"days"`
+	Words []struct{ Name, Title, Wait string } `json:"words"`
 	Asks  []struct{ Name, Title string }       `json:"asks"`
 	Goals []struct {
 		Name, Title, Wait, By string
@@ -48,7 +49,8 @@ const maxMemBlock = 2000
 
 // memBlock is what a new session is told of mem, from its status: the
 // user's rules in full, first; then, within about maxMemBlock bytes, the
-// counts, what is due today, the questions for the user, the open goals
+// counts, what is due today, the questions for the user, what waits for
+// something said in words (older than the goals listed), the open goals
 // newest first with their next, and the newest facts. "" when mem holds
 // none of these.
 func memBlock(st memStatus, now time.Time) string {
@@ -97,6 +99,21 @@ func memBlock(st memStatus, now time.Time) string {
 			asks = append(asks, memRef(a.Name, a.Title))
 		}
 		b.WriteString("waiting on the user: " + memFew(asks, m.Counts.ForUser) + "\n")
+	}
+	// A goal that waits for words ("PR #6399 merged") is easy to lose once
+	// newer goals push it out of the list below: it is named here.
+	listed := map[string]bool{}
+	for _, g := range m.Goals {
+		listed[g.Name] = true
+	}
+	var words []string
+	for _, w := range m.Words {
+		if !listed[w.Name] {
+			words = append(words, memRef(w.Name, w.Title)+" ("+memEscape(memLine(w.Wait, 80))+")")
+		}
+	}
+	if len(words) > 0 {
+		b.WriteString("waiting for something said: " + memFew(words, len(words)) + "\n")
 	}
 	cut := false
 	for i, g := range m.Goals {

@@ -206,24 +206,12 @@ func forgottenName(n string) bool {
 	return strings.HasPrefix(n, "forgotten-")
 }
 
-// sameTitle is a title as titles are matched: ASCII case folded, runs of
-// white space as one space, trailing . , ; : ! ? dropped.
-func sameTitle(t string) string {
-	t = strings.Join(strings.Fields(strings.ToLower(t)), " ")
-	return strings.TrimRight(t, ".,;:!?")
-}
-
 // refuseOpenTitle refuses a new top-level item whose title an open one has.
 func (m *Mem) refuseOpenTitle(title string) {
-	want := sameTitle(title)
-	m.open.Iterate("", "", func(_ string, v any) bool {
-		n := v.(string)
+	if n := m.titled(title); n != "" {
 		it := m.get(n)
-		if sameTitle(it.Title) != want {
-			return false
-		}
 		panic(ref(n, it.Title) + " (" + who(it.By) + ", " + ago(it.Changed) + ", " + progress(it) + ") is already open: add to it with mem.Steps(\"" + n + "\", \"…\"), or give other work a title that tells them apart")
-	})
+	}
 }
 
 // checkName refuses a fact's or a rule's name outside the grammar.
@@ -345,14 +333,14 @@ func like(suggestion, example string) string {
 	return ", like `" + example + "`"
 }
 
-// titled is the name of the open goal titled title, or "".
+// titled is the name of the open goal titled title, or "": one lookup in
+// the titles index.
 func (m *Mem) titled(title string) string {
-	want, found := sameTitle(title), ""
-	m.open.Iterate("", "", func(_ string, v any) bool {
-		if n := v.(string); sameTitle(m.get(n).Title) == want {
-			found = n
-		}
-		return found != ""
+	found := ""
+	want := sameTitle(title) + "|"
+	m.titles.Iterate(want, want+"\xff", func(_ string, v any) bool {
+		found = v.(string)
+		return true
 	})
 	return found
 }

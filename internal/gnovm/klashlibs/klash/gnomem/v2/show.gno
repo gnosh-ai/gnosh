@@ -122,22 +122,17 @@ func (m *Mem) factGroups(shown map[string]bool) string {
 			parts = append(parts, "`"+group+"`")
 		}
 	}
-	m.facts.Iterate("", "", func(n string, _ any) bool {
-		if shown[n] {
-			return false
-		}
-		g := n
-		if i := strings.Index(n, "/"); i >= 0 {
-			g = n[:i+1]
-		}
-		if g != group {
-			flush()
-			group, count = g, 0
-		}
-		count++
+	// The groups index counts each group's facts; those shown already
+	// are taken off, so the walk is over groups, not every fact.
+	less := map[string]int{}
+	for n := range shown {
+		less[factGroup(n)]++
+	}
+	m.groups.Iterate("", "", func(g string, v any) bool {
+		group, count = g, v.(int)-less[g]
+		flush()
 		return false
 	})
-	flush()
 	if len(parts) > maxShowGroups {
 		parts = append(parts[:maxShowGroups], plural(len(parts)-maxShowGroups, "more group"))
 	}

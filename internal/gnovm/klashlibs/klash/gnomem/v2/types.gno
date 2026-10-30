@@ -29,6 +29,9 @@ type Mem struct {
 	closed bptree.BPTree // stampKey(changed, name) → name: each done or dropped goal
 	recent bptree.BPTree // stampKey(changed, name) → name: each fact
 	taken  bptree.BPTree // goal name → true: every top-level name ever given
+	titles bptree.BPTree // sameTitle(title) + "|" + name → name: each open goal, by its title
+	words  bptree.BPTree // name → true: each open item waiting for words
+	groups bptree.BPTree // factGroup(name) → how many facts the group has
 	counts Counts
 }
 

@@ -22,7 +22,7 @@ func (m *Mem) Check() string {
 	var problems []string
 	bad := func(s string) { problems = append(problems, s) }
 	var c Counts
-	open, closed, asks, days := 0, 0, 0, 0
+	open, closed, asks, days, words := 0, 0, 0, 0, 0
 	m.items.Iterate("", "", func(k string, v any) bool {
 		name, it := unkey(k), v.(*Todo)
 		stepsOpen, stepsDone := 0, 0
@@ -49,6 +49,9 @@ func (m *Mem) Check() string {
 				if m.open.Get(stampKey(it.Changed, name)) == nil {
 					bad("open `" + name + "` is not in the open goals")
 				}
+				if m.titles.Get(sameTitle(it.Title)+"|"+name) == nil {
+					bad("open `" + name + "` is not in the titles")
+				}
 			}
 			if it.For != "" {
 				c.ForUser++
@@ -63,6 +66,11 @@ func (m *Mem) Check() string {
 					days++
 					if m.days.Get(it.Wait+"|"+name) == nil {
 						bad("`" + name + "` waits until " + it.Wait + " but is not in the days")
+					}
+				} else {
+					words++
+					if m.words.Get(name) == nil {
+						bad("`" + name + "` waits for words but is not in the words")
 					}
 				}
 			}
@@ -87,6 +95,17 @@ func (m *Mem) Check() string {
 	if c != m.counts {
 		bad("the counts are " + countsText(m.counts) + ", but the items make " + countsText(c))
 	}
+	groups := map[string]int{}
+	m.facts.Iterate("", "", func(n string, _ any) bool {
+		groups[factGroup(n)]++
+		return false
+	})
+	m.groups.Iterate("", "", func(g string, v any) bool {
+		if v.(int) != groups[g] {
+			bad("the group `" + g + "` counts " + strconv.Itoa(v.(int)) + " facts, but has " + strconv.Itoa(groups[g]))
+		}
+		return len(problems) >= 10
+	})
 	for _, ix := range []struct {
 		what       string
 		size, want int
@@ -95,6 +114,9 @@ func (m *Mem) Check() string {
 		{"closed goals", m.closed.Size(), closed},
 		{"questions", m.asks.Size(), asks},
 		{"days", m.days.Size(), days},
+		{"words", m.words.Size(), words},
+		{"titles", m.titles.Size(), open},
+		{"fact groups", m.groups.Size(), len(groups)},
 		{"facts by time", m.recent.Size(), m.facts.Size()},
 	} {
 		if ix.size != ix.want {

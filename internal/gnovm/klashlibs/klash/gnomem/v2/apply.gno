@@ -66,6 +66,7 @@ func (m *Mem) apply(op Op, at int64) {
 			}
 			m.recent.Remove(stampKey(f.Changed, op.Name))
 			m.facts.Remove(op.Name)
+			m.group(op.Name, -1)
 			return
 		case "rule":
 			if m.getRule(op.Name) == nil {
@@ -117,6 +118,7 @@ func (m *Mem) applyAdd(op Op) {
 	} else {
 		m.taken.Set(op.Name, true)
 		m.open.Set(stampKey(0, op.Name), op.Name)
+		m.titles.Set(sameTitle(op.New)+"|"+op.Name, op.Name)
 	}
 	m.items.Set(key(op.Name), &Todo{Title: op.New, By: op.By})
 	m.counts.Open++
@@ -130,6 +132,7 @@ func (m *Mem) applyUnadd(op Op) {
 	m.items.Remove(key(op.Name))
 	if p := parentOf(op.Name); p == "" {
 		m.open.Remove(stampKey(it.Changed, op.Name))
+		m.titles.Remove(sameTitle(it.Title) + "|" + op.Name)
 	} else {
 		m.get(p).OpenSteps--
 	}
@@ -206,6 +209,7 @@ func (m *Mem) setStatus(name string, it *Todo, status string, at int64) {
 		m.counts.Open--
 		if top {
 			m.open.Remove(stampKey(it.Changed, name))
+			m.titles.Remove(sameTitle(it.Title) + "|" + name)
 		}
 		if it.For != "" {
 			m.asks.Remove(name)
@@ -213,9 +217,7 @@ func (m *Mem) setStatus(name string, it *Todo, status string, at int64) {
 		}
 		if it.Wait != "" {
 			m.counts.Waits--
-			if isDay(it.Wait) {
-				m.days.Remove(it.Wait + "|" + name)
-			}
+			m.unwait(name, it.Wait)
 		}
 	} else {
 		m.counts.countStatus(it.Status, -1)
@@ -228,6 +230,7 @@ func (m *Mem) setStatus(name string, it *Todo, status string, at int64) {
 		m.counts.Open++
 		if top {
 			m.open.Set(stampKey(it.Changed, name), name)
+			m.titles.Set(sameTitle(it.Title)+"|"+name, name)
 		}
 		if it.For != "" {
 			m.asks.Set(name, true)
@@ -235,9 +238,7 @@ func (m *Mem) setStatus(name string, it *Todo, status string, at int64) {
 		}
 		if it.Wait != "" {
 			m.counts.Waits++
-			if isDay(it.Wait) {
-				m.days.Set(it.Wait+"|"+name, name)
-			}
+			m.rewait(name, it.Wait)
 		}
 	} else {
 		m.counts.countStatus(status, 1)
@@ -275,18 +276,32 @@ func (m *Mem) setWait(name string, it *Todo, wait string) {
 	if it.Status == "" {
 		if it.Wait != "" {
 			m.counts.Waits--
-			if isDay(it.Wait) {
-				m.days.Remove(it.Wait + "|" + name)
-			}
+			m.unwait(name, it.Wait)
 		}
 		if wait != "" {
 			m.counts.Waits++
-			if isDay(wait) {
-				m.days.Set(wait+"|"+name, name)
-			}
+			m.rewait(name, wait)
 		}
 	}
 	it.Wait = wait
+}
+
+// rewait puts open item name, waiting for wait, in the days or the words
+// index; unwait takes it out.
+func (m *Mem) rewait(name, wait string) {
+	if isDay(wait) {
+		m.days.Set(wait+"|"+name, name)
+	} else {
+		m.words.Set(name, true)
+	}
+}
+
+func (m *Mem) unwait(name, wait string) {
+	if isDay(wait) {
+		m.days.Remove(wait + "|" + name)
+	} else {
+		m.words.Remove(name)
+	}
 }
 
 func (m *Mem) applyFact(op Op, at int64) {
@@ -303,11 +318,13 @@ func (m *Mem) applyFact(op Op, at int64) {
 	}
 	if op.New == "" {
 		m.facts.Remove(op.Name)
+		m.group(op.Name, -1)
 		return
 	}
 	if f == nil {
 		f = &Fact{}
 		m.facts.Set(op.Name, f)
+		m.group(op.Name, 1)
 	}
 	f.Text, f.Changed = op.New, at
 	m.recent.Set(stampKey(at, op.Name), op.Name)
@@ -342,6 +359,10 @@ func (m *Mem) applyRedact(op Op) bool {
 		it := m.get(op.Name)
 		if it == nil {
 			return false
+		}
+		if parentOf(op.Name) == "" && it.Status == "" {
+			m.titles.Remove(sameTitle(it.Title) + "|" + op.Name)
+			m.titles.Set(sameTitle(re(it.Title))+"|"+op.Name, op.Name)
 		}
 		it.Title, it.Result = re(it.Title), re(it.Result)
 		if it.Wait != "" {
@@ -407,6 +428,38 @@ func (m *Mem) stampFact(kind, name string, at int64) {
 		if r := m.getRule(name); r != nil {
 			r.Changed = at
 		}
+	}
+}
+
+// sameTitle is a title as titles are matched: ASCII case folded, runs of
+// white space as one space, trailing . , ; : ! ? dropped. The titles
+// index is keyed by it, so it lives here, under the layout's pin.
+func sameTitle(t string) string {
+	t = strings.Join(strings.Fields(strings.ToLower(t)), " ")
+	return strings.TrimRight(t, ".,;:!?")
+}
+
+// factGroup is the group a fact's name is in, as Show lists hidden facts:
+// its first part with the "/", as `cmd/`, or the whole name when it has
+// none.
+func factGroup(name string) string {
+	if i := strings.Index(name, "/"); i >= 0 {
+		return name[:i+1]
+	}
+	return name
+}
+
+// group counts fact name in or out of its group.
+func (m *Mem) group(name string, d int) {
+	g := factGroup(name)
+	n := d
+	if v := m.groups.Get(g); v != nil {
+		n += v.(int)
+	}
+	if n <= 0 {
+		m.groups.Remove(g)
+	} else {
+		m.groups.Set(g, n)
 	}
 }
 
