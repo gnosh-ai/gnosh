@@ -363,8 +363,12 @@ func linkProblems(root, doc string) (problems []string, checked int, err error) 
 	return problems, checked, nil
 }
 
+// linkedDocs are the documents whose links must lead somewhere: the two that
+// hold runnable examples, and the references they send readers to.
+var linkedDocs = []string{"README.md", "GNOMEM.md", "docs/hooks/README.md", "docs/config/README.md"}
+
 func TestDocLinksResolve(t *testing.T) {
-	for doc := range checkedDocs {
+	for _, doc := range linkedDocs {
 		problems, checked, err := linkProblems(repoRoot, doc)
 		require.NoError(t, err)
 		require.Positive(t, checked,
