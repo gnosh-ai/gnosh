@@ -365,7 +365,11 @@ func linkProblems(root, doc string) (problems []string, checked int, err error) 
 
 // linkedDocs are the documents whose links must lead somewhere: the two that
 // hold runnable examples, and the references they send readers to.
-var linkedDocs = []string{"README.md", "GNOMEM.md", "docs/hooks/README.md", "docs/config/README.md"}
+var linkedDocs = []string{
+	"README.md", "GNOMEM.md",
+	"docs/hooks/README.md", "docs/hooks/FUTURE.md",
+	"docs/config/README.md", // docs/config/FUTURE.md links nowhere inside the repository
+}
 
 func TestDocLinksResolve(t *testing.T) {
 	for _, doc := range linkedDocs {
