@@ -223,6 +223,9 @@ func (a *sessionAgent) goalContinuation(ctx context.Context, call SessionAgentCa
 	cont.goalChecks = call.goalChecks + 1
 	cont.goalReflecting = false
 	cont.judgedGoal = ""
+	// reopened is what the check found missing, when it sends the agent
+	// back: the user is told once the binding is kept.
+	reopened := ""
 	switch turn.Do {
 	case "continue":
 		cont.Prompt = turn.Prompt
@@ -252,6 +255,7 @@ func (a *sessionAgent) goalContinuation(ctx context.Context, call SessionAgentCa
 			a.notifyGoal(call.SessionID, notify.TypeWarning, "The goal was found not met, but could not be reopened in mem, so the turn ended with it still set: "+err.Error())
 			return SessionAgentCall{}, false
 		}
+		reopened = reason
 		cont.Prompt = goalNotMetPrompt(next, reason)
 	case "rebind":
 		rebound, directive, err := client.BindGoal(ctx, a.goals.project, call.SessionID, b.Condition, nil)
@@ -275,6 +279,9 @@ func (a *sessionAgent) goalContinuation(ctx context.Context, call SessionAgentCa
 	// the user left it.
 	if ok, err := a.goals.swap(ctx, call.SessionID, stored, &next); err != nil || !ok {
 		return SessionAgentCall{}, false
+	}
+	if reopened != "" {
+		a.notifyGoal(call.SessionID, notify.TypeWarning, fmt.Sprintf("The check found the goal not met: %s. It is reopened, and the agent goes back to it", reopenReason(reopened)))
 	}
 	// Generated, not typed, and the attachments went with the prompt.
 	cont.HiddenUserMessage = true
@@ -327,6 +334,7 @@ func (a *sessionAgent) closedGoalContinuation(ctx context.Context, call SessionA
 			a.notifyGoal(call.SessionID, notify.TypeWarning, fmt.Sprintf("The goal `%s` was found not met, but could not be reopened in mem, so it stays closed: %s", g.Name, err))
 			continue
 		}
+		a.notifyGoal(call.SessionID, notify.TypeWarning, fmt.Sprintf("The check found the goal `%s` not met: %s. It is reopened, and the agent goes back to it", g.Name, reopenReason(reason)))
 		cont := call
 		cont.goalChecks = call.goalChecks + 1
 		cont.goalReflecting = cont.goalChecks%stopHookReflectEvery == 0
@@ -434,8 +442,19 @@ func clip(s string, n int) string {
 }
 
 // goalNotMetPrompt is the hidden prompt that sends the agent back to a
-// goal it closed, which the check found not met, and reopened.
+// goal it closed, which the check found not met, and reopened. What is
+// missing may be the user's: told only to do it, an agent the user had
+// told "I did both steps, mark it done" made the edits itself, release
+// notes and all, and said only "Fixed and closed" (QA, 2026-10-30).
 func goalNotMetPrompt(b gnovm.GoalBinding, reason string) string {
-	return fmt.Sprintf("The check found the goal `%s` not met: %s\n\nThe goal: %s\n\nIt is reopened in mem. Do what is missing, then close it again with `mem.Done(%q, \"<command> → <result>\")`.",
-		b.Name, cmp.Or(reason, "the check gave no reason"), b.Condition, b.Name)
+	return fmt.Sprintf("The check found the goal `%s` not met: %s\n\nThe goal: %s\n\nIt is reopened in mem. Do what is missing, then close it again with `mem.Done(%q, \"<command> → <result>\")`; "+
+		"or, when what is missing is the user's to do or decide (they said it was done, or it needs their answer), ask them with `mem.Ask(%q, \"…\")` instead. "+
+		"Either way, tell the user what the check found.",
+		b.Name, reopenReason(reason), b.Condition, b.Name, b.Name)
+}
+
+// reopenReason is what the check found missing, as the user and the agent
+// are told it.
+func reopenReason(reason string) string {
+	return cmp.Or(strings.TrimSuffix(compactReason(reason), "."), "the check gave no reason")
 }

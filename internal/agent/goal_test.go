@@ -181,7 +181,7 @@ func TestGoalDrivesTheTurnFromMem(t *testing.T) {
 	_, set := r.goal()
 	require.False(t, set, "a goal met is cleared")
 	require.Equal(t, []string{"Goal met: the tests pass (the test run passes)"}, r.notices(notify.TypeGoalMet))
-	require.Empty(t, r.notifier.warnings())
+	require.Equal(t, []string{"The check found the goal not met: the tests still fail. It is reopened, and the agent goes back to it"}, r.notices(notify.TypeWarning))
 	prompts := r.hiddenPrompts()
 	require.Len(t, prompts, 2)
 	require.Contains(t, prompts[0], "Its next step is `tests-pass/1` \"fix the parser\"")
@@ -224,7 +224,8 @@ func TestEveryGoalClosedIsJudged(t *testing.T) {
 	require.Contains(t, prompts[0], "The goal: fix the login loop")
 	require.Contains(t, r.mem(`mem.Show("fix-login")`), "the check found it not met: no test was run")
 	require.Equal(t, []string{"Goal met: fix the login loop (the auth tests pass)"}, r.notices(notify.TypeGoalMet))
-	require.Empty(t, r.notifier.warnings())
+	require.Equal(t, []string{"The check found the goal `fix-login` not met: no test was run. It is reopened, and the agent goes back to it"}, r.notices(notify.TypeWarning))
+	require.Contains(t, prompts[0], "ask them with `mem.Ask(\"fix-login\", \"…\")` instead. Either way, tell the user what the check found.")
 
 	// The next turn closes nothing: the goal closed before it is not
 	// judged again.
@@ -254,8 +255,10 @@ func TestAJudgedGoalReflectsEveryTenContinuations(t *testing.T) {
 
 	require.Equal(t, int64(stopHookReflectEvery+1), turns.Load(), "the turn, then one each time the check found the goal not met")
 	require.Equal(t, int64(stopHookReflectEvery), judge.checks.Load())
-	require.Len(t, r.notifier.warnings(), 1)
-	require.Equal(t, "The agent judged it should stop working on the goal `deploy`: It cannot pass: the staging server is down. It stays open in mem", r.notifier.warnings()[0].Message)
+	warnings := r.notices(notify.TypeWarning)
+	require.Len(t, warnings, stopHookReflectEvery+1, "a notice each time the check reopened it, then why the agent stopped")
+	require.Equal(t, "The check found the goal `deploy` not met: the deploy failed. It is reopened, and the agent goes back to it", warnings[0])
+	require.Equal(t, "The agent judged it should stop working on the goal `deploy`: It cannot pass: the staging server is down. It stays open in mem", warnings[stopHookReflectEvery])
 	var j struct {
 		Goals []struct {
 			Status string `json:"status"`
