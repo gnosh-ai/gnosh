@@ -1,6 +1,8 @@
 package shellconfig_test
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/config"
@@ -47,4 +49,29 @@ func TestKnownMCPTypesMatchConfig(t *testing.T) {
 	}
 	require.ElementsMatch(t, want, shellconfig.KnownMCPTypesForTest(),
 		"mcp add's accepted types must be exactly the types the loader accepts")
+}
+
+// Every option config.Options has can be written in a crushrc. A crushrc
+// line naming an option the table lacks is "option: unknown key", which
+// stops the whole config from loading, so an option added to config
+// without a crushrc name fails here instead of in a user's config.
+func TestEveryOptionHasACrushrcName(t *testing.T) {
+	t.Parallel()
+
+	// Not written by hand: the TUI keeps each model's reasoning level.
+	notInCrushrc := map[string]bool{"reasoning": true}
+	settable := map[string]bool{}
+	for _, key := range shellconfig.OptionJSONKeysForTest() {
+		settable[key] = true
+	}
+	typ := reflect.TypeFor[config.Options]()
+	for i := range typ.NumField() {
+		name, _, _ := strings.Cut(typ.Field(i).Tag.Get("json"), ",")
+		if name == "" || name == "-" || notInCrushrc[name] {
+			continue
+		}
+		if !settable[name] {
+			t.Errorf("options.%s has no crushrc option: add it to optionSpecs in options.go", name)
+		}
+	}
 }

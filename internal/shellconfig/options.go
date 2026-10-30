@@ -207,14 +207,16 @@ var optionSpecs = map[string]optionSpec{
 	"auto-summarize":       {jsonKey: "disable_auto_summarize", kind: optBool, inverted: true},
 	"provider-auto-update": {jsonKey: "disable_provider_auto_update", kind: optBool, inverted: true},
 	"default-providers":    {jsonKey: "disable_default_providers", kind: optBool, inverted: true},
+	"idle-compaction":      {jsonKey: "disable_idle_compaction", kind: optBool, inverted: true},
 
 	// String fields.
-	"notifications":  {jsonKey: "notifications", kind: optString},
-	"data-directory": {jsonKey: "data_directory", kind: optString},
-	"initialize-as":  {jsonKey: "initialize_as", kind: optString},
-	"metrics-url":    {jsonKey: "metrics_url", kind: optString},
-	"metrics-key":    {jsonKey: "metrics_key", kind: optString},
-	"update-repo":    {jsonKey: "update_repo", kind: optString},
+	"notifications":   {jsonKey: "notifications", kind: optString},
+	"data-directory":  {jsonKey: "data_directory", kind: optString},
+	"initialize-as":   {jsonKey: "initialize_as", kind: optString},
+	"metrics-url":     {jsonKey: "metrics_url", kind: optString},
+	"metrics-key":     {jsonKey: "metrics_key", kind: optString},
+	"update-repo":     {jsonKey: "update_repo", kind: optString},
+	"artifact-server": {jsonKey: "artifact_server", kind: optString},
 	// mem's embedding server: what mem's text and the prompts typed are
 	// sent to (config's mem_embeddings_url); unset, nothing is.
 	"mem-embeddings-url": {jsonKey: "mem_embeddings_url", kind: optString},
@@ -223,6 +225,7 @@ var optionSpecs = map[string]optionSpec{
 	"request-timeout":     {jsonKey: "request_timeout", kind: optInt},
 	"max-background-jobs": {jsonKey: "max_background_jobs", kind: optInt},
 	"loop-max-turns":      {jsonKey: "loop_max_turns", kind: optInt},
+	"auto-compact-window": {jsonKey: "auto_compact_window", kind: optInt},
 
 	// List fields. Keys are singular because each call appends one value.
 	"context-path":        {jsonKey: "context_paths", kind: optList},
@@ -295,4 +298,15 @@ func parseBool(s string) (bool, error) {
 	default:
 		return false, fmt.Errorf("invalid boolean %q", s)
 	}
+}
+
+// OptionJSONKeysForTest returns every options key a crushrc line can set:
+// those in optionSpecs, the two handleOption sets itself (ui and
+// attribution), and disabled_tools, which "permissions deny" writes.
+func OptionJSONKeysForTest() []string {
+	keys := []string{"tui", "attribution", "disabled_tools"}
+	for _, spec := range optionSpecs {
+		keys = append(keys, spec.jsonKey)
+	}
+	return keys
 }

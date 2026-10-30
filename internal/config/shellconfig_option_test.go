@@ -151,6 +151,20 @@ func TestShellConfigOptionUnknownKeyFails(t *testing.T) {
 	require.Contains(t, err.Error(), "unknown key")
 }
 
+// Options a crushrc could not name before: idle compaction, phrased
+// positively as auto-summarize is, the artifact server and the
+// auto-compact window.
+func TestShellConfigOptionIdleCompactionArtifactServerCompactWindow(t *testing.T) {
+	store := loadCrushSh(t, `option idle-compaction false
+option artifact-server off
+option auto-compact-window 300000`)
+
+	opts := store.Config().Options
+	require.True(t, opts.DisableIdleCompaction, "idle-compaction false should land as disable_idle_compaction")
+	require.Equal(t, "off", opts.ArtifactServer)
+	require.Equal(t, int64(300000), opts.AutoCompactWindow)
+}
+
 func TestShellConfigOptionDisableToolRemoved(t *testing.T) {
 	_, err := loadCrushShErr(t, `option disable-tool bash`)
 	require.Error(t, err)
