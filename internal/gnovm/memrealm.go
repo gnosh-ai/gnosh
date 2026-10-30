@@ -11,7 +11,9 @@ package gnovm
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	gno "github.com/gnolang/gno/gnovm/pkg/gnolang"
@@ -50,6 +52,9 @@ type memRealm struct {
 	b  *base
 	db *goleveldb.GoLevelDB
 	kv storetypes.CommitStore
+	// clock is the time a call runs at: its Ops' time, and the user's
+	// local date for days.
+	clock func() time.Time
 }
 
 // openMemRealm opens the mem in dir, deploying the realm into a new store.
@@ -64,7 +69,7 @@ func openMemRealm(b *base, dir string) (*memRealm, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &memRealm{b: b, db: db, kv: dbadapter.StoreConstructor(db, storetypes.StoreOptions{})}
+	r := &memRealm{b: b, db: db, kv: dbadapter.StoreConstructor(db, storetypes.StoreOptions{}), clock: time.Now}
 	if err := r.deploy(); err != nil {
 		db.Close()
 		return nil, err
@@ -135,6 +140,8 @@ func (b *base) preprocessMemRealm() (err error) {
 type memCall struct {
 	Output string
 	Ops    []memOp
+	// At is the call's time, which its Ops share.
+	At int64
 }
 
 // run runs code as the body of a mem input's main, by caller, and commits
@@ -158,13 +165,25 @@ func (r *memRealm) call(code string, ctx memContext, imports ...string) (call me
 	tx := r.b.store.BeginTransaction(wc, wc, nil, nil)
 	tx.SetPackageGetter(nil)
 	var out bytes.Buffer
-	ctx.ExecContext = execContext(0, time.Now())
+	now := r.clock()
+	call.At = now.Unix()
+	ctx.ExecContext = execContext(0, now)
 	ctx.OriginCaller = memRunAddr.Bech32()
 	ctx.ops = &call.Ops
+	if ctx.today == "" {
+		ctx.today = now.Format(time.DateOnly)
+	}
 	defer func() {
 		call.Output = out.String()
 		if p := recover(); p != nil {
-			err = fmt.Errorf("%v", p)
+			// What the input printed before it failed may read as done;
+			// say plainly that none of it was kept.
+			msg := memPanicText(p)
+			if len(call.Ops) > 0 {
+				msg += "; nothing was kept"
+			}
+			call.Ops = nil
+			err = errors.New(msg)
 		}
 	}()
 	opts := gno.MachineOptions{Output: &out, Store: tx, Context: ctx, BoundedPanicRender: true}
@@ -183,6 +202,19 @@ func (r *memRealm) call(code string, ctx memContext, imports ...string) (call me
 	}
 	kv.Write()
 	return call, nil
+}
+
+// memPanicText is a failed mem input's refusal as the model reads it: gno's
+// panic text, without its wrapping, on one line.
+func memPanicText(p any) string {
+	msg := fmt.Sprint(p)
+	for _, prefix := range []string{"unhandled panic: ", "panic: "} {
+		msg = strings.TrimPrefix(msg, prefix)
+	}
+	if i := strings.Index(msg, "\n"); i >= 0 {
+		msg = msg[:i]
+	}
+	return msg
 }
 
 // writeCounter counts the writes a call makes to its store.

@@ -11,6 +11,7 @@ package gnovm
 
 import (
 	"reflect"
+	"time"
 
 	gno "github.com/gnolang/gno/gnovm/pkg/gnolang"
 	"github.com/gnolang/gno/gnovm/stdlibs"
@@ -26,6 +27,12 @@ type memContext struct {
 	// pending and at are the Ops klash hands Apply, and their call's time.
 	pending []memOp
 	at      int64
+	// today is the user's local date, 2026-10-29.
+	today string
+	// find and holding answer from mem's index and journal; nil finds
+	// nothing.
+	find    func(words string, max int) (names, kinds []string)
+	holding func(text string) (names, kinds []string, statements bool)
 }
 
 // memOp is one change to a mem, as gnomem's do hands it to klash.
@@ -37,7 +44,7 @@ type memOp struct {
 var memNativeGas = gno.NativeGasInfo{Base: 1000, SlopeIdx: -1, SlopeKind: gno.SizeFlat}
 
 func init() {
-	for _, name := range []gno.Name{"caller", "record", "pending"} {
+	for _, name := range []gno.Name{"caller", "today", "record", "pending", "find", "holding"} {
 		info := memNativeGas
 		gno.RegisterNativeGas(memLibPath, name, &info)
 	}
@@ -50,9 +57,39 @@ func memNative(name gno.Name) func(*gno.Machine) {
 	switch name {
 	case "caller":
 		return func(m *gno.Machine) {
-			ctx := memCallContext(m, "caller")
-			s := ctx.caller
-			m.PushValue(gno.Go2GnoValue(m.Alloc, m.Store, reflect.ValueOf(&s).Elem()))
+			memPush(m, memCallContext(m, "caller").caller)
+		}
+	case "today":
+		return func(m *gno.Machine) {
+			ctx := memCallContext(m, "today")
+			d := ctx.today
+			if d == "" {
+				d = time.Now().Format(time.DateOnly)
+			}
+			memPush(m, d)
+		}
+	case "find":
+		return func(m *gno.Machine) {
+			ctx := memCallContext(m, "find")
+			var names, kinds []string
+			if ctx.find != nil {
+				max := m.LastBlock().GetPointerTo(nil, gno.NewValuePathBlock(1, 1, "")).TV.GetInt()
+				names, kinds = ctx.find(memArg(m, 0), int(max))
+			}
+			memPush(m, names)
+			memPush(m, kinds)
+		}
+	case "holding":
+		return func(m *gno.Machine) {
+			ctx := memCallContext(m, "holding")
+			var names, kinds []string
+			statements := false
+			if ctx.holding != nil {
+				names, kinds, statements = ctx.holding(memArg(m, 0))
+			}
+			memPush(m, names)
+			memPush(m, kinds)
+			memPush(m, statements)
 		}
 	case "record":
 		return func(m *gno.Machine) {
@@ -76,13 +113,17 @@ func memNative(name gno.Name) func(*gno.Machine) {
 				}
 			}
 			for i := range fields {
-				m.PushValue(gno.Go2GnoValue(m.Alloc, m.Store, reflect.ValueOf(&fields[i]).Elem()))
+				memPush(m, fields[i])
 			}
-			at := ctx.at
-			m.PushValue(gno.Go2GnoValue(m.Alloc, m.Store, reflect.ValueOf(&at).Elem()))
+			memPush(m, ctx.at)
 		}
 	}
 	return nil
+}
+
+// memPush returns v from a native.
+func memPush[T any](m *gno.Machine, v T) {
+	m.PushValue(gno.Go2GnoValue(m.Alloc, m.Store, reflect.ValueOf(&v).Elem()))
 }
 
 func memCallContext(m *gno.Machine, native string) memContext {

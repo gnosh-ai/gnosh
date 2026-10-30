@@ -1,0 +1,129 @@
+> s1: println(mem.Show())
+mem is empty: mem.Goal("what to get done").Steps("…", "…") plans a task, and mem.Fact("cmd/test", "…") keeps a fact
+
+> s1: mem.Goal("release v2").Steps("bump the version", "tag v2.0.0", "CI is green")
+added goal `release-v2` "release v2"
+added `release-v2/1` "bump the version", `release-v2/2` "tag v2.0.0", `release-v2/3` "CI is green"; next: `release-v2/1` "bump the version"
+> s1: mem.Done("release-v2/1", "now 2.0.0")
+done `release-v2/1` "bump the version" → now 2.0.0; next: `release-v2/2` "tag v2.0.0"
+> s1: mem.Ask("release-v2/2", "which key signs the tag?")
+asked `release-v2/2/1` "which key signs the tag?" (for the user); `release-v2/2` waits on it; next: `release-v2/3` "CI is green"
+> s1: mem.Done("release-v2/2", "tagged")
+error: `release-v2/2` "tag v2.0.0" has open steps `release-v2/2/1` "which key signs the tag?": Done or Drop them first
+> s1: mem.Done("release-v2/2/1", "the YubiKey")
+answered `release-v2/2/1` "which key signs the tag?" → the YubiKey; next: `release-v2/2` "tag v2.0.0"
+> s1: mem.Note("release-v2/2", "the tag needs the release key")
+noted on `release-v2/2` "tag v2.0.0"
+> s1: mem.Done("Release-v2/2", "tagged")
+error: names are lowercase, typed as printed: `release-v2/2`
+> s1: mem.Done("2", "tagged")
+error: `2` is not a name; steps are named under their goal, like `goal/2`: mem.Show() lists them
+> s1: mem.Goal("Release v2")
+error: `release-v2` "release v2" (this session, 3m ago, 1/3 done) is already open: add to it with mem.Steps("release-v2", "…"), or give other work a title that tells them apart
+> s1: mem.Goal("renew the gno.shop TLS cert", "renew-cert").Wait("Dec 1")
+added goal `renew-cert` "renew the gno.shop TLS cert"
+error: write a day as 2026-12-01 (today is Thu 2026-10-29); nothing was kept
+> s1: mem.Goal("renew the gno.shop TLS cert", "renew-cert").Wait("2026-12-01")
+added goal `renew-cert` "renew the gno.shop TLS cert"
+`renew-cert` "renew the gno.shop TLS cert" waits until 2026-12-01
+> s1: mem.Goal("bump the gno pin").Wait("PR #6399 merged")
+added goal `bump-gno-pin` "bump the gno pin"
+`bump-gno-pin` "bump the gno pin" waits for: PR #6399 merged
+> s2: mem.Start("release-v2/2")
+started `release-v2/2` "tag v2.0.0"
+> s1: println(mem.Next("release-v2"))
+release-v2/3
+> s1: println(mem.Show())
+mem: 3 goals open
+goals:
+  [ ] `release-v2` "release v2" (1/3 done · this session · 2m ago)
+    [x] `release-v2/1` "bump the version" → now 2.0.0
+    [ ] `release-v2/2` "tag v2.0.0" (started by session s2)
+      [x] `release-v2/2/1` "which key signs the tag?" → the YubiKey
+    [ ] `release-v2/3` "CI is green"  ← next
+  [ ] `bump-gno-pin` "bump the gno pin" (this session · 3m ago · waits for: PR #6399 merged)
+  [ ] `renew-cert` "renew the gno.shop TLS cert" (this session · 4m ago · waits until 2026-12-01)
+
+> s1: mem.Fact("cmd/test", "go test ./...")
+fact `cmd/test` is new
+> s1: mem.Fact("cmd/build", "make build")
+fact `cmd/build` is new; `cmd/` also has `cmd/test`
+> s1: mem.Fact("cmd/test", "go test -race ./...")
+fact `cmd/test` changed (was "go test ./...")
+> s1: mem.Fact("cmd/tests", "go test ./internal/...")
+fact `cmd/tests` is new; `cmd/` also has `cmd/build` and `cmd/test`
+> s1: mem.Fact("Cmd/Test", "x")
+error: names are lowercase: `cmd/test`
+> user: mem.Rule("push-after-landing", "push klash main to GitHub only after land-branch.sh prints landed:")
+rule `push-after-landing` is new; every session will be given it
+> s1: mem.Drop("bump-gno-pin", "the PR was closed")
+dropped `bump-gno-pin` "bump the gno pin"
+> s1: mem.Reopen("bump-gno-pin")
+reopened `bump-gno-pin` "bump the gno pin"; it waits for: PR #6399 merged
+> s1: mem.Done("release-v2/2", "tagged v2.0.0")
+done `release-v2/2` "tag v2.0.0" → tagged v2.0.0; next: `release-v2/3` "CI is green"
+> s1: mem.Done("release-v2/3", "go test ./... → ok")
+done `release-v2/3` "CI is green" → go test ./... → ok; next: `release-v2` itself: mem.Done("release-v2", "…") once it holds
+> s1: mem.Done("release-v2", "shipped")
+done `release-v2` "release v2" → shipped
+> s1: println(mem.Show())
+mem: 2 goals open · 1 closed · 1 rule · 3 facts
+rules:
+  `push-after-landing` = push klash main to GitHub only after land-branch.sh prints landed:
+goals:
+  [ ] `bump-gno-pin` "bump the gno pin" (this session · 4m ago · waits for: PR #6399 merged)
+  [ ] `renew-cert` "renew the gno.shop TLS cert" (this session · 16m ago · waits until 2026-12-01)
+closed lately:
+  [x] `release-v2` "release v2" → shipped (2026-10-29)
+facts, newest first:
+  `cmd/tests` = go test ./internal/...
+  `cmd/test` = go test -race ./...
+  `cmd/build` = make build
+
+> s1: println(mem.Show("release-v2"))
+[x] `release-v2` "release v2"
+  done → shipped
+  made by this session, changed 2m ago
+  [x] `release-v2/1` "bump the version" → now 2.0.0
+  [x] `release-v2/2` "tag v2.0.0" → tagged v2.0.0
+  [x] `release-v2/3` "CI is green" → go test ./... → ok
+
+> s1: println(mem.Show("cmd"))
+under `cmd/`: fact `cmd/build`, fact `cmd/test`, fact `cmd/tests`
+
+> s1: mem.Forget("release-v2")
+forgot `release-v2` and its 4 steps; klash erases their text from its files
+> s1: mem.Goal("make tea").Steps("boil water", "pour water")
+added goal `make-tea` "make tea"
+added `make-tea/1` "boil water", `make-tea/2` "pour water"; next: `make-tea/1` "boil water"
+> s1: mem.Drop("make-tea", "no kettle")
+dropped `make-tea` "make tea", with its open steps `make-tea/1` and `make-tea/2`
+> s1: mem.Goal("make tea")
+added goal `make-tea-2` "make tea"
+> s1: mem.Forget("make-tea-2")
+error: `make-tea-2` is open: mem.Drop("make-tea-2", "why") first, then forget it
+> s1: mem.Note("bump-gno-pin", "the token is sk-live-4f9c2b")
+noted on `bump-gno-pin` "bump the gno pin"
+> s1: mem.Redact("sk-live-4f9c2b")
+redacted it in 1 place; klash rewrites mem's files
+> s1: mem.Redact("nothing")
+error: mem holds no such text; Redact takes a secret's exact text
+> s1: println(mem.Show())
+mem: 3 goals open · 1 closed · 1 rule · 3 facts
+rules:
+  `push-after-landing` = push klash main to GitHub only after land-branch.sh prints landed:
+due:
+  [ ] `renew-cert` "renew the gno.shop TLS cert" (since 2026-12-01)
+goals:
+  [ ] `bump-gno-pin` "bump the gno pin" (this session · 33d ago · waits for: PR #6399 merged)
+  [ ] `make-tea-2` "make tea" (this session · 33d ago)
+  [ ] `renew-cert` "renew the gno.shop TLS cert" (this session · 33d ago · due since 2026-12-01)
+closed lately:
+  [-] `make-tea` "make tea" → no kettle (2026-10-29)
+facts, newest first:
+  `cmd/tests` = go test ./internal/...
+  `cmd/test` = go test -race ./...
+  `cmd/build` = make build
+
+> s1: println(mem.JSON("bump-gno-pin"))
+{"goals":[{"name":"bump-gno-pin","title":"bump the gno pin","status":"","result":"","wait":"PR #6399 merged","for":"","doing":"","by":"s1","changed":1793270160,"next":"","items":[],"held":[{"name":"bump-gno-pin","why":"words"}]}]}

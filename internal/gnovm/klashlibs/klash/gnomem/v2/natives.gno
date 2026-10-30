@@ -1,0 +1,36 @@
+// Copyright (C) 2026 Jae Kwon
+//
+// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// the GNO Network General Public License, version 6, as published by
+// NewTendermint, LLC or its successor, or any later version of that License
+// that the Licensor accepts as the proxy under its section 14, by a statement
+// published in the canonical copy of internal/gnovm/LICENSE.md; together with
+// the Additional Terms (Strong Attribution) in that file.
+
+package gnomem
+
+// Natives that klash provides. Each one panics unless it runs in a mem
+// call, inside the realm klash.local/r/mem, with klash's own context, so a
+// Mem the model's code makes or copies for itself can do nothing.
+
+// caller is who runs this input: a session's id, "user" or "klash".
+func caller() string
+
+// today is the user's local date, "2026-10-29".
+func today() string
+
+// record hands klash an Op of this call.
+func record(kind, name, field, old, new, by string)
+
+// pending is the Ops klash hands Apply, field by field, and their call's
+// time.
+func pending() (kinds, names, fields, olds, news, bys []string, at int64)
+
+// find is klash's index, by words and by meaning: the best matches for
+// words, with their kinds ("item", "fact" or "rule").
+func find(words string, max int) (names, kinds []string)
+
+// holding is where the journal, and this call's Ops, ever held text or its
+// name form: names with their kinds, and whether statements of past inputs
+// did.
+func holding(text string) (names, kinds []string, statements bool)
