@@ -99,6 +99,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.getSessionByIDStmt, err = db.PrepareContext(ctx, getSessionByID); err != nil {
 		return nil, fmt.Errorf("error preparing query GetSessionByID: %w", err)
 	}
+	if q.getSessionGoalStmt, err = db.PrepareContext(ctx, getSessionGoal); err != nil {
+		return nil, fmt.Errorf("error preparing query GetSessionGoal: %w", err)
+	}
 	if q.getToolUsageStmt, err = db.PrepareContext(ctx, getToolUsage); err != nil {
 		return nil, fmt.Errorf("error preparing query GetToolUsage: %w", err)
 	}
@@ -170,6 +173,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.setSessionTodosStmt, err = db.PrepareContext(ctx, setSessionTodos); err != nil {
 		return nil, fmt.Errorf("error preparing query SetSessionTodos: %w", err)
+	}
+	if q.swapSessionGoalStmt, err = db.PrepareContext(ctx, swapSessionGoal); err != nil {
+		return nil, fmt.Errorf("error preparing query SwapSessionGoal: %w", err)
 	}
 	if q.updateMessageStmt, err = db.PrepareContext(ctx, updateMessage); err != nil {
 		return nil, fmt.Errorf("error preparing query UpdateMessage: %w", err)
@@ -316,6 +322,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing getSessionByIDStmt: %w", cerr)
 		}
 	}
+	if q.getSessionGoalStmt != nil {
+		if cerr := q.getSessionGoalStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing getSessionGoalStmt: %w", cerr)
+		}
+	}
 	if q.getToolUsageStmt != nil {
 		if cerr := q.getToolUsageStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing getToolUsageStmt: %w", cerr)
@@ -436,6 +447,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing setSessionTodosStmt: %w", cerr)
 		}
 	}
+	if q.swapSessionGoalStmt != nil {
+		if cerr := q.swapSessionGoalStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing swapSessionGoalStmt: %w", cerr)
+		}
+	}
 	if q.updateMessageStmt != nil {
 		if cerr := q.updateMessageStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing updateMessageStmt: %w", cerr)
@@ -525,6 +541,7 @@ type Queries struct {
 	getMessageStmt                       *sql.Stmt
 	getRecentActivityStmt                *sql.Stmt
 	getSessionByIDStmt                   *sql.Stmt
+	getSessionGoalStmt                   *sql.Stmt
 	getToolUsageStmt                     *sql.Stmt
 	getTotalStatsStmt                    *sql.Stmt
 	getUsageByDayStmt                    *sql.Stmt
@@ -549,6 +566,7 @@ type Queries struct {
 	renameSessionStmt                    *sql.Stmt
 	setSessionChannelStmt                *sql.Stmt
 	setSessionTodosStmt                  *sql.Stmt
+	swapSessionGoalStmt                  *sql.Stmt
 	updateMessageStmt                    *sql.Stmt
 	updateSessionStmt                    *sql.Stmt
 	updateSessionSummaryStmt             *sql.Stmt
@@ -585,6 +603,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		getMessageStmt:                       q.getMessageStmt,
 		getRecentActivityStmt:                q.getRecentActivityStmt,
 		getSessionByIDStmt:                   q.getSessionByIDStmt,
+		getSessionGoalStmt:                   q.getSessionGoalStmt,
 		getToolUsageStmt:                     q.getToolUsageStmt,
 		getTotalStatsStmt:                    q.getTotalStatsStmt,
 		getUsageByDayStmt:                    q.getUsageByDayStmt,
@@ -609,6 +628,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		renameSessionStmt:                    q.renameSessionStmt,
 		setSessionChannelStmt:                q.setSessionChannelStmt,
 		setSessionTodosStmt:                  q.setSessionTodosStmt,
+		swapSessionGoalStmt:                  q.swapSessionGoalStmt,
 		updateMessageStmt:                    q.updateMessageStmt,
 		updateSessionStmt:                    q.updateSessionStmt,
 		updateSessionSummaryStmt:             q.updateSessionSummaryStmt,

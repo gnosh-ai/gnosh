@@ -114,3 +114,13 @@ WHERE id = ?;
 -- name: DeleteSession :exec
 DELETE FROM sessions
 WHERE id = ?;
+
+-- name: GetSessionGoal :one
+SELECT goal
+FROM sessions
+WHERE id = ? LIMIT 1;
+
+-- name: SwapSessionGoal :execrows
+UPDATE sessions
+SET goal = sqlc.arg(new_goal)
+WHERE id = sqlc.arg(id) AND goal = sqlc.arg(old_goal);

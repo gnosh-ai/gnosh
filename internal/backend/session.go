@@ -37,7 +37,7 @@ func (b *Backend) BranchSession(ctx context.Context, workspaceID, sessionID, tit
 }
 
 // SessionGoal is a session's goal, and false when it has none.
-func (b *Backend) SessionGoal(workspaceID, sessionID string) (agent.Goal, bool, error) {
+func (b *Backend) SessionGoal(ctx context.Context, workspaceID, sessionID string) (agent.Goal, bool, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
 		return agent.Goal{}, false, err
@@ -45,20 +45,20 @@ func (b *Backend) SessionGoal(workspaceID, sessionID string) (agent.Goal, bool, 
 	if ws.App == nil {
 		return agent.Goal{}, false, ErrAgentNotInitialized
 	}
-	return ws.App.SessionGoal(sessionID)
+	return ws.App.SessionGoal(ctx, sessionID)
 }
 
-// SetSessionGoal sets a session's goal, as Claude Code's /goal does, or
-// clears it when condition is "", and returns the goal it had.
-func (b *Backend) SetSessionGoal(workspaceID, sessionID, condition string) (agent.Goal, bool, error) {
+// SetSessionGoal sets a session's goal, as /goal does, or clears it when
+// condition is "", and says what it did; see app.App.SetSessionGoal.
+func (b *Backend) SetSessionGoal(ctx context.Context, workspaceID, sessionID, condition string) (agent.GoalChange, error) {
 	ws, err := b.GetWorkspace(workspaceID)
 	if err != nil {
-		return agent.Goal{}, false, err
+		return agent.GoalChange{}, err
 	}
 	if ws.App == nil {
-		return agent.Goal{}, false, ErrAgentNotInitialized
+		return agent.GoalChange{}, ErrAgentNotInitialized
 	}
-	return ws.App.SetSessionGoal(sessionID, condition)
+	return ws.App.SetSessionGoal(ctx, sessionID, condition)
 }
 
 // Rewind restores a session's conversation, its code or both to the point

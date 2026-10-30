@@ -75,8 +75,12 @@ func (*NopCoordinator) Branched(string) {}
 
 func (*NopCoordinator) RebuildSystemPrompts(context.Context) error { return nil }
 
-func (*NopCoordinator) SetGoal(string, string) {}
+func (*NopCoordinator) SetGoal(context.Context, string, string) (agent.GoalChange, error) {
+	return agent.GoalChange{}, nil
+}
 
-func (*NopCoordinator) Goal(string) (agent.Goal, bool) { return agent.Goal{}, false }
+func (*NopCoordinator) Goal(context.Context, string) (agent.Goal, bool) { return agent.Goal{}, false }
 
-func (*NopCoordinator) ClearGoal(string) (agent.Goal, bool) { return agent.Goal{}, false }
+func (*NopCoordinator) ClearGoal(context.Context, string) (agent.GoalChange, error) {
+	return agent.GoalChange{}, nil
+}

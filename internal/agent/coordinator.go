@@ -29,7 +29,6 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/discover"
 	"github.com/charmbracelet/crush/internal/event"
 	"github.com/charmbracelet/crush/internal/filetracker"
@@ -168,11 +167,12 @@ type Coordinator interface {
 	// conversation, as Claude Code's /rename does with no name, and
 	// returns the name.
 	GenerateSessionName(ctx context.Context, sessionID string) (string, error)
-	// SetGoal sets the session's goal (see Goal), in place of any it had;
-	// Goal says what it is; ClearGoal clears it, saying what it was.
-	SetGoal(sessionID, condition string)
-	Goal(sessionID string) (Goal, bool)
-	ClearGoal(sessionID string) (Goal, bool)
+	// SetGoal binds the session's goal to a goal in mem (see Goal), in
+	// place of any it had, and says what starts the agent on it; Goal says
+	// what it is; ClearGoal unbinds it, and says what clearing it did.
+	SetGoal(ctx context.Context, sessionID, condition string) (GoalChange, error)
+	Goal(ctx context.Context, sessionID string) (Goal, bool)
+	ClearGoal(ctx context.Context, sessionID string) (GoalChange, error)
 	// Rewound forgets what the session was given in the messages a
 	// /rewind cut, removed, as Claude Code forgets what the cut
 	// conversation read: the context files of the subdirectories it was
@@ -236,9 +236,9 @@ type coordinator struct {
 	// sent context files to: one for all of them, as sessionStarts is.
 	instructionsLoaded *instructionsLoadedState
 
-	// goals are the sessions' goals, which every agent the coordinator
-	// builds checks when a turn would end (see Goal).
-	goals *csync.Map[string, Goal]
+	// goals are the sessions' /goal bindings, which every agent the
+	// coordinator makes reads as its turns end.
+	goals *goalBindings
 
 	// subdirectoryGiven records the subdirectories' context files each
 	// session has been given since its last summary, with the message
@@ -313,7 +313,7 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		agents:             make(map[string]SessionAgent),
 		sessionStarts:      newSessionStartState(),
 		instructionsLoaded: newInstructionsLoadedState(),
-		goals:              csync.NewMap[string, Goal](),
+		goals:              &goalBindings{sessions: opts.Sessions, gnovms: opts.GnoVMs, project: opts.Config.WorkingDir()},
 		allSkills:          allSkills,
 		activeSkills:       activeSkills,
 		skillTracker:       skillTracker,
@@ -449,19 +449,20 @@ func (c *coordinator) viewedFiles() tools.ViewedFiles {
 	return c.viewed
 }
 
-// SetGoal sets the session's goal, in place of any it had.
-func (c *coordinator) SetGoal(sessionID, condition string) {
-	c.goals.Set(sessionID, Goal{Condition: condition})
+// SetGoal binds the session's goal to a goal in mem, in place of any it
+// had.
+func (c *coordinator) SetGoal(ctx context.Context, sessionID, condition string) (GoalChange, error) {
+	return c.goals.set(ctx, sessionID, condition)
 }
 
 // Goal is the session's goal, and false when it has none.
-func (c *coordinator) Goal(sessionID string) (Goal, bool) {
-	return c.goals.Get(sessionID)
+func (c *coordinator) Goal(ctx context.Context, sessionID string) (Goal, bool) {
+	return c.goals.get(ctx, sessionID)
 }
 
-// ClearGoal clears the session's goal, and returns it.
-func (c *coordinator) ClearGoal(sessionID string) (Goal, bool) {
-	return c.goals.Take(sessionID)
+// ClearGoal unbinds the session's goal, and says what that did.
+func (c *coordinator) ClearGoal(ctx context.Context, sessionID string) (GoalChange, error) {
+	return c.goals.clear(ctx, sessionID)
 }
 
 // compactPoint is the running token total at which a session on a model
@@ -1228,7 +1229,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	// what the session's todos show.
 	if c.gnovms != nil {
 		allTools = append(allTools,
-			wrap(gnovmtools.NewRunTool(c.gnovms, c.cfg.WorkingDir(), gnovmtools.OnMemGoals(gnovmtools.SessionTodos(c.sessions)))),
+			wrap(gnovmtools.NewRunTool(c.gnovms, c.cfg.WorkingDir(), gnovmtools.OnMemGoals(gnovmtools.SessionTodos(c.sessions)), gnovmtools.BoundGoal(c.goals.boundName))),
 			wrap(gnovmtools.NewNewTool(c.gnovms, c.cfg.WorkingDir())),
 			wrap(gnovmtools.NewListTool(c.gnovms, c.cfg.WorkingDir())),
 			wrap(gnovmtools.NewDropTool(c.gnovms, c.cfg.WorkingDir(), c.permissions)),

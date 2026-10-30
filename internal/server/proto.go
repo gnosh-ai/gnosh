@@ -401,7 +401,7 @@ func (c *controllerV1) handlePostWorkspaceSessionBranch(w http.ResponseWriter, r
 
 // handleGetWorkspaceSessionGoal answers a session's goal.
 func (c *controllerV1) handleGetWorkspaceSessionGoal(w http.ResponseWriter, r *http.Request) {
-	goal, ok, err := c.backend.SessionGoal(r.PathValue("id"), r.PathValue("sid"))
+	goal, ok, err := c.backend.SessionGoal(r.Context(), r.PathValue("id"), r.PathValue("sid"))
 	if err != nil {
 		c.handleError(w, r, err)
 		return
@@ -418,12 +418,14 @@ func (c *controllerV1) handlePutWorkspaceSessionGoal(w http.ResponseWriter, r *h
 		jsonError(w, http.StatusBadRequest, "failed to decode request")
 		return
 	}
-	had, ok, err := c.backend.SetSessionGoal(r.PathValue("id"), r.PathValue("sid"), req.Condition)
+	change, err := c.backend.SetSessionGoal(r.Context(), r.PathValue("id"), r.PathValue("sid"), req.Condition)
 	if err != nil {
 		c.handleError(w, r, err)
 		return
 	}
-	jsonEncode(w, goalStatus(had, ok))
+	status := goalStatus(change.Goal, change.Had)
+	status.Directive, status.Notice = change.Directive, change.Notice
+	jsonEncode(w, status)
 }
 
 // goalStatus is goal on the wire, none when ok is false.
@@ -431,7 +433,7 @@ func goalStatus(goal agent.Goal, ok bool) proto.GoalStatus {
 	if !ok {
 		return proto.GoalStatus{}
 	}
-	return proto.GoalStatus{Goal: &proto.Goal{Condition: goal.Condition, Checks: goal.Checks, LastCheck: goal.LastCheck}}
+	return proto.GoalStatus{Goal: &proto.Goal{Condition: goal.Condition, Name: goal.Name, Title: goal.Title, Checks: goal.Checks, LastCheck: goal.LastCheck}}
 }
 
 // handlePostWorkspaceSessionRewind restores a session's conversation, its

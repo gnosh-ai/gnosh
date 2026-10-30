@@ -310,9 +310,9 @@ type sessionAgent struct {
 	// latest of them are given again (restoredFilesText). Nil gives none.
 	fileTracker          filetracker.Service
 	disableAutoSummarize bool
-	// goals are the sessions' goals, shared with the coordinator that sets
+	// goals are the sessions' goals, kept by the coordinator that sets
 	// them; nil, there are none (see goalContinuation).
-	goals *csync.Map[string, Goal]
+	goals *goalBindings
 	// memBlock is SessionAgentOptions.MemBlock.
 	memBlock func() string
 	// idleCompaction holds each session's idle-compaction timer, armed
@@ -422,7 +422,7 @@ type SessionAgentOptions struct {
 	InstructionsLoaded *instructionsLoadedState
 	// Goals are the sessions' goals (see Goal), shared by a coordinator's
 	// agents, which set them; nil, there are none.
-	Goals *csync.Map[string, Goal]
+	Goals *goalBindings
 	// MemBlock is what the project's mem holds (gnovm.MemBlock), for a
 	// new session's first prompt; nil or "", nothing.
 	MemBlock func() string

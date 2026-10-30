@@ -82,6 +82,12 @@ type Service interface {
 	AddCost(ctx context.Context, sessionID string, cost float64) error
 	// SetTodos writes the session's todo list and nothing else.
 	SetTodos(ctx context.Context, sessionID string, todos []Todo) (Session, error)
+	// Goal is the session's /goal, its binding to a goal in mem, as the
+	// agent stores it; "" for none. SwapGoal sets it to new if it is still
+	// old, and reports whether it was: a /goal set or cleared meanwhile
+	// wins over what a turn's end read before it.
+	Goal(ctx context.Context, sessionID string) (string, error)
+	SwapGoal(ctx context.Context, sessionID, old, new string) (bool, error)
 	// UpdateSummary records a summary and what it changes: the summary
 	// message, the counters starting again from it, and its cost, added.
 	UpdateSummary(ctx context.Context, sessionID, summaryMessageID string, completionTokens int64, cost float64, estimated bool) (Session, error)
@@ -255,6 +261,15 @@ func (s *service) SetChannel(ctx context.Context, sessionID, channel string) (Se
 	s.applyEstimatedUsageState(&session)
 	s.Publish(pubsub.UpdatedEvent, session)
 	return session, nil
+}
+
+func (s *service) Goal(ctx context.Context, sessionID string) (string, error) {
+	return s.q.GetSessionGoal(ctx, sessionID)
+}
+
+func (s *service) SwapGoal(ctx context.Context, sessionID, old, new string) (bool, error) {
+	n, err := s.q.SwapSessionGoal(ctx, db.SwapSessionGoalParams{ID: sessionID, OldGoal: old, NewGoal: new})
+	return n == 1, err
 }
 
 // UpdateTitleAndUsage updates only the title and usage fields atomically.

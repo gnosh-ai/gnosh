@@ -43,6 +43,7 @@ type Querier interface {
 	GetMessage(ctx context.Context, id string) (Message, error)
 	GetRecentActivity(ctx context.Context) ([]GetRecentActivityRow, error)
 	GetSessionByID(ctx context.Context, id string) (Session, error)
+	GetSessionGoal(ctx context.Context, id string) (string, error)
 	GetToolUsage(ctx context.Context) ([]GetToolUsageRow, error)
 	GetTotalStats(ctx context.Context) (GetTotalStatsRow, error)
 	GetUsageByDay(ctx context.Context) ([]GetUsageByDayRow, error)
@@ -73,6 +74,7 @@ type Querier interface {
 	RenameSession(ctx context.Context, arg RenameSessionParams) error
 	SetSessionChannel(ctx context.Context, arg SetSessionChannelParams) (Session, error)
 	SetSessionTodos(ctx context.Context, arg SetSessionTodosParams) (Session, error)
+	SwapSessionGoal(ctx context.Context, arg SwapSessionGoalParams) (int64, error)
 	UpdateMessage(ctx context.Context, arg UpdateMessageParams) error
 	UpdateSession(ctx context.Context, arg UpdateSessionParams) (Session, error)
 	UpdateSessionSummary(ctx context.Context, arg UpdateSessionSummaryParams) (Session, error)

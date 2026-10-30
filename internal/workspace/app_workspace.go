@@ -71,12 +71,12 @@ func (w *AppWorkspace) AddDir(ctx context.Context, path string) (string, bool, e
 	return w.app.AddDir(ctx, path)
 }
 
-func (w *AppWorkspace) SessionGoal(_ context.Context, sessionID string) (agent.Goal, bool, error) {
-	return w.app.SessionGoal(sessionID)
+func (w *AppWorkspace) SessionGoal(ctx context.Context, sessionID string) (agent.Goal, bool, error) {
+	return w.app.SessionGoal(ctx, sessionID)
 }
 
-func (w *AppWorkspace) SetSessionGoal(_ context.Context, sessionID, condition string) (agent.Goal, bool, error) {
-	return w.app.SetSessionGoal(sessionID, condition)
+func (w *AppWorkspace) SetSessionGoal(ctx context.Context, sessionID, condition string) (agent.GoalChange, error) {
+	return w.app.SetSessionGoal(ctx, sessionID, condition)
 }
 
 func (w *AppWorkspace) Rewind(ctx context.Context, sessionID, messageID string, opts app.RewindOptions) (app.RewindResult, error) {

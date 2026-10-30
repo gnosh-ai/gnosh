@@ -30,13 +30,18 @@ func (w *goalWorkspace) SessionGoal(_ context.Context, sessionID string) (agent.
 	return goal, ok, nil
 }
 
-func (w *goalWorkspace) SetSessionGoal(_ context.Context, sessionID, condition string) (agent.Goal, bool, error) {
+func (w *goalWorkspace) SetSessionGoal(_ context.Context, sessionID, condition string) (agent.GoalChange, error) {
 	had, ok := w.goals[sessionID]
 	delete(w.goals, sessionID)
-	if condition != "" {
-		w.goals[sessionID] = agent.Goal{Condition: condition}
+	if condition == "" {
+		if !ok {
+			return agent.GoalChange{}, nil
+		}
+		return agent.GoalChange{Goal: had, Had: true, Notice: "/goal is cleared"}, nil
 	}
-	return had, ok, nil
+	goal := agent.Goal{Condition: condition, Name: strings.ReplaceAll(condition, " ", "-")}
+	w.goals[sessionID] = goal
+	return agent.GoalChange{Goal: goal, Had: true, Directive: "work toward " + goal.Name}, nil
 }
 
 func (w *goalWorkspace) CreateSession(context.Context, string) (session.Session, error) {
@@ -79,9 +84,9 @@ func TestGoalCommand(t *testing.T) {
 			set = m
 		}
 	}
-	require.Equal(t, goalSetMsg{condition: "the tests pass"}, set)
+	require.Equal(t, goalSetMsg{goal: agent.Goal{Condition: "the tests pass", Name: "the-tests-pass"}, directive: "work toward the-tests-pass"}, set)
 	require.Equal(t, "new", u.session.ID, "a session made for it")
-	require.Equal(t, map[string]agent.Goal{"new": {Condition: "the tests pass"}}, ws.goals)
+	require.Equal(t, map[string]agent.Goal{"new": {Condition: "the tests pass", Name: "the-tests-pass"}}, ws.goals)
 
 	var said []util.InfoMsg
 	var directive agentRunSubmittedMsg
@@ -93,14 +98,14 @@ func TestGoalCommand(t *testing.T) {
 			directive = m
 		}
 	}
-	require.Equal(t, []util.InfoMsg{util.NewInfoMsg("Goal set: the tests pass")}, said)
-	require.Equal(t, agent.GoalDirective("the tests pass"), directive.prompt)
+	require.Equal(t, []util.InfoMsg{util.NewInfoMsg("Goal set: the tests pass (`the-tests-pass` in mem)")}, said)
+	require.Equal(t, "work toward the-tests-pass", directive.prompt)
 	require.True(t, directive.hidden)
 
-	require.Equal(t, util.NewInfoMsg("Goal active: the tests pass. Last check: not yet evaluated"), u.sendMessage("/goal")())
-	ws.goals["new"] = agent.Goal{Condition: "the tests pass", Checks: 1, LastCheck: "the tests still fail"}
-	require.Equal(t, util.NewInfoMsg("Goal active: the tests pass. Last check: the tests still fail"), u.handleDialogAction(dialog.ActionGoal{})())
-	require.Equal(t, util.NewInfoMsg("Goal cleared: the tests pass"), u.sendMessage("/goal Off")())
+	require.Equal(t, util.NewInfoMsg("Goal active: the tests pass (`the-tests-pass` in mem). Last check: not yet evaluated"), u.sendMessage("/goal")())
+	ws.goals["new"] = agent.Goal{Condition: "the tests pass", Name: "the-tests-pass", Checks: 1, LastCheck: "the tests still fail"}
+	require.Equal(t, util.NewInfoMsg("Goal active: the tests pass (`the-tests-pass` in mem). Last check: the tests still fail"), u.handleDialogAction(dialog.ActionGoal{})())
+	require.Equal(t, util.NewInfoMsg("Goal cleared: the tests pass. /goal is cleared"), u.sendMessage("/goal Off")())
 	require.Empty(t, ws.goals)
 	require.Equal(t, none, u.sendMessage("/goal")())
 
@@ -135,7 +140,7 @@ func TestGoalSetThroughUpdate(t *testing.T) {
 	warmCaches(u, false)
 	u.session = &session.Session{ID: "s1"}
 
-	_, cmd := u.Update(goalSetMsg{condition: "the tests pass"})
+	_, cmd := u.Update(goalSetMsg{goal: agent.Goal{Condition: "the tests pass", Name: "tests-pass"}, directive: "work toward tests-pass"})
 	var said []string
 	var directive agentRunSubmittedMsg
 	for _, msg := range msgsOf(cmd) {
@@ -146,6 +151,6 @@ func TestGoalSetThroughUpdate(t *testing.T) {
 			directive = m
 		}
 	}
-	require.Contains(t, said, "Goal set: the tests pass")
-	require.Equal(t, agent.GoalDirective("the tests pass"), directive.prompt)
+	require.Contains(t, said, "Goal set: the tests pass (`tests-pass` in mem)")
+	require.Equal(t, "work toward tests-pass", directive.prompt)
 }

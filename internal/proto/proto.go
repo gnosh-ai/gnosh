@@ -198,18 +198,25 @@ type BranchRequest struct {
 	Title string `json:"title,omitempty"`
 }
 
-// Goal is a session's goal, as Claude Code's /goal sets one: a condition
-// the agent keeps working toward until a check finds it holds; Checks
-// counts the checks, and LastCheck is what the last one found missing.
+// Goal is a session's goal, as /goal sets one: a condition the agent keeps
+// working toward, bound to the goal named Name in the project's mem, until
+// a check finds it holds; Checks counts the checks, and LastCheck is what
+// the last one found.
 type Goal struct {
 	Condition string `json:"condition"`
+	Name      string `json:"name,omitempty"`
+	Title     string `json:"title,omitempty"`
 	Checks    int    `json:"checks"`
 	LastCheck string `json:"last_check,omitempty"`
 }
 
-// GoalStatus is a session's goal: Goal is nil when it has none.
+// GoalStatus is a session's goal: Goal is nil when it has none. Setting
+// one answers the goal set and Directive, what to send the agent;
+// clearing one answers the goal cleared and Notice, what that did.
 type GoalStatus struct {
-	Goal *Goal `json:"goal,omitempty"`
+	Goal      *Goal  `json:"goal,omitempty"`
+	Directive string `json:"directive,omitempty"`
+	Notice    string `json:"notice,omitempty"`
 }
 
 // GoalRequest sets a session's goal, or clears it when Condition is "".

@@ -162,9 +162,10 @@ func (w *ClientWorkspace) SessionGoal(ctx context.Context, sessionID string) (ag
 	return protoToGoal(goal, err)
 }
 
-func (w *ClientWorkspace) SetSessionGoal(ctx context.Context, sessionID, condition string) (agent.Goal, bool, error) {
-	had, err := w.client.SetSessionGoal(ctx, w.workspaceID(), sessionID, condition)
-	return protoToGoal(had, err)
+func (w *ClientWorkspace) SetSessionGoal(ctx context.Context, sessionID, condition string) (agent.GoalChange, error) {
+	status, err := w.client.SetSessionGoal(ctx, w.workspaceID(), sessionID, condition)
+	goal, had, err := protoToGoal(status.Goal, err)
+	return agent.GoalChange{Goal: goal, Had: had, Directive: status.Directive, Notice: status.Notice}, err
 }
 
 // protoToGoal is a goal from the wire: none when it is nil.
@@ -172,7 +173,7 @@ func protoToGoal(goal *proto.Goal, err error) (agent.Goal, bool, error) {
 	if err != nil || goal == nil {
 		return agent.Goal{}, false, err
 	}
-	return agent.Goal{Condition: goal.Condition, Checks: goal.Checks, LastCheck: goal.LastCheck}, true, nil
+	return agent.Goal{Condition: goal.Condition, Name: goal.Name, Title: goal.Title, Checks: goal.Checks, LastCheck: goal.LastCheck}, true, nil
 }
 
 func (w *ClientWorkspace) Rewind(ctx context.Context, sessionID, messageID string, opts app.RewindOptions) (app.RewindResult, error) {

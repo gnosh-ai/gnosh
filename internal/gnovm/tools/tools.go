@@ -97,11 +97,18 @@ type RunOption func(*runOptions)
 
 type runOptions struct {
 	onMem MemGoalsFunc
+	bound func(ctx context.Context, sessionID string) string
 }
 
 // OnMemGoals has gnovm_run tell f the goals each call to mem changed.
 func OnMemGoals(f MemGoalsFunc) RunOption {
 	return func(o *runOptions) { o.onMem = f }
+}
+
+// BoundGoal has gnovm_run ask f for the goal in mem the session's /goal is
+// bound to, which the session's own mem calls may not drop or forget.
+func BoundGoal(f func(ctx context.Context, sessionID string) string) RunOption {
+	return func(o *runOptions) { o.bound = f }
 }
 
 // NewRunTool returns gnovm_run, running in project's VMs.
@@ -125,6 +132,9 @@ func NewRunTool(vms *gnovm.Lazy, project string, opts ...RunOption) fantasy.Agen
 			}
 			session := tools.GetSessionFromContext(ctx)
 			req := gnovm.RunRequest{Project: project, Session: session, Name: p.Name, Code: p.Code, Gas: gas, Reset: p.Reset, Req: call.ID}
+			if o.bound != nil && p.Name == gnovm.MemVM {
+				req.Goal = o.bound(ctx, session)
+			}
 			res, err := c.Run(ctx, req)
 			var died interface{ Error() string }
 			if err != nil && errors.As(err, &died) && strings.Contains(err.Error(), "worker ended before it replied") {

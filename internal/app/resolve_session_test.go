@@ -74,6 +74,12 @@ func (m *mockSessionService) SetTodos(context.Context, string, []session.Todo) (
 	return session.Session{}, nil
 }
 
+func (m *mockSessionService) Goal(context.Context, string) (string, error) { return "", nil }
+
+func (m *mockSessionService) SwapGoal(context.Context, string, string, string) (bool, error) {
+	return true, nil
+}
+
 func (m *mockSessionService) UpdateSummary(context.Context, string, string, int64, float64, bool) (session.Session, error) {
 	return session.Session{}, nil
 }

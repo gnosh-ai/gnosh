@@ -12,8 +12,10 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"charm.land/log/v2"
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/client"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/event"
@@ -80,6 +82,7 @@ gnosh run --continue "Follow up on your last response"
 			useLast, _         = cmd.Flags().GetBool("continue")
 			fork, _            = cmd.Flags().GetBool("fork-session")
 			name               = nameFlag(cmd)
+			goal, _            = cmd.Flags().GetString("goal")
 		)
 
 		// sessionID is read from --session or --resume; --resume also
@@ -103,6 +106,9 @@ gnosh run --continue "Follow up on your last response"
 
 		if prompt == "" {
 			return fmt.Errorf("no prompt provided")
+		}
+		if goal = strings.TrimSpace(goal); utf8.RuneCountInString(goal) > agent.GoalConditionLimit {
+			return fmt.Errorf("--goal is limited to %d characters", agent.GoalConditionLimit)
 		}
 
 		outputFormat, _ := cmd.Flags().GetString("output-format")
@@ -163,7 +169,7 @@ gnosh run --continue "Follow up on your last response"
 			hideSpinner, traceTools := runOutputFlags(quiet, verbose)
 			notice, err := clientWs.MemNotice(ctx)
 			printMemNotice(cmd.ErrOrStderr(), notice, err)
-			return output.finish(runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, fork, name, output))
+			return output.finish(runNonInteractive(ctx, c, ws, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, fork, name, goal, output))
 		}
 
 		ws, cleanup, err := setupLocalWorkspace(cmd)
@@ -201,7 +207,7 @@ gnosh run --continue "Follow up on your last response"
 		if mode, _ := permissionModeFlag(cmd); mode == config.PermissionModePlan {
 			permissionMode = config.PermissionModePlan
 		}
-		return output.finish(appWs.App().RunNonInteractive(ctx, output.w, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, fork, name, func(id string) {
+		return output.finish(appWs.App().RunNonInteractive(ctx, output.w, prompt, largeModel, smallModel, reasoningEffort, hideSpinner, traceTools, sessionID, useLast, fork, name, goal, func(id string) {
 			output.started(id, func() streamInit {
 				// Asked for then, not now: the run replaces the coordinator
 				// with one without the interactive-only tools.
@@ -252,6 +258,7 @@ func addRunFlags(cmd *cobra.Command) {
 	cmd.MarkFlagsMutuallyExclusive("session", "resume", "continue")
 	cmd.Flags().Bool("fork-session", false, forkSessionUsage)
 	cmd.Flags().StringP("name", "n", "", nameUsage)
+	cmd.Flags().String("goal", "", "Keep working until this holds, as /goal does: the goal is kept in mem, checked once the agent closes it, and the run exits non-zero while it is still set")
 	addSafeModeFlag(cmd)
 	cmd.Flags().String("output-format", "text", "How the answer is printed: text, as it streams; json, one result object at the end; or stream-json, a JSON line per message and the result at the end (as Claude Code's -p --output-format)")
 	// The yolo flags are accepted so that Claude Code's
@@ -344,7 +351,7 @@ func runNonInteractive(
 	hideSpinner, traceTools bool,
 	continueSessionID string,
 	useLast, fork bool,
-	name string,
+	name, goal string,
 	output *runOutput,
 ) error {
 	slog.Info("Running in non-interactive mode")
@@ -428,6 +435,15 @@ func runNonInteractive(
 		}
 	}
 	output.sessionID = sess.ID
+	// --goal binds the session's goal in mem before the prompt is sent,
+	// which carries the directive the binding gives.
+	if goal != "" {
+		status, err := c.SetSessionGoal(ctx, ws.ID, sess.ID, goal)
+		if err != nil {
+			return fmt.Errorf("failed to set the goal: %w", err)
+		}
+		prompt = strings.TrimSpace(prompt + "\n\n" + status.Directive)
+	}
 	if continueSessionID != "" || useLast {
 		slog.Info("Continuing session for non-interactive run", "session_id", sess.ID)
 		// If no explicit model override was requested, restore the
@@ -507,7 +523,7 @@ func runNonInteractive(
 				return err
 			}
 			if done {
-				return nil
+				return runGoalOutcome(ctx, c, ws.ID, sess.ID, goal)
 			}
 
 		case <-ctx.Done():
@@ -515,6 +531,24 @@ func runNonInteractive(
 			return ctx.Err()
 		}
 	}
+}
+
+// runGoalOutcome ends a client run with --goal: it fails while the goal
+// is still set. (Whether a goal no longer set was met or cleared, the
+// warning printed above says: the server sends no event for a goal met.)
+func runGoalOutcome(ctx context.Context, c *client.Client, workspaceID, sessionID, goal string) error {
+	if goal == "" {
+		return nil
+	}
+	g, err := c.SessionGoal(ctx, workspaceID, sessionID)
+	switch {
+	case err != nil:
+		return fmt.Errorf("the goal could not be read: %w", err)
+	case g != nil:
+		return fmt.Errorf("the goal is still set: %s (`%s` in mem); last check: %s", g.Condition, g.Name, cmp.Or(g.LastCheck, "none yet"))
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "goal no longer set: %s\n", goal)
+	return nil
 }
 
 // runStream tracks the per-message stdout cursor and the

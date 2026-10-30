@@ -52,7 +52,7 @@ INSERT INTO sessions (
     null,
     strftime('%s', 'now'),
     strftime('%s', 'now')
-) RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel
+) RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel, goal
 `
 
 type CreateSessionParams struct {
@@ -89,6 +89,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.SummaryMessageID,
 		&i.Todos,
 		&i.Channel,
+		&i.Goal,
 	)
 	return i, err
 }
@@ -104,7 +105,7 @@ func (q *Queries) DeleteSession(ctx context.Context, id string) error {
 }
 
 const getLastSession = `-- name: GetLastSession :one
-SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel
+SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel, goal
 FROM sessions
 ORDER BY updated_at DESC
 LIMIT 1
@@ -126,12 +127,13 @@ func (q *Queries) GetLastSession(ctx context.Context) (Session, error) {
 		&i.SummaryMessageID,
 		&i.Todos,
 		&i.Channel,
+		&i.Goal,
 	)
 	return i, err
 }
 
 const getSessionByID = `-- name: GetSessionByID :one
-SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel
+SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel, goal
 FROM sessions
 WHERE id = ? LIMIT 1
 `
@@ -152,12 +154,26 @@ func (q *Queries) GetSessionByID(ctx context.Context, id string) (Session, error
 		&i.SummaryMessageID,
 		&i.Todos,
 		&i.Channel,
+		&i.Goal,
 	)
 	return i, err
 }
 
+const getSessionGoal = `-- name: GetSessionGoal :one
+SELECT goal
+FROM sessions
+WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetSessionGoal(ctx context.Context, id string) (string, error) {
+	row := q.queryRow(ctx, q.getSessionGoalStmt, getSessionGoal, id)
+	var goal string
+	err := row.Scan(&goal)
+	return goal, err
+}
+
 const listSessions = `-- name: ListSessions :many
-SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel
+SELECT id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel, goal
 FROM sessions
 WHERE parent_session_id is NULL
 ORDER BY updated_at DESC
@@ -185,6 +201,7 @@ func (q *Queries) ListSessions(ctx context.Context) ([]Session, error) {
 			&i.SummaryMessageID,
 			&i.Todos,
 			&i.Channel,
+			&i.Goal,
 		); err != nil {
 			return nil, err
 		}
@@ -220,7 +237,7 @@ const setSessionChannel = `-- name: SetSessionChannel :one
 UPDATE sessions
 SET channel = ?
 WHERE id = ?
-RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel
+RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel, goal
 `
 
 type SetSessionChannelParams struct {
@@ -244,6 +261,7 @@ func (q *Queries) SetSessionChannel(ctx context.Context, arg SetSessionChannelPa
 		&i.SummaryMessageID,
 		&i.Todos,
 		&i.Channel,
+		&i.Goal,
 	)
 	return i, err
 }
@@ -254,7 +272,7 @@ SET
     todos = ?,
     updated_at = strftime('%s', 'now')
 WHERE id = ?
-RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel
+RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel, goal
 `
 
 type SetSessionTodosParams struct {
@@ -278,8 +296,29 @@ func (q *Queries) SetSessionTodos(ctx context.Context, arg SetSessionTodosParams
 		&i.SummaryMessageID,
 		&i.Todos,
 		&i.Channel,
+		&i.Goal,
 	)
 	return i, err
+}
+
+const swapSessionGoal = `-- name: SwapSessionGoal :execrows
+UPDATE sessions
+SET goal = ?1
+WHERE id = ?2 AND goal = ?3
+`
+
+type SwapSessionGoalParams struct {
+	NewGoal string `json:"new_goal"`
+	ID      string `json:"id"`
+	OldGoal string `json:"old_goal"`
+}
+
+func (q *Queries) SwapSessionGoal(ctx context.Context, arg SwapSessionGoalParams) (int64, error) {
+	result, err := q.exec(ctx, q.swapSessionGoalStmt, swapSessionGoal, arg.NewGoal, arg.ID, arg.OldGoal)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateSession = `-- name: UpdateSession :one
@@ -293,7 +332,7 @@ SET
     todos = ?,
     channel = ?
 WHERE id = ?
-RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel
+RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel, goal
 `
 
 type UpdateSessionParams struct {
@@ -332,6 +371,7 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) (S
 		&i.SummaryMessageID,
 		&i.Todos,
 		&i.Channel,
+		&i.Goal,
 	)
 	return i, err
 }
@@ -345,7 +385,7 @@ SET
     cost = cost + ?,
     updated_at = strftime('%s', 'now')
 WHERE id = ?
-RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel
+RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel, goal
 `
 
 type UpdateSessionSummaryParams struct {
@@ -376,6 +416,7 @@ func (q *Queries) UpdateSessionSummary(ctx context.Context, arg UpdateSessionSum
 		&i.SummaryMessageID,
 		&i.Todos,
 		&i.Channel,
+		&i.Goal,
 	)
 	return i, err
 }
@@ -418,7 +459,7 @@ SET
     cost = cost + ?,
     updated_at = strftime('%s', 'now')
 WHERE id = ?
-RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel
+RETURNING id, parent_session_id, title, message_count, prompt_tokens, completion_tokens, cost, updated_at, created_at, summary_message_id, todos, channel, goal
 `
 
 type UpdateSessionUsageParams struct {
@@ -449,6 +490,7 @@ func (q *Queries) UpdateSessionUsage(ctx context.Context, arg UpdateSessionUsage
 		&i.SummaryMessageID,
 		&i.Todos,
 		&i.Channel,
+		&i.Goal,
 	)
 	return i, err
 }

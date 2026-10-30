@@ -494,7 +494,7 @@ func (app *App) resolveSession(ctx context.Context, continueSessionID string, us
 // fork, for Claude Code's --fork-session, the run goes on in a copy of the
 // session it continues, which is left as it was. A name, for Claude
 // Code's --name, names the session the run goes on in, as /rename does.
-func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner, traceTools bool, continueSessionID string, useLast, fork bool, name string, onSession func(sessionID string), onMessage func(message.Message)) error {
+func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt, largeModel, smallModel, reasoningEffort string, hideSpinner, traceTools bool, continueSessionID string, useLast, fork bool, name, goal string, onSession func(sessionID string), onMessage func(message.Message)) error {
 	slog.Info("Running in non-interactive mode")
 
 	// Re-initialize the coder agent without interactive-only tools. The
@@ -592,6 +592,15 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 			return fmt.Errorf("failed to name the session: %w", err)
 		}
 	}
+	// --goal binds the session's goal in mem before the prompt is
+	// composed, and the prompt carries the directive that binding gives.
+	if goal != "" {
+		change, err := app.SetSessionGoal(ctx, sess.ID, goal)
+		if err != nil {
+			return fmt.Errorf("failed to set the goal: %w", err)
+		}
+		prompt = strings.TrimSpace(prompt + "\n\n" + change.Directive)
+	}
 	if onSession != nil {
 		onSession(sess.ID)
 	}
@@ -635,7 +644,9 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	// stopped over a Stop hook's objection) are notifications only the TUI
 	// shows. A run prints them on stderr instead of losing them.
 	notifications := app.agentNotifications.Subscribe(ctx)
+	met := false
 	warn := func(n notify.Notification) {
+		met = met || n.Type == notify.TypeGoalMet && n.SessionID == sess.ID
 		if line, ok := hookWarningLine(n, sess.ID); ok {
 			stopSpinner()
 			_, _ = fmt.Fprint(os.Stderr, line)
@@ -744,7 +755,11 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 				}
 				return runError(result.err)
 			}
-			return nil
+			if goal == "" {
+				return nil
+			}
+			g, set, err := app.SessionGoal(ctx, sess.ID)
+			return GoalOutcome(os.Stderr, goal, met, g, set, err)
 
 		case event := <-messageEvents:
 			if err := handle(event.Payload); err != nil {

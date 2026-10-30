@@ -12,7 +12,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/gnovm"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/stretchr/testify/require"
 )
@@ -41,28 +41,24 @@ func (m *judgeModel) Stream(context.Context, fantasy.Call) (fantasy.StreamRespon
 	}, nil
 }
 
-// goalRun is a turn run with a goal set.
+// goalRun is a session with a goal bound in an in-process mem, and an
+// agent to run its turns.
 type goalRun struct {
 	stopHookRun
-	goals *csync.Map[string, Goal]
+	goals *goalBindings
+	t     *testing.T
 }
 
-// runGoalTurn drives a whole turn through Run, with goal set for its
-// session, against main, the agent's model, and judge, the small model
-// that makes the goal check.
-func runGoalTurn(t *testing.T, goal string, main fantasy.LanguageModel, turns *atomic.Int64, judge fantasy.LanguageModel) goalRun {
+// newGoalRun makes a session whose goal is condition, bound in mem, and
+// an agent whose model is main and whose goal check is judge. Run with
+// run.
+func newGoalRun(t *testing.T, condition string, main fantasy.LanguageModel, turns *atomic.Int64, judge fantasy.LanguageModel) goalRun {
 	t.Helper()
-	return runGoalTurnWith(t, goal, main, turns, judge, nil)
-}
-
-// runGoalTurnWith is runGoalTurn telling before the goals and the session
-// once the goal is set, before the turn runs.
-func runGoalTurnWith(t *testing.T, goal string, main fantasy.LanguageModel, turns *atomic.Int64, judge fantasy.LanguageModel, before func(*csync.Map[string, Goal], string)) goalRun {
-	t.Helper()
-
 	env := testEnv(t)
 	notifier := &recordingNotifier{}
-	goals := csync.NewMap[string, Goal]()
+	vms := gnovm.NewLazy(gnovm.ClientOptions{Options: gnovm.Options{Dir: t.TempDir()}, InProcess: true})
+	t.Cleanup(vms.Close)
+	goals := &goalBindings{sessions: env.sessions, gnovms: vms, project: env.workingDir}
 	model := func(llm fantasy.LanguageModel) Model {
 		return Model{Model: llm, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000}}
 	}
@@ -87,14 +83,34 @@ func runGoalTurnWith(t *testing.T, goal string, main fantasy.LanguageModel, turn
 		Parts: []message.ContentPart{message.TextContent{Text: "earlier prompt"}},
 	})
 	require.NoError(t, err)
-	goals.Set(sess.ID, Goal{Condition: goal})
-	if before != nil {
-		before(goals, sess.ID)
-	}
-
-	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, RunID: "run-1", Prompt: "do the thing"})
+	change, err := goals.set(t.Context(), sess.ID, condition)
 	require.NoError(t, err)
-	return goalRun{stopHookRun{agent: a, sessionID: sess.ID, notifier: notifier, turns: turns}, goals}
+	require.True(t, change.Had)
+	require.Contains(t, change.Directive, "Goal `"+change.Goal.Name+"`")
+	return goalRun{stopHookRun{agent: a, sessionID: sess.ID, notifier: notifier, turns: turns}, goals, t}
+}
+
+// run runs a turn, prompted with prompt.
+func (r goalRun) run(prompt string) {
+	r.t.Helper()
+	_, err := r.agent.Run(r.t.Context(), SessionAgentCall{SessionID: r.sessionID, RunID: "run-1", Prompt: prompt})
+	require.NoError(r.t, err)
+}
+
+// mem runs code in mem as the session's agent does.
+func (r goalRun) mem(code string) string {
+	r.t.Helper()
+	client, err := r.goals.client()
+	require.NoError(r.t, err)
+	res, err := client.Run(context.Background(), gnovm.RunRequest{Project: r.goals.project, Session: r.sessionID, Name: gnovm.MemVM, Code: code, Goal: r.goals.boundName(context.Background(), r.sessionID)})
+	require.NoError(r.t, err, code)
+	require.NoError(r.t, res.Err, code)
+	return res.Output
+}
+
+// goal is the session's goal, and whether it is set.
+func (r goalRun) goal() (Goal, bool) {
+	return r.goals.get(context.Background(), r.sessionID)
 }
 
 // notices are the notifications of type kind the run sent.
@@ -110,72 +126,116 @@ func (r goalRun) notices(kind notify.Type) []string {
 	return out
 }
 
-// The feature, end to end, as in Claude Code: a goal the check finds not
-// met keeps the turn going, with what it found missing as a hidden
-// prompt, until a check finds it met; then the goal is cleared, and the
-// user told.
-func TestGoalKeepsTheTurnGoingUntilMet(t *testing.T) {
+// hiddenPrompts are the hidden prompts the session was sent: the goal's
+// continuations.
+func (r goalRun) hiddenPrompts() []string {
+	msgs, err := r.agent.messages.List(r.t.Context(), r.sessionID)
+	require.NoError(r.t, err)
+	var out []string
+	for _, msg := range msgs {
+		if msg.Role == message.User && msg.Content().Hidden {
+			out = append(out, msg.Content().Text)
+		}
+	}
+	return out
+}
+
+// The feature, end to end: mem drives the turn, with the goal's next step
+// as a hidden prompt; once the agent closes the goal, the check asks
+// whether it holds; not met, the goal is reopened and the agent goes back
+// to it; met, it is cleared, and the user told.
+func TestGoalDrivesTheTurnFromMem(t *testing.T) {
 	var turns atomic.Int64
+	var r goalRun
+	main := &promptAwareModel{turns: &turns, answer: func(string) string {
+		switch turns.Load() {
+		case 1:
+			r.mem(`mem.Steps("tests-pass", "fix the parser")`)
+			return "Planned."
+		case 2:
+			r.mem(`mem.Done("tests-pass/1", "fixed"); mem.Done("tests-pass", "go test ./... → ok")`)
+			return "Done."
+		default:
+			r.mem(`mem.Done("tests-pass", "go test ./... → ok, all of it")`)
+			return "Done now."
+		}
+	}}
 	judge := &judgeModel{verdicts: []string{
 		`{"ok": false, "reason": "the tests still fail"}`,
 		`<think>they ran</think> Verdict: {"ok": true, "reason": "the test run passes"}`,
 	}}
-	r := runGoalTurn(t, "the tests pass", textOnlyModel("Working.", &turns), &turns, judge)
+	r = newGoalRun(t, "the tests pass", main, &turns, judge)
+	r.run("make the tests pass")
 
-	require.Equal(t, int64(2), turns.Load(), "one more turn, for the check that found the goal not met")
-	require.Equal(t, int64(2), judge.checks.Load())
+	require.Equal(t, int64(3), turns.Load(), "a turn for the next step, one after the check found it not met")
+	require.Equal(t, int64(2), judge.checks.Load(), "a check each time the agent closed the goal")
 	requireQueueEmpty(t, r.stopHookRun)
-	_, set := r.goals.Get(r.sessionID)
+	_, set := r.goal()
 	require.False(t, set, "a goal met is cleared")
 	require.Equal(t, []string{"Goal met: the tests pass (the test run passes)"}, r.notices(notify.TypeGoalMet))
 	require.Empty(t, r.notifier.warnings())
-
-	msgs, err := r.agent.messages.List(t.Context(), r.sessionID)
-	require.NoError(t, err)
-	var prompt message.TextContent
-	for _, msg := range msgs {
-		if msg.Role == message.User && strings.Contains(msg.Content().Text, "not met yet") {
-			prompt = msg.Content()
-		}
-	}
-	require.Equal(t, goalContinuationPrompt("the tests pass", "the tests still fail"), prompt.Text)
-	require.True(t, prompt.Hidden, "kept out of the transcript the user reads")
+	prompts := r.hiddenPrompts()
+	require.Len(t, prompts, 2)
+	require.Contains(t, prompts[0], "Its next step is `tests-pass/1` \"fix the parser\"")
+	require.Contains(t, prompts[1], "The check found the goal `tests-pass` not met: the tests still fail")
+	require.Contains(t, r.mem(`mem.Show("tests-pass")`), "the check found it not met: the tests still fail")
 }
 
-// No cap: every stopHookReflectEvery checks in a row the agent is asked
-// whether there is a genuine reason to stop; when it judges there is, the
-// turn ends there, the goal still set with what the checks found, and the
-// user is told why.
-func TestGoalReflectsEveryTenChecks(t *testing.T) {
+// A goal that waits on the user ends the turn, still set, and says why.
+func TestGoalWaitingOnTheUserEndsTheTurn(t *testing.T) {
+	var turns atomic.Int64
+	var r goalRun
+	main := &promptAwareModel{turns: &turns, answer: func(string) string {
+		r.mem(`mem.Ask("tests-pass", "which test runner do you use?")`)
+		return "Asked."
+	}}
+	r = newGoalRun(t, "the tests pass", main, &turns, &judgeModel{verdicts: []string{`{"ok": true}`}})
+	r.run("make the tests pass")
+
+	require.Equal(t, int64(1), turns.Load())
+	_, set := r.goal()
+	require.True(t, set)
+	require.Len(t, r.notifier.warnings(), 1)
+	require.Contains(t, r.notifier.warnings()[0].Message, "`tests-pass/1` \"which test runner do you use?\" is for the user. It stays set")
+}
+
+// No cap: every stopHookReflectEvery continuations in a row the agent is
+// asked whether there is a real reason to stop; when it judges there is,
+// the turn ends there, the goal still set, and the user is told why.
+func TestGoalReflectsEveryTenContinuations(t *testing.T) {
 	var turns atomic.Int64
 	main := &promptAwareModel{turns: &turns, answer: func(last string) string {
-		if strings.Contains(last, "step back") {
+		if strings.Contains(last, "Step back") {
 			return "I cannot: the test server is down.\n" + StopMarker
 		}
 		return "Working."
 	}}
-	judge := &judgeModel{verdicts: []string{`{"ok": false, "reason": "the tests still fail"}`}}
-	r := runGoalTurn(t, "the tests pass", main, &turns, judge)
+	judge := &judgeModel{verdicts: []string{`{"ok": true}`}}
+	r := newGoalRun(t, "the tests pass", main, &turns, judge)
+	r.run("make the tests pass")
 
-	require.Equal(t, int64(stopHookReflectEvery+1), turns.Load(), "the turn, a continuation per check, the last a checkpoint")
-	require.Equal(t, int64(stopHookReflectEvery), judge.checks.Load(), "no check after the agent judged it should stop")
-	goal, set := r.goals.Get(r.sessionID)
+	require.Equal(t, int64(stopHookReflectEvery+1), turns.Load(), "the turn, a continuation each, the last a checkpoint")
+	require.Zero(t, judge.checks.Load(), "never closed, never checked")
+	_, set := r.goal()
 	require.True(t, set, "the goal stays set")
-	require.Equal(t, Goal{Condition: "the tests pass", Checks: stopHookReflectEvery, LastCheck: "the tests still fail"}, goal)
 	require.Len(t, r.notifier.warnings(), 1)
-	require.Equal(t, "The goal was found not met 10 times in a row; the agent judged it should stop: I cannot: the test server is down. The goal stays set (/goal clear clears it)", r.notifier.warnings()[0].Message)
-	require.Empty(t, r.notices(notify.TypeGoalMet))
+	require.Equal(t, "The agent judged it should stop working toward the goal: I cannot: the test server is down. The goal stays set (/goal clear clears it)", r.notifier.warnings()[0].Message)
 }
 
 // A check that answers no verdict ends the turn, the goal still set, and
 // says why.
 func TestGoalCheckWithNoVerdictEndsTheTurn(t *testing.T) {
 	var turns atomic.Int64
-	judge := &judgeModel{verdicts: []string{"maybe"}}
-	r := runGoalTurn(t, "the tests pass", textOnlyModel("Working.", &turns), &turns, judge)
+	var r goalRun
+	main := &promptAwareModel{turns: &turns, answer: func(string) string {
+		r.mem(`mem.Done("tests-pass", "go test → ok")`)
+		return "Done."
+	}}
+	r = newGoalRun(t, "the tests pass", main, &turns, &judgeModel{verdicts: []string{"maybe"}})
+	r.run("make the tests pass")
 
 	require.Equal(t, int64(1), turns.Load())
-	goal, set := r.goals.Get(r.sessionID)
+	goal, set := r.goal()
 	require.True(t, set)
 	require.Zero(t, goal.Checks)
 	require.Len(t, r.notifier.warnings(), 1)
@@ -186,19 +246,43 @@ func TestGoalCheckWithNoVerdictEndsTheTurn(t *testing.T) {
 // check's verdict was about the old one.
 func TestGoalSetAnewWhileCheckedIsLeft(t *testing.T) {
 	var turns atomic.Int64
-	var goals *csync.Map[string, Goal]
-	var sessionID string
-	// Met the second time, so a check that ignored the goal set anew would
-	// not keep the turn going for ever.
-	judge := &judgeModel{verdicts: []string{`{"ok": false, "reason": "the tests still fail"}`, `{"ok": true, "reason": "the test run passes"}`}}
-	// The check runs in the turn, once before has said where the goal is.
-	judge.during = func() { goals.Set(sessionID, Goal{Condition: "the docs build"}) }
-	r := runGoalTurnWith(t, "the tests pass", textOnlyModel("Working.", &turns), &turns, judge, func(g *csync.Map[string, Goal], id string) { goals, sessionID = g, id })
+	var r goalRun
+	main := &promptAwareModel{turns: &turns, answer: func(string) string {
+		r.mem(`mem.Done("tests-pass", "go test → ok")`)
+		return "Done."
+	}}
+	judge := &judgeModel{verdicts: []string{`{"ok": false, "reason": "the tests still fail"}`}}
+	judge.during = func() {
+		_, err := r.goals.set(context.Background(), r.sessionID, "the docs build")
+		require.NoError(t, err)
+	}
+	r = newGoalRun(t, "the tests pass", main, &turns, judge)
+	r.run("make the tests pass")
 
 	require.Equal(t, int64(1), turns.Load())
-	goal, set := r.goals.Get(r.sessionID)
+	goal, set := r.goal()
 	require.True(t, set)
-	require.Equal(t, Goal{Condition: "the docs build"}, goal)
+	require.Equal(t, "the docs build", goal.Condition)
+	require.Equal(t, "docs-build", goal.Name)
+}
+
+// The stop marker counts only at a checkpoint: one the agent writes
+// elsewhere does not end a turn its goal goes on with.
+func TestGoalIgnoresAStopMarkerOutsideACheckpoint(t *testing.T) {
+	var turns atomic.Int64
+	var r goalRun
+	main := &promptAwareModel{turns: &turns, answer: func(string) string {
+		if turns.Load() == 2 {
+			r.mem(`mem.Done("tests-pass", "go test → ok")`)
+		}
+		return "Done, I think.\n" + StopMarker
+	}}
+	r = newGoalRun(t, "the tests pass", main, &turns, &judgeModel{verdicts: []string{`{"ok": true, "reason": "the test run passes"}`}})
+	r.run("make the tests pass")
+
+	require.Equal(t, int64(2), turns.Load())
+	require.Equal(t, []string{"Goal met: the tests pass (the test run passes)"}, r.notices(notify.TypeGoalMet))
+	require.Empty(t, r.notifier.warnings())
 }
 
 // The verdict is the JSON object in the check's answer, past any thinking
@@ -252,42 +336,47 @@ func TestGoalTranscript(t *testing.T) {
 	require.True(t, strings.HasSuffix(got, strings.Repeat("y", 100)))
 }
 
-// The coordinator keeps the sessions' goals: set, read and cleared.
+// The coordinator keeps the sessions' goals in their rows, bound in mem:
+// set, read, set anew in place of the one before, and cleared, which
+// drops the goal binding added.
 func TestCoordinatorGoals(t *testing.T) {
 	t.Parallel()
+	env := testEnv(t)
+	vms := gnovm.NewLazy(gnovm.ClientOptions{Options: gnovm.Options{Dir: t.TempDir()}, InProcess: true})
+	t.Cleanup(vms.Close)
+	c := &coordinator{goals: &goalBindings{sessions: env.sessions, gnovms: vms, project: env.workingDir}}
+	sess, err := env.sessions.Create(t.Context(), "goals")
+	require.NoError(t, err)
+	ctx := t.Context()
 
-	c := &coordinator{goals: csync.NewMap[string, Goal]()}
-	_, ok := c.Goal("s1")
+	_, ok := c.Goal(ctx, sess.ID)
 	require.False(t, ok)
-	c.SetGoal("s1", "the tests pass")
-	c.SetGoal("s1", "the docs build")
-	goal, ok := c.Goal("s1")
+	_, err = c.SetGoal(ctx, sess.ID, "the tests pass")
+	require.NoError(t, err)
+	change, err := c.SetGoal(ctx, sess.ID, "the docs build")
+	require.NoError(t, err)
+	require.Equal(t, Goal{Condition: "the docs build", Name: "docs-build", Title: "the docs build"}, change.Goal, "in place of the one before")
+	goal, ok := c.Goal(ctx, sess.ID)
 	require.True(t, ok)
-	require.Equal(t, Goal{Condition: "the docs build"}, goal, "in place of the one before")
-	cleared, ok := c.ClearGoal("s1")
-	require.True(t, ok)
-	require.Equal(t, "the docs build", cleared.Condition)
-	_, ok = c.Goal("s1")
+	require.Equal(t, change.Goal, goal)
+	stored, err := env.sessions.Goal(ctx, sess.ID)
+	require.NoError(t, err)
+	require.Contains(t, stored, `"name":"docs-build"`)
+
+	cleared, err := c.ClearGoal(ctx, sess.ID)
+	require.NoError(t, err)
+	require.True(t, cleared.Had)
+	require.Equal(t, "the docs build", cleared.Goal.Condition)
+	require.Equal(t, "/goal is cleared, and the goal `docs-build` it added is dropped", cleared.Notice)
+	_, ok = c.Goal(ctx, sess.ID)
 	require.False(t, ok)
+	none, err := c.ClearGoal(ctx, sess.ID)
+	require.NoError(t, err)
+	require.False(t, none.Had)
 }
 
-// The stop marker counts only at a checkpoint, as with Stop hooks: one the
-// agent writes elsewhere does not end a turn the goal check would go on.
-func TestGoalIgnoresAStopMarkerOutsideACheckpoint(t *testing.T) {
-	var turns atomic.Int64
-	judge := &judgeModel{verdicts: []string{
-		`{"ok": false, "reason": "the tests still fail"}`,
-		`{"ok": true, "reason": "the test run passes"}`,
-	}}
-	r := runGoalTurn(t, "the tests pass", textOnlyModel("Done, I think.\n"+StopMarker, &turns), &turns, judge)
-
-	require.Equal(t, int64(2), turns.Load())
-	require.Equal(t, []string{"Goal met: the tests pass (the test run passes)"}, r.notices(notify.TypeGoalMet))
-	require.Empty(t, r.notifier.warnings())
-}
-
-// Every agent the coordinator builds checks the goals the coordinator
-// keeps: the coder's and the plan agent's are the same.
+// Every agent the coordinator builds reads the goals the coordinator
+// keeps: the coder's and the plan agent's share them.
 func TestCoordinatorAgentsShareItsGoals(t *testing.T) {
 	env := testEnv(t)
 	t.Setenv("CRUSH_GLOBAL_CONFIG", filepath.Join(t.TempDir(), "crush.json"))
@@ -315,10 +404,7 @@ func TestCoordinatorAgentsShareItsGoals(t *testing.T) {
 	coord := c.(*coordinator)
 	require.NoError(t, coord.readyWg.Wait())
 
-	c.SetGoal("s1", "the tests pass")
 	for _, name := range []string{config.AgentCoder, config.AgentPlan} {
-		goal, ok := coord.agents[name].(*sessionAgent).goals.Get("s1")
-		require.True(t, ok, name)
-		require.Equal(t, "the tests pass", goal.Condition, name)
+		require.Same(t, coord.goals, coord.agents[name].(*sessionAgent).goals, name)
 	}
 }
