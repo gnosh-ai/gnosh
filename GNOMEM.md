@@ -83,9 +83,9 @@ what is next, so it knows where the goal stands without being told.
 
 A goal the agent closes is not taken at its word. As the turn ends, a
 separate judge checks it against what mem shows of it and the end of the
-conversation. Met, you are told, as in a real run in the TUI: `Goal met:
-create release notes file (The agent wrote …/notes.md with content 'release
-notes' and verified …)`. Not met, the goal is reopened with the judge's
+conversation. Met, you are told, in the TUI's status bar and on stderr from
+`gnosh run`, as in a real run in the TUI: `Goal met: create release notes file
+(The agent wrote …/notes.md with content 'release notes' and verified …)`. Not met, the goal is reopened with the judge's
 reason as a note, you are told so, and the agent goes back to it; when
 what is missing is yours to do or decide, it asks you instead.
 
