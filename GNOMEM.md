@@ -362,7 +362,7 @@ type Todo struct {
 	// ...
 }
 
-func (m *Mem) Goal(title string, name ...string) Goal // .Steps(...), .Wait(...), .Ask(...)
+func (m *Mem) Goal(title string, name ...string) Goal // .Steps(...), .Wait(...), .Ask(...), .Start()
 func (m *Mem) Steps(name string, titles ...string)
 func (m *Mem) Ask(name, question string)
 func (m *Mem) Start(name string)
@@ -377,6 +377,7 @@ func (m *Mem) Forget(name string)
 func (m *Mem) Redact(secret string)
 func (m *Mem) Find(words string) string
 func (m *Mem) Show(names ...string) string
+func (m *Mem) JSON(names ...string) string
 func (m *Mem) Next(name string) string
 ```
 
@@ -391,13 +392,20 @@ func (m *Mem) Next(name string) string
 - **The journal is the source.** mem's store, the realm in goleveldb, and its
   index, SQLite with full-text search, are built from the journal, and built
   again from it after damage, an upgrade or an erasure. Two Gnosh processes
-  take turns through a lock.
+  take turns through a lock. With an embedding server set, each row of the
+  index also has a vector, kept in a file of its own under the hash of the
+  text it was made from, so a vector is never stale.
 - **Erased means erased.** `mem.Redact(secret)` and `mem.Forget(name)` write
-  the journal again without the text and rebuild the store and the index,
-  so the text leaves every file mem has.
+  the journal again without the text and rebuild the store, the index and
+  the vectors, so the text leaves every file mem has. Gnosh's own copies of
+  mem's text go too: the block a session started with, a `/goal`'s binding,
+  the task list and a session's summary. What you typed and saw in a session
+  stays, prompts, replies and tool results, and Gnosh names the sessions
+  that still show a redacted secret.
 - **Short by construction.** Show's outline stays under about 3000 bytes:
   the rules, what is due, the open goals newest first (a long run of finished
-  steps folded into one line), the goals closed lately, and the newest facts.
+  steps folded into one line), the goals closed lately, and the newest facts,
+  with the rest of them by group.
 
 ## The machines
 
