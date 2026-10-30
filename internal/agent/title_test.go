@@ -196,3 +196,50 @@ func TestTitleProviderOptionsWithoutSwitch(t *testing.T) {
 	bare := NewSessionAgent(SessionAgentOptions{}).(*sessionAgent)
 	require.Empty(t, bare.titleProviderOptions(Model{ModelCfg: config.SelectedModel{Provider: "qwen"}}))
 }
+
+// titleWatchModel is a main model that records, as its turn starts, the
+// session's title and whether the small model was asked for one yet.
+type titleWatchModel struct {
+	fastModel
+	small    *titleModel
+	sessions func() string
+	mu       sync.Mutex
+	titles   []string
+	asked    []int
+}
+
+func (m *titleWatchModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
+	m.mu.Lock()
+	m.titles = append(m.titles, m.sessions())
+	m.asked = append(m.asked, len(m.small.recorded()))
+	m.mu.Unlock()
+	return m.fastModel.Stream(ctx, call)
+}
+
+// A new session is named after its prompt at once, and its title is asked
+// for only when the turn ends: asked for at the start, it took the model
+// server slot whose cache the turn needed.
+func TestRunTitlesAfterTheTurn(t *testing.T) {
+	t.Parallel()
+
+	env := testEnv(t)
+	small := &titleModel{text: "Fix the flaky test", finish: fantasy.FinishReasonStop}
+	sess, err := env.sessions.Create(t.Context(), "")
+	require.NoError(t, err)
+	large := &titleWatchModel{small: small, sessions: func() string {
+		s, _ := env.sessions.Get(context.Background(), sess.ID)
+		return s.Title
+	}}
+	a := testSessionAgent(env, large, small, "system")
+
+	_, err = a.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "please fix the flaky test"})
+	require.NoError(t, err)
+	large.mu.Lock()
+	require.Equal(t, "please fix the flaky test", large.titles[0], "named after the prompt at once")
+	require.Equal(t, 0, large.asked[0], "no title asked for before the turn")
+	large.mu.Unlock()
+	require.Eventually(t, func() bool {
+		s, err := env.sessions.Get(t.Context(), sess.ID)
+		return err == nil && s.Title == "Fix the flaky test"
+	}, 5*time.Second, 10*time.Millisecond, "titled by the model after it")
+}

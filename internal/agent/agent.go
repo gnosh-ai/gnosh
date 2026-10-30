@@ -1151,9 +1151,22 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// server with few slots that took the slot holding the parent's
 	// prompt cache, and the parent then spent minutes re-reading its
 	// whole conversation when it resumed.
+	//
+	// The session is named after its prompt at once, and titled by the
+	// model when the turn ends. Asked for at the start, the title went to
+	// the model server beside the turn's first request; on a local server
+	// with a few slots, each caching one prompt, it could take the slot
+	// whose cache held what this session or another needed next, and that
+	// one then re-read all of it. After the turn, the least recently used
+	// slot is one no live conversation is in.
 	if !hasUserTextMessage(msgs) && currentSession.ParentSessionID == "" {
 		titleCtx := context.WithoutCancel(ctx)
-		go a.GenerateTitle(titleCtx, call.SessionID, call.Prompt)
+		provisional := a.nameAfterPrompt(ctx, call.SessionID, call.Prompt)
+		// A non-interactive run (klash run) ends with its turn: the name
+		// from its prompt stands.
+		if !call.NonInteractive {
+			defer func() { go a.generateTitle(titleCtx, call.SessionID, call.Prompt, provisional) }()
+		}
 		// A new session starts with the project's board in view when an
 		// item on it is open: the model sees what is next without a tool
 		// call. It goes with the prompt, as SessionStart hook output does,
@@ -2870,6 +2883,28 @@ func (a *sessionAgent) titleProviderOptions(model Model) fantasy.ProviderOptions
 }
 
 func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, userPrompt string) {
+	a.generateTitle(ctx, sessionID, userPrompt, "")
+}
+
+// nameAfterPrompt names an untitled session after its prompt, and returns
+// that name, which generateTitle may replace; or "" if the session has a
+// name already.
+func (a *sessionAgent) nameAfterPrompt(ctx context.Context, sessionID, userPrompt string) string {
+	sess, err := a.sessions.Get(ctx, sessionID)
+	if err != nil || !session.Untitled(sess.Title) || strings.TrimSpace(userPrompt) == "" {
+		return ""
+	}
+	name := titleFromPrompt(userPrompt)
+	if err := a.sessions.Rename(ctx, sessionID, name); err != nil {
+		slog.Error("Failed to name the session after its prompt", "error", err)
+		return ""
+	}
+	return name
+}
+
+// generateTitle is GenerateTitle for a session that may carry provisional, a
+// name taken from its prompt, which counts as no name.
+func (a *sessionAgent) generateTitle(ctx context.Context, sessionID, userPrompt, provisional string) {
 	if userPrompt == "" {
 		return
 	}
@@ -2878,12 +2913,17 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 	// (/rename, the sessions dialog) is kept instead of the one made here.
 	sess, getErr := a.sessions.Get(context.WithoutCancel(ctx), sessionID)
 	if getErr != nil {
-		slog.Error("Failed to read the session to title", "error", getErr)
+		// Asked for after the turn, a title may come as klash shuts down.
+		if strings.Contains(getErr.Error(), "database is closed") {
+			slog.Debug("Not titling the session: klash is closing", "error", getErr)
+		} else {
+			slog.Error("Failed to read the session to title", "error", getErr)
+		}
 		return
 	}
 	// A name the session was given before its first prompt (klash -n) is
 	// kept, as Claude Code keeps a --name: only an untitled one is titled.
-	if !session.Untitled(sess.Title) {
+	if !session.Untitled(sess.Title) && (provisional == "" || sess.Title != provisional) {
 		return
 	}
 	untitled := sess.Title
