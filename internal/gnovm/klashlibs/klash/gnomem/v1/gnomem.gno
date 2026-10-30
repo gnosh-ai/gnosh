@@ -71,6 +71,7 @@ const (
 	maxClosed = 10   // closed top-level items Show lists
 	maxClosedSteps = 5 // closed steps Show lists under an open item
 	maxFacts  = 20   // facts Show lists
+	maxFactNames = 200 // about the most bytes of fact names the header lists
 	shownNote = 3    // notes Show gives the next item
 )
 
@@ -327,14 +328,30 @@ func (b *Board) Show(ids ...int) string {
 	if next != 0 {
 		sb.WriteString(" · next: " + b.ref(next))
 	}
+	keys := make([]string, 0, len(b.Facts))
+	for k := range b.Facts {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	if len(keys) > 0 {
+		// The facts' names, so that a session that reads only this line
+		// changes a fact by its name rather than adding a second one.
+		names := ""
+		for i, k := range keys {
+			if i > 0 {
+				names += ", "
+			}
+			if len(names)+len(k) > maxFactNames {
+				names += "+" + strconv.Itoa(len(keys)-i) + " more"
+				break
+			}
+			names += line(k)
+		}
+		sb.WriteString(" · facts: " + names)
+	}
 	sb.WriteString("\n")
 
-	if len(b.Facts) > 0 {
-		keys := make([]string, 0, len(b.Facts))
-		for k := range b.Facts {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
+	if len(keys) > 0 {
 		sb.WriteString("facts:\n")
 		for i, k := range keys {
 			if i == maxFacts {

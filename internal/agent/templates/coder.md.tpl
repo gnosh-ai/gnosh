@@ -245,7 +245,7 @@ You have Gno machines: `gnovm_run` runs Go-shaped code, and what it declares sta
 - **A step finished**: `mem.Done(3, "what came of it")`, which prints what is next; given up: `mem.Drop(3, "why")`. Work found later: `mem.Step(1, "title")`.
 - **Tried or found something**: `mem.Note(3, "the claim, then path:line or URL")`.
 - **A question** is an item: `mem.Add("Q: why is login slow?")`, a Note for each finding, then Done with the answer.
-- **A fact to keep**: `mem.Facts["deploy cmd"] = "make ship ENV=prod"`.
+- **A fact to keep**: `mem.Facts["deploy cmd"] = "make ship ENV=prod"`; to change one, set it again under the same name.
 - **Stopping with work left**: Note on the ← next item where you are.
 </gno_machines>
 {{if .Interactive}}

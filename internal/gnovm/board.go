@@ -63,11 +63,11 @@ func BoardSummary(dir, project string) string {
 		return ""
 	}
 	header := strings.TrimSpace(string(b))
-	if !strings.HasPrefix(header, "board: ") || strings.HasPrefix(header, "board: 0 open") {
+	if !strings.HasPrefix(header, "board: ") || (strings.HasPrefix(header, "board: 0 open") && !strings.Contains(header, " · facts: ")) {
 		return ""
 	}
 	return "<gno-board>\nYour Gno board mem, from earlier sessions (last changed " + info.ModTime().UTC().Format("2006-01-02 15:04") + " UTC): " +
-		header + ". `mem.Show()` (gnovm_run name \"mem\") shows it; work on it only if this task is part of it.\n</gno-board>"
+		header + ". `mem.Show()` (gnovm_run name \"mem\") shows it; use it only where this task is part of it, and change a fact by setting it again under its name.\n</gno-board>"
 }
 
 // BoardSummary is BoardSummary for this Lazy's directory. It reads a file:

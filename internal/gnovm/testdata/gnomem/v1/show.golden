@@ -1,4 +1,4 @@
-board: 2 open, 5 done, 1 blocked · next: 1 "goal: ship the parser"
+board: 2 open, 5 done, 1 blocked · next: 1 "goal: ship the parser" · facts: a, go version
 facts:
   a = 1
   go version = 1.22

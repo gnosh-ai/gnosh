@@ -33,7 +33,7 @@ mem.Note(6, "auth.go:88 runs one query per user")
 mem.Done(6, "an N+1 query in auth.go:88")
 mem.Facts["deploy cmd"] = "make ship ENV=prod"`
 
-const memBoardShow = `board: 4 open, 2 done · next: 3 "update CHANGELOG"
+const memBoardShow = `board: 4 open, 2 done · next: 3 "update CHANGELOG" · facts: deploy cmd
 facts:
   deploy cmd = make ship ENV=prod
 [ ] 1 release v2
@@ -118,7 +118,7 @@ func TestMemDropAndReopen(t *testing.T) {
 	run(t, h, MemVM, memBoard)
 	require.Equal(t, "dropped 1 \"release v2\"; nothing is open\n", run(t, h, MemVM, `mem.Drop(1, "postponed")`).Output)
 	out := run(t, h, MemVM, `mem.Show()`).Value
-	require.Contains(t, out, "board: 0 open, 2 done, 4 dropped\n")
+	require.Contains(t, out, "board: 0 open, 2 done, 4 dropped · facts: deploy cmd\n")
 	require.Contains(t, out, "[-] 1 release v2 · dropped: postponed (4 steps)\n")
 
 	// Reopening a step reopens what it belongs to, and the steps dropped
@@ -390,12 +390,16 @@ func TestMemBoardSummary(t *testing.T) {
 	run(t, h, MemVM, memBoard)
 	got := changedRe.ReplaceAllString(BoardSummary(dir, "/proj"), "last changed (time)")
 	require.Equal(t, "<gno-board>\nYour Gno board mem, from earlier sessions (last changed (time)): "+
-		`board: 4 open, 2 done · next: 3 "update CHANGELOG"`+
-		". `mem.Show()` (gnovm_run name \"mem\") shows it; work on it only if this task is part of it.\n</gno-board>", got)
+		`board: 4 open, 2 done · next: 3 "update CHANGELOG" · facts: deploy cmd`+
+		". `mem.Show()` (gnovm_run name \"mem\") shows it; use it only where this task is part of it, and change a fact by setting it again under its name.\n</gno-board>", got)
 
-	// Reads leave it as it is; a change rewrites it.
+	// Reads leave it as it is; a change rewrites it. With nothing open, the
+	// facts are still worth saying: a session that did not see their names
+	// added a second fact for one that changed.
 	run(t, h, MemVM, `mem.Show()`)
 	run(t, h, MemVM, `mem.Drop(1, "postponed")`)
-	require.Empty(t, BoardSummary(dir, "/proj"), "nothing open, nothing said")
+	require.Contains(t, BoardSummary(dir, "/proj"), "board: 0 open, 2 done, 4 dropped · facts: deploy cmd")
+	run(t, h, MemVM, `delete(mem.Facts, "deploy cmd")`)
+	require.Empty(t, BoardSummary(dir, "/proj"), "nothing open and no facts: nothing said")
 	require.Empty(t, BoardSummary(dir, "/elsewhere"))
 }
