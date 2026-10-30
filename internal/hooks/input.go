@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/tidwall/gjson"
@@ -562,6 +563,9 @@ func BuildEnv(eventName, toolName, sessionID, cwd, projectDir, toolInputJSON str
 	// such a command ran /.claude/hooks/check.sh, failed to start, and a
 	// hook that fails lets the call go ahead.
 	env = append(env, "CLAUDE_PROJECT_DIR="+projectDir)
+	if f := memStatusPath.Load(); f != nil && projectDir != "" {
+		env = append(env, hookVar("MEM_STATUS", (*f)(projectDir))...)
+	}
 
 	// Extract tool-specific env vars from the JSON input.
 	if toolInputJSON != "" {
@@ -574,6 +578,22 @@ func BuildEnv(eventName, toolName, sessionID, cwd, projectDir, toolInputJSON str
 	}
 
 	return env
+}
+
+// memStatusPath names, for a project's directory, the status.json its mem
+// keeps; unset while gnosh's GnoVM machines are off.
+var memStatusPath atomic.Pointer[func(projectDir string) string]
+
+// SetMemStatusPath has every hook told, as GNOSH_MEM_STATUS, where the
+// project's mem keeps its status.json, as f names it: mem.JSON() as gnosh
+// last computed it, which a hook reads without starting anything (test -f
+// first: it is there once mem first changes). nil unsets it.
+func SetMemStatusPath(f func(projectDir string) string) {
+	if f == nil {
+		memStatusPath.Store(nil)
+		return
+	}
+	memStatusPath.Store(&f)
 }
 
 // hookVar sets a hook's environment variable under its GNOSH_ name and

@@ -1308,6 +1308,7 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 			Dir:        filepath.Join(filepath.Dir(config.GlobalConfigData()), "gnovm"),
 			Embeddings: app.config.Config().Options.MemEmbeddingsURL,
 		}})
+		hooks.SetMemStatusPath(app.gnovms.MemStatusPath)
 	}
 	app.setArtifactServer(interactive, app.config.Config().Options)
 	var err error

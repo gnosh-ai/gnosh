@@ -246,6 +246,17 @@ func MemBlock(dir, project string) string {
 	return memBlock(st, time.Now())
 }
 
+// MemStatusPath is where the status.json of project's mem is under dir,
+// for hooks (GNOSH_MEM_STATUS), which read mem without opening it: mem.JSON()
+// with when and for what it was computed (memStatus). It names the file,
+// which is there once mem first changes, and makes nothing.
+func MemStatusPath(dir, project string) string {
+	return filepath.Join(memDir(dir, project), memStatusFile)
+}
+
+// MemStatusPath is MemStatusPath for this Lazy's directory.
+func (l *Lazy) MemStatusPath(project string) string { return MemStatusPath(l.opts.Dir, project) }
+
 // MemNotice is what the user is told at a session's start, by gnosh itself
 // rather than the model, which may not raise it: what in mem is due today,
 // and what waits on the user. "" when nothing is.

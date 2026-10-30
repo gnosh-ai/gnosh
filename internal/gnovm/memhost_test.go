@@ -18,6 +18,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -792,4 +793,44 @@ func TestMemRedactLeavesRulesToTheUser(t *testing.T) {
 	res, err = h.call(context.Background(), memRequest{Code: `mem.Redact("without asking")`, User: true})
 	require.NoError(t, err, res.Output)
 	require.Contains(t, memOK(t, h, `println(mem.Show("push"))`).Output, "never push (redacted) first")
+}
+
+// status.json is what hooks read of mem (GNOSH_MEM_STATUS names it): its
+// field names are an interface, pinned here; renaming one breaks hooks.
+// MemStatusPath names it, and makes nothing for a mem not yet there.
+func TestMemStatusIsAHookInterface(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestHost(t, dir)
+	res, err := h.Run(context.Background(), RunRequest{Project: "/proj", Session: "s1", Name: MemVM, Code: `mem.Fact("cmd/test", "go test ./...")`})
+	require.NoError(t, err)
+	require.NoError(t, res.Err)
+	b, err := os.ReadFile(MemStatusPath(dir, "/proj"))
+	require.NoError(t, err)
+	keys := func(raw []byte) []string {
+		t.Helper()
+		var m map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(raw, &m))
+		var out []string
+		for k := range m {
+			out = append(out, k)
+		}
+		sort.Strings(out)
+		return out
+	}
+	var st struct {
+		Mem json.RawMessage `json:"mem"`
+	}
+	require.NoError(t, json.Unmarshal(b, &st))
+	var mem struct {
+		Counts json.RawMessage `json:"counts"`
+	}
+	require.NoError(t, json.Unmarshal(st.Mem, &mem))
+	require.Equal(t, []string{"at", "day", "generation", "mem", "seq"}, keys(b))
+	require.Equal(t, []string{"asks", "counts", "days", "facts", "goals", "rules", "words"}, keys(st.Mem))
+	require.Equal(t, []string{"done", "dropped", "facts", "for_user", "forgotten", "open", "rules", "waits"}, keys(mem.Counts))
+
+	elsewhere := MemStatusPath(dir, "/elsewhere")
+	_, err = os.Stat(filepath.Dir(elsewhere))
+	require.ErrorIs(t, err, os.ErrNotExist, "naming it makes nothing")
 }
