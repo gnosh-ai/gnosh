@@ -6,4 +6,4 @@ then the 30 s cap twice: 111 s in all, 111000 ms.
 A client retries a failed request with exponential backoff: it waits 200 ms before the first retry, doubles the wait each time, and never waits more than 30 s. How long after the first failure does the 10th retry go out?
 -- check --
 tool gnovm_run >= 1
-answer last matches \b111\b|111,?000
+answer last matches \A[^\n]*(\b111\b|111,?000)
