@@ -641,9 +641,10 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	done := make(chan response, 1)
 
 	// Warnings (a Stop hook that failed to run, an agent that stopped
-	// over a Stop hook's objection, a goal that could not be checked, a
-	// rule a session's mem call set) are notifications only the TUI
-	// shows. A run prints them on stderr instead of losing them.
+	// over a Stop hook's objection, a goal that could not be checked or
+	// was reopened, a rule a session's mem call set) and goals found met
+	// are notifications only the TUI shows. A run prints them on stderr
+	// instead of losing them.
 	notifications := app.agentNotifications.Subscribe(ctx)
 	met := false
 	warn := func(n notify.Notification) {
@@ -874,12 +875,19 @@ func (app *App) descendsFrom(ctx context.Context, id, ancestorID string) bool {
 }
 
 // warningLine is the stderr line a non-interactive run prints for a
-// notification, when it is a warning for the run's own session.
+// notification of the run's own session: a warning, or a goal the judge
+// found met, which only the TUI showed.
 func warningLine(n notify.Notification, sessionID string) (string, bool) {
-	if n.Type != notify.TypeWarning || n.SessionID != sessionID || n.Message == "" {
+	if n.SessionID != sessionID || n.Message == "" {
 		return "", false
 	}
-	return "warning: " + n.Message + "\n", true
+	switch n.Type {
+	case notify.TypeWarning:
+		return "warning: " + n.Message + "\n", true
+	case notify.TypeGoalMet:
+		return n.Message + "\n", true
+	}
+	return "", false
 }
 
 func (app *App) UpdateAgentModel(ctx context.Context) error {

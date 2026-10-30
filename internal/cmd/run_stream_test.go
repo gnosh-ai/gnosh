@@ -562,6 +562,18 @@ func TestRunStream_WarningIsNotAFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, errOut.String())
 
+	// A goal the judge found met carries its text in Error too. It used
+	// to fail the run as "agent error: Goal met: …".
+	errOut.Reset()
+	done, err = s.handle(pubsub.Event[proto.AgentEvent]{Payload: proto.AgentEvent{
+		SessionID: "S",
+		Type:      proto.AgentEventTypeGoalMet,
+		Error:     errors.New("Goal met: the tests pass (go test → ok)"),
+	}}, nil)
+	require.NoError(t, err)
+	require.False(t, done)
+	require.Equal(t, "Goal met: the tests pass (go test → ok)\n", errOut.String())
+
 	// A real agent error still fails the run.
 	done, err = s.handle(pubsub.Event[proto.AgentEvent]{Payload: proto.AgentEvent{
 		SessionID: "S",

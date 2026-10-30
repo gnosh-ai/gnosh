@@ -17,6 +17,9 @@ const (
 	// session's mem call set), its text in Error. It is not a failed run.
 	// Its value is notify.TypeWarning's, which the server passes on.
 	AgentEventTypeWarning AgentEventType = "hook_warning"
+	// AgentEventTypeGoalMet reports a goal the judge found met, its text in
+	// Error, as notify.TypeGoalMet's value. It is not a failed run either.
+	AgentEventTypeGoalMet AgentEventType = "goal_met"
 )
 
 // MarshalText implements the [encoding.TextMarshaler] interface.

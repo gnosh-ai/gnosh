@@ -185,8 +185,8 @@ func testNConsumers(t *testing.T, n int) {
 	wg.Wait()
 }
 
-// gnosh run prints a warning for its own session as a stderr line, and
-// nothing for any other notification.
+// gnosh run prints a warning, or a goal found met, for its own session as
+// a stderr line, and nothing for any other notification.
 func TestWarningLine(t *testing.T) {
 	t.Parallel()
 
@@ -198,4 +198,9 @@ func TestWarningLine(t *testing.T) {
 	require.False(t, ok, "another session's warning")
 	_, ok = warningLine(notify.Notification{SessionID: "S", Type: notify.TypeAgentError, Message: "x"}, "S")
 	require.False(t, ok, "not a warning")
+
+	// A goal the judge found met is printed too: only the TUI showed it.
+	line, ok = warningLine(notify.Notification{SessionID: "S", Type: notify.TypeGoalMet, Message: "Goal met: fix the login loop (the auth tests pass)"}, "S")
+	require.True(t, ok)
+	require.Equal(t, "Goal met: fix the login loop (the auth tests pass)\n", line)
 }

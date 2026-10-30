@@ -686,12 +686,19 @@ func (s *runStream) handle(ev any, stopSpinner func()) (done bool, err error) {
 		if e.Payload.Error == nil || !s.ours(e.Payload) {
 			return false, nil
 		}
-		// A warning carries its text in Error too, but the turn goes
-		// on or ends normally: print it rather than fail the run.
-		if e.Payload.Type == proto.AgentEventTypeWarning {
+		// A warning, or a goal the judge found met, carries its text in
+		// Error too, but the turn goes on or ends normally: print it rather
+		// than fail the run, as a goal met once did ("agent error: Goal
+		// met: …").
+		switch e.Payload.Type {
+		case proto.AgentEventTypeWarning, proto.AgentEventTypeGoalMet:
 			if s.errOut != nil {
 				stop()
-				_, _ = fmt.Fprintf(s.errOut, "warning: %s\n", e.Payload.Error)
+				prefix := "warning: "
+				if e.Payload.Type == proto.AgentEventTypeGoalMet {
+					prefix = ""
+				}
+				_, _ = fmt.Fprintf(s.errOut, "%s%s\n", prefix, e.Payload.Error)
 			}
 			return false, nil
 		}
