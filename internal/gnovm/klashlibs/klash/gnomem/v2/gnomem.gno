@@ -246,11 +246,23 @@ func (m *Mem) Ask(name, question string) {
 // other sessions' next skips it; Show marks it "(started by …)". Done and
 // Drop clear the mark. Starting an item another session started takes it
 // over, and says from whom: that is how a step left by a session that has
-// ended is picked up.
+// ended is picked up. An item that waits, or is under one that waits, is
+// not started: mem would say it is being worked on while it waits for a
+// day or for something said, and a later session could not tell which
+// holds.
 func (m *Mem) Start(name string) {
 	it := m.openItem(name)
 	if it.For != "" {
 		panic(ref(name, it.Title) + " is for the user: only they can do it")
+	}
+	for p := name; p != ""; p = parentOf(p) {
+		if w := m.get(p); m.waiting(w) {
+			until := "until " + w.Wait
+			if !isDay(w.Wait) {
+				until = "for " + strconv.Quote(w.Wait)
+			}
+			panic(ref(p, w.Title) + " waits " + until + ": start it then, or clear the wait with mem.Wait(\"" + p + "\", \"\")")
+		}
 	}
 	me := caller()
 	if it.Doing == me {
@@ -354,9 +366,12 @@ func (m *Mem) drop(name string, it *Todo, why string) []string {
 
 // Reopen opens item name again if it is done or dropped, with the items it
 // belongs to and the steps dropped with any of them (the highest first);
-// what came of each becomes a note. An open item is left as it is.
-func (m *Mem) Reopen(name string) {
+// what came of each becomes a note, and so does why, if given: why it is
+// taken up again, as Drop keeps why it was put down. An open item is left
+// as it is.
+func (m *Mem) Reopen(name string, why ...string) {
 	it := m.item(name)
+	reason := clip(text("why", strings.Join(why, " ")), maxText)
 	if it.Status == "" {
 		println(ref(name, it.Title) + " is open")
 		return
@@ -375,6 +390,9 @@ func (m *Mem) Reopen(name string) {
 				others = append(others, r)
 			}
 		}
+	}
+	if reason != "" {
+		m.do(Op{Kind: "note", Name: name, New: "reopened: " + reason})
 	}
 	msg := "reopened " + ref(name, it.Title)
 	if len(others) > 0 {

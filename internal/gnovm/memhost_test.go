@@ -913,3 +913,33 @@ func TestMemHostChecksARebuildCutAcrossCalls(t *testing.T) {
 	res := memOK(t, h, `print(mem.Show())`)
 	require.Empty(t, res.Notes, "and not again")
 }
+
+// An item that waits, or is under a goal that waits, is not started, and is
+// told what to do instead; one whose day has come is started. Reopen keeps
+// why it was taken up again, as Drop keeps why it was put down. Both from
+// QA's real-model scenarios (2026-10-30): a reminder started the day it was
+// set, and a reopen given a reason it refused.
+func TestMemStartRefusesAWaitAndReopenKeepsWhy(t *testing.T) {
+	t.Parallel()
+	h := newTestMemHost(t, t.TempDir())
+	start := func(code string) error {
+		t.Helper()
+		_, err := h.call(context.Background(), memRequest{Code: code, Session: "s1"})
+		return err
+	}
+	memOK(t, h, `mem.Goal("renew the TLS cert", "renew-cert").Wait("2026-11-03")`)
+	require.ErrorContains(t, start(`mem.Start("renew-cert")`),
+		"`renew-cert` \"renew the TLS cert\" waits until 2026-11-03: start it then, or clear the wait with mem.Wait(\"renew-cert\", \"\")")
+	memOK(t, h, `mem.Goal("tag the release", "tag").Steps("push the tag").Wait("PR #6399 merged")`)
+	require.ErrorContains(t, start(`mem.Start("tag/1")`),
+		"`tag` \"tag the release\" waits for \"PR #6399 merged\": start it then, or clear the wait with mem.Wait(\"tag\", \"\")")
+	memOK(t, h, `mem.Goal("check the backups", "backups").Wait("2026-10-30")`)
+	require.Contains(t, memOK(t, h, `mem.Start("backups")`).Output, "started `backups`", "its day has come")
+
+	memOK(t, h, `mem.Goal("migrate to postgres 16", "pg16").Steps("dump", "restore")`)
+	memOK(t, h, `mem.Drop("pg16", "not this quarter")`)
+	require.Contains(t, memOK(t, h, `mem.Reopen("pg16", "doing it after all")`).Output, "reopened `pg16`")
+	show := memOK(t, h, `print(mem.Show("pg16"))`).Output
+	require.Contains(t, show, "reopened: doing it after all")
+	require.Contains(t, show, "was dropped: not this quarter")
+}
