@@ -49,6 +49,13 @@ func (g *GenericToolRenderContext) RenderTool(sty *styles.Styles, width int, opt
 	}
 
 	header := toolHeader(sty, opts.Status, name, cappedWidth, opts, toolParams...)
+	return toolWithResult(sty, cappedWidth, opts, header)
+}
+
+// toolWithResult is header with what the call returned under it, as a tool
+// with no renderer of its own shows it: its early state, an image, or its
+// text. Compact, it is the header alone.
+func toolWithResult(sty *styles.Styles, cappedWidth int, opts *ToolRenderOpts, header string) string {
 	if opts.Compact {
 		return header
 	}

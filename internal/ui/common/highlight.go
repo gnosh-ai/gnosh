@@ -39,18 +39,31 @@ func SyntaxHighlightLexerName(st *styles.Styles, source, lexerName string, bg co
 	return syntaxHighlight(st, source, l, bg)
 }
 
+// SyntaxHighlightMuted is SyntaxHighlightLexerName in MutedChromaStyle's
+// colours, taken halfway toward toward: for code shown inside a line of
+// text rather than as a block of its own.
+func SyntaxHighlightMuted(st *styles.Styles, source, lexerName string, toward color.Color) (string, error) {
+	l := lexers.Get(lexerName)
+	if l == nil {
+		l = lexers.Fallback
+	}
+	return formatChroma(source, l, MutedChromaStyle(st, toward))
+}
+
 // syntaxHighlight formats the given source using the provided lexer and the
 // memoized Chroma style for the theme and background.
 func syntaxHighlight(st *styles.Styles, source string, l chroma.Lexer, bg color.Color) (string, error) {
-	// Get the formatter
+	// Memoized: building the style per call is expensive and only depends
+	// on the theme and background.
+	return formatChroma(source, l, ChromaStyle(st, bg))
+}
+
+// formatChroma formats source, tokenised by l, in style s, as 24-bit color.
+func formatChroma(source string, l chroma.Lexer, s *chroma.Style) (string, error) {
 	f := formatters.Get("terminal16m")
 	if f == nil {
 		f = formatters.Fallback
 	}
-
-	// Memoized: building the style per call is expensive and only depends
-	// on the theme and background.
-	s := ChromaStyle(st, bg)
 
 	// Tokenize and format
 	it, err := l.Tokenise(nil, source)

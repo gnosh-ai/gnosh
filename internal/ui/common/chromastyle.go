@@ -2,8 +2,10 @@ package common
 
 import (
 	"image/color"
+	"math"
 	"sync"
 
+	"charm.land/lipgloss/v2"
 	"github.com/alecthomas/chroma/v2"
 	chromastyles "github.com/alecthomas/chroma/v2/styles"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -20,6 +22,11 @@ var (
 	chromaStyleFor  *styles.Styles
 	chromaStyleBase *chroma.Style
 	chromaStyleByBg map[[3]uint8]*chroma.Style
+	// chromaStyleMuted is MutedChromaStyle's, for the theme and the colour
+	// it mixes in.
+	chromaStyleMuted    *chroma.Style
+	chromaStyleMutedFor *styles.Styles
+	chromaStyleMutedTo  [3]uint8
 )
 
 // InvalidateChromaStyleCache drops the memoized chroma style so the next
@@ -32,6 +39,7 @@ func InvalidateChromaStyleCache() {
 	chromaStyleFor = nil
 	chromaStyleBase = nil
 	chromaStyleByBg = nil
+	chromaStyleMuted = nil
 }
 
 // InvalidateStyleCaches drops every style-derived cache that the pointer
@@ -80,5 +88,49 @@ func ChromaStyle(st *styles.Styles, bg color.Color) *chroma.Style {
 		chromaStyleByBg = map[[3]uint8]*chroma.Style{}
 	}
 	chromaStyleByBg[key] = built
+	return built
+}
+
+// mutedMix is how far MutedChromaStyle takes each colour toward the muted
+// one.
+const mutedMix = 0.5
+
+// MutedChromaStyle is ChromaStyle with every colour taken mutedMix of the
+// way toward toward, memoized: code set inside a line of text, such as the
+// Gno a gnovm_run call runs in its header, reads as code without outshining
+// the line. It sets no background. A toward with no colour leaves the style
+// as it is.
+func MutedChromaStyle(st *styles.Styles, toward color.Color) *chroma.Style {
+	base := ChromaStyle(st, nil)
+	if _, none := toward.(lipgloss.NoColor); none || toward == nil {
+		return base
+	}
+	r, g, b, _ := toward.RGBA()
+	to := [3]uint8{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8)}
+
+	chromaStyleMu.Lock()
+	defer chromaStyleMu.Unlock()
+	if chromaStyleMuted != nil && chromaStyleMutedFor == st && chromaStyleMutedTo == to {
+		return chromaStyleMuted
+	}
+	mix := func(x, t uint8) uint8 {
+		return uint8(math.Round(float64(x)*(1-mutedMix) + float64(t)*mutedMix))
+	}
+	built, err := base.Builder().Transform(
+		func(e chroma.StyleEntry) chroma.StyleEntry {
+			// Transform hands each entry the Background entry's colour
+			// too, which would then stand behind every token: code in a
+			// line of text has none.
+			e.Background = 0
+			if e.Colour.IsSet() {
+				e.Colour = chroma.NewColour(mix(e.Colour.Red(), to[0]), mix(e.Colour.Green(), to[1]), mix(e.Colour.Blue(), to[2]))
+			}
+			return e
+		},
+	).Build()
+	if err != nil {
+		return base
+	}
+	chromaStyleMuted, chromaStyleMutedFor, chromaStyleMutedTo = built, st, to
 	return built
 }
