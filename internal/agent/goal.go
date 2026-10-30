@@ -386,12 +386,31 @@ func parseGoalCheck(answer string) (met bool, reason string, err error) {
 	start, end := strings.Index(answer, "{"), strings.LastIndex(answer, "}")
 	var verdict struct {
 		OK     *bool  `json:"ok"`
+		Basis  string `json:"basis"`
 		Reason string `json:"reason"`
 	}
 	if start < 0 || end < start || json.Unmarshal([]byte(answer[start:end+1]), &verdict) != nil || verdict.OK == nil {
 		return false, "", errors.New("its answer was not a verdict: " + compactReason(answer))
 	}
-	return *verdict.OK, strings.TrimSpace(verdict.Reason), nil
+	reason = strings.TrimSpace(verdict.Reason)
+	// A goal met on the user's word says so in gnosh's words: told to begin
+	// its reason so, the judge did when the user's word covered the whole
+	// goal, and not when it covered the last step (QA, 2026-10-30).
+	if *verdict.OK && verdict.Basis == "user" {
+		reason = userWordPrefix + strings.TrimSpace(trimPrefixFold(reason, userWordPrefix))
+	}
+	return *verdict.OK, reason, nil
+}
+
+// userWordPrefix begins the reason of a goal met on the user's word.
+const userWordPrefix = "on the user's word: "
+
+// trimPrefixFold is s without prefix, matched without regard to case.
+func trimPrefixFold(s, prefix string) string {
+	if len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix) {
+		return s[len(prefix):]
+	}
+	return s
 }
 
 // goalTranscript is the end of a conversation as the goal check reads it,

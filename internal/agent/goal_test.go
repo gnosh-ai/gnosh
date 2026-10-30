@@ -483,6 +483,18 @@ func TestParseGoalCheck(t *testing.T) {
 		_, _, err := parseGoalCheck(answer)
 		require.Error(t, err, answer)
 	}
+
+	// A goal met on the user's word says so in gnosh's words, once.
+	for answer, want := range map[string]string{
+		`{"ok": true, "basis": "user", "reason": "Lin signed off on 1.3.0 this morning"}`:                       "on the user's word: Lin signed off on 1.3.0 this morning",
+		`{"ok": true, "basis": "user", "reason": "On the user's word: they did it on their laptop"}`:            "on the user's word: they did it on their laptop",
+		`{"ok": true, "basis": "conversation", "reason": "go test ./... passes"}`:                               "go test ./... passes",
+		`{"ok": false, "basis": "user", "reason": "the user said one step is done; the tag is not pushed yet"}`: "the user said one step is done; the tag is not pushed yet",
+	} {
+		_, reason, err := parseGoalCheck(answer)
+		require.NoError(t, err, answer)
+		require.Equal(t, want, reason, answer)
+	}
 }
 
 // The check is shown the end of the conversation: the prompts typed (not
