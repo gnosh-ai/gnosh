@@ -19,6 +19,41 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// gnosh mem's reads name gnosh mem where a session's name /mem, say when
+// mem refused them, so the command can exit 1, and take nothing but
+// reads (QA, 2026-10-30).
+func TestMemRead(t *testing.T) {
+	t.Parallel()
+	h := newTestHost(t, t.TempDir())
+	ctx := context.Background()
+	res, err := h.Run(ctx, RunRequest{Project: "/proj", Session: "s1", Name: MemVM, Code: `mem.Goal("ship the release").Steps("build")`})
+	require.NoError(t, err)
+	require.NoError(t, res.Err)
+
+	read := func(args string) (string, bool) {
+		t.Helper()
+		text, refused, err := h.MemRead(ctx, "/proj", "gnosh mem", args, nil)
+		require.NoError(t, err, args)
+		return text, refused
+	}
+	text, refused := read("show ship-release")
+	require.False(t, refused)
+	require.Contains(t, text, `"build"`)
+	text, refused = read("show nope")
+	require.True(t, refused)
+	require.Equal(t, "no item `nope`; gnosh mem lists them", text)
+	text, refused = read("find")
+	require.True(t, refused)
+	require.Equal(t, "gnosh mem find takes words: gnosh mem find release key", text)
+	text, refused = read("find nothing-like-it")
+	require.False(t, refused, text)
+	text, refused = read("forget ship-release")
+	require.True(t, refused)
+	require.Equal(t, "gnosh mem only reads mem: show, find and log", text)
+	text, _ = read("show ship-release")
+	require.Contains(t, text, `"build"`, "forget took nothing")
+}
+
 // /mem, as the user types it: what it shows, what it undoes and redoes, and
 // what it erases, goals, steps, facts and rules, from every file of mem.
 func TestMemCommand(t *testing.T) {

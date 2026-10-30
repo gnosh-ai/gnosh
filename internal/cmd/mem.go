@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -48,7 +49,7 @@ func runMem(cmd *cobra.Command, args []string) error {
 	defer done()
 
 	out := cmd.OutOrStdout()
-	opts := gnovm.Options{Dir: app.GnoVMDir(), Embeddings: svc.cfg.Config().Options.MemEmbeddingsURL}
+	opts := gnovm.Options{Dir: app.GnoVMDir(), Client: gnovm.NewClientID(), Embeddings: svc.cfg.Config().Options.MemEmbeddingsURL}
 	project := svc.cfg.WorkingDir()
 	if _, err := os.Stat(filepath.Dir(gnovm.MemStatusPath(opts.Dir, project))); os.IsNotExist(err) {
 		fmt.Fprintln(out, "no mem here yet: a session makes one when it first keeps something")
@@ -62,14 +63,17 @@ func runMem(cmd *cobra.Command, args []string) error {
 	}
 	// One read needs no worker: the host runs here, and takes mem's lock
 	// as a worker does, beside any gnosh with the project open.
-	client, err := gnovm.Acquire(gnovm.ClientOptions{Options: opts, InProcess: true})
+	host, err := gnovm.NewHost(opts)
 	if err != nil {
 		return err
 	}
-	defer client.Release()
-	text, _, err := client.MemCommand(ctx, project, "", strings.Join(args, " "), titles)
-	if err != nil {
+	defer host.Close()
+	text, refused, err := host.MemRead(ctx, project, version.Command+" mem", strings.Join(args, " "), titles)
+	switch {
+	case err != nil:
 		return err
+	case refused:
+		return errors.New(strings.TrimRight(text, "\n"))
 	}
 	fmt.Fprintln(out, strings.TrimRight(text, "\n"))
 	return nil

@@ -326,6 +326,26 @@ func (m *Mem) showName(sb *strings.Builder, name string) {
 	sb.WriteString(m.miss(name) + "\n")
 }
 
+// Has reports whether Show shows something under name: an item, a fact, a
+// rule, or a group of facts and rules. gnosh mem's reads use it to say
+// that a name is not there, which Show itself only writes.
+func (m *Mem) Has(name string) bool {
+	if it := m.get(name); it != nil && it.Status != "forgotten" {
+		return true
+	}
+	if m.getFact(name) != nil || m.getRule(name) != nil {
+		return true
+	}
+	has := false
+	found := func(string, any) bool {
+		has = true
+		return true
+	}
+	m.facts.Iterate(name+"/", name+"/\xff", found)
+	m.rules.Iterate(name+"/", name+"/\xff", found)
+	return has
+}
+
 // showItem writes item name in full: its status, result, wait, claim, notes
 // and every item under it.
 func (m *Mem) showItem(sb *strings.Builder, name string, it *Todo) {

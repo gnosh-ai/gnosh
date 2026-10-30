@@ -45,14 +45,34 @@ func (h *Host) MemCommand(ctx context.Context, project, session, args string, ti
 // memCommand is MemCommand, with what it erased, if anything, for gnosh's
 // own copies of mem's text.
 func (h *Host) memCommand(ctx context.Context, project, session, args string, titles map[string]string) (string, *MemErasure, error) {
-	var erased *MemErasure
-	text, err := h.memAnswer(ctx, project, session, args, titles, &erased)
-	return text, erased, err
+	var reply memReply
+	text, err := h.memAnswer(ctx, project, session, args, titles, "/mem", &reply)
+	return text, reply.erased, err
 }
 
-// memAnswer answers /mem; an input that erased something leaves what it
-// erased in erased.
-func (h *Host) memAnswer(ctx context.Context, project, session, args string, titles map[string]string, erased **MemErasure) (string, error) {
+// MemRead answers one of /mem's reads (show, find, log) typed at a shell
+// as command, gnosh mem: its text names command where a session's names
+// /mem, and refused reports that mem refused it, or failed ("no item
+// `x`"), for the command to exit 1. It takes nothing else: at a shell,
+// mem is only read.
+func (h *Host) MemRead(ctx context.Context, project, command, args string, titles map[string]string) (text string, refused bool, err error) {
+	if f := strings.Fields(args); len(f) > 0 && f[0] != "show" && f[0] != "find" && f[0] != "log" {
+		return command + " only reads mem: show, find and log", true, nil
+	}
+	var reply memReply
+	text, err = h.memAnswer(ctx, project, "", args, titles, command, &reply)
+	return text, reply.refused, err
+}
+
+// memReply is what a /mem answer leaves besides its text: what it erased,
+// if anything, and whether mem refused it.
+type memReply struct {
+	erased  *MemErasure
+	refused bool
+}
+
+// memAnswer answers /mem, typed as via ("/mem" in a session), into reply.
+func (h *Host) memAnswer(ctx context.Context, project, session, args string, titles map[string]string, via string, reply *memReply) (string, error) {
 	args = strings.TrimSpace(args)
 	sub, rest := args, ""
 	if i := strings.IndexFunc(args, unicode.IsSpace); i >= 0 {
@@ -71,22 +91,27 @@ func (h *Host) memAnswer(ctx context.Context, project, session, args string, tit
 		for _, n := range strings.Fields(rest) {
 			names = append(names, strconv.Quote(n))
 		}
-		out, err := m.user(ctx, session, "mem.Show("+strings.Join(names, ", ")+")", titles, erased)
+		out, err := m.user(ctx, session, "mem.Show("+strings.Join(names, ", ")+")", titles, via, reply)
 		if line := m.meaningLine(ctx); err == nil && len(names) == 0 && line != "" {
 			out = strings.TrimRight(out, "\n") + "\n" + line + "\n"
+		}
+		if err == nil && len(names) > 0 && !m.has(ctx, session, names) {
+			reply.refused = true // Show writes a miss as text
 		}
 		return out, err
 	case "find":
 		if rest == "" {
-			return "/mem find takes words: /mem find release key", nil
+			reply.refused = true
+			return via + " find takes words: " + via + " find release key", nil
 		}
-		return m.user(ctx, session, "mem.Find("+strconv.Quote(rest)+")", titles, erased)
+		return m.user(ctx, session, "mem.Find("+strconv.Quote(rest)+")", titles, via, reply)
 	case "log":
 		n := 20
 		if rest != "" {
 			var err error
 			if n, err = strconv.Atoi(rest); err != nil || n < 1 {
-				return "/mem log takes how many changes to show: /mem log 50", nil
+				reply.refused = true
+				return via + " log takes how many changes to show: " + via + " log 50", nil
 			}
 		}
 		return m.log(n, titles)
@@ -96,19 +121,22 @@ func (h *Host) memAnswer(ctx context.Context, project, session, args string, tit
 		}
 		seq, err := strconv.ParseInt(strings.TrimPrefix(rest, "#"), 10, 64)
 		if err != nil || seq < 1 {
+			reply.refused = true
 			return "/mem undo takes a change's number, as /mem log shows it: /mem undo 12", nil
 		}
 		return m.undo(ctx, session, seq)
 	case "forget":
 		if rest == "" {
+			reply.refused = true
 			return "/mem forget takes a name, as /mem shows it: /mem forget release-v2", nil
 		}
-		return m.user(ctx, session, "mem.Forget("+strconv.Quote(rest)+")", titles, erased)
+		return m.user(ctx, session, "mem.Forget("+strconv.Quote(rest)+")", titles, via, reply)
 	case "redact":
 		if rest == "" {
+			reply.refused = true
 			return "/mem redact takes a secret's exact text: /mem redact sk-live-…", nil
 		}
-		return m.user(ctx, session, "mem.Redact("+strconv.Quote(rest)+")", titles, erased)
+		return m.user(ctx, session, "mem.Redact("+strconv.Quote(rest)+")", titles, via, reply)
 	case "repair":
 		n, err := m.repair(ctx)
 		if err != nil {
@@ -138,32 +166,45 @@ func (h *Host) repairVM(ctx context.Context, project, name string) (string, erro
 	return fmt.Sprintf("VM %s is repaired: %d %s kept, %d cut from the damage on; its old journal is kept beside it", name, kept, entries, cut), nil
 }
 
-// user runs code against mem as the user, typed in session, and returns
-// what it printed, then why it failed, if it did, and what gnosh did
-// besides. Only a busy mem is an error: the rest is the answer. Sessions
-// are named for the user (memSessions).
-func (h *memHost) user(ctx context.Context, session, code string, titles map[string]string, erased **MemErasure) (string, error) {
+// user runs code against mem as the user, typed in session as via ("/mem"),
+// and returns what it printed, then why it failed, if it did, and what
+// gnosh did besides. Only a busy mem is an error: the rest is the answer,
+// a failure marked refused in reply. Sessions are named for the user
+// (memSessions).
+func (h *memHost) user(ctx context.Context, session, code string, titles map[string]string, via string, reply *memReply) (string, error) {
 	res, err := h.call(ctx, memRequest{Code: code, Session: session, User: true})
-	*erased = res.Erased
+	reply.erased = res.Erased
 	var busy *busyError
 	if errors.As(err, &busy) {
 		return "", err
 	}
 	out := strings.TrimRight(res.Output, "\n")
 	if err != nil {
+		reply.refused = true
 		out = strings.TrimLeft(out+"\n"+err.Error(), "\n")
 	}
 	for _, n := range res.Notes {
 		out += "\n(" + n + ")"
 	}
-	// mem's text points the agent at mem.Show; the user has /mem.
+	// mem's text points the agent at mem.Show; the user has via.
 	out = memShowRe.ReplaceAllStringFunc(out, func(call string) string {
 		if name := memShowRe.FindStringSubmatch(call)[1]; name != "" {
-			return "/mem show " + name
+			return via + " show " + name
 		}
-		return "/mem"
+		return via
 	})
 	return memSessions(out, session, titles), nil
+}
+
+// has reports whether mem shows something under every one of names, which
+// are quoted. A mem it cannot read has nothing.
+func (h *memHost) has(ctx context.Context, session string, names []string) bool {
+	checks := make([]string, len(names))
+	for i, n := range names {
+		checks[i] = "mem.Has(" + n + ")"
+	}
+	res, err := h.call(ctx, memRequest{Code: "println(" + strings.Join(checks, " && ") + ")", Session: session, User: true})
+	return err == nil && strings.TrimSpace(res.Output) == "true"
 }
 
 // memShowRe is a call of mem.Show in mem's text, with the name it shows.

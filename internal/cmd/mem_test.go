@@ -56,6 +56,13 @@ func TestMemCommandReadsTheProjectsMem(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, "ship the release")
 
+	// What mem refuses is an error, so a script can tell, named for the
+	// shell (QA, 2026-10-30).
+	_, err = run("show", "nope")
+	require.EqualError(t, err, "no item `nope`; gnosh mem lists them")
+	_, err = run("find")
+	require.EqualError(t, err, "gnosh mem find takes words: gnosh mem find release key")
+
 	_, err = run("forget", "ship-release")
 	require.EqualError(t, err, "gnosh mem only reads mem: type /mem forget in a session")
 	_, err = run("drop")
