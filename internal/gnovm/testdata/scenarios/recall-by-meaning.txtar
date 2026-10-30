@@ -1,0 +1,46 @@
+Facts asked about in words they do not share: the question has no word in
+common with the two facts it needs, which are older than the 30 the session is
+shown at its start, so only meaning connects them. Run it with and without
+mem_embeddings_url to see what recall by meaning adds. The first session is a
+throwaway, so the seeded facts' vectors are filled before the question.
+
+-- mem --
+mem.Fact("people/sam", "Sam Okafor carries the pager this week")
+mem.Fact("storage/snapshots", "snapshots are taken nightly at 02:00 UTC and kept 35 days")
+mem.Fact("infra/vpn", "the VPN gateway is vpn2.internal")
+mem.Fact("infra/grafana", "Grafana is at grafana.internal:3000")
+mem.Fact("ci/cache", "the build cache bucket is s3://ci-cache-7")
+mem.Fact("team/design", "the design review is every Thursday at 3pm")
+mem.Fact("release/branch", "the release branch is cut on Mondays")
+mem.Fact("support/inbox", "the support inbox is help@acme.test")
+mem.Fact("infra/flags", "the feature-flag service is flagd on port 8013")
+mem.Fact("docs/site", "the docs site deploys from the docs folder")
+mem.Fact("infra/lb", "the load balancer is lb-east-2")
+mem.Fact("errors/sentry", "errors go to the Sentry project acme-web")
+mem.Fact("ci/image", "the CI runner image is ci-base 22.04")
+mem.Fact("staging/reset", "staging resets every night at 2am")
+mem.Fact("api/limit", "the public API allows 600 requests a minute")
+mem.Fact("mobile/ship", "the mobile app ships through TestFlight")
+mem.Fact("data/warehouse", "the analytics warehouse is wh-prod-1")
+mem.Fact("legal/contact", "Dana Ruiz is the legal contact for licences")
+mem.Fact("auth/sso", "sign-in goes through Okta")
+mem.Fact("status/page", "the status page is status.acme.test")
+mem.Fact("billing/invoices", "invoices go out on the 1st")
+mem.Fact("office/wifi", "the office wifi is acme-guest")
+mem.Fact("licences/fonts", "the font licence is renewed in March")
+mem.Fact("infra/k8s", "the Kubernetes cluster is k8s-east")
+mem.Fact("infra/mail", "the mail relay is smtp.internal")
+mem.Fact("release/freeze", "feature freezes start two days before a release")
+mem.Fact("repos/monolith", "the old monolith repo is archived")
+mem.Fact("tests/postgres", "the test suite needs Postgres 16")
+mem.Fact("design/colours", "the brand colours are in the design repo")
+mem.Fact("infra/dns", "DNS is managed in Route 53")
+mem.Fact("team/standup", "standup is at 9:30 every weekday")
+mem.Fact("infra/cdn", "the CDN is CloudFront distribution E2X9")
+-- prompt --
+Good morning! Nothing to do yet, just checking in.
+-- prompt-new --
+Who should I wake up at 3 a.m. if the site goes down, and how long do we hold on to old copies of the database?
+-- check --
+answer last contains Sam
+answer last contains 35

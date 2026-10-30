@@ -1,0 +1,10 @@
+The user asks how to see what the agent keeps for the project, without
+asking the agent: the answer points at /mem, which the user runs themselves.
+
+-- prompt --
+Remember for later: the release train leaves every other Tuesday.
+-- prompt-new --
+How can I see everything you're keeping for this project, without asking you?
+-- check --
+turn 1 tool gnovm_run >= 1
+answer last contains /mem

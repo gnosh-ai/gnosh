@@ -20,7 +20,7 @@ after 2 file greet.go exists
 after 2 file greet_test.go absent
 after 3 file greet_test.go exists
 after 3 file Makefile absent
-file Makefile contains go test
+cmd grep -Eq '\bgo\b.*test|\$\(GO\) test' Makefile
 cmd go test ./...
 turn 2 tool gnovm_run >= 1
 turn 3 tool gnovm_run >= 1
