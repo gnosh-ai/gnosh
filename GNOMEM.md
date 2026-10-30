@@ -48,9 +48,9 @@ gnovm_run {"name": "mem", "code": "mem.Show()"}
 
 ### A goal, carried across sessions
 
-> **You:** Build the `greet` package: a go.mod, `Hello` with a test, and a
-> `make test` that runs the tests. Do the first step now; we'll carry on
-> tomorrow.
+> *(for example)* **You:** Build the `greet` package: a go.mod, `Hello` with a
+> test, and a `make test` that runs the tests. Do the first step now; we'll
+> carry on tomorrow.
 
 The agent puts the goal in mem with each part as a step, does the
 first, and marks it done with what came of it. When a step turns out to be

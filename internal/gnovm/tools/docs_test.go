@@ -472,6 +472,87 @@ func TestDocPromptsAreScenarios(t *testing.T) {
 	}
 }
 
+// docUserPrompts are what a document quotes the user as saying: the text
+// after each **You:** in its blockquotes, to the next one or a blank quoted
+// line, each on one line. A turn marked *(for example)* is left out: it shows
+// how a user might put it, not a prompt a scenario runs.
+func docUserPrompts(text string) []string {
+	var out, cur []string
+	inTurn := false
+	flush := func() {
+		if inTurn {
+			out = append(out, strings.Join(strings.Fields(strings.Join(cur, " ")), " "))
+		}
+		cur, inTurn = nil, false
+	}
+	for _, line := range strings.Split(prose(text), "\n") {
+		if !strings.HasPrefix(line, ">") {
+			flush()
+			continue
+		}
+		line = strings.TrimSpace(strings.TrimPrefix(line, ">"))
+		if before, after, ok := strings.Cut(line, "**You:**"); ok {
+			flush()
+			if !strings.Contains(before, "for example") {
+				inTurn, cur = true, []string{after}
+			}
+			continue
+		}
+		if line == "" {
+			flush()
+		} else if inTurn {
+			cur = append(cur, line)
+		}
+	}
+	flush()
+	return out
+}
+
+// TestDocUserPromptsAreScenarios checks the other way from
+// TestDocPromptsAreScenarios: each prompt a document quotes the user as
+// saying is, word for word, a prompt of a scenario bound to it, so a quote
+// that drifts is caught even where its words appear again elsewhere.
+func TestDocUserPromptsAreScenarios(t *testing.T) {
+	bound := map[string]map[string]bool{}
+	for _, p := range docPrompts {
+		sc, err := os.ReadFile(filepath.Join(repoRoot, "internal", "gnovm", "testdata", "scenarios", p.scenario))
+		require.NoError(t, err)
+		if bound[p.doc] == nil {
+			bound[p.doc] = map[string]bool{}
+		}
+		for _, prompt := range scenarioPrompts(string(sc)) {
+			bound[p.doc][prompt] = true
+		}
+	}
+	for doc, prompts := range bound {
+		text, err := os.ReadFile(filepath.Join(repoRoot, doc))
+		require.NoError(t, err)
+		quoted := docUserPrompts(string(text))
+		require.NotEmpty(t, quoted, "%s quotes no prompts: if it still does, the parser no longer finds them", doc)
+		for _, q := range quoted {
+			assert.True(t, prompts[q], "%s quotes the user as saying %q, which is no prompt of a scenario bound to it: quote the scenario word for word, bind the scenario that has it, or mark the turn *(for example)*", doc, q)
+		}
+	}
+}
+
+// TestDocUserPromptsParse pins docUserPrompts: turns end at the next **You:**
+// or a blank quoted line, a prompt may run over lines, and an example is
+// left out.
+func TestDocUserPromptsParse(t *testing.T) {
+	doc := strings.Join([]string{
+		"> **You:** one, over",
+		"> two lines.",
+		">",
+		"> *(next session)* **You:** second",
+		"",
+		"> *(for example)* **You:** not a scenario's",
+		"",
+		"> just a quote",
+		"**You:** outside a quote",
+	}, "\n")
+	require.Equal(t, []string{"one, over two lines.", "second"}, docUserPrompts(doc))
+}
+
 // TestDocScenarioPrompts pins scenarioPrompts: every session's prompt, in
 // order, each on one line, and nothing from the other sections.
 func TestDocScenarioPrompts(t *testing.T) {
