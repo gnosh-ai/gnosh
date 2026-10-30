@@ -27,6 +27,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestScenarios runs the use cases in testdata/scenarios against a real
@@ -143,6 +145,7 @@ func TestScenarioFilesParse(t *testing.T) {
 		`cmd .+|` +
 		`vm-persist (>=|<=|==|>|<) \d+|` +
 		`vm-dump contains .+|` +
+		`mem-count (open|done|dropped|items|facts|rules) (>=|<=|==|>|<) \d+|` +
 		`vm-eval [a-z][a-z0-9_-]* \S+ ((>=|<=|==|>|<) -?\d+|contains .+))$`)
 	for _, file := range files {
 		sc, err := parseScenario(file)
@@ -467,6 +470,10 @@ func dumpPersistentVMs(t *testing.T, gnovmDir, project string) map[string]string
 		if !vm.Options.Persist {
 			continue
 		}
+		if vm.Name == MemVM {
+			dumps[vm.Name] = dumpMem(h, project)
+			continue
+		}
 		res, err := h.Run(context.Background(), RunRequest{Project: project, Name: vm.Name, Code: "0"})
 		if err != nil || res.Err != nil {
 			dumps[vm.Name] = fmt.Sprintf("(could not rebuild: %v %v)", err, res.Err)
@@ -493,7 +500,70 @@ func evalInVM(gnovmDir, project, vm, expr string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return res.Value, nil
+	// mem shows a trailing read as output, not as a value.
+	return strings.TrimRight(cmp.Or(res.Value, res.Output), "\n"), nil
+}
+
+// dumpMem is mem as a run left it: its outline, then every change its
+// journal holds, one line each ("op note fix-ci/1: the claim").
+func dumpMem(h *Host, project string) string {
+	var b strings.Builder
+	res, err := h.Run(context.Background(), RunRequest{Project: project, Name: MemVM, Code: "mem.Show()"})
+	switch {
+	case err != nil:
+		fmt.Fprintf(&b, "(could not show: %v)\n", err)
+	case res.Err != nil:
+		fmt.Fprintf(&b, "(could not show: %v)\n", res.Err)
+	default:
+		b.WriteString(res.Output)
+	}
+	_, entries, _, err := readMemJournal(filepath.Join(memDir(h.opts.Dir, project), "journal.jsonl"))
+	if err != nil {
+		fmt.Fprintf(&b, "(could not read the journal: %v)\n", err)
+	}
+	for _, e := range entries {
+		for _, op := range e.Ops {
+			fmt.Fprintf(&b, "op %s %s:", op.Kind, op.Name)
+			for _, s := range []string{op.Field, op.Old, op.New} {
+				if s != "" {
+					b.WriteString(" " + s)
+				}
+			}
+			b.WriteString("\n")
+		}
+	}
+	return fmt.Sprintf("%d entries\n%s", len(entries), b.String())
+}
+
+// memCount is one of mem's counts, from mem.JSON(): open, done, dropped,
+// facts, rules, or items (open, done and dropped).
+func memCount(gnovmDir, project, what string) (int, error) {
+	out, err := evalInVM(gnovmDir, project, MemVM, "mem.JSON()")
+	if err != nil {
+		return 0, err
+	}
+	var m struct {
+		Counts struct{ Open, Done, Dropped, Facts, Rules int } `json:"counts"`
+	}
+	if err := json.Unmarshal([]byte(out), &m); err != nil {
+		return 0, err
+	}
+	c := m.Counts
+	switch what {
+	case "open":
+		return c.Open, nil
+	case "done":
+		return c.Done, nil
+	case "dropped":
+		return c.Dropped, nil
+	case "facts":
+		return c.Facts, nil
+	case "rules":
+		return c.Rules, nil
+	case "items":
+		return c.Open + c.Done + c.Dropped, nil
+	}
+	return 0, fmt.Errorf("mem has no count %q", what)
 }
 
 var opRe = regexp.MustCompile(`^(>=|<=|==|>|<)$`)
@@ -605,6 +675,14 @@ func (r *scenarioRun) check(line, project string, env []string) checkResult {
 		if !res.ok {
 			res.got = fmt.Sprintf("not in %d persistent VMs", len(r.vms))
 		}
+	case len(f) == 4 && f[0] == "mem-count":
+		// mem-count <what> <op> <n>: one of mem's counts.
+		n, err := memCount(filepath.Join(r.dir, "data", "crush", "gnovm"), project, f[1])
+		res.got = fmt.Sprintf("%d %s", n, f[1])
+		if err != nil {
+			res.got = err.Error()
+		}
+		res.ok = err == nil && countOK(n, f[2], f[3])
 	case len(f) >= 5 && f[0] == "vm-eval":
 		// vm-eval <vm> <expression, no spaces> <op or contains> <value>:
 		// the expression's value in the VM, rebuilt from its journal.
@@ -714,4 +792,38 @@ func writeSummary(t *testing.T, path string, runs []*scenarioRun) {
 		t.Logf("writing the summary: %v", err)
 	}
 	t.Logf("summary (%s):\n%s", path, b.String())
+}
+
+// The checks on mem read mem v2 as a run left it: it is counted among the
+// persistent VMs, its dump holds its outline and every change its journal
+// holds, vm-eval shows a read of it, and mem-count reads its counts.
+func TestScenarioChecksReadMem(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestHost(t, dir)
+	for _, code := range []string{
+		`mem.Goal("implement Div").Steps("write it", "test it")`,
+		`mem.Note("implement-div/1", "see calc.go:12")`,
+		`mem.Done("implement-div/1", "done")`,
+		`mem.Fact("db/staging", "db-stg-9")`,
+	} {
+		run(t, h, MemVM, code)
+	}
+	require.NoError(t, h.Close())
+
+	dumps := dumpPersistentVMs(t, dir, "/proj")
+	require.Len(t, dumps, 1)
+	require.Contains(t, dumps[MemVM], "4 entries\n")
+	require.Contains(t, dumps[MemVM], "[ ] `implement-div` \"implement Div\"")
+	require.Contains(t, dumps[MemVM], "op note implement-div/1: see calc.go:12\n")
+	require.Contains(t, dumps[MemVM], "op fact db/staging: db-stg-9\n")
+
+	got, err := evalInVM(dir, "/proj", MemVM, "mem.Show()")
+	require.NoError(t, err)
+	require.Contains(t, got, "[x] `implement-div/1` \"write it\" → done")
+	for what, want := range map[string]int{"open": 2, "done": 1, "items": 3, "facts": 1, "rules": 0} {
+		n, err := memCount(dir, "/proj", what)
+		require.NoError(t, err)
+		require.Equal(t, want, n, what)
+	}
 }

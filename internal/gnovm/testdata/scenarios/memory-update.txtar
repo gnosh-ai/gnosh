@@ -13,4 +13,4 @@ vm-dump contains db-stg-9
 answer last contains db-stg-9
 answer last contains Sam
 turn 3 tool gnovm_run >= 1
-vm-eval mem len(mem.Facts) == 2
+mem-count facts == 2

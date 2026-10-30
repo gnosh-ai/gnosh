@@ -43,5 +43,5 @@ Make `go test ./...` pass by fixing parse.go, not the test. Keep the goal on you
 cmd go test ./...
 file parse_test.go contains "0b101": 5
 tool gnovm_run >= 2
-vm-eval mem len(mem.Items) >= 2
-vm-eval mem mem.Show(1,2,3,4,5,6,7,8) contains note 1:
+mem-count items >= 2
+vm-dump contains op note
