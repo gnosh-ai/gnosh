@@ -734,7 +734,7 @@ func (r *ThemeItem) SetFocused(focused bool) {
 }
 
 func (r *ThemeItem) SetMatch(m fuzzy.Match) {
-	if !sameFuzzyMatch(r.m, m) {
+	if !list.SameFuzzyMatch(r.m, m) {
 		r.cache = nil
 		r.Bump()
 	}

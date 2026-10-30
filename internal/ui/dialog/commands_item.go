@@ -90,7 +90,7 @@ func (c *CommandItem) SetFocused(focused bool) {
 
 // SetMatch implements ListItem.
 func (c *CommandItem) SetMatch(m fuzzy.Match) {
-	if sameFuzzyMatch(c.m, m) {
+	if list.SameFuzzyMatch(c.m, m) {
 		return
 	}
 	c.cache = nil

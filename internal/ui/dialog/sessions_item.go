@@ -2,7 +2,6 @@ package dialog
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -14,22 +13,8 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/dustin/go-humanize"
-	"github.com/rivo/uniseg"
 	"github.com/sahilm/fuzzy"
 )
-
-// sameFuzzyMatch reports whether two fuzzy.Match values are
-// observably equal. Because Match contains a slice (MatchedIndexes)
-// it is not directly comparable with ==; we compare the scalar
-// fields and then walk the indexes. The dialog list items use this
-// to skip gratuitous version bumps when SetMatch reapplies the same
-// match.
-func sameFuzzyMatch(a, b fuzzy.Match) bool {
-	return a.Str == b.Str &&
-		a.Index == b.Index &&
-		a.Score == b.Score &&
-		slices.Equal(a.MatchedIndexes, b.MatchedIndexes)
-}
 
 // ListItem represents a selectable and searchable item in a dialog list.
 type ListItem interface {
@@ -75,7 +60,7 @@ func (s *SessionItem) ID() string {
 
 // SetMatch sets the fuzzy match for the session item.
 func (s *SessionItem) SetMatch(m fuzzy.Match) {
-	if sameFuzzyMatch(s.m, m) {
+	if list.SameFuzzyMatch(s.m, m) {
 		return
 	}
 	s.cache = nil
@@ -208,9 +193,9 @@ func renderItem(t ListItemStyles, title string, info string, focused bool, width
 	if m != nil && len(m.MatchedIndexes) > 0 {
 		var lastPos int
 		parts := make([]string, 0)
-		ranges := matchedRanges(m.MatchedIndexes)
+		ranges := list.MatchedRanges(m.MatchedIndexes)
 		for _, rng := range ranges {
-			start, stop := bytePosToVisibleCharPos(title, rng)
+			start, stop := list.BytePosToVisibleCharPos(title, rng)
 			if start > lastPos {
 				parts = append(parts, ansi.Cut(title, lastPos, start))
 			}
@@ -270,48 +255,4 @@ func sessionItems(t *styles.Styles, mode sessionsMode, sessions ...session.Sessi
 		items[i] = item
 	}
 	return items
-}
-
-func matchedRanges(in []int) [][2]int {
-	if len(in) == 0 {
-		return [][2]int{}
-	}
-	current := [2]int{in[0], in[0]}
-	if len(in) == 1 {
-		return [][2]int{current}
-	}
-	var out [][2]int
-	for i := 1; i < len(in); i++ {
-		if in[i] == current[1]+1 {
-			current[1] = in[i]
-		} else {
-			out = append(out, current)
-			current = [2]int{in[i], in[i]}
-		}
-	}
-	out = append(out, current)
-	return out
-}
-
-func bytePosToVisibleCharPos(str string, rng [2]int) (int, int) {
-	bytePos, byteStart, byteStop := 0, rng[0], rng[1]
-	pos, start, stop := 0, 0, 0
-	gr := uniseg.NewGraphemes(str)
-	for byteStart > bytePos {
-		if !gr.Next() {
-			break
-		}
-		bytePos += len(gr.Str())
-		pos += max(1, gr.Width())
-	}
-	start = pos
-	for byteStop > bytePos {
-		if !gr.Next() {
-			break
-		}
-		bytePos += len(gr.Str())
-		pos += max(1, gr.Width())
-	}
-	stop = pos
-	return start, stop
 }

@@ -1,12 +1,9 @@
 package completions
 
 import (
-	"slices"
-
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/ui/list"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/rivo/uniseg"
 	"github.com/sahilm/fuzzy"
 )
 
@@ -77,24 +74,12 @@ func (c *CompletionItem) Filter() string {
 
 // SetMatch implements [list.MatchSettable].
 func (c *CompletionItem) SetMatch(m fuzzy.Match) {
-	if sameFuzzyMatch(c.match, m) {
+	if list.SameFuzzyMatch(c.match, m) {
 		return
 	}
 	c.cache = nil
 	c.match = m
 	c.Bump()
-}
-
-// sameFuzzyMatch reports whether two fuzzy.Match values are
-// observably equal. Because Match contains a slice (MatchedIndexes)
-// it is not directly comparable with ==; we compare the scalar
-// fields and then walk the indexes. SetMatch uses this to skip
-// gratuitous version bumps when the same match is reapplied.
-func sameFuzzyMatch(a, b fuzzy.Match) bool {
-	return a.Str == b.Str &&
-		a.Index == b.Index &&
-		a.Score == b.Score &&
-		slices.Equal(a.MatchedIndexes, b.MatchedIndexes)
 }
 
 // SetFocused implements [list.Focusable].
@@ -158,8 +143,8 @@ func renderItem(
 	// Apply match highlighting using StyleRanges.
 	if len(match.MatchedIndexes) > 0 {
 		var ranges []lipgloss.Range
-		for _, rng := range matchedRanges(match.MatchedIndexes) {
-			start, stop := bytePosToVisibleCharPos(text, rng)
+		for _, rng := range list.MatchedRanges(match.MatchedIndexes) {
+			start, stop := list.BytePosToVisibleCharPos(text, rng)
 			// Offset by 1 for the padding space.
 			ranges = append(ranges, lipgloss.NewRange(start+1, stop+2, matchStyle))
 		}
@@ -168,52 +153,6 @@ func renderItem(
 
 	cache[width] = content
 	return content
-}
-
-// matchedRanges converts a list of match indexes into contiguous ranges.
-func matchedRanges(in []int) [][2]int {
-	if len(in) == 0 {
-		return [][2]int{}
-	}
-	current := [2]int{in[0], in[0]}
-	if len(in) == 1 {
-		return [][2]int{current}
-	}
-	var out [][2]int
-	for i := 1; i < len(in); i++ {
-		if in[i] == current[1]+1 {
-			current[1] = in[i]
-		} else {
-			out = append(out, current)
-			current = [2]int{in[i], in[i]}
-		}
-	}
-	out = append(out, current)
-	return out
-}
-
-// bytePosToVisibleCharPos converts byte positions to visible character positions.
-func bytePosToVisibleCharPos(str string, rng [2]int) (int, int) {
-	bytePos, byteStart, byteStop := 0, rng[0], rng[1]
-	pos, start, stop := 0, 0, 0
-	gr := uniseg.NewGraphemes(str)
-	for byteStart > bytePos {
-		if !gr.Next() {
-			break
-		}
-		bytePos += len(gr.Str())
-		pos += max(1, gr.Width())
-	}
-	start = pos
-	for byteStop > bytePos {
-		if !gr.Next() {
-			break
-		}
-		bytePos += len(gr.Str())
-		pos += max(1, gr.Width())
-	}
-	stop = pos
-	return start, stop
 }
 
 // Ensure CompletionItem implements the required interfaces.

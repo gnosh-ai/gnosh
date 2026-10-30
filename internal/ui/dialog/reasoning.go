@@ -302,7 +302,7 @@ func (r *ReasoningItem) SetFocused(focused bool) {
 
 // SetMatch sets the fuzzy match for the reasoning item.
 func (r *ReasoningItem) SetMatch(m fuzzy.Match) {
-	if sameFuzzyMatch(r.m, m) {
+	if list.SameFuzzyMatch(r.m, m) {
 		return
 	}
 	r.cache = nil

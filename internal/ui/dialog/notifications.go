@@ -293,7 +293,7 @@ func (n *NotificationItem) SetFocused(focused bool) {
 
 // SetMatch sets the fuzzy match for the notification item.
 func (n *NotificationItem) SetMatch(m fuzzy.Match) {
-	if sameFuzzyMatch(n.m, m) {
+	if list.SameFuzzyMatch(n.m, m) {
 		return
 	}
 	n.cache = nil

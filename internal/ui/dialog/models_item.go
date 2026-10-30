@@ -217,7 +217,7 @@ func (m *ModelItem) SetFocused(focused bool) {
 
 // SetMatch implements ListItem.
 func (m *ModelItem) SetMatch(fm fuzzy.Match) {
-	if sameFuzzyMatch(m.m, fm) {
+	if list.SameFuzzyMatch(m.m, fm) {
 		return
 	}
 	m.cache = nil
