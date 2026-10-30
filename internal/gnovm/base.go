@@ -40,6 +40,8 @@ type base struct {
 	names map[string]string
 	// heap is the heap growth measured across loads, charged to the budget.
 	heap int64
+	// memRealmReady is set once mem's realm is preprocessed into the base.
+	memRealmReady bool
 }
 
 func newBase() *base {
@@ -61,6 +63,8 @@ func nativeResolver(pkgPath string, name gno.Name) func(*gno.Machine) {
 		return func(*gno.Machine) {}
 	case pkgPath == "fmt":
 		return fmtNative(name)
+	case pkgPath == memLibPath:
+		return memNative(name)
 	}
 	return stdlibs.NativeResolver(pkgPath, name)
 }

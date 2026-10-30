@@ -1,0 +1,81 @@
+// Copyright (C) 2026 Jae Kwon
+//
+// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// the GNO Network General Public License, version 6, as published by
+// NewTendermint, LLC or its successor, or any later version of that License
+// that the Licensor accepts as the proxy under its section 14, by a statement
+// published in the canonical copy of internal/gnovm/LICENSE.md; together with
+// the Additional Terms (Strong Attribution) in that file.
+
+package gnovm
+
+import (
+	"reflect"
+
+	gno "github.com/gnolang/gno/gnovm/pkg/gnolang"
+	"github.com/gnolang/gno/gnovm/stdlibs"
+)
+
+// memContext is the context a mem call runs in: gno's own, which its natives
+// read through the interface ExecContext answers, and what klash's mem
+// natives read.
+type memContext struct {
+	stdlibs.ExecContext
+	caller string
+	ops    *[]memOp
+}
+
+// memOp is one change to a mem, as gnomem's do hands it to klash.
+type memOp struct {
+	Kind, Name, Field, Old, New, By string
+}
+
+// memNativeGas is what a mem native costs: a little bookkeeping in Go.
+var memNativeGas = gno.NativeGasInfo{Base: 1000, SlopeIdx: -1, SlopeKind: gno.SizeFlat}
+
+func init() {
+	for _, name := range []gno.Name{"caller", "record"} {
+		info := memNativeGas
+		gno.RegisterNativeGas(memLibPath, name, &info)
+	}
+}
+
+// memNative resolves gnomem's natives. Each answers only in a mem call,
+// inside mem's realm: a Mem the model's code made or copied for itself lives
+// outside the realm, and its Ops must never reach the journal.
+func memNative(name gno.Name) func(*gno.Machine) {
+	switch name {
+	case "caller":
+		return func(m *gno.Machine) {
+			ctx := memCallContext(m, "caller")
+			s := ctx.caller
+			m.PushValue(gno.Go2GnoValue(m.Alloc, m.Store, reflect.ValueOf(&s).Elem()))
+		}
+	case "record":
+		return func(m *gno.Machine) {
+			ctx := memCallContext(m, "record")
+			*ctx.ops = append(*ctx.ops, memOp{
+				Kind:  memArg(m, 0),
+				Name:  memArg(m, 1),
+				Field: memArg(m, 2),
+				Old:   memArg(m, 3),
+				New:   memArg(m, 4),
+				By:    memArg(m, 5),
+			})
+		}
+	}
+	return nil
+}
+
+func memCallContext(m *gno.Machine, native string) memContext {
+	ctx, ok := m.Context.(memContext)
+	if !ok || ctx.ops == nil || m.Realm == nil || m.Realm.Path != memRealmPath {
+		panic(native + ": only mem's own Mem, in a mem call, may change mem")
+	}
+	return ctx
+}
+
+// memArg is the native's i'th parameter, a string.
+func memArg(m *gno.Machine, i int) string {
+	return m.LastBlock().GetPointerTo(nil, gno.NewValuePathBlock(1, uint16(i), "")).TV.GetString()
+}
