@@ -70,9 +70,10 @@ const (
 	// memRecallScore and memFindScore are how close in meaning a row must
 	// be to be recalled with a prompt, or found by mem.Find after the rows
 	// holding the words: cosines of Qwen3-Embedding-0.6B's whole vectors.
-	// Measured 2026-10-30 on a 30-row mem and 26 prompts: at 0.52, 13 of
-	// the 16 prompts mem had an answer for were given it, and none of the
-	// 10 without one was given anything; at 0.45, 15 of 16, and 1 of 10.
+	// TestMemRecallLive measures them on the AI box's server: at 0.52, 12
+	// of 16 prompts mem had an answer for were given it, and none of 10
+	// without one was given anything (2026-10-30). 0.45, a search's, finds
+	// more and lets a little noise in.
 	memRecallScore = 0.52
 	memFindScore   = 0.45
 )
