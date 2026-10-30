@@ -674,9 +674,9 @@ func (c *workerConn) cause() string {
 	return c.why
 }
 
-// goal makes one of /goal's calls, in-process or through the worker.
+// goal makes one of the goal calls, in-process or through the worker.
 func (c *Client) goal(ctx context.Context, req goalReq) (goalResp, error) {
-	if req.Op != "turn" {
+	if req.Op != "turn" && req.Op != "closed" {
 		defer c.memChanged(req.Project)
 	}
 	if h, err := c.inProcess(); h != nil || err != nil {
@@ -711,6 +711,13 @@ func (c *Client) GoalTurnEnd(ctx context.Context, project, session string, b Goa
 func (c *Client) GoalReopen(ctx context.Context, project string, b GoalBinding, reason string) error {
 	_, err := c.goal(ctx, goalReq{Op: "reopen", Project: project, Binding: b, Reason: reason})
 	return err
+}
+
+// ClosedGoals are the goals a session closed as done since its turn
+// began, for the judge; see Host.ClosedGoals.
+func (c *Client) ClosedGoals(ctx context.Context, project, session string, since time.Time, except string) ([]ClosedGoal, error) {
+	resp, err := c.goal(ctx, goalReq{Op: "closed", Project: project, Session: session, Since: since.Unix(), Except: except})
+	return resp.Closed, err
 }
 
 // GoalClear unbinds a session's /goal; see Host.GoalClear.

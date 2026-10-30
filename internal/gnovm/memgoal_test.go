@@ -13,6 +13,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -192,4 +193,59 @@ func TestGoalTurnEndsWhileAQuestionUnderItIsOpen(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "end", tn.Do, "a question for the user is open under the goal, and the turn went on with: %s", tn.Prompt)
 	require.Contains(t, tn.Notice, "is for the user")
+}
+
+// Every goal is judged before it counts as done: the goals a session's own
+// calls closed as done since its turn began, and that are done still, each
+// with the entry that closed it and what mem shows of it. Steps, other
+// sessions' goals, the goal /goal binds and goals closed before the turn
+// are left out.
+func TestClosedGoals(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	now := time.Unix(1_800_000_000, 0)
+	clock := func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		return now
+	}
+	h, err := NewHost(Options{Dir: t.TempDir(), Client: NewClientID(), Now: clock, BudgetBytes: 32 << 30})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+	mem := func(session, code string) {
+		t.Helper()
+		res, err := h.Run(context.Background(), RunRequest{Project: "/proj", Session: session, Name: MemVM, Code: code})
+		require.NoError(t, err, code)
+		require.NoError(t, res.Err, code)
+	}
+	mem("s1", `mem.Goal("an earlier turn's goal", "earlier"); mem.Done("earlier", "closed then")`)
+	mu.Lock()
+	now = now.Add(time.Hour)
+	mu.Unlock()
+	since := clock()
+	mem("s1", `mem.Goal("release v2").Steps("bump the version", "tag v2.0.0")`)
+	mem("s1", `mem.Done("release-v2/1", "now 2.0.0")`)
+	mem("s1", `mem.Goal("fix the login loop", "fix-login"); mem.Done("fix-login", "SameSite=Lax → the login test passes")`)
+	mem("s1", `mem.Goal("what /goal binds", "bound"); mem.Done("bound", "ok")`)
+	mem("s1", `mem.Goal("closed, then reopened", "reopened"); mem.Done("reopened", "ok"); mem.Reopen("reopened")`)
+	mem("s2", `mem.Goal("another session's goal", "theirs"); mem.Done("theirs", "ok")`)
+
+	got, err := h.ClosedGoals(context.Background(), "/proj", "s1", since, "bound")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, "fix-login", got[0].Name)
+	require.Equal(t, "fix the login loop", got[0].Title)
+	require.Contains(t, got[0].Show, "SameSite=Lax → the login test passes")
+	require.NotZero(t, got[0].Seq)
+
+	// Closed again after it was reopened, it is judged again.
+	mem("s1", `mem.Reopen("fix-login"); mem.Done("fix-login", "and the redirect test passes")`)
+	again, err := h.ClosedGoals(context.Background(), "/proj", "s1", since, "bound")
+	require.NoError(t, err)
+	require.Len(t, again, 1)
+	require.Greater(t, again[0].Seq, got[0].Seq)
+
+	none, err := h.ClosedGoals(context.Background(), "/elsewhere", "s1", since, "")
+	require.NoError(t, err)
+	require.Empty(t, none, "a project with no mem closed nothing")
 }

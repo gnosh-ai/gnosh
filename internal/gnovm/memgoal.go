@@ -12,7 +12,10 @@ package gnovm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -303,6 +306,76 @@ func (h *memHost) goalReopen(ctx context.Context, b GoalBinding, reason string) 
 	return err
 }
 
+// ClosedGoal is a goal a session closed as done, for the judge: every goal
+// is judged before it counts as done (Jae, 2026-10-30), not only the one
+// /goal binds.
+type ClosedGoal struct {
+	Name  string `json:"name"`
+	Title string `json:"title"`
+	// Seq is the journal entry that closed it: closed again after it was
+	// reopened, it is judged again.
+	Seq int64 `json:"seq"`
+	// Show is mem.Show(name): its steps, results and notes, the agent's
+	// own claims.
+	Show string `json:"show"`
+}
+
+// closedGoals are the goals session's own calls closed as done at since
+// (Unix seconds) or later, and that are done still: the turn's, for the
+// judge. except, the goal its /goal binds, is left out: that one is judged
+// against the user's condition (goalTurnEnd).
+func (h *memHost) closedGoals(ctx context.Context, session string, since int64, except string) ([]ClosedGoal, error) {
+	closed := map[string]int64{}
+	var names []string
+	_, err := readEntriesOf(filepath.Join(h.dir, "journal.jsonl"), 0, 0, func(e memEntry, _ int64, _ string) error {
+		if e.Who != "agent" || e.Session != session || e.Time < since {
+			return nil
+		}
+		for _, op := range e.Ops {
+			if op.Kind != "set" || op.Field != "status" || op.New != "done" || strings.Contains(op.Name, "/") || op.Name == except {
+				continue
+			}
+			if _, ok := closed[op.Name]; !ok {
+				names = append(names, op.Name)
+			}
+			closed[op.Name] = e.Seq
+		}
+		return nil
+	})
+	if errors.Is(err, os.ErrNotExist) || len(names) == 0 {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = strconv.Quote(n)
+	}
+	res, err := h.call(ctx, memRequest{Code: "print(mem.JSON(" + strings.Join(quoted, ", ") + "))", Session: session})
+	if err != nil {
+		return nil, err
+	}
+	var j struct {
+		Goals []memGoalJSON `json:"goals"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(res.Output)), &j); err != nil {
+		return nil, fmt.Errorf("mem's answer about the goals closed could not be read: %q", memLine(res.Output, 200))
+	}
+	var out []ClosedGoal
+	for _, g := range j.Goals {
+		if g.Status != "done" {
+			continue
+		}
+		res, err := h.call(ctx, memRequest{Code: "print(mem.Show(" + strconv.Quote(g.Name) + "))", Session: session})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ClosedGoal{Name: g.Name, Title: g.Title, Seq: closed[g.Name], Show: res.Output})
+	}
+	return out, nil
+}
+
 // goalClear unbinds b, as /goal clear does: the goal is dropped, "cleared
 // by the user", if binding added it and it is still open. It says what it
 // did.
@@ -372,6 +445,15 @@ func (h *Host) GoalReopen(ctx context.Context, project string, b GoalBinding, re
 	return h.mem(project).goalReopen(ctx, b, reason)
 }
 
+// ClosedGoals are the goals a session closed as done since its turn
+// began, for the judge; see closedGoals.
+func (h *Host) ClosedGoals(ctx context.Context, project, session string, since time.Time, except string) ([]ClosedGoal, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.ensureBase()
+	return h.mem(project).closedGoals(ctx, session, since.Unix(), except)
+}
+
 // goal runs one of /goal's calls, as the worker gets them.
 func (h *Host) goal(ctx context.Context, req goalReq) (goalResp, error) {
 	var resp goalResp
@@ -383,6 +465,8 @@ func (h *Host) goal(ctx context.Context, req goalReq) (goalResp, error) {
 		resp.Turn, resp.Binding, err = h.GoalTurnEnd(ctx, req.Project, req.Session, req.Binding, req.Marker)
 	case "reopen":
 		err = h.GoalReopen(ctx, req.Project, req.Binding, req.Reason)
+	case "closed":
+		resp.Closed, err = h.ClosedGoals(ctx, req.Project, req.Session, time.Unix(req.Since, 0), req.Except)
 	case "clear":
 		resp.Text, err = h.GoalClear(ctx, req.Project, req.Session, req.Binding)
 	default:

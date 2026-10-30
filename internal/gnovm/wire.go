@@ -215,8 +215,8 @@ type (
 		Text   string      `json:"text"`
 		Erased *MemErasure `json:"erased,omitempty"`
 	}
-	// goalReq is one of /goal's calls: Op is "bind", "turn", "reopen" or
-	// "clear".
+	// goalReq is one of the goal calls: Op is "bind", "turn", "reopen",
+	// "closed" or "clear".
 	goalReq struct {
 		Op        string       `json:"op"`
 		Project   string       `json:"project"`
@@ -226,11 +226,14 @@ type (
 		Prev      *GoalBinding `json:"prev,omitempty"`
 		Reason    string       `json:"reason,omitempty"`
 		Marker    string       `json:"marker,omitempty"`
+		Since     int64        `json:"since,omitempty"`
+		Except    string       `json:"except,omitempty"`
 	}
 	goalResp struct {
-		Binding GoalBinding `json:"binding"`
-		Turn    GoalTurn    `json:"turn"`
-		Text    string      `json:"text,omitempty"`
+		Binding GoalBinding  `json:"binding"`
+		Turn    GoalTurn     `json:"turn"`
+		Text    string       `json:"text,omitempty"`
+		Closed  []ClosedGoal `json:"closed,omitempty"`
 	}
 	newResp struct {
 		Info    VMInfo `json:"info"`
