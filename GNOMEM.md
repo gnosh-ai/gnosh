@@ -117,6 +117,40 @@ added a second time to disagree with the first. What the agent finds while it
 works is kept on the item it was working on, as notes, and a question for you
 is a step of its own (`mem.Ask`), which holds its goal until you answer.
 
+### Found by meaning, if you want it
+
+mem finds by words until you name an embedding server, an OpenAI-compatible
+`/embeddings` endpoint such as `llama-server --embedding`, in your gnoshrc:
+
+```bash
+option mem-embeddings-url "http://127.0.0.1:8091/v1"
+```
+
+Then `mem.Find` gives the rows holding all the words first, then those close
+in meaning, and each prompt you type goes with up to five items or facts close
+to it, found within half a second or not at all, as a hidden part after it. In
+a real run on a mem of 32 facts, the session opened with the newest ten, and
+"Who signs off on a release?" carried one it did not:
+
+```
+<mem>
+From your memory (mem), what may bear on what the user just wrote, found by meaning; `mem.Show("name")` shows one in full:
+- fact `release/qa-signoff` = Lin Wei does QA sign-off on every release
+</mem>
+```
+
+The agent answered "Lin Wei does QA sign-off on every release." in 11 seconds.
+Meaning has a cut-off, and some questions fall under it: asked "How do I push
+this to production, and who has to check it first?", the two facts it needed
+scored 0.48 and 0.45 against recall's 0.52, nothing came with the prompt, and
+the agent found both by searching mem, in eight calls. Measured on a 30-row
+mem with 26 prompts, 13 of the 16 that mem had an answer for were given it,
+and none of the 10 without one got anything. These runs used
+Qwen3-Embedding-0.6B, on a CPU.
+
+With the option set, mem's text and the prompts you type go to that server;
+unset, nothing is sent anywhere.
+
 ### A reminder for next time
 
 > **You:** Before we wrap up: remind me next time we talk to rotate the

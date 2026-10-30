@@ -114,6 +114,13 @@ message. So a fact that changes is set again under the same name, not kept
 twice, and in a real run the last session answered without a single call to
 mem: "Staging database: `db-stg-9`. On call: Sam Okafor."
 
+Name an embedding server (`option mem-embeddings-url`) and mem also finds by
+meaning: a prompt goes with the facts close to it, so "Who signs off on a
+release?" brought back one that thirty newer facts had pushed out of the
+session's opening. It has a cut-off and misses some;
+[GNOMEM](GNOMEM.md#found-by-meaning-if-you-want-it) has the runs, the misses
+and what is sent.
+
 ### A reminder for next time
 
 > **You:** Before we wrap up: remind me next time we talk to rotate the
@@ -279,6 +286,10 @@ nothing is sent until you say yes and nothing goes to Charm either way. Without
 the catalog fetch, Gnosh uses the list built into the binary, and
 `gnosh update-providers` refreshes it by hand. `DO_NOT_TRACK=1` keeps metrics
 off whatever else is set. [Metrics](#metrics) is the detail.
+
+Finding by meaning is off the same way: until you name an embedding server
+with `option mem-embeddings-url`, mem sends nothing anywhere, and with it,
+mem's text and the prompts you type go to that server alone.
 
 ### Untrusted text stays untrusted
 
