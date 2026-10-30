@@ -1,42 +1,42 @@
 ---
-name: klash-config
-description: Use when the user needs help configuring Klash — writing klashrc (the Bash config format) or klash.json, setting up providers, models, LSPs, MCP servers, hooks, skills, permissions, or changing Klash behavior.
+name: gnosh-config
+description: Use when the user needs help configuring Gnosh — writing gnoshrc (the Bash config format) or gnosh.json, setting up providers, models, LSPs, MCP servers, hooks, skills, permissions, or changing Gnosh behavior.
 ---
 
-# Klash Configuration
+# Gnosh Configuration
 
-Klash supports two config formats:
+Gnosh supports two config formats:
 
-- **`klashrc`** — a Bash script that builds config by calling Klash builtins.
+- **`gnoshrc`** — a Bash script that builds config by calling Gnosh builtins.
   **Preferred.** Because it is real Bash you get includes, secrets,
   conditionals, and variables for free.
-- **`klash.json`** — static JSON. Fully supported; see
+- **`gnosh.json`** — static JSON. Fully supported; see
   [Legacy JSON format](#legacy-json-format).
 
 Both are discovered together and deep-merged. Priority (highest to lowest):
 
-1. `.klashrc` / `klashrc` / `.klash.json` / `klash.json` (project-local,
-   closer-to-cwd wins; Windows uses `.\.klashrc` / `.\klashrc`)
-2. `$XDG_CONFIG_HOME/klash/klashrc` or `~/.config/klash/klashrc`
-   (`%XDG_CONFIG_HOME%\klash\klashrc` or
-   `%USERPROFILE%\.config\klash\klashrc` on Windows)
+1. `.gnoshrc` / `gnoshrc` / `.gnosh.json` / `gnosh.json` (project-local,
+   closer-to-cwd wins; Windows uses `.\.gnoshrc` / `.\gnoshrc`)
+2. `$XDG_CONFIG_HOME/gnosh/gnoshrc` or `~/.config/gnosh/gnoshrc`
+   (`%XDG_CONFIG_HOME%\gnosh\gnoshrc` or
+   `%USERPROFILE%\.config\gnosh\gnoshrc` on Windows)
 
-Data directories (`~/.local/share/klash` and `%LOCALAPPDATA%\klash`) contain
-machine-owned JSON state only; Klash does not discover or execute a `klashrc`
+Data directories (`~/.local/share/gnosh` and `%LOCALAPPDATA%\gnosh`) contain
+machine-owned JSON state only; Gnosh does not discover or execute a `gnoshrc`
 from those locations.
 
-If a directory has both `klashrc` and `klash.json`, they merge (`klashrc` wins
-on conflicts) and Klash logs a warning.
+If a directory has both `gnoshrc` and `gnosh.json`, they merge (`gnoshrc` wins
+on conflicts) and Gnosh logs a warning.
 
-Klash was called Crush, and every crush name still works: `crushrc`,
+Gnosh was called Crush, and every crush name still works: `crushrc`,
 `crush.json`, `~/.config/crush`, a project's `.crush/`, `CRUSH_*` variables.
-Where a klash one and a crush one both exist, the klash one wins;
-`~/.config/klash` takes over from `~/.config/crush` only once it holds a config
+Where a gnosh one and a crush one both exist, the gnosh one wins;
+`~/.config/gnosh` takes over from `~/.config/crush` only once it holds a config
 file.
 
-## klashrc at a glance
+## gnoshrc at a glance
 
-A `klashrc` is a plain Bash script executed at load time with the same embedded
+A `gnoshrc` is a plain Bash script executed at load time with the same embedded
 shell the `bash` tool uses. It builds config by calling builtins (`provider`,
 `model`, `mcp`, `lsp`, `hook`, `permissions`, `option`). Statements run top to
 bottom; later statements win, and `remove`/`reset` operate on anything defined
@@ -45,7 +45,7 @@ earlier or pulled in via `source`.
 ```bash
 #!/usr/bin/env bash
 # Includes and secrets are just Bash.
-source ~/.config/klash/shared.sh
+source ~/.config/gnosh/shared.sh
 
 provider add anthropic --api-key "$ANTHROPIC_API_KEY"
 
@@ -59,11 +59,11 @@ permissions allow view ls grep edit
 Values are ordinary Bash — quote and expand normally (`"$VAR"`, `$(cmd)`,
 `${VAR:?required}`). A failing `$(command)` aborts the load.
 
-`KLASH_VERSION` is exported into the script so you can feature-detect the
-running Klash (it is the literal `devel` for local builds):
+`GNOSH_VERSION` is exported into the script so you can feature-detect the
+running Gnosh (it is the literal `devel` for local builds):
 
 ```bash
-[[ "$KLASH_VERSION" != devel ]] && lsp add gopls --command gopls
+[[ "$GNOSH_VERSION" != devel ]] && lsp add gopls --command gopls
 ```
 
 ## Commands
@@ -100,7 +100,7 @@ model large [<provider>/<id>] [flags]  # set the large slot; no arg prints it
 model small [<provider>/<id>] [flags]  # set the small slot; no arg prints it
 ```
 
-- `<provider>/<id>` is the same form `klash models` prints. A missing slash is
+- `<provider>/<id>` is the same form `gnosh models` prints. A missing slash is
   an error. `model add` requires the provider to already exist.
 - `model add` flags: `--name`, `--context-window N`, `--default-max-tokens N`,
   `--can-reason BOOL`, `--supports-images BOOL`, `--price-input F`,
@@ -163,7 +163,7 @@ intend to remove it later. See [Hooks runtime](#hooks-runtime) for how hooks
 execute (stdin payload, env vars, decisions).
 
 ```bash
-hook add PreToolUse --matcher "^bash$" --command ".klash/hooks/no-haskell.sh" --name no-haskell
+hook add PreToolUse --matcher "^bash$" --command ".gnosh/hooks/no-haskell.sh" --name no-haskell
 ```
 
 ### permissions
@@ -204,7 +204,7 @@ option reset <list-key>    # clear a list option back to empty
 ```bash
 option progress false
 option skill-path ./skills
-option disable-skill klash-config
+option disable-skill gnosh-config
 option attribution-trailer-style assisted-by
 option attribution-generated-with true
 option ui compact true
@@ -213,7 +213,7 @@ option ui exit-banner compact
 ```
 
 > [!IMPORTANT] These skill paths are loaded by default and do NOT need
-> `skill-path`: `.agents/skills`, `.klash/skills`, `.claude/skills`,
+> `skill-path`: `.agents/skills`, `.gnosh/skills`, `.claude/skills`,
 > `.cursor/skills`.
 
 ## Hooks runtime
@@ -222,7 +222,7 @@ Hooks are user-defined shell commands that fire on agent events: `PreToolUse`
 before a tool runs, `PostToolUse` after one succeeds, `PostToolUseFailure` after
 one fails, `UserPromptSubmit` when the user sends a prompt, and `Stop` when the
 agent is about to finish its turn. This behavior is the same however the hook is
-defined (`hook add` or JSON). The klash-hooks skill has the full reference.
+defined (`hook add` or JSON). The gnosh-hooks skill has the full reference.
 
 ### How hooks work
 
@@ -233,7 +233,7 @@ defined (`hook add` or JSON). The klash-hooks skill has the full reference.
    variables**.
 
 Event names are matched exactly: `pretooluse` or `pre_tool_use` is a config
-error, not a spelling of `PreToolUse`, and Klash refuses to start on it.
+error, not a spelling of `PreToolUse`, and Gnosh refuses to start on it.
 
 ### Hook input (stdin)
 
@@ -251,13 +251,13 @@ error, not a spelling of `PreToolUse`, and Klash refuses to start on it.
 
 | Variable                     | Description                                       |
 | ---------------------------- | ------------------------------------------------- |
-| `KLASH_EVENT`                | Event name (e.g. `PreToolUse`)                    |
-| `KLASH_TOOL_NAME`            | Name of the tool being called                     |
-| `KLASH_SESSION_ID`           | Current session ID                                |
-| `KLASH_CWD`                  | Current working directory                         |
-| `KLASH_PROJECT_DIR`          | Project root directory                            |
-| `KLASH_TOOL_INPUT_COMMAND`   | Value of `command` from tool input (if present)   |
-| `KLASH_TOOL_INPUT_FILE_PATH` | Value of `file_path` from tool input (if present) |
+| `GNOSH_EVENT`                | Event name (e.g. `PreToolUse`)                    |
+| `GNOSH_TOOL_NAME`            | Name of the tool being called                     |
+| `GNOSH_SESSION_ID`           | Current session ID                                |
+| `GNOSH_CWD`                  | Current working directory                         |
+| `GNOSH_PROJECT_DIR`          | Project root directory                            |
+| `GNOSH_TOOL_INPUT_COMMAND`   | Value of `command` from tool input (if present)   |
+| `GNOSH_TOOL_INPUT_FILE_PATH` | Value of `file_path` from tool input (if present) |
 
 Each is also set under its `CRUSH_` name (`CRUSH_EVENT`, ...), from before
 the rename; either works.
@@ -289,7 +289,7 @@ the rename; either works.
 
 ### Claude Code compatibility
 
-Klash also accepts the Claude Code hook output format, so existing hooks work
+Gnosh also accepts the Claude Code hook output format, so existing hooks work
 unchanged:
 
 ```json
@@ -322,16 +322,16 @@ user-invocable: true
 
 ## Environment variables
 
-- `KLASH_VERSION` — exported into `klashrc` at load; the running version (or
+- `GNOSH_VERSION` — exported into `gnoshrc` at load; the running version (or
   `devel` for local builds).
-- `KLASH_GLOBAL_CONFIG` — override global config location.
-- `KLASH_GLOBAL_DATA` — override data directory location.
-- `KLASH_SKILLS_DIR` — override default skills directory.
+- `GNOSH_GLOBAL_CONFIG` — override global config location.
+- `GNOSH_GLOBAL_DATA` — override data directory location.
+- `GNOSH_SKILLS_DIR` — override default skills directory.
 
 ## Legacy JSON format
 
-`klash.json` is the original static format. It still works and merges with
-`klashrc`. Basic structure:
+`gnosh.json` is the original static format. It still works and merges with
+`gnoshrc`. Basic structure:
 
 ```json
 {
@@ -348,9 +348,9 @@ user-invocable: true
 
 The `$schema` property enables IDE autocomplete but is optional.
 
-### klashrc ↔ klash.json mapping
+### gnoshrc ↔ gnosh.json mapping
 
-| klashrc                             | klash.json                                             |
+| gnoshrc                             | gnosh.json                                             |
 | ------------------------------------ | ------------------------------------------------------ |
 | `provider add openai --api-key "$K"` | `providers.openai = {"api_key": "$K"}`                 |
 | `model add openai/gpt-x --name X`    | append to `providers.openai.models[]`                  |
@@ -367,10 +367,10 @@ The `$schema` property enables IDE autocomplete but is optional.
 | `option attribution-trailer-style none` | `options.attribution.trailer_style = "none"`        |
 | `option attribution-generated-with false` | `options.attribution.generated_with = false`       |
 
-### Shell expansion in klash.json
+### Shell expansion in gnosh.json
 
 In JSON, only selected string fields are run through the embedded shell at load
-time (in `klashrc`, everything is native Bash so this table does not apply):
+time (in `gnoshrc`, everything is native Bash so this table does not apply):
 
 | Surface                                                         | Expansion                          |
 | --------------------------------------------------------------- | ---------------------------------- |
@@ -387,7 +387,7 @@ the request.
 
 ### Security note
 
-Both formats are trusted code. `klashrc` runs entirely, and any `$(...)` in
-`klash.json` runs at load time, with the invoking user's shell privileges,
-before the UI appears. Don't launch Klash in a directory whose config you
+Both formats are trusted code. `gnoshrc` runs entirely, and any `$(...)` in
+`gnosh.json` runs at load time, with the invoking user's shell privileges,
+before the UI appears. Don't launch Gnosh in a directory whose config you
 haven't reviewed.

@@ -67,7 +67,7 @@ func TestSystemPromptAndItsFileAreExclusive(t *testing.T) {
 	require.Contains(t, err.Error(), "system-prompt system-prompt-file")
 }
 
-// Both klash and klash run take the flags.
+// Both gnosh and gnosh run take the flags.
 func TestRootAndRunTakeTheSystemPromptFlags(t *testing.T) {
 	for _, c := range []*cobra.Command{rootCmd, runCmd} {
 		for _, name := range []string{"system-prompt", "system-prompt-file", "append-system-prompt", "append-system-prompt-file"} {

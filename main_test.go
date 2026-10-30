@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// With the default port taken, as it is whenever another klash already
+// With the default port taken, as it is whenever another gnosh already
 // serves pprof, the profiler still gets a port of its own.
 func TestPprofListenFallsBackWhenTheDefaultIsTaken(t *testing.T) {
 	t.Parallel()
@@ -23,7 +23,7 @@ func TestPprofListenFallsBackWhenTheDefaultIsTaken(t *testing.T) {
 }
 
 // The default port is used when it is free, and an address given in
-// KLASH_PROFILE is used as given, with no fallback if it is taken.
+// GNOSH_PROFILE is used as given, with no fallback if it is taken.
 func TestPprofListenUsesTheAddressAsked(t *testing.T) {
 	t.Parallel()
 
@@ -37,6 +37,6 @@ func TestPprofListenUsesTheAddressAsked(t *testing.T) {
 	require.Equal(t, free, ln.Addr().String())
 
 	_, err = pprofListen(free, "localhost:0")
-	require.Error(t, err, "an address KLASH_PROFILE names is not swapped for another")
+	require.Error(t, err, "an address GNOSH_PROFILE names is not swapped for another")
 	require.NoError(t, ln.Close())
 }

@@ -5,17 +5,17 @@
 
 > [!TIP]
 >
-> Klash can configure itself via a builtin config skill. That is to say,
-> can generally just tell Klash want you want to configure using natural
+> Gnosh can configure itself via a builtin config skill. That is to say,
+> can generally just tell Gnosh want you want to configure using natural
 > language.
 >
-> If you're migrating from the old JSON format, you can also ask Klash to
+> If you're migrating from the old JSON format, you can also ask Gnosh to
 > convert the config for you.
 
-Klash is configured with Bash via a set of Klash-specific builtin commands. By
-default, global config lives at `~/.config/klash/klashrc` on Unix-like systems
-and `%USERPROFILE%\.config\klash\klashrc` on Windows. It works like a `.bashrc`:
-it runs when Klash starts and configures the agent.
+Gnosh is configured with Bash via a set of Gnosh-specific builtin commands. By
+default, global config lives at `~/.config/gnosh/gnoshrc` on Unix-like systems
+and `%USERPROFILE%\.config\gnosh\gnoshrc` on Windows. It works like a `.bashrc`:
+it runs when Gnosh starts and configures the agent.
 
 ```bash
 # Add Ollama.
@@ -57,9 +57,9 @@ provider add my-secret-provider \
 
 Two reasons:
 
-1. Klash ships with a first-class Bash interpreter, so we get the logic for
+1. Gnosh ships with a first-class Bash interpreter, so we get the logic for
    free.
-2. Ultimately, Klash needs to be able to configure itself, and command-based
+2. Ultimately, Gnosh needs to be able to configure itself, and command-based
    config allows both users and the agent to use the same tools.
 
 ## What about JSON?
@@ -70,48 +70,48 @@ be receiving new features. For more see [Legacy JSON](#legacy-json).
 ## Config versioning
 
 Not breaking the config API is really important to us! That said, you can
-target specific Klash versions with `$KLASH_VERSION`:
+target specific Gnosh versions with `$GNOSH_VERSION`:
 
 ```bash
-if [[ $KLASH_VERSION == "0.85.*" ]]; then
+if [[ $GNOSH_VERSION == "0.85.*" ]]; then
     option debug true
 fi
 ```
 
 ## Security
 
-Just like `klash.json`, `klashrc` is a trusted file. Guard it carefully and
+Just like `gnosh.json`, `gnoshrc` is a trusted file. Guard it carefully and
 don't download random configs without reading them first.
 
 ## Where config lives
 
-Klash looks for config in the following places, with lower numbers taking
+Gnosh looks for config in the following places, with lower numbers taking
 precedence:
 
 | Priority | Unix-like                        | Windows                           |
 | -------- | -------------------------------- | --------------------------------- |
-| 1        | `./.klashrc`                     | `.\.klashrc`                      |
-| 2        | `./klashrc`                      | `.\klashrc`                       |
-| 3        | `$XDG_CONFIG_HOME/klash/klashrc` | `%XDG_CONFIG_HOME%\klash\klashrc` |
+| 1        | `./.gnoshrc`                     | `.\.gnoshrc`                      |
+| 2        | `./gnoshrc`                      | `.\gnoshrc`                       |
+| 3        | `$XDG_CONFIG_HOME/gnosh/gnoshrc` | `%XDG_CONFIG_HOME%\gnosh\gnoshrc` |
 
-Legacy JSON uses `.klash.json` / `klash.json` in the same directories as the
+Legacy JSON uses `.gnosh.json` / `gnosh.json` in the same directories as the
 above. Everything found is merged, with project settings overriding global ones
-and `klashrc` overriding JSON in the same directory. If a folder has both, they
-merge and Klash logs a warning.
+and `gnoshrc` overriding JSON in the same directory. If a folder has both, they
+merge and Gnosh logs a warning.
 
-Data directories (`~/.local/share/klash` on Unix-like systems and
-`%LOCALAPPDATA%\klash` on Windows) contain machine-owned JSON state. Klash does
-not discover or execute a `klashrc` from those locations.
+Data directories (`~/.local/share/gnosh` on Unix-like systems and
+`%LOCALAPPDATA%\gnosh` on Windows) contain machine-owned JSON state. Gnosh does
+not discover or execute a `gnoshrc` from those locations.
 
-Klash was called Crush, and every crush name still works: `crushrc`,
+Gnosh was called Crush, and every crush name still works: `crushrc`,
 `crush.json`, `~/.config/crush`, `~/.local/share/crush`, a project's `.crush/`
-with its `crush.db`, and `CRUSH_*` variables. Where a klash one and a crush one
-both exist, the klash one wins; `~/.config/klash` and `~/.local/share/klash`
+with its `crush.db`, and `CRUSH_*` variables. Where a gnosh one and a crush one
+both exist, the gnosh one wins; `~/.config/gnosh` and `~/.local/share/gnosh`
 take over only once they hold a config file.
 
 > [!NOTE]
-> Klash also stores state data in `$XDG_DATA_HOME/klash`
-> (`%LOCALAPPDATA%\klash` on Windows). This is application state, and should
+> Gnosh also stores state data in `$XDG_DATA_HOME/gnosh`
+> (`%LOCALAPPDATA%\gnosh` on Windows). This is application state, and should
 > not be edited by hand.
 
 ## Command Reference
@@ -128,7 +128,7 @@ Available Commands:
   lsp           Manage language servers
   hook          Manage hooks
   permissions   Configure tool permissions
-  option        Configure general Klash behavior
+  option        Configure general Gnosh behavior
 ```
 
 ### provider
@@ -198,7 +198,7 @@ Usage:
 ### model
 
 Manage custom models and the large/small model slots. Model references use the
-same `<provider>/<id>` form printed by `klash models`.
+same `<provider>/<id>` form printed by `gnosh models`.
 
 ```text
 Usage:
@@ -467,7 +467,7 @@ permissions deny sourcegraph 'Bash(git push *)' 'Bash(rm -rf *)'
 
 ### option
 
-Configure general Klash behavior, paths, attribution, and the terminal UI.
+Configure general Gnosh behavior, paths, attribution, and the terminal UI.
 Boolean values are optional and default to `true`.
 
 ```text
@@ -488,11 +488,11 @@ Boolean Keys:
   auto-summarize                 automatically summarize long conversations
   provider-auto-update           update the provider catalog automatically
   default-providers              include built-in providers
-  attribution-generated-with     add the Generated with Klash line
+  attribution-generated-with     add the Generated with Gnosh line
 
 String Keys:
   data-directory string            directory for project data and state
-  initialize-as string             context filename created by klash init
+  initialize-as string             context filename created by gnosh init
   notifications string             notification style: auto, native, osc, bell,
                                    or disabled
   attribution-trailer-style string attribution trailer: none, co-authored-by,
@@ -556,7 +556,7 @@ Available Keys:
                                 always, or never
   exit-banner default|compact|none
                                 control the post-session banner: default shows
-                                the Klash logo, compact shows only the resume
+                                the Gnosh logo, compact shows only the resume
                                 hint, none hides it entirely
   completions-max-depth int     maximum directory depth shown by completions
   completions-max-items int     maximum items returned to completions
@@ -575,7 +575,7 @@ option ui completions-max-items 200
 
 > [!IMPORTANT]
 > These skill paths load by default — you do NOT need `skill-path`
-> for them: `.agents/skills`, `.klash/skills`, `.claude/skills`,
+> for them: `.agents/skills`, `.gnosh/skills`, `.claude/skills`,
 > `.cursor/skills`.
 
 > [!NOTE]
@@ -590,9 +590,9 @@ option ui completions-max-items 200
 Because it's Bash, a shared base config is just a `source`:
 
 ```bash
-# Unix-like: ~/.config/klash/klashrc
-# Windows:   %USERPROFILE%\.config\klash\klashrc
-source ~/team/klash-base.sh    # sets up providers, a few skills
+# Unix-like: ~/.config/gnosh/gnoshrc
+# Windows:   %USERPROFILE%\.config\gnosh\gnoshrc
+source ~/team/gnosh-base.sh    # sets up providers, a few skills
 
 # …but on this machine, drop a skill path the base added and add my own.
 option reset skill-path
@@ -604,7 +604,7 @@ script or pulled in via `source`. Later lines win, just like a shell.
 
 ## Legacy JSON
 
-`klash.json` is the original format and is now deprecated. We plan to support
+`gnosh.json` is the original format and is now deprecated. We plan to support
 it for the forseeable future, but new configuration options will only be added
 to Bash-based config.
 
@@ -624,11 +624,11 @@ to Bash-based config.
 For a full reference, See the [JSON schema](../../schema.json).
 
 In JSON, only selected string fields (API keys, URLs, MCP/LSP commands and args,
-headers) are shell-expanded at load time. In `klashrc` there's no such list —
+headers) are shell-expanded at load time. In `gnoshrc` there's no such list —
 it's all just Bash.
 
 Both formats are trusted code: they run with your shell privileges before the UI
-appears. Don't launch Klash in a directory whose config you haven't read.
+appears. Don't launch Gnosh in a directory whose config you haven't read.
 
 ---
 

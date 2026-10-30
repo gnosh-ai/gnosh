@@ -14,10 +14,10 @@ import (
 // runPostCompactHooks runs the PostCompact hooks once the given session's
 // conversation has been summarized to summary, with trigger naming what
 // set the summary going, as Claude Code runs them: to log the summary or
-// update something outside Klash. A hook has no say over the summary,
+// update something outside Gnosh. A hook has no say over the summary,
 // which is done; one that did not run to a verdict is shown to the user
 // as a hook warning. A Claude Code config with PostCompact hooks used to
-// stop Klash at startup, as an event it did not fire.
+// stop Gnosh at startup, as an event it did not fire.
 func (a *sessionAgent) runPostCompactHooks(ctx context.Context, sessionID string, trigger preCompactTrigger, summary string) {
 	// A sub-agent's summary runs no PostCompact hooks, as it runs no
 	// PreCompact ones. cfg is nil in tests and wherever config-backed

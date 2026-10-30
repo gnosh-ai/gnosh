@@ -14,7 +14,7 @@ import (
 
 // --fork-session copies the session resumed, so with no session named,
 // none to pick (a bare -r) and no --continue there is nothing to copy:
-// klash and klash run say so instead of starting a new session.
+// gnosh and gnosh run say so instead of starting a new session.
 func TestForkAlone(t *testing.T) {
 	t.Parallel()
 
@@ -31,7 +31,7 @@ func TestForkAlone(t *testing.T) {
 		{[]string{"-C"}, false},
 	} {
 		for _, add := range []func(*cobra.Command){addSessionFlags, addRunFlags} {
-			cmd := &cobra.Command{Use: "klash"}
+			cmd := &cobra.Command{Use: "gnosh"}
 			add(cmd)
 			require.NoError(t, cmd.ParseFlags(tc.args))
 			if tc.alone {
@@ -43,14 +43,14 @@ func TestForkAlone(t *testing.T) {
 	}
 }
 
-// `klash run --fork-session`, as Claude Code's `claude -p --resume ID
+// `gnosh run --fork-session`, as Claude Code's `claude -p --resume ID
 // --fork-session`: the run goes on in a copy of the session it resumes,
 // the most recent with -C or one by ID, and the session is left as it
 // was. The copy's first prompt runs the SessionStart hooks with source
 // "fork", and going back to the copy later is a resume.
 func TestRunForkSession(t *testing.T) {
 	sources := filepath.Join(t.TempDir(), "sources")
-	proj := standInRunProject(t, `"hooks": {"SessionStart": [{"command": "echo \"$KLASH_SESSION_START_SOURCE\" >> `+sources+`"}]}`)
+	proj := standInRunProject(t, `"hooks": {"SessionStart": [{"command": "echo \"$GNOSH_SESSION_START_SOURCE\" >> `+sources+`"}]}`)
 	original := runSessionID(t, "list the files here")
 	fork := runSessionID(t, "--fork-session", "-C", "list the files here")
 	byID := runSessionID(t, "--fork-session", "-s", original, "list the files here")
@@ -85,7 +85,7 @@ func TestRunForkSession(t *testing.T) {
 }
 
 // standInRunProject makes a project of its own the working directory, its
-// klash.json using standInModel for both models, with more, when given, at
+// gnosh.json using standInModel for both models, with more, when given, at
 // the end of the config, and HOME and the global config and data dirs in a
 // directory of their own. It returns the project's directory.
 func standInRunProject(t *testing.T, more string) string {
@@ -94,9 +94,9 @@ func standInRunProject(t *testing.T, more string) string {
 	t.Setenv("HOME", isolated)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(isolated, ".config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(isolated, ".local", "share"))
-	t.Setenv("KLASH_GLOBAL_CONFIG", filepath.Join(isolated, ".config", "klash"))
-	t.Setenv("KLASH_GLOBAL_DATA", filepath.Join(isolated, ".local", "share", "klash"))
-	for _, name := range []string{"KLASH_DISABLE_PROVIDER_AUTO_UPDATE", "KLASH_DISABLE_DEFAULT_PROVIDERS", "KLASH_DISABLE_METRICS", "KLASH_DISABLE_UPDATE_CHECK"} {
+	t.Setenv("GNOSH_GLOBAL_CONFIG", filepath.Join(isolated, ".config", "gnosh"))
+	t.Setenv("GNOSH_GLOBAL_DATA", filepath.Join(isolated, ".local", "share", "gnosh"))
+	for _, name := range []string{"GNOSH_DISABLE_PROVIDER_AUTO_UPDATE", "GNOSH_DISABLE_DEFAULT_PROVIDERS", "GNOSH_DISABLE_METRICS", "GNOSH_DISABLE_UPDATE_CHECK"} {
 		t.Setenv(name, "1")
 	}
 	srv := standInModel(t)
@@ -106,13 +106,13 @@ func standInRunProject(t *testing.T, more string) string {
 	if more != "" {
 		cfg += ",\n\t\t" + more
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(proj, "klash.json"), []byte(cfg+"}"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(proj, "gnosh.json"), []byte(cfg+"}"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(proj, "a.txt"), []byte("alpha\n"), 0o644))
 	t.Chdir(proj)
 	return proj
 }
 
-// runSessionID runs `klash run --output-format json args...` against the
+// runSessionID runs `gnosh run --output-format json args...` against the
 // stand-in model and returns the session it went on in.
 func runSessionID(t *testing.T, args ...string) string {
 	t.Helper()
@@ -128,14 +128,14 @@ func runSessionID(t *testing.T, args ...string) string {
 // it is released, not closed.
 func projectQueries(t *testing.T, proj string) *db.Queries {
 	t.Helper()
-	dir := filepath.Join(proj, ".klash")
+	dir := filepath.Join(proj, ".gnosh")
 	conn, err := db.Connect(t.Context(), dir)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Release(dir) })
 	return db.New(conn)
 }
 
-// `klash run -n`, as Claude Code's `claude -p --name`: a new session is
+// `gnosh run -n`, as Claude Code's `claude -p --name`: a new session is
 // named from its start and keeps the name, as no title is made for it, so
 // -r finds it by it; with -C the session resumed is renamed, and with
 // --fork-session the copy is named and the session left as it was.

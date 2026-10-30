@@ -53,7 +53,7 @@ func TestShellConfigOptionsReachingCharmAreOffUnlessAsked(t *testing.T) {
 func TestShellConfigOptionProviderAutoUpdate(t *testing.T) {
 	// TestMain forces the fetch off through the environment, which outranks
 	// the config; an empty value leaves the decision to the config again.
-	t.Setenv("KLASH_DISABLE_PROVIDER_AUTO_UPDATE", "")
+	t.Setenv("GNOSH_DISABLE_PROVIDER_AUTO_UPDATE", "")
 
 	on := loadCrushSh(t, `option provider-auto-update true`).Config().Options
 	require.True(t, on.ProviderAutoUpdate(), "provider-auto-update true asks for the fetch")
@@ -125,10 +125,10 @@ func TestShellConfigOptionAttributionRejectsInvalidStyle(t *testing.T) {
 }
 
 func TestShellConfigOptionListAppends(t *testing.T) {
-	store := loadCrushSh(t, `option disable-skill klash-config
+	store := loadCrushSh(t, `option disable-skill gnosh-config
 option disable-skill jq`)
 
-	require.Subset(t, store.Config().Options.DisabledSkills, []string{"klash-config", "jq"})
+	require.Subset(t, store.Config().Options.DisabledSkills, []string{"gnosh-config", "jq"})
 }
 
 // reset wipes values added earlier (or via source) while keeping anything
@@ -165,20 +165,20 @@ func TestShellConfigOptionResetRejectsNonList(t *testing.T) {
 
 // The fork's own endpoints are plain string options, and default to empty so
 // nothing is sent or checked until they are set (and never to Charm).
-func TestShellConfigKlashEndpoints(t *testing.T) {
+func TestShellConfigGnoshEndpoints(t *testing.T) {
 	bare := loadCrushSh(t, `option debug true`).Config().Options
 	require.Empty(t, bare.MetricsURL)
 	require.Empty(t, bare.UpdateRepo)
 	// MetricsSink is read only once the gate is on; with no custom url it is
-	// klash's own analytics, never Charm.
+	// gnosh's own analytics, never Charm.
 	url, key := bare.MetricsSink()
 	require.Equal(t, "https://metrics.klash.pro", url)
-	require.Equal(t, "klash", key)
+	require.Equal(t, "gnosh", key)
 
 	set := loadCrushSh(t, `option metrics-url https://my.collector
-option update-repo klash-pro/klash`).Config().Options
+option update-repo gnosh-ai/gnosh`).Config().Options
 	gotURL, gotKey := set.MetricsSink()
 	require.Equal(t, "https://my.collector", gotURL)
-	require.Equal(t, "klash", gotKey, "a sink with no key defaults to klash")
-	require.Equal(t, "klash-pro/klash", set.UpdateCheckRepo())
+	require.Equal(t, "gnosh", gotKey, "a sink with no key defaults to gnosh")
+	require.Equal(t, "gnosh-ai/gnosh", set.UpdateCheckRepo())
 }

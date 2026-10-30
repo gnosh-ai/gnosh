@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -52,7 +52,7 @@ const newDescription = `Make a named Gno VM, or change one's settings. Names: a 
 - memory_mb: memory cap, 1 to 64 (default 16); it can only grow.
 - gas: gas limit per call (default 1e9; 1 gas is about 1 ns).
 - ns_per_gas: this VM's nanoseconds per gas (default 1), for its time estimates and limits.
-- persist: keep the VM's state on disk across restarts of klash (default false); once on, it stays on.
+- persist: keep the VM's state on disk across restarts of gnosh (default false); once on, it stays on.
 - pinned: never evict it from memory to make room for others.
 - description: what the VM is for, shown by gnovm_list.`
 
@@ -389,10 +389,10 @@ func renderList(l gnovm.ListResult, deaths []string) string {
 		b.WriteString("\n")
 	}
 	if len(deaths) > 0 {
-		fmt.Fprintf(&b, "the VM worker ended %d time(s) in this klash; last: %s\n", len(deaths), deaths[len(deaths)-1])
+		fmt.Fprintf(&b, "the VM worker ended %d time(s) in this gnosh; last: %s\n", len(deaths), deaths[len(deaths)-1])
 	}
 	fmt.Fprintf(&b, "importable: fmt, %s\n", strings.Join(gnovm.ImportablePackages(), ", "))
-	b.WriteString("Built on gno.land (https://gno.land) · built on klash (https://klash.pro)\n")
+	b.WriteString("Built on gno.land (https://gno.land) · built on gnosh (https://gnosh.ai)\n")
 	return b.String()
 }
 

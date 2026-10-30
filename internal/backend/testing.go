@@ -48,7 +48,7 @@ func RegisterClientForTesting(b *Backend, ws *Workspace, clientID string) error 
 // SetWorkspaceShutdownFnForTest overrides the workspace teardown
 // callback. Useful for tests in other packages that drive synthetic
 // workspaces (where the embedded [app.App] is incomplete) through
-// detach paths that would otherwise klash inside App.Shutdown.
+// detach paths that would otherwise gnosh inside App.Shutdown.
 func SetWorkspaceShutdownFnForTest(ws *Workspace, fn func()) {
 	ws.shutdownFn = fn
 }

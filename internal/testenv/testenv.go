@@ -10,10 +10,10 @@ import (
 )
 
 // prefixes are the environment variable prefixes the program is configured
-// through: CRUSH_*, and KLASH_* for the name it is being renamed to.
-var prefixes = []string{"CRUSH_", "KLASH_"}
+// through: CRUSH_*, and GNOSH_* for the name it is being renamed to.
+var prefixes = []string{"CRUSH_", "GNOSH_"}
 
-// ClearConfigVars unsets every CRUSH_* and KLASH_* variable in the process
+// ClearConfigVars unsets every CRUSH_* and GNOSH_* variable in the process
 // environment. Run calls it; a package's TestMain should call Run.
 //
 // The program is configured through these variables, and everything it runs
@@ -28,7 +28,7 @@ var prefixes = []string{"CRUSH_", "KLASH_"}
 // the catalog from Charm's servers (catwalk and Hyper): the network is no
 // part of a unit test, and Jae runs the program with that fetch off. A test
 // of the fetch itself opts back in with
-// t.Setenv("KLASH_DISABLE_PROVIDER_AUTO_UPDATE", "0") and points it at a
+// t.Setenv("GNOSH_DISABLE_PROVIDER_AUTO_UPDATE", "0") and points it at a
 // local server.
 func ClearConfigVars() {
 	for _, kv := range os.Environ() {
@@ -40,7 +40,7 @@ func ClearConfigVars() {
 			}
 		}
 	}
-	os.Setenv("KLASH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	os.Setenv("GNOSH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
 }
 
 // Run runs a package's tests, as its TestMain, os.Exit(testenv.Run(m)):
@@ -49,20 +49,20 @@ func ClearConfigVars() {
 //
 // Without that, a test reads the user's own config directory: the coder
 // prompt template a user keeps there, their tool descriptions, their
-// klash.json. The AI box's self-improvement runs work as a user with its
+// gnosh.json. The AI box's self-improvement runs work as a user with its
 // own coder.md.tpl, and under it TestCoderPromptNamesTheAddedDirs failed,
 // though it passed as root; the run was then held at its Stop hook by a
 // test it never touched.
 //
 // The directories go in the XDG variables, which every other way of
 // naming them wins over: a test's own XDG_CONFIG_HOME or XDG_DATA_HOME
-// (the tests that set HOME set these too), and KLASH_GLOBAL_* or
+// (the tests that set HOME set these too), and GNOSH_GLOBAL_* or
 // CRUSH_GLOBAL_*. Set in CRUSH_GLOBAL_* at first, they won over a test's
 // own XDG_DATA_HOME, and tests that isolated that way shared one
 // directory.
 func Run(m *testing.M) int {
 	ClearConfigVars()
-	home, err := os.MkdirTemp("", "klash-test")
+	home, err := os.MkdirTemp("", "gnosh-test")
 	if err != nil {
 		panic(err)
 	}

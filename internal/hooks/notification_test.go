@@ -43,7 +43,7 @@ func TestRunNotification(t *testing.T) {
 	dir := t.TempDir()
 	payloadPath := filepath.Join(dir, "payload.json")
 	envPath := filepath.Join(dir, "env")
-	r := notificationRunner(t, "", `cat > `+payloadPath, `echo "$KLASH_NOTIFICATION_TYPE" > `+envPath)
+	r := notificationRunner(t, "", `cat > `+payloadPath, `echo "$GNOSH_NOTIFICATION_TYPE" > `+envPath)
 	_, err := r.RunNotification(context.Background(), "sess", NotificationTypePermissionPrompt, `Permission required to execute "bash"`, "Permission needed")
 	require.NoError(t, err)
 

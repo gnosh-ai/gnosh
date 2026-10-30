@@ -97,7 +97,7 @@ type Payload struct {
 	// input carries it.
 	FilePath string `json:"file_path,omitempty"`
 	// MemoryType is set on an EventInstructionsLoaded payload: the kind of
-	// the file, Claude Code's "User", "Project" or "Local". Klash has no
+	// the file, Claude Code's "User", "Project" or "Local". Gnosh has no
 	// managed rules, so it is never "Managed".
 	MemoryType string `json:"memory_type,omitempty"`
 	// LoadReason is set on an EventInstructionsLoaded payload: what
@@ -174,7 +174,7 @@ func postPayload(sessionID, cwd, toolName, toolInputJSON, output, metadata strin
 type toolUseIDKey struct{}
 
 // WithToolUseID returns a context naming the tool call that hooks run
-// for. They get it as tool_use_id, and in KLASH_TOOL_USE_ID, so that a
+// for. They get it as tool_use_id, and in GNOSH_TOOL_USE_ID, so that a
 // PreToolUse and a PostToolUse hook can tell they saw the same call.
 func WithToolUseID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, toolUseIDKey{}, id)
@@ -498,7 +498,7 @@ const (
 )
 
 // Memory types, as in Claude Code's memory_type: the user's global
-// context files, a CLAUDE.local.md, or the rest. Klash has no managed
+// context files, a CLAUDE.local.md, or the rest. Gnosh has no managed
 // rules, so "Managed" is never used.
 const (
 	MemoryTypeUser    = "User"
@@ -510,7 +510,7 @@ const (
 // EventInstructionsLoaded hook: the file loaded, its memory type, and the
 // load reason, as Claude Code's InstructionsLoaded input carries it.
 // triggerFilePath and parentFilePath are set for a nested_traversal and
-// an include load respectively; Klash has no globbed rules, so globs is
+// an include load respectively; Gnosh has no globbed rules, so globs is
 // never sent. There is no tool in play, so tool_name is empty and
 // tool_input is an empty object.
 func BuildInstructionsLoadedPayload(sessionID, cwd, filePath, memoryType, loadReason, triggerFilePath, parentFilePath string) []byte {
@@ -590,10 +590,10 @@ func BuildEnv(eventName, toolName, sessionID, cwd, projectDir, toolInputJSON str
 	return env
 }
 
-// hookVar sets a hook's environment variable under its KLASH_ name and
+// hookVar sets a hook's environment variable under its GNOSH_ name and
 // under the CRUSH_ name that hooks written before the rename read.
 func hookVar(name, value string) []string {
-	return []string{"KLASH_" + name + "=" + value, "CRUSH_" + name + "=" + value}
+	return []string{"GNOSH_" + name + "=" + value, "CRUSH_" + name + "=" + value}
 }
 
 // parseStdout parses the JSON output from a hook command's stdout.
@@ -924,7 +924,7 @@ func rawToString(raw json.RawMessage) string {
 //     "deny", "ask". "ask" puts the tool call to the user, as Claude
 //     Code's does, even one that would run without asking: it used to
 //     count as no opinion here, so a hook asking about a call that
-//     --allowedTools, acceptEdits or klash run let through was ignored.
+//     --allowedTools, acceptEdits or gnosh run let through was ignored.
 //
 // Matching is exact, as it is for event names.
 var decisionWords = map[string]Decision{

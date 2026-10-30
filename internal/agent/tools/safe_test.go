@@ -32,7 +32,7 @@ func TestReadOnlyCommand(t *testing.T) {
 	for _, command := range []string{
 		// Holes of the old check.
 		"echo hi\nrm -rf ~", "ls & rm -rf ~", "ls & echo done", "echo x > ~/.zshrc", "ls > /tmp/out", "echo x >> notes",
-		"timeout 5 rm -rf ~", "nice rm -rf ~", "nohup rm -rf ~", "time rm x", "env rm -rf ~", "kill 1234", "killall klash",
+		"timeout 5 rm -rf ~", "nice rm -rf ~", "nohup rm -rf ~", "time rm x", "env rm -rf ~", "kill 1234", "killall gnosh",
 		"git branch -D main", "git branch newbranch", "git tag v1.0", "git tag -d v1", "git remote add x y",
 		"git config user.name x", "git config --get x --unset y", "set -e",
 		// Git that runs a program or writes a file.

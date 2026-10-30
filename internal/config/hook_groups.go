@@ -12,16 +12,16 @@ import (
 )
 
 // flattenHookGroups rewrites the hooks a config file gives in Claude
-// Code's shape into Klash's. Claude Code files each event's hooks in
+// Code's shape into Gnosh's. Claude Code files each event's hooks in
 // groups, a matcher and the handlers it runs:
 //
 //	{"matcher": "Bash", "hooks": [{"type": "command", "command": "./check.sh"}]}
 //
-// and Klash takes one entry per command, {"matcher": "Bash", "command":
+// and Gnosh takes one entry per command, {"matcher": "Bash", "command":
 // "./check.sh"}. So a Claude Code settings.json hooks block works pasted
-// in as it is. Entries already in Klash's shape are left as they are.
+// in as it is. Entries already in Gnosh's shape are left as they are.
 //
-// Only what Klash can do as Claude Code would is taken: command handlers,
+// Only what Gnosh can do as Claude Code would is taken: command handlers,
 // with a timeout, and the fields that change nothing here (statusMessage,
 // once, which Claude Code ignores in settings files, and the defaults of
 // shell, async, asyncRewake and onFailure). A handler that asks for more,
@@ -75,7 +75,7 @@ func isHookGroup(entry gjson.Result) bool {
 }
 
 // flattenHookGroup turns one Claude Code group, at where in the file,
-// into Klash hook entries, one per handler.
+// into Gnosh hook entries, one per handler.
 func flattenHookGroup(group gjson.Result, where string) ([]json.RawMessage, error) {
 	var err error
 	group.ForEach(func(key, _ gjson.Result) bool {
@@ -106,7 +106,7 @@ func flattenHookGroup(group gjson.Result, where string) ([]json.RawMessage, erro
 	return out, nil
 }
 
-// flattenHookHandler turns one Claude Code hook handler into a Klash hook
+// flattenHookHandler turns one Claude Code hook handler into a Gnosh hook
 // entry under matcher, or says why it cannot be one.
 func flattenHookHandler(handler gjson.Result, matcher, where string) (json.RawMessage, error) {
 	if !handler.IsObject() {
@@ -119,7 +119,7 @@ func flattenHookHandler(handler gjson.Result, matcher, where string) (json.RawMe
 		switch k {
 		case "type":
 			if value.String() != "command" {
-				err = fmt.Errorf("%s: hook type %q is not supported; Klash runs command hooks only", where, value.String())
+				err = fmt.Errorf("%s: hook type %q is not supported; Gnosh runs command hooks only", where, value.String())
 			}
 		case "command":
 			if value.Type != gjson.String || value.String() == "" {
@@ -136,11 +136,11 @@ func flattenHookHandler(handler gjson.Result, matcher, where string) (json.RawMe
 			// run-once flag, which Claude Code ignores in settings files.
 		case "shell":
 			if value.String() != "bash" {
-				err = fmt.Errorf("%s.shell: %q is not supported; Klash runs hooks in its POSIX shell", where, value.String())
+				err = fmt.Errorf("%s.shell: %q is not supported; Gnosh runs hooks in its POSIX shell", where, value.String())
 			}
 		case "async", "asyncRewake":
 			if value.Type != gjson.False {
-				err = fmt.Errorf("%s.%s: background hooks are not supported; Klash waits for every hook", where, k)
+				err = fmt.Errorf("%s.%s: background hooks are not supported; Gnosh waits for every hook", where, k)
 			}
 		case "onFailure":
 			if value.String() != "continue" {
@@ -157,7 +157,7 @@ func flattenHookHandler(handler gjson.Result, matcher, where string) (json.RawMe
 		return nil, err
 	}
 	if !handler.Get("type").Exists() {
-		return nil, fmt.Errorf("%s.type: required; Klash runs \"command\" hooks", where)
+		return nil, fmt.Errorf("%s.type: required; Gnosh runs \"command\" hooks", where)
 	}
 	if entry.Command == "" {
 		return nil, fmt.Errorf("%s.command: required", where)

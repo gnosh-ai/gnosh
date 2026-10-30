@@ -1,7 +1,7 @@
 // Package artifacts serves the deliverables the agent records with the
 // artifact tool, so that the user can open one — a rendered video, a
 // generated report, a published page — from the machine they are sitting
-// at. Klash usually runs somewhere else: on a box over ssh, in a
+// at. Gnosh usually runs somewhere else: on a box over ssh, in a
 // container, on a droplet, and a path printed there is of no use from
 // here.
 //
@@ -40,7 +40,7 @@ const Off = "off"
 // taken falls back to a free one.
 //
 // Loopback, because an artifact is whatever the agent was told to make
-// and the machine Klash runs on is often shared. Reaching it from the
+// and the machine Gnosh runs on is often shared. Reaching it from the
 // machine the user sits at is then an ssh -L away, which costs them one
 // line of ~/.ssh/config and exposes nothing to the network. Set
 // artifact_server to ":7777" to serve every interface instead.
@@ -94,7 +94,7 @@ func Start(addr, dir string) *Server {
 	}
 	ln, err := net.Listen("tcp", cmp.Or(addr, DefaultAddress))
 	if err != nil && addr == "" {
-		// The default port is taken — by another Klash, most likely.
+		// The default port is taken — by another Gnosh, most likely.
 		// Any free port still serves this session's artifacts, on the
 		// same loopback address the default binds.
 		ln, err = net.Listen("tcp", "127.0.0.1:0")
@@ -186,7 +186,7 @@ func (s *Server) Close() error {
 	// Serve closes the listener too, but only when its goroutine gets
 	// there. Closing it here means the port is free by the time Close
 	// returns, which is what a caller taking the port back expects — a
-	// `klash run` dropping the server it inherited, or a test. Closing a
+	// `gnosh run` dropping the server it inherited, or a test. Closing a
 	// listener the server has already closed is not a failure.
 	if s.ln != nil {
 		if cerr := s.ln.Close(); cerr != nil && err == nil && !errors.Is(cerr, net.ErrClosed) {
@@ -328,7 +328,7 @@ func (s *Server) prune() {
 func newToken() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand does not fail on any platform Klash runs on; if
+		// crypto/rand does not fail on any platform Gnosh runs on; if
 		// it ever did, a guessable token must not be handed out.
 		panic("artifacts: no randomness for a token: " + err.Error())
 	}

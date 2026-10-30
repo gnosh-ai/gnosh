@@ -156,7 +156,7 @@ func TestSubagentStopContinuation_PassesStopHookActive(t *testing.T) {
 
 	out := filepath.Join(t.TempDir(), "active.txt")
 	env := testEnv(t)
-	a := subagentStopAgent(t, env, `printf '%s' "$KLASH_STOP_HOOK_ACTIVE" > `+out+`; exit 2`)
+	a := subagentStopAgent(t, env, `printf '%s' "$GNOSH_STOP_HOOK_ACTIVE" > `+out+`; exit 2`)
 
 	_, blocked := a.stopHookContinuation(t.Context(), SessionAgentCall{SessionID: "s1"}, "done")
 	require.True(t, blocked)
@@ -320,7 +320,7 @@ func requireSubagentQueueEmpty(t *testing.T, r subagentStopRun) {
 // one the agent tool hands to the parent.
 func TestSubagentStopHookBlockOnceCostsOneMoreTurn(t *testing.T) {
 	r := runSubagentTurn(t,
-		`[ "$KLASH_STOP_HOOK_ACTIVE" = "1" ] && exit 0; echo "you forgot the tests" >&2; exit 2`)
+		`[ "$GNOSH_STOP_HOOK_ACTIVE" = "1" ] && exit 0; echo "you forgot the tests" >&2; exit 2`)
 
 	require.Equal(t, int64(2), r.turns.Load(),
 		"the sub-agent must answer again after the block, then be allowed to finish")
@@ -365,7 +365,7 @@ func TestSubagentStopParentGetsTheAnswerAfterTheBlock(t *testing.T) {
 		},
 	}
 	r := runSubagentTurnModel(t, llm, &turns,
-		`[ "$KLASH_STOP_HOOK_ACTIVE" = "1" ] && exit 0; echo "you forgot the tests" >&2; exit 2`)
+		`[ "$GNOSH_STOP_HOOK_ACTIVE" = "1" ] && exit 0; echo "you forgot the tests" >&2; exit 2`)
 
 	require.Equal(t, int64(2), turns.Load())
 	require.Equal(t, "Tests added; all done.", subAgentOutput(r.result))
@@ -449,7 +449,7 @@ func TestSubagentStopHookCouldNotEvaluateKeepsTheSubAgentWorking(t *testing.T) {
 		require.Contains(t, warnings[0].Message, want)
 		require.Contains(t, warnings[0].Message, "the turn goes on")
 		require.Equal(t, r.parentID, warnings[0].SessionID,
-			"in the session the user is in: klash run prints only that session's warnings")
+			"in the session the user is in: gnosh run prints only that session's warnings")
 	}
 }
 
@@ -457,7 +457,7 @@ func TestSubagentStopHookCouldNotEvaluateKeepsTheSubAgentWorking(t *testing.T) {
 // now, even over its own earlier block.
 func TestSubagentStopHookHaltEndsTheTurn(t *testing.T) {
 	r := runSubagentTurn(t,
-		`[ "$KLASH_STOP_HOOK_ACTIVE" = "1" ] && { echo "enough" >&2; exit 49; }; echo "keep going" >&2; exit 2`)
+		`[ "$GNOSH_STOP_HOOK_ACTIVE" = "1" ] && { echo "enough" >&2; exit 49; }; echo "keep going" >&2; exit 2`)
 
 	require.Equal(t, int64(2), r.turns.Load(),
 		"the block costs one turn; the halt ends the continuation")
@@ -507,7 +507,7 @@ func TestSubagentStopAgentJudgesItShouldStopAtACheckpoint(t *testing.T) {
 // the same contract as Stop.
 func TestSubagentStopClaudeCodeStyleHookKeepsTheSubAgentWorking(t *testing.T) {
 	r := runSubagentTurn(t,
-		`[ "$KLASH_STOP_HOOK_ACTIVE" = "1" ] && exit 0; echo '{"decision":"block","reason":"run the tests first"}'`)
+		`[ "$GNOSH_STOP_HOOK_ACTIVE" = "1" ] && exit 0; echo '{"decision":"block","reason":"run the tests first"}'`)
 
 	require.Equal(t, int64(2), r.turns.Load(),
 		"the JSON block must cost exactly one more turn, like exit 2 does")
@@ -540,14 +540,14 @@ func TestSubagentStopPromptsNameTheEvent(t *testing.T) {
 
 // The env vars a SubagentStop hook reads: the event name, the session the
 // sub-agent works for, its own ID and type, and the active flag under
-// its KLASH_ and CRUSH_ names.
+// its GNOSH_ and CRUSH_ names.
 func TestSubagentStopHookEnvVars(t *testing.T) {
 	t.Parallel()
 
 	envDir := t.TempDir()
 	envLine := filepath.Join(envDir, "env.txt")
 	env := testEnv(t)
-	a := subagentStopAgent(t, env, `printf '%s|%s|%s|%s|%s|%s' "$KLASH_EVENT" "$KLASH_SESSION_ID" "$KLASH_AGENT_ID" "$KLASH_AGENT_TYPE" "$KLASH_STOP_HOOK_ACTIVE" "$CRUSH_STOP_HOOK_ACTIVE" > `+envLine+`; exit 0`)
+	a := subagentStopAgent(t, env, `printf '%s|%s|%s|%s|%s|%s' "$GNOSH_EVENT" "$GNOSH_SESSION_ID" "$GNOSH_AGENT_ID" "$GNOSH_AGENT_TYPE" "$GNOSH_STOP_HOOK_ACTIVE" "$CRUSH_STOP_HOOK_ACTIVE" > `+envLine+`; exit 0`)
 
 	parent, err := env.sessions.Create(t.Context(), "parent")
 	require.NoError(t, err)

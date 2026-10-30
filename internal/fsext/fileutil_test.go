@@ -275,12 +275,12 @@ func TestGlobSearchesARootOfAnIgnoredName(t *testing.T) {
 	t.Parallel()
 
 	root := filepath.Join(t.TempDir(), ".local")
-	for _, rel := range []string{"tools/klash.sh", ".git/hook.sh"} {
+	for _, rel := range []string{"tools/gnosh.sh", ".git/hook.sh"} {
 		full := filepath.Join(root, rel)
 		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o755))
 		require.NoError(t, os.WriteFile(full, []byte("x"), 0o644))
 	}
 	got, _, err := GlobGitignoreAware("**/*.sh", root, 10)
 	require.NoError(t, err)
-	require.Equal(t, []string{filepath.Join(root, "tools", "klash.sh")}, got)
+	require.Equal(t, []string{filepath.Join(root, "tools", "gnosh.sh")}, got)
 }

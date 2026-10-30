@@ -18,7 +18,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Could not get terminal size: %s", err)
 	}
 
-	s := styles.KlashCosmos()
+	s := styles.GnoshCosmos()
 	opts := logo.Opts{
 		FieldColor:   s.Logo.FieldColor,
 		FieldColorB:  s.Logo.FieldColorB,

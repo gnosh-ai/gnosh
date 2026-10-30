@@ -88,20 +88,20 @@ func TestApplyUserTools_UneditedExportFollowsTheBuiltIn(t *testing.T) {
 }
 
 // disabled.txt entries and exported descriptions written for a tool's name
-// from before the rename to Klash keep applying to it.
+// from before the rename to Gnosh keep applying to it.
 func TestApplyUserToolsTakesLegacyToolNames(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CRUSH_GLOBAL_CONFIG", filepath.Join(dir, "crush.json"))
 	require.NoError(t, os.MkdirAll(UserToolsDir(), 0o755))
 	require.NoError(t, os.WriteFile(DisabledToolsFile(), []byte("crush_logs\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(UserToolsDir(), "crush_info.md"), []byte("What Klash is running with.\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(UserToolsDir(), "crush_info.md"), []byte("What Gnosh is running with.\n"), 0o644))
 
-	got := applyUserTools([]fantasy.AgentTool{userToolFake{"klash_logs", "built-in logs"}, userToolFake{"klash_info", "built-in info"}})
-	require.Len(t, got, 1, "crush_logs in disabled.txt leaves klash_logs out")
-	require.Equal(t, "klash_info", got[0].Info().Name)
-	require.Equal(t, "What Klash is running with.", got[0].Info().Description)
+	got := applyUserTools([]fantasy.AgentTool{userToolFake{"gnosh_logs", "built-in logs"}, userToolFake{"gnosh_info", "built-in info"}})
+	require.Len(t, got, 1, "crush_logs in disabled.txt leaves gnosh_logs out")
+	require.Equal(t, "gnosh_info", got[0].Info().Name)
+	require.Equal(t, "What Gnosh is running with.", got[0].Info().Description)
 
-	path, used := UserToolDescription("klash_info")
+	path, used := UserToolDescription("gnosh_info")
 	require.True(t, used)
 	require.Equal(t, filepath.Join(UserToolsDir(), "crush_info.md"), path)
 }

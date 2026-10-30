@@ -648,7 +648,7 @@ func (r *Runner) runOne(parentCtx context.Context, hook config.HookConfig, event
 	if result.Error != "" {
 		// An answer that cannot be read is no answer: a hook that wrote
 		// "decision": "Deny" meant to deny.
-		reason := fmt.Sprintf("hook %q gave an answer Klash could not read (%s)", hook.DisplayName(), result.Error)
+		reason := fmt.Sprintf("hook %q gave an answer Gnosh could not read (%s)", hook.DisplayName(), result.Error)
 		if result.Reason != "" {
 			reason += "; its reason: " + result.Reason
 		}
@@ -673,7 +673,7 @@ const checkDidNotPass = "A check that could not run does not pass."
 
 // couldNotRun is the result of a hook that could not run to a verdict:
 // it never started, it or a command it runs was not found or not
-// executable, or it timed out. It checked nothing, so it blocks: Klash
+// executable, or it timed out. It checked nothing, so it blocks: Gnosh
 // fails closed, where Claude Code lets such a hook pass.
 func couldNotRun(hook config.HookConfig, failure string) HookResult {
 	return HookResult{

@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/styles"
 )
 
-// NoticeItem is a notice from klash the agent was sent, such as a
+// NoticeItem is a notice from gnosh the agent was sent, such as a
 // background job's end: one subdued line in the chat, as Claude Code
 // shows its task notifications, so the turn it starts does not seem to
 // come from nowhere.

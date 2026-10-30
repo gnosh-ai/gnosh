@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -82,7 +82,7 @@ func TestMemHostKeepsWhatChanged(t *testing.T) {
 	require.ErrorContains(t, err, "nothing was kept")
 	require.Zero(t, res.Seq)
 
-	// Another klash process finds it, through the journal and the store.
+	// Another gnosh process finds it, through the journal and the store.
 	other := newTestMemHost(t, dir)
 	res, err = other.call(context.Background(), memRequest{Code: `println(mem.Show())`, User: true})
 	require.NoError(t, err)
@@ -104,7 +104,7 @@ func TestMemHostKeepsWhatChanged(t *testing.T) {
 	require.Equal(t, memStamp{Layout: memLayout, Gno: stdlibVersion(), Generation: j.generation, Seq: 1, End: j.size, Hash: j.lastHash}, st)
 }
 
-// An entry in the journal that the store lacks, as when klash died between
+// An entry in the journal that the store lacks, as when gnosh died between
 // journaling a call and writing its batch, or another process journaled it,
 // is applied at the next call.
 func TestMemHostCatchesUp(t *testing.T) {
@@ -127,7 +127,7 @@ func TestMemHostCatchesUp(t *testing.T) {
 }
 
 // A store of an older layout is rebuilt from the journal; one a newer
-// klash wrote is refused.
+// gnosh wrote is refused.
 func TestMemHostRebuildsAnOlderStore(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -158,7 +158,7 @@ func TestMemHostRebuildsAnOlderStore(t *testing.T) {
 	_, err := h.call(context.Background(), memRequest{Code: `println(mem.Show())`})
 	var ref *refusal
 	require.ErrorAs(t, err, &ref)
-	require.Contains(t, err.Error(), "a newer klash wrote mem")
+	require.Contains(t, err.Error(), "a newer gnosh wrote mem")
 }
 
 // A catch-up cut short keeps every batch it applied, so a rebuild of a
@@ -325,7 +325,7 @@ func TestMemHostForgets(t *testing.T) {
 	require.Contains(t, memOK(t, h, `mem.Goal("plan the surprise party")`).Output, "added goal `plan-surprise-party`")
 }
 
-// Two klash processes take turns through mem's lock, and every input is
+// Two gnosh processes take turns through mem's lock, and every input is
 // kept once, in one order.
 func TestMemHostTwoProcessesTakeTurns(t *testing.T) {
 	t.Parallel()
@@ -456,7 +456,7 @@ func TestMemBlock(t *testing.T) {
 	require.Equal(t, "<mem>\n"+
 		"Rules the user gave you; follow them (the user's words today come first):\n"+
 		"- `push-after-landing` (set by the user, 2026-10-30): push to GitHub only after landed:\n"+
-		"From your memory (mem), kept by klash for this project: what you found and were told in earlier sessions. `mem.Show()` shows the outline; `mem.Find(\"words\")` searches everything.\n"+
+		"From your memory (mem), kept by gnosh for this project: what you found and were told in earlier sessions. `mem.Show()` shows the outline; `mem.Find(\"words\")` searches everything.\n"+
 		"mem: 5 items open · 1 question for the user · 1 fact\n"+
 		"due: `renew-tls-cert` \"renew the TLS cert\" (since 2026-12-01)\n"+
 		"waiting on the user: `release-v2/2/1` \"which key signs the &lt;tag&gt;?\"\n"+

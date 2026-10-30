@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -78,7 +78,7 @@ func memBlock(st memStatus, now time.Time) string {
 			b.WriteString("- `" + r.Name + "` (" + by + ", " + time.Unix(r.Changed, 0).Format(time.DateOnly) + "): " + memEscape(r.Text) + "\n")
 		}
 	}
-	b.WriteString("From your memory (mem), kept by klash for this project: what you found and were told in earlier sessions. `mem.Show()` shows the outline; `mem.Find(\"words\")` searches everything.\n")
+	b.WriteString("From your memory (mem), kept by gnosh for this project: what you found and were told in earlier sessions. `mem.Show()` shows the outline; `mem.Find(\"words\")` searches everything.\n")
 	start := b.Len()
 	head := []string{memPlural(m.Counts.Open, "item") + " open"}
 	if m.Counts.ForUser > 0 {

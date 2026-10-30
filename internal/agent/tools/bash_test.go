@@ -136,7 +136,7 @@ func TestBashTool_ToolNameAsCommand(t *testing.T) {
 		Command:     "job_kill 077",
 	})
 
-	require.Contains(t, resp.Content, "job_kill is a Klash tool, not a shell command: call the job_kill tool instead.")
+	require.Contains(t, resp.Content, "job_kill is a Gnosh tool, not a shell command: call the job_kill tool instead.")
 }
 
 type recordingPermissionService struct {
@@ -402,8 +402,8 @@ func TestBashTool_RunsTheSessionEnvFile(t *testing.T) {
 	workingDir := t.TempDir()
 	tool := newBashToolForTest(workingDir)
 	envFile := filepath.Join(t.TempDir(), "it's; a $file.sh")
-	require.NoError(t, os.WriteFile(envFile, []byte("export KLASH_TEST_GREETING=hello\n"), 0o600))
-	const command = `echo "greeting=[$KLASH_TEST_GREETING]"`
+	require.NoError(t, os.WriteFile(envFile, []byte("export GNOSH_TEST_GREETING=hello\n"), 0o600))
+	const command = `echo "greeting=[$GNOSH_TEST_GREETING]"`
 	session := context.WithValue(context.Background(), SessionIDContextKey, "s1")
 	withEnv := WithSessionEnvFile(session, envFile)
 

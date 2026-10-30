@@ -31,7 +31,7 @@ func newRestoreWorkspace() *restoreWorkspace {
 			config.SelectedModelTypeLarge: {Provider: "standin", Model: "qwen-a"},
 			config.SelectedModelTypeSmall: {Provider: "standin", Model: "qwen-a"},
 		},
-		Options: &config.Options{TUI: &config.TUIOptions{ActiveTheme: "klash-cosmos"}},
+		Options: &config.Options{TUI: &config.TUIOptions{ActiveTheme: "gnosh-cosmos"}},
 	}}
 }
 

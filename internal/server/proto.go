@@ -769,7 +769,7 @@ func (c *controllerV1) handlePostWorkspaceJobKill(w http.ResponseWriter, r *http
 }
 
 // handleGetWorkspaceDoctorReport reports the check of the workspace's
-// setup that klash doctor prints.
+// setup that gnosh doctor prints.
 func (c *controllerV1) handleGetWorkspaceDoctorReport(w http.ResponseWriter, r *http.Request) {
 	report, err := c.backend.DoctorReport(r.PathValue("id"))
 	if err != nil {

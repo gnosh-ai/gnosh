@@ -18,10 +18,10 @@ var projectsCmd = &cobra.Command{
 	Long:  "List directories where " + version.Name + " project data is known to exist",
 	Example: `
 # List all projects in a table
-klash projects
+gnosh projects
 
 # Output projects data as JSON
-klash projects --json
+gnosh projects --json
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonOutput, _ := cmd.Flags().GetBool("json")

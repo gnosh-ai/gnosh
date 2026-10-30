@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -46,12 +46,12 @@ func TestCgroupHeadroom(t *testing.T) {
 	}
 	// The leaf has no limit; its parent allows 8 GiB with 6 GiB used, the
 	// root's child slice allows 64 GiB with 10 GiB used: the parent is tightest.
-	write("system.slice/klash.service", "memory.max", "max\n")
-	write("system.slice/klash.service", "memory.current", "1073741824\n")
+	write("system.slice/gnosh.service", "memory.max", "max\n")
+	write("system.slice/gnosh.service", "memory.current", "1073741824\n")
 	write("system.slice", "memory.max", "8589934592\n")
 	write("system.slice", "memory.current", "6442450944\n")
 
-	limit, headroom, ok := cgroupHeadroom(root, "/system.slice/klash.service")
+	limit, headroom, ok := cgroupHeadroom(root, "/system.slice/gnosh.service")
 	require.True(t, ok)
 	require.Equal(t, uint64(8589934592), limit)
 	require.Equal(t, uint64(8589934592-6442450944), headroom)

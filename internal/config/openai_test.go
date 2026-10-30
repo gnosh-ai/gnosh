@@ -336,7 +336,7 @@ func newCatwalkStub(t *testing.T, status int, catalog []catwalk.Provider) {
 	// TestMain keeps tests off Charm's servers by turning the catalog
 	// fetch off; a test of the fetch, against this local server, asks for
 	// it explicitly, as a user has to.
-	t.Setenv("KLASH_DISABLE_PROVIDER_AUTO_UPDATE", "0")
+	t.Setenv("GNOSH_DISABLE_PROVIDER_AUTO_UPDATE", "0")
 
 	t.Setenv("CATWALK_URL", server.URL)
 	t.Setenv("HYPER_URL", server.URL)

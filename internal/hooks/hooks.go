@@ -56,7 +56,7 @@ const (
 	// call is due; its matcher is tested against the tool name. A hook can
 	// allow or deny the call in the user's place.
 	EventPermissionRequest = config.EventPermissionRequest
-	// EventNotification fires on Klash's two notifications, a permission
+	// EventNotification fires on Gnosh's two notifications, a permission
 	// prompt that has waited for the user and a finished turn with no
 	// reply; its matcher is tested against the notification type. It has
 	// no decision control: its output is ignored and the TUI does not
@@ -72,7 +72,7 @@ const HaltExitCode = 49
 
 // CouldNotEvaluateExitCode is the exit code a hook gives when it could
 // not check what it was asked to: the tool it runs is missing, say, or
-// what it reads is not there. Klash fails closed on it, as on a hook that
+// what it reads is not there. Gnosh fails closed on it, as on a hook that
 // could not run at all: it blocks as exit 2 does, so a check that did not
 // run never passes for one that did. Stderr says why. 3 is the UNKNOWN
 // of monitoring checks, beside their 0 for OK and 2 for CRITICAL.

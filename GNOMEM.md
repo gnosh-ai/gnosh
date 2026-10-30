@@ -1,6 +1,6 @@
 # GNOMEM: the agent's memory, in Gno
 
-Klash runs the GnoVM, gno.land's interpreter for its Go dialect, inside
+Gnosh runs the GnoVM, gno.land's interpreter for its Go dialect, inside
 itself, and keeps the agent's memory there: the goals it is working on and
 their steps, what it tried and found, what it waits for, what it must ask
 you, the facts it was told to keep, and the rules you gave it. That memory,
@@ -40,10 +40,10 @@ gnovm_run {"name": "mem", "code": "mem.Show()"}
   in a worker process of their own.
 - **Durable and checkable.** Every change to mem is journaled before it is
   kept, and mem is rebuilt from its journal after a crash, an upgrade, or on
-  another Klash. A torn journal tail is cut off. An erasure writes the
+  another Gnosh. A torn journal tail is cut off. An erasure writes the
   journal again without the text, and rebuilds, so the text leaves every
   file.
-- **Private.** Everything lives in Klash's data directory, on your machine.
+- **Private.** Everything lives in Gnosh's data directory, on your machine.
 
 ## In use
 
@@ -135,10 +135,10 @@ it would. Ask what is open, or say good morning, and it is there.
 
 ## See it work
 
-These are real runs of Klash with the open-weight Qwen3.8-27B on a local
+These are real runs of Gnosh with the open-weight Qwen3.8-27B on a local
 llama.cpp server, from every build of 30 October 2026 that had mem (from
 01:08 UTC on). Each runs in a fresh project and a fresh config, with only
-Klash's built-in prompt, and the user talks the way the second column says,
+Gnosh's built-in prompt, and the user talks the way the second column says,
 never naming Gno or mem unless it says so. The checks are scripted: files,
 test results, the final answer, and what mem holds at the end.
 
@@ -179,7 +179,7 @@ and it put memory in a MEMORY.md file. The use cases are txtar files in
 one and run them all:
 
 ```sh
-GNOVM_SCENARIO_KLASH=$(command -v klash) GNOVM_SCENARIO_OUT=/tmp/gnomem \
+GNOVM_SCENARIO_GNOSH=$(command -v gnosh) GNOVM_SCENARIO_OUT=/tmp/gnomem \
   go test ./internal/gnovm -run TestScenarios -v -test.parallel 2 -test.timeout 6h
 ```
 
@@ -188,13 +188,13 @@ and a dump of every persistent machine.
 
 ## How the agent uses it
 
-Klash's system prompt carries a short recipe, so the model needs no setup:
+Gnosh's system prompt carries a short recipe, so the model needs no setup:
 `mem` is made the first time it is used.
 
 - **At the start of a session** the model is told, with its first prompt,
   the rules you gave, what is due, what waits on you, the open goals with
   what is next in each, and the newest facts; `mem.Show()` gives the whole
-  outline. Klash rewrites what it will be told after every change, and
+  outline. Gnosh rewrites what it will be told after every change, and
   reading it starts nothing.
 - **When a task starts**: `mem.Show()`, and carry on from `← next`.
 - **A task of two or more steps**: `mem.Goal("…").Steps("…", "…")`, then
@@ -252,10 +252,10 @@ func (m *Mem) Next(name string) string
   what it should have been.
 - **One function changes mem.** A call only decides which changes (Ops) to
   make; one function applies them, checking each against what is there, and
-  Klash journals them. A failed call keeps nothing.
+  Gnosh journals them. A failed call keeps nothing.
 - **The journal is the source.** mem's store, the realm in goleveldb, and its
   index, SQLite with full-text search, are built from the journal, and built
-  again from it after damage, an upgrade or an erasure. Two Klash processes
+  again from it after damage, an upgrade or an erasure. Two Gnosh processes
   take turns through a lock.
 - **Erased means erased.** `mem.Redact(secret)` and `mem.Forget(name)` write
   the journal again without the text and rebuild the store and the index,
@@ -274,9 +274,9 @@ func (m *Mem) Next(name string) string
 | `gnovm_drop` | evicts a machine from memory (rebuilt when next used), or deletes it after asking you |
 
 - **Scratch, named, persistent.** Each session has a scratch machine. A named
-  machine lasts as long as the Klash process; a persistent one is kept on
-  disk, and another Klash on the same project catches up with it.
-- **Memory, managed.** Klash reads how much memory the host can give, cgroup
+  machine lasts as long as the Gnosh process; a persistent one is kept on
+  disk, and another Gnosh on the same project catches up with it.
+- **Memory, managed.** Gnosh reads how much memory the host can give, cgroup
   limits included. It keeps the machines within a budget, and evicts the
   least recently used one when a large task needs the room.
 - **Gas you can reason about.** gno's calibration makes 1 gas about 1 ns, and
@@ -286,7 +286,7 @@ func (m *Mem) Next(name string) string
 ## Made not to trip
 
 Each failed call costs the model a round trip, which takes several seconds to
-a minute on a local model. The real runs showed where it stumbled, and Klash
+a minute on a local model. The real runs showed where it stumbled, and Gnosh
 now handles each case:
 
 - **Imports.** A package used without an import (`fmt.Println`, `strings`,
@@ -308,11 +308,11 @@ now handles each case:
   call's results ("8, undefined"), and a nil value shows as `nil`. A value
   that is a string of several lines is shown as it is, not as one quoted
   line.
-- **Go's fmt.** Gno has no fmt. Klash's runs Go's own formatting natively, so
+- **Go's fmt.** Gno has no fmt. Gnosh's runs Go's own formatting natively, so
   `%-10s`, `%5.2f`, `%+v` of a struct, `%v` of a slice or a map and `%w` in
   Errorf all work as in Go. The earlier fmt printed "(unhandled)" for most of
   them.
-- **Prompt reuse.** Klash keeps everything that changes from one session to
+- **Prompt reuse.** Gnosh keeps everything that changes from one session to
   the next (the date, the working directory, git status) out of the system
   prompt, so a local model server reuses the prompt it has already read. A
   new session reads about 30 new tokens instead of 14,000, which took one to
@@ -323,7 +323,7 @@ The full design, with every review of it, is in
 
 ## License
 
-This part of Klash is under the GNO Network General Public License, version
+This part of Gnosh is under the GNO Network General Public License, version
 6, with Additional Terms (Strong Attribution); see
 [internal/gnovm/LICENSE.md](internal/gnovm/LICENSE.md). Built on
-[gno.land](https://gno.land) · built on [klash](https://klash.pro).
+[gno.land](https://gno.land) · built on [gnosh](https://gnosh.ai).

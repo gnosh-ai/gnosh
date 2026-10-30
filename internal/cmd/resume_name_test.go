@@ -20,7 +20,7 @@ func (w *namedSessionsWorkspace) ListSessions(context.Context) ([]session.Sessio
 	return w.sessions, w.err
 }
 
-// `klash -r <name>`, as Claude Code's --resume: the one session with that
+// `gnosh -r <name>`, as Claude Code's --resume: the one session with that
 // name, ignoring case; a name no session or several have is the search
 // to open the list on.
 func TestResumeByName(t *testing.T) {

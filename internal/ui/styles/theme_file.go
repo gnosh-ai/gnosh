@@ -91,7 +91,7 @@ var themeDirsOverride []string
 // ThemeDirs returns the user theme directory. Theme files are global so
 // launching Crush from different working directories always resolves the same
 // themes. Themes live in the Crush config directory (the one holding the
-// global config file) under themes/, which honors KLASH_GLOBAL_CONFIG and
+// global config file) under themes/, which honors GNOSH_GLOBAL_CONFIG and
 // matches the README on every platform.
 func ThemeDirs() []string {
 	if themeDirsOverride != nil {

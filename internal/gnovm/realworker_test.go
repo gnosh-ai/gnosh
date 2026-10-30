@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -20,21 +20,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRealWorker runs VMs in a real worker process: a klash binary built
+// TestRealWorker runs VMs in a real worker process: a gnosh binary built
 // from this tree, never the test binary. It is skipped unless asked for;
 // run it on the devbox, with both binaries given the same build id so their
 // handshake matches, and a cap on processes:
 //
 //	ID=-X=github.com/charmbracelet/crush/internal/version.BuildID=gnovm-it
-//	go build -ldflags "$ID" -o /root/scratch/klash-worker .
-//	GNOVM_WORKER_BIN=/root/scratch/klash-worker systemd-run --scope -p TasksMax=64 -- \
+//	go build -ldflags "$ID" -o /root/scratch/gnosh-worker .
+//	GNOVM_WORKER_BIN=/root/scratch/gnosh-worker systemd-run --scope -p TasksMax=64 -- \
 //	  go test -ldflags "$ID" -run TestRealWorker -v ./internal/gnovm/
 //
 // (Not parallel: the client is process-wide.)
 func TestRealWorker(t *testing.T) {
 	bin := os.Getenv("GNOVM_WORKER_BIN")
 	if bin == "" {
-		t.Skip("set GNOVM_WORKER_BIN to a klash binary built from this tree")
+		t.Skip("set GNOVM_WORKER_BIN to a gnosh binary built from this tree")
 	}
 	dir := t.TempDir()
 	c, err := Acquire(ClientOptions{Options: Options{Dir: dir}, Binary: bin})

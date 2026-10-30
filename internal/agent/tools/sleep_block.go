@@ -13,7 +13,7 @@ import (
 // command ends, as Claude Code has it.
 const blockedSleep = 25
 
-// sleepBlocked is Claude Code's refusal of such a command, with klash's
+// sleepBlocked is Claude Code's refusal of such a command, with gnosh's
 // way to wait on a condition in place of its Monitor tool: an until-loop
 // in the background, whose end the agent is told of.
 const sleepBlocked = "Blocked: %s. To wait for a condition, run an until-loop with run_in_background: true (e.g. `until <check>; do sleep 2; done`); you will be told when it ends. To wait for a command you started, use run_in_background: true. Do not chain shorter sleeps to work around this block."

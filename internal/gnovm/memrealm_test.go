@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -70,7 +70,7 @@ func TestMemLayoutPinned(t *testing.T) {
 }
 
 // TestMemRealmPersists runs a mem input against the realm in a store on
-// disk, then opens the store again from a new base, as a new klash process
+// disk, then opens the store again from a new base, as a new gnosh process
 // would, and finds what the first input made.
 func TestMemRealmPersists(t *testing.T) {
 	dir := t.TempDir()

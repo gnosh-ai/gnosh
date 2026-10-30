@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -29,7 +29,7 @@ import (
 //
 //	journal.jsonl  every input that changed mem: the source (memjournal.go)
 //	store-<gen>/   the realm, built from the journal of generation gen
-//	lock           held through each call, so klash processes take turns
+//	lock           held through each call, so gnosh processes take turns
 //
 // A call takes the lock, opens the store and brings it up to the journal,
 // runs, journals what it changed, commits that to the store, and closes the
@@ -69,7 +69,7 @@ type memResult struct {
 	Ops    []memOp
 	// Seq is the journal entry the input was kept as; 0 for a read.
 	Seq int64
-	// Notes say what klash did besides: rebuilt the store, caught it up.
+	// Notes say what gnosh did besides: rebuilt the store, caught it up.
 	Notes []string
 	// Renamed is the goals an erasure renamed, old name to new.
 	Renamed map[string]string
@@ -184,7 +184,7 @@ func (h *memHost) touched(r *memRealm, caller string, ops []memOp) []MemGoal {
 	return out.Goals
 }
 
-// memStatus is status.json: mem.JSON() as klash computed it for no session
+// memStatus is status.json: mem.JSON() as gnosh computed it for no session
 // after a change, with what it was computed for. Hooks read it, and so does
 // the <mem> block at a session's start, without opening mem.
 type memStatus struct {
@@ -302,7 +302,7 @@ func (h *memHost) holding(j *journal) func(text string, ops []memOp) (names, kin
 	}
 }
 
-// lock takes mem's lock, waiting at most lockWait while another klash
+// lock takes mem's lock, waiting at most lockWait while another gnosh
 // process holds it.
 func (h *memHost) lock(ctx context.Context) (func(), error) {
 	if err := mkdirSync(h.dir); err != nil {
@@ -321,7 +321,7 @@ func (h *memHost) lock(ctx context.Context) (func(), error) {
 		}
 		select {
 		case <-ctx.Done():
-			return nil, &busyError{"mem is in use by another klash process; try again shortly"}
+			return nil, &busyError{"mem is in use by another gnosh process; try again shortly"}
 		case <-time.After(20 * time.Millisecond):
 		}
 	}
@@ -359,7 +359,7 @@ func (h *memHost) open() (r *memRealm, j *journal, notes []string, err error) {
 	if err == nil && ok {
 		if st.Layout > memLayout {
 			r.close()
-			return nil, nil, nil, &refusal{"a newer klash wrote mem (layout " + strconv.Itoa(st.Layout) + "); restart klash to use it"}
+			return nil, nil, nil, &refusal{"a newer gnosh wrote mem (layout " + strconv.Itoa(st.Layout) + "); restart gnosh to use it"}
 		}
 		same := st.Layout == memLayout && st.Gno == stdlibVersion() && st.Generation == hdr.Generation
 		if same {

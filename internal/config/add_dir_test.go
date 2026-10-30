@@ -14,8 +14,8 @@ func TestAddDir(t *testing.T) {
 	s := NewTestStore(&Config{})
 	s.Overrides().AddedDirs = []string{"/src/gno"}
 	before := s.AddedDirs()
-	s.AddDir("/src/klash")
-	require.Equal(t, []string{"/src/gno", "/src/klash"}, s.AddedDirs())
+	s.AddDir("/src/gnosh")
+	require.Equal(t, []string{"/src/gno", "/src/gnosh"}, s.AddedDirs())
 	require.Equal(t, []string{"/src/gno"}, before)
-	require.Equal(t, []string{"/src/gno", "/src/klash"}, s.Overrides().AddedDirs)
+	require.Equal(t, []string{"/src/gno", "/src/gnosh"}, s.Overrides().AddedDirs)
 }

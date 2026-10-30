@@ -135,7 +135,7 @@ func TestSummarize_PreCompactFiresWithTheTrigger(t *testing.T) {
 			dir := t.TempDir()
 			out := filepath.Join(dir, "trigger")
 			r := preCompactAgent(t, false,
-				preCompactHooks("", `echo "$KLASH_PRE_COMPACT_TRIGGER" > `+out)...)
+				preCompactHooks("", `echo "$GNOSH_PRE_COMPACT_TRIGGER" > `+out)...)
 			err, summarized, _ := r.summarize(t, tc.trigger)
 			require.NoError(t, err)
 			require.Equal(t, 1, summarized, "the summary goes ahead")

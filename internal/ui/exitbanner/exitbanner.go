@@ -68,7 +68,7 @@ func logoSection(contentWidth int) string {
 		lipgloss.NewStyle().Width(contentWidth).Render("Thanks for using "+version.Name+"! "+randomExitMessage())
 }
 
-// sessionResumeLines returns the "Session  <title>\nContinue klash -s <hash>"
+// sessionResumeLines returns the "Session  <title>\nContinue gnosh -s <hash>"
 // pair used by the exit banner.
 func sessionResumeLines(sess *session.Session, contentWidth int) string {
 	title := strings.ReplaceAll(sess.Title, "\n", " ")
@@ -80,7 +80,7 @@ func sessionResumeLines(sess *session.Session, contentWidth int) string {
 	}
 
 	hash := session.HashID(sess.ID)[:7]
-	label := lipgloss.NewStyle().Foreground(styles.KlashPurple)
+	label := lipgloss.NewStyle().Foreground(styles.GnoshPurple)
 	sessionLine := label.Render("Session  ") + title
 	continueLine := label.Render("Continue ") + version.Command + " -s " + hash
 	return sessionLine + "\n" + continueLine

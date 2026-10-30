@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -30,7 +30,7 @@ const (
 	heartbeatEvery = 500 * time.Millisecond
 )
 
-// errHandshake is a worker that was not started by a klash client, or by
+// errHandshake is a worker that was not started by a gnosh client, or by
 // one of another build.
 var errHandshake = errors.New("gnovm worker: no valid handshake")
 
@@ -75,7 +75,7 @@ func serve(in io.Reader, out io.Writer, setup func(hello)) error {
 	if h.Protocol != mine.Protocol || h.Build != mine.Build || h.Gno != mine.Gno {
 		_ = w.send(&frame{Type: msgHello, Body: mustJSON(mine), Err: &wireError{
 			Kind: "other",
-			Msg:  fmt.Sprintf("worker is build %s (gno %s), client is %s (gno %s): restart klash", mine.Build, mine.Gno, h.Build, h.Gno),
+			Msg:  fmt.Sprintf("worker is build %s (gno %s), client is %s (gno %s): restart gnosh", mine.Build, mine.Gno, h.Build, h.Gno),
 		}})
 		return errHandshake
 	}

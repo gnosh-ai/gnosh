@@ -23,12 +23,12 @@ import (
 	"github.com/invopop/jsonschema"
 )
 
-// The program is being renamed from Crush to Klash. Its directories and
+// The program is being renamed from Crush to Gnosh. Its directories and
 // config files take the new name, but where only the one from before the
 // rename exists, that one is used (see fsext.FirstExisting), so existing
 // setups and their sessions keep working without being moved.
 const (
-	appName              = "klash"
+	appName              = "gnosh"
 	legacyAppName        = "crush"
 	defaultDataDirectory = "." + appName
 	legacyDataDirectory  = "." + legacyAppName
@@ -43,12 +43,12 @@ var defaultContextPaths = []string{
 	"CLAUDE.local.md",
 	"GEMINI.md",
 	"gemini.md",
-	"klash.md",
-	"klash.local.md",
-	"Klash.md",
-	"Klash.local.md",
-	"KLASH.md",
-	"KLASH.local.md",
+	"gnosh.md",
+	"gnosh.local.md",
+	"Gnosh.md",
+	"Gnosh.local.md",
+	"GNOSH.md",
+	"GNOSH.local.md",
 	"crush.md",
 	"crush.local.md",
 	"Crush.md",
@@ -289,7 +289,7 @@ type MCPConfig struct {
 	//
 	// When nil, Crush auto-detects a set of known sessionless servers (see
 	// IsSessionless); set it explicitly to override that detection.
-	Sessionless *bool `json:"sessionless,omitempty" jsonschema:"description=Mark a sessionless MCP server (no Mcp-Session-Id) so Klash skips the subscriptions/listen stream it would otherwise reject. Leave unset to auto-detect known sessionless servers (e.g. GitHub MCP),default=false"`
+	Sessionless *bool `json:"sessionless,omitempty" jsonschema:"description=Mark a sessionless MCP server (no Mcp-Session-Id) so Gnosh skips the subscriptions/listen stream it would otherwise reject. Leave unset to auto-detect known sessionless servers (e.g. GitHub MCP),default=false"`
 
 	// Headers are HTTP headers for HTTP/SSE MCP servers. Values run
 	// through shell expansion at MCP startup, so $VAR and $(cmd)
@@ -395,12 +395,12 @@ type LSPConfig struct {
 type TUIOptions struct {
 	CompactMode bool        `json:"compact_mode,omitempty" jsonschema:"description=Enable compact mode for the TUI interface,default=false"`
 	DiffMode    string      `json:"diff_mode,omitempty" jsonschema:"description=Diff mode for the TUI interface,enum=unified,enum=split"`
-	ActiveTheme string      `json:"active_theme,omitempty" jsonschema:"description=Name of the currently active theme,default=klash-cosmos,example=klash-cosmos,example=charmtone-panther,example=gruvbox-dark"`
+	ActiveTheme string      `json:"active_theme,omitempty" jsonschema:"description=Name of the currently active theme,default=gnosh-cosmos,example=gnosh-cosmos,example=charmtone-panther,example=gruvbox-dark"`
 	Completions Completions `json:"completions,omitzero" jsonschema:"description=Completions UI options"`
 	Transparent *bool       `json:"transparent,omitempty" jsonschema:"description=Enable transparent background for the TUI interface,default=false"`
 	Scrollbar   string      `json:"scrollbar,omitempty" jsonschema:"description=Chat scrollbar visibility,enum=default,enum=always,enum=never,default=default"`
 	Mouse       *bool       `json:"mouse,omitempty" jsonschema:"description=Enable terminal mouse capture for selection\\, clicks\\, and scrolling in the TUI. Disable to let the terminal emulator or tmux handle text selection and copy/paste,default=true"`
-	ExitBanner  ExitBanner  `json:"exit_banner,omitempty" jsonschema:"description=Exit banner style after quitting Klash,enum=default,enum=compact,enum=none,default=default"`
+	ExitBanner  ExitBanner  `json:"exit_banner,omitempty" jsonschema:"description=Exit banner style after quitting Gnosh,enum=default,enum=compact,enum=none,default=default"`
 }
 
 // IsTransparent reports whether the TUI draws a transparent background. The
@@ -484,12 +484,12 @@ const (
 type Permissions struct {
 	AllowedTools []string `json:"allowed_tools,omitempty" jsonschema:"description=List of tools that don't require permission prompts,example=bash,example=view"`
 	// Allow are Claude Code's permissions.allow rules of the two kinds
-	// klash applies: a tool's name, which lets the tool run without
+	// gnosh applies: a tool's name, which lets the tool run without
 	// asking as allowed_tools does, and Bash(pattern), which lets the
 	// commands the pattern matches run without asking (see
 	// shell.CommandRule). Another kind of rule is refused at load.
 	Allow []string `json:"allow,omitempty" jsonschema:"description=Claude Code's allow rules: a tool's name to let it run without asking or Bash(pattern) to let the commands the pattern matches run without asking,example=Bash(git diff *),example=Read"`
-	// Deny are Claude Code's permissions.deny rules of the two kinds klash
+	// Deny are Claude Code's permissions.deny rules of the two kinds gnosh
 	// applies: a tool's name, which takes the tool from the agent as
 	// options.disabled_tools does, and Bash(pattern), which stops every
 	// command the pattern matches (shell.CommandRuleBlocker). Another kind
@@ -530,7 +530,7 @@ func (p *Permissions) BashAllowPatterns() []string {
 }
 
 // BashRulePattern is the pattern of rule when it is a Bash(pattern) rule,
-// in Claude Code's spelling or klash's (bash).
+// in Claude Code's spelling or gnosh's (bash).
 func BashRulePattern(rule string) (string, bool) {
 	tool, rest, ok := strings.Cut(rule, "(")
 	if !ok || !strings.EqualFold(tool, "bash") {
@@ -550,7 +550,7 @@ const (
 type Attribution struct {
 	TrailerStyle  TrailerStyle `json:"trailer_style,omitempty" jsonschema:"description=Style of attribution trailer to add to commits,enum=none,enum=co-authored-by,enum=assisted-by,default=assisted-by"`
 	CoAuthoredBy  *bool        `json:"co_authored_by,omitempty" jsonschema:"description=Deprecated: use trailer_style instead"`
-	GeneratedWith bool         `json:"generated_with,omitempty" jsonschema:"description=Add Generated with Klash line to commit messages and issues and PRs,default=true"`
+	GeneratedWith bool         `json:"generated_with,omitempty" jsonschema:"description=Add Generated with Gnosh line to commit messages and issues and PRs,default=true"`
 }
 
 // JSONSchemaExtend marks the co_authored_by field as deprecated in the schema.
@@ -590,24 +590,24 @@ type Options struct {
 	// verbatim. After defaulting the stored value is always absolute.
 	DataDirectory             string       `json:"data_directory,omitempty" jsonschema:"description=Directory for storing application data. Relative paths are resolved against the working directory; absolute paths are used as-is.,default=.crush,example=.crush"`
 	DisabledTools             []string     `json:"disabled_tools,omitempty" jsonschema:"description=List of built-in tools to disable and hide from the agent,example=bash,example=sourcegraph"`
-	DisableProviderAutoUpdate *bool        `json:"disable_provider_auto_update,omitempty" jsonschema:"description=Disable fetching the provider catalog from Charm's servers (catwalk.charm.land and hyper.charm.land). Unset it is not fetched and the catalog built into Klash is used; set false to fetch it,default=true"`
+	DisableProviderAutoUpdate *bool        `json:"disable_provider_auto_update,omitempty" jsonschema:"description=Disable fetching the provider catalog from Charm's servers (catwalk.charm.land and hyper.charm.land). Unset it is not fetched and the catalog built into Gnosh is used; set false to fetch it,default=true"`
 	DisableDefaultProviders   bool         `json:"disable_default_providers,omitempty" jsonschema:"description=Ignore all default/embedded providers. When enabled\\, providers must be fully specified in the config file with base_url\\, models\\, and api_key - no merging with defaults occurs,default=false"`
 	Attribution               *Attribution `json:"attribution,omitempty" jsonschema:"description=Attribution settings for generated content"`
 	DisableMetrics            *bool        `json:"disable_metrics,omitempty" jsonschema:"description=Disable sending usage metrics. Unset none are sent; set false to send them to metrics_url (never to Charm),default=true"`
 	MetricsURL                string       `json:"metrics_url,omitempty" jsonschema:"description=Where opted-in usage metrics go: a PostHog-compatible endpoint such as https://metrics.klash.pro. Empty sends nowhere; Charm is never a default."`
-	MetricsKey                string       `json:"metrics_key,omitempty" jsonschema:"description=Project key sent with metrics to metrics_url; a self-hosted collector may ignore it. Defaults to klash when metrics_url is set."`
-	UpdateRepo                string       `json:"update_repo,omitempty" jsonschema:"description=GitHub owner/repo whose latest release the update check compares against (e.g. klash-pro/klash). Empty disables the check; Charm's repo is never a default."`
+	MetricsKey                string       `json:"metrics_key,omitempty" jsonschema:"description=Project key sent with metrics to metrics_url; a self-hosted collector may ignore it. Defaults to gnosh when metrics_url is set."`
+	UpdateRepo                string       `json:"update_repo,omitempty" jsonschema:"description=GitHub owner/repo whose latest release the update check compares against (e.g. gnosh-ai/gnosh). Empty disables the check; Charm's repo is never a default."`
 	InitializeAs              string       `json:"initialize_as,omitempty" jsonschema:"description=Name of the context file to create/update during project initialization,default=AGENTS.md,example=AGENTS.md,example=CRUSH.md,example=CLAUDE.md,example=docs/LLMs.md"`
 	AutoLSP                   *bool        `json:"auto_lsp,omitempty" jsonschema:"description=Automatically setup LSPs based on root markers,default=true"`
 	Progress                  *bool        `json:"progress,omitempty" jsonschema:"description=Show indeterminate progress updates during long operations,default=true"`
 	Notifications             string       `json:"notifications,omitempty" jsonschema:"description=Notification style to use. Options: auto (default)\\, native\\, osc\\, bell\\, disabled. Auto selects based on environment: native for local sessions\\, osc for SSH (with automatic OSC 99/777 detection).,enum=auto,enum=native,enum=osc,enum=bell,enum=disabled,default=auto"`
-	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=klash-config"`
+	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=gnosh-config"`
 	RequestTimeout            *int         `json:"request_timeout,omitempty" jsonschema:"description=Timeout in seconds for each LLM API request. Streaming responses are aborted only after this much inactivity\\, so slow but active streams are never killed. 0 disables it\\, negative values are invalid.,default=60,example=120,example=300,example=0"`
 	MaxBackgroundJobs         *int         `json:"max_background_jobs,omitempty" jsonschema:"description=How many background shell jobs may run at once. Jobs that have finished never count against it. 0 or negative restores the default.,default=50,example=10,example=200"`
-	// ArtifactServer is where Klash serves the deliverables the agent
+	// ArtifactServer is where Gnosh serves the deliverables the agent
 	// records with the artifact tool, so the user can open one from the
 	// machine they are sitting at rather than being handed a path on the
-	// machine Klash runs on. Unset listens on every interface at port
+	// machine Gnosh runs on. Unset listens on every interface at port
 	// 7777 (a port already taken falls back to a free one); an address of
 	// its own narrows it, as "127.0.0.1:7777" does; "off" serves none,
 	// and an artifact is then recorded as its path. Only a file the agent
@@ -635,7 +635,7 @@ func (o *Options) GetLoopMaxTurns() int {
 // Charm's servers. Upstream Crush fetches it unless told not to; this fork
 // uses the catalog built into the binary unless the user asks for the
 // fetch (option provider-auto-update true, or
-// KLASH_DISABLE_PROVIDER_AUTO_UPDATE=0).
+// GNOSH_DISABLE_PROVIDER_AUTO_UPDATE=0).
 func (o *Options) ProviderAutoUpdate() bool {
 	return o != nil && o.DisableProviderAutoUpdate != nil && !*o.DisableProviderAutoUpdate
 }
@@ -650,7 +650,7 @@ func (o *Options) MetricsOptedIn() bool {
 // MetricsSink is where opted-in metrics are sent. It is read only once the
 // metrics gate is on (DO_NOT_TRACK off, and either an explicit opt-in or this
 // machine's stored consent). The configured metrics_url wins; with none, the
-// default is klash's own analytics (DefaultMetricsURL), never Charm's.
+// default is gnosh's own analytics (DefaultMetricsURL), never Charm's.
 func (o *Options) MetricsSink() (url, key string) {
 	if o != nil {
 		url, key = o.MetricsURL, o.MetricsKey
@@ -659,7 +659,7 @@ func (o *Options) MetricsSink() (url, key string) {
 		url = DefaultMetricsURL
 	}
 	if key == "" {
-		key = "klash"
+		key = "gnosh"
 	}
 	return url, key
 }
@@ -1013,7 +1013,7 @@ type HookConfig struct {
 	// trigger) the hook runs for, as in Claude Code: empty or "*" for all,
 	// exact names separated by | or , ("Bash", "edit|write"), or else an
 	// unanchored regular expression ("^mcp_github_"). See HookMatcher.
-	Matcher string `json:"matcher,omitempty" jsonschema:"description=Which tools the hook runs for as in Claude Code: empty or * for all; exact names separated by | such as Bash|edit (klash's or Claude Code's names); anything else is an unanchored regular expression."`
+	Matcher string `json:"matcher,omitempty" jsonschema:"description=Which tools the hook runs for as in Claude Code: empty or * for all; exact names separated by | such as Bash|edit (gnosh's or Claude Code's names); anything else is an unanchored regular expression."`
 	// Shell command to execute.
 	Command string `json:"command" jsonschema:"required,description=Shell command to execute when the hook fires"`
 	// Timeout in seconds. Default 60, as in Claude Code.

@@ -109,23 +109,23 @@ func TestGlobAbsolutePatternSearchesWhereItPoints(t *testing.T) {
 	t.Parallel()
 
 	elsewhere := t.TempDir()
-	mkfiles(t, elsewhere, "bin/klash", "bin/klash-bin", "bin/other")
+	mkfiles(t, elsewhere, "bin/gnosh", "bin/gnosh-bin", "bin/other")
 	project := t.TempDir()
-	mkfiles(t, project, "bin/klash-not-this")
+	mkfiles(t, project, "bin/gnosh-not-this")
 
 	for _, params := range []GlobParams{
-		{Pattern: filepath.Join(elsewhere, "bin", "klash*")},
-		{Pattern: filepath.Join(elsewhere, "bin", "klash*"), Path: "bin"},
+		{Pattern: filepath.Join(elsewhere, "bin", "gnosh*")},
+		{Pattern: filepath.Join(elsewhere, "bin", "gnosh*"), Path: "bin"},
 	} {
 		out, isErr := runGlob(t, project, params)
 		require.False(t, isErr, out)
 		got := strings.Split(out, "\n")
 		sort.Strings(got)
-		require.Equal(t, []string{filepath.ToSlash(filepath.Join(elsewhere, "bin", "klash")), filepath.ToSlash(filepath.Join(elsewhere, "bin", "klash-bin"))}, got)
+		require.Equal(t, []string{filepath.ToSlash(filepath.Join(elsewhere, "bin", "gnosh")), filepath.ToSlash(filepath.Join(elsewhere, "bin", "gnosh-bin"))}, got)
 	}
-	out, isErr := runGlob(t, project, GlobParams{Pattern: filepath.Join(elsewhere, "bin", "klash")})
+	out, isErr := runGlob(t, project, GlobParams{Pattern: filepath.Join(elsewhere, "bin", "gnosh")})
 	require.False(t, isErr, out)
-	require.Equal(t, filepath.ToSlash(filepath.Join(elsewhere, "bin", "klash")), out, "a plain absolute path")
+	require.Equal(t, filepath.ToSlash(filepath.Join(elsewhere, "bin", "gnosh")), out, "a plain absolute path")
 }
 
 // A path to search that is not there is said plainly, in Claude Code's

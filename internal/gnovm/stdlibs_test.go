@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, or any later version
 // that the Licensor has publicly accepted as the proxy under section 14 of
 // that License, with the Additional Terms (Strong Attribution); see
@@ -40,7 +40,7 @@ func embeddedStdlibPaths(t *testing.T) []string {
 	return out
 }
 
-// The embedded sources and the native bindings compiled into klash must come
+// The embedded sources and the native bindings compiled into gnosh must come
 // from the same gno, or a native call can disagree with its declaration.
 // After bumping gno in go.mod, run `go generate ./internal/gnovm`.
 func TestEmbeddedStdlibsVersion(t *testing.T) {

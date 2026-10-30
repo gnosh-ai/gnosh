@@ -143,7 +143,7 @@ type fileBefore struct {
 	// existed is false for a file the agent made.
 	existed bool
 	// known is false when the change did not record what the file held:
-	// a write from before klash recorded what it wrote over.
+	// a write from before gnosh recorded what it wrote over.
 	known bool
 }
 

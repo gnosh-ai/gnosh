@@ -35,7 +35,7 @@ func assistantMsg(id, session string, parts ...message.ContentPart) message.Mess
 }
 
 // A turn that calls a tool streams as Claude Code's does: the assistant
-// message with its tool_use before the tool's result, though klash marks
+// message with its tool_use before the tool's result, though gnosh marks
 // the message finished only after the tool has run, then the answer; each
 // once, however many updates come.
 func TestStreamJSONWritesATurnInOrder(t *testing.T) {

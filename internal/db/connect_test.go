@@ -210,7 +210,7 @@ func TestConnect_ServerPathFailsWhenDataDirLocked(t *testing.T) {
 	require.ErrorIs(t, err, ErrDataDirLocked)
 }
 
-// A new data directory gets klash.db and klash.lock; one that already
+// A new data directory gets gnosh.db and gnosh.lock; one that already
 // holds the crush.db from before the rename keeps it, and locks
 // crush.lock as an older process sharing it does, so the two cannot open
 // it at once.
@@ -221,19 +221,19 @@ func TestDataFileNames(t *testing.T) {
 	conn, err := Connect(context.Background(), fresh)
 	require.NoError(t, err)
 	require.NoError(t, conn.PingContext(context.Background()))
-	require.FileExists(t, filepath.Join(fresh, "klash.db"))
+	require.FileExists(t, filepath.Join(fresh, "gnosh.db"))
 	require.NoFileExists(t, filepath.Join(fresh, "crush.db"))
-	require.Equal(t, filepath.Join(fresh, "klash.lock"), dataDirLockFile(fresh))
+	require.Equal(t, filepath.Join(fresh, "gnosh.lock"), dataDirLockFile(fresh))
 	require.NoError(t, Release(fresh))
 
 	// An existing database from before the rename is opened, not
-	// replaced by a new, empty klash.db beside it.
+	// replaced by a new, empty gnosh.db beside it.
 	old := t.TempDir()
-	require.NoError(t, os.Rename(filepath.Join(fresh, "klash.db"), filepath.Join(old, "crush.db")))
+	require.NoError(t, os.Rename(filepath.Join(fresh, "gnosh.db"), filepath.Join(old, "crush.db")))
 	conn, err = Connect(context.Background(), old)
 	require.NoError(t, err)
 	require.NoError(t, conn.PingContext(context.Background()))
-	require.NoFileExists(t, filepath.Join(old, "klash.db"))
+	require.NoFileExists(t, filepath.Join(old, "gnosh.db"))
 	require.Equal(t, filepath.Join(old, "crush.db"), FileName(old))
 	require.Equal(t, filepath.Join(old, "crush.lock"), dataDirLockFile(old))
 	require.NoError(t, Release(old))

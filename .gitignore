@@ -46,16 +46,16 @@ Thumbs.db
 .direnv/
 
 **/.crush/**
-**/.klash/**
+**/.gnosh/**
 
 /crush
-/klash
-/klash-darwin-arm64
+/gnosh
+/gnosh-darwin-arm64
 /crush-darwin-arm64
 /tmp/
 
 manpages/
 completions/crush.*sh
-completions/klash.*sh
+completions/gnosh.*sh
 .prettierignore
 .task

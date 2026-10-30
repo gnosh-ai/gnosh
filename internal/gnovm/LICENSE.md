@@ -7,10 +7,10 @@ The following copyright notice covers all of the files in this directory
   `stdlibs/LICENSE.md`. Files in it that came from Go keep Go's BSD license, in
   `stdlibs/LICENSE-GO`.
 - `klashlibs/fmt` is gno's `ufmt` package (examples/gno.land/p/nt/ufmt/v0),
-  modified by klash on 29 October 2026: its package is renamed to fmt, and
+  modified by gnosh on 29 October 2026: its package is renamed to fmt, and
   ufmt.gno to fmt.gno. It keeps the same notices as `stdlibs/`.
 
-The rest of klash is licensed separately; see "Known license interactions"
+The rest of gnosh is licensed separately; see "Known license interactions"
 below.
 
 ---
@@ -43,7 +43,7 @@ Attached below are the terms of the GNO Network General Public License, Version
 he designates by a statement published in the canonical copy, or his
 successors in interest. The "canonical copy" of this file is
 `internal/gnovm/LICENSE.md` on the `main` branch of
-<https://github.com/klash-pro/klash>, or at another location the Licensor
+<https://github.com/gnosh-ai/gnosh>, or at another location the Licensor
 names in that copy. A "version" of the Covered Work is each commit or tag the
 Licensor publishes in the repository that holds the canonical copy, with every
 copy made from it. The "Designation" is the last section of this clause; it is
@@ -119,8 +119,8 @@ other terms.
 Dated 29 October 2026. It governs every version that carries it; a later
 Designation governs only versions first published after it (see Status).
 
-- Attribution URL: <https://klash.pro>
-- Words: "built on klash"
+- Attribution URL: <https://gnosh.ai>
+- Words: "built on gnosh"
 
 
 # Known license interactions (to be resolved; not part of the license terms)
@@ -129,23 +129,23 @@ Recorded plainly so they are not forgotten. Jae Kwon's instruction, 29 October
 2026: prioritize the GNO Network GPL and the strong attribution clause above
 for this subsystem; the details and conflicts will be worked out later.
 
-- **The klash binary is a combined work, and its licenses conflict.** Most of
-  klash is derived from Charm's Crush and is under the Functional Source License
+- **The gnosh binary is a combined work, and its licenses conflict.** Most of
+  gnosh is derived from Charm's Crush and is under the Functional Source License
   (FSL-1.1-MIT), whose Competing Use clause restricts use. This subsystem links
-  the GnoVM into the klash binary, and embeds the Gno standard library in it;
+  the GnoVM into the gnosh binary, and embeds the Gno standard library in it;
   the worker that runs the VMs is the same binary. A binary that includes GNO
   Network GPL code must be conveyed under that License as a whole (sections 5(c)
   and 6) with no further restrictions (section 10), which the Competing Use
-  clause is. Before this subsystem, klash did not link the GnoVM: its x402
+  clause is. Before this subsystem, gnosh did not link the GnoVM: its x402
   client used only tm2 (Apache-2.0) and gno.land's small `ugnot` package. No
-  klash binary has been released since; none should be until this is settled.
+  gnosh binary has been released since; none should be until this is settled.
   The ways out are:
   (a) keep one binary, with a linking exception from NewTendermint, LLC for the
   GnoVM and an additional permission from the Licensor for this subsystem; or
   wait until each Crush version's FSL becomes MIT, two years after Charm
   released it, since MIT code can be conveyed under this License;
-  (b) build the worker as a separate program (`klash-gnovm-worker`) that holds
-  everything that links gno, keep klash's own binary free of it, and have the
+  (b) build the worker as a separate program (`gnosh-gnovm-worker`) that holds
+  everything that links gno, keep gnosh's own binary free of it, and have the
   two speak the worker protocol; the Licensor can grant a section 7 additional
   permission for any glue of his in the FSL binary. This needs nobody's
   consent but the Licensor's.
@@ -155,13 +155,13 @@ for this subsystem; the details and conflicts will be worked out later.
   Charmbracelet, Inc. do not extend to them; the grants to the Maintainer do.
 - **Remote users.** Section 13 of the License asks that whoever modifies the
   Program, and lets people use the modified version remotely (for instance
-  through klash's server mode or its channels), offer them its Corresponding
-  Source. That binds klash's own remote interfaces too, since klash already
-  includes the GnoVM: they should link to klash's source.
+  through gnosh's server mode or its channels), offer them its Corresponding
+  Source. That binds gnosh's own remote interfaces too, since gnosh already
+  includes the GnoVM: they should link to gnosh's source.
 - **The GnoVM's own terms.** The GnoVM and the standard library this subsystem
   embeds are under the GNO Network GPL v6 with NewTendermint, LLC's Additional
   Terms (Strong Attribution). Those terms apply independently of this file:
-  since klash now includes the GnoVM, its interface must carry NewTendermint's
+  since gnosh now includes the GnoVM, its interface must carry NewTendermint's
   attribution notice too.
 - **Other licenses in the dependency tree.** The tm2 packages used here are
   Apache-2.0 (github.com/gnolang/gno/tm2/LICENSE). Files in `stdlibs/` that came

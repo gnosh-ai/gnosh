@@ -535,7 +535,7 @@ func TestRunOutputFlags(t *testing.T) {
 }
 
 // A hook warning arrives with its text in Error, like a failure, but the
-// turn goes on or ends normally: klash run prints it on stderr and keeps
+// turn goes on or ends normally: gnosh run prints it on stderr and keeps
 // going. It used to end the run as "agent error".
 func TestRunStream_HookWarningIsNotAFailure(t *testing.T) {
 	t.Parallel()

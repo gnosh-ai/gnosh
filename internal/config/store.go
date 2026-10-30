@@ -97,7 +97,7 @@ type RuntimeOverrides struct {
 	// without asking, and hooks are told the mode.
 	AcceptEdits bool
 	// DontAsk is set by Claude Code's --permission-mode dontAsk: a request
-	// that would be put to the user is denied instead, and a klash run
+	// that would be put to the user is denied instead, and a gnosh run
 	// does not grant its session's requests.
 	DontAsk bool
 	// AddedDirs are the directories added with --add-dir, as absolute

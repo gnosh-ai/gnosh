@@ -472,7 +472,7 @@ func TestSummaryGivesTheLoadedSkillsAgain(t *testing.T) {
 		usage:   fantasy.Usage{InputTokens: 190000, OutputTokens: 10},
 	}
 	a, sessionID, _ := summaryRequestAgent(t, llm)
-	for _, name := range []string{"klash-hooks", "jq"} {
+	for _, name := range []string{"gnosh-hooks", "jq"} {
 		path := skills.BuiltinPrefix + name + "/SKILL.md"
 		meta, err := json.Marshal(tools.ViewResponseMetadata{FilePath: path, ResourceType: tools.ViewResourceSkill, ResourceName: name})
 		require.NoError(t, err)
@@ -490,11 +490,11 @@ func TestSummaryGivesTheLoadedSkillsAgain(t *testing.T) {
 		require.NoError(t, err)
 		return string(data)
 	}
-	hooks := skillMD("klash-hooks")
-	require.Greater(t, len(hooks), restoredSkillChars, "klash-hooks is long enough to be cut")
+	hooks := skillMD("gnosh-hooks")
+	require.Greater(t, len(hooks), restoredSkillChars, "gnosh-hooks is long enough to be cut")
 	want := skillsGivenAgain +
-		"### Skill: jq\nPath: klash://skills/jq/SKILL.md\n\n" + skillMD("jq") + "\n\n---\n\n" +
-		"### Skill: klash-hooks\nPath: klash://skills/klash-hooks/SKILL.md\n\n" + hooks[:restoredSkillChars-len(skillCut)] + skillCut
+		"### Skill: jq\nPath: gnosh://skills/jq/SKILL.md\n\n" + skillMD("jq") + "\n\n---\n\n" +
+		"### Skill: gnosh-hooks\nPath: gnosh://skills/gnosh-hooks/SKILL.md\n\n" + hooks[:restoredSkillChars-len(skillCut)] + skillCut
 	given := func(req fantasy.Call) string {
 		for _, text := range userTexts(req.Prompt) {
 			if strings.HasPrefix(text, skillsGivenAgain) {

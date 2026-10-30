@@ -1,4 +1,4 @@
-// Package logo renders the Klash wordmark in a stylized way.
+// Package logo renders the Gnosh wordmark in a stylized way.
 package logo
 
 import (
@@ -20,9 +20,9 @@ const diag = `╱`
 
 // Mark is the maker's mark printed above the wordmark, where upstream Crush
 // prints Charm™.
-const Mark = "klash.pro"
+const Mark = "gnosh.ai"
 
-// Opts are the options for rendering the Klash title art.
+// Opts are the options for rendering the Gnosh title art.
 type Opts struct {
 	FieldColor   color.Color // diagonal lines
 	FieldColorB  color.Color // when set, the diagonal lines fade from FieldColor to it

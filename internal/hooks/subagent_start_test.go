@@ -19,7 +19,7 @@ func TestRunSubagentStart(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, "env")
 	cfg := &config.Config{Hooks: map[string][]config.HookConfig{EventSubagentStart: {
-		{Matcher: "task", Command: `echo "$KLASH_AGENT_ID $KLASH_AGENT_TYPE" > ` + envPath + `; echo '{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"be brief"}}'`},
+		{Matcher: "task", Command: `echo "$GNOSH_AGENT_ID $GNOSH_AGENT_TYPE" > ` + envPath + `; echo '{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"be brief"}}'`},
 	}}}
 	require.NoError(t, cfg.ValidateHooks())
 	r := NewRunner(cfg.Hooks[EventSubagentStart], dir, dir)

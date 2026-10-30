@@ -71,7 +71,7 @@ func TestSubAgentToolCallsGoPastToolHooks(t *testing.T) {
 // main agent's.
 func TestBuildToolsHooksASubAgentsTools(t *testing.T) {
 	// No user tool descriptions, which wrap a tool again.
-	t.Setenv("KLASH_GLOBAL_CONFIG", t.TempDir())
+	t.Setenv("GNOSH_GLOBAL_CONFIG", t.TempDir())
 	const providerID = "test-provider"
 	env := testEnv(t)
 	coord := newTestCoordinator(t, env, providerID, config.ProviderConfig{ID: providerID})

@@ -130,7 +130,7 @@ var warnedCompactVariables sync.Map
 
 func warnCompactVariable(name, value, why string) {
 	if _, seen := warnedCompactVariables.LoadOrStore(name+"="+value, true); !seen {
-		slog.Warn("An auto-compaction variable has a value Klash cannot use as given", "variable", name, "value", value, "why", why)
+		slog.Warn("An auto-compaction variable has a value Gnosh cannot use as given", "variable", name, "value", value, "why", why)
 	}
 }
 

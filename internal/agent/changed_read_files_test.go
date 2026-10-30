@@ -200,7 +200,7 @@ func TestChangedReadFilesNotNamedWhenRewrittenUnchanged(t *testing.T) {
 	require.Equal(t, "done", resp)
 }
 
-// A session resumed in a later run of Klash, which kept no hash of the
+// A session resumed in a later run of Gnosh, which kept no hash of the
 // earlier reads, is not told that every file it read changed: only a
 // file modified after its read is named.
 func TestChangedReadFilesInALaterRun(t *testing.T) {

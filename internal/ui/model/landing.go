@@ -59,11 +59,11 @@ func (m *UI) landingView() string {
 		)
 }
 
-// attributionLine is the notice the GnoVM's licence and that of klash's
+// attributionLine is the notice the GnoVM's licence and that of gnosh's
 // GnoVM machines ask for (internal/gnovm/LICENSE.md), with links.
 func (m *UI) attributionLine(width int) string {
 	link := m.com.Styles.Dialog.OAuth.Link
 	return lipgloss.NewStyle().Width(width).Render(
 		"Built on " + link.Hyperlink("https://gno.land", "id=gnoland").Render("gno.land") +
-			" · GnoVM machines built on " + link.Hyperlink("https://klash.pro", "id=klashpro").Render("klash"))
+			" · GnoVM machines built on " + link.Hyperlink("https://gnosh.ai", "id=gnoshpro").Render("gnosh"))
 }

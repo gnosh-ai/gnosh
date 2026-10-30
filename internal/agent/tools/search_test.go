@@ -212,11 +212,11 @@ func TestSearchSaysWhenBingFailsToo(t *testing.T) {
 	require.Empty(t, results)
 }
 
-// Bing's live result page still parses: set KLASH_LIVE_SEARCH=1 to ask
+// Bing's live result page still parses: set GNOSH_LIVE_SEARCH=1 to ask
 // the real Bing.
 func TestSearchBingLive(t *testing.T) {
-	if os.Getenv("KLASH_LIVE_SEARCH") == "" {
-		t.Skip("set KLASH_LIVE_SEARCH=1 to search the real Bing")
+	if os.Getenv("GNOSH_LIVE_SEARCH") == "" {
+		t.Skip("set GNOSH_LIVE_SEARCH=1 to search the real Bing")
 	}
 	results, err := searchBing(context.Background(), &http.Client{Timeout: 30 * time.Second}, "golang context package", 10)
 	require.NoError(t, err)

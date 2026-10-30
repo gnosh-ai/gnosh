@@ -17,7 +17,7 @@ import (
 // prompt, as Claude Code does. A hook cannot stop the sub-agent; one that
 // did not run to a verdict is shown to the user as a hook warning, and
 // the sub-agent starts without it. A Claude Code config with SubagentStart
-// hooks used to stop Klash at startup, as an event it did not fire.
+// hooks used to stop Gnosh at startup, as an event it did not fire.
 func (c *coordinator) runSubagentStartHooks(ctx context.Context, sessionID, agentID, agentType string) string {
 	if c.cfg == nil {
 		return ""

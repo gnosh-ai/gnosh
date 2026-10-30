@@ -93,7 +93,7 @@ func TestGenerateTitleSwitchesThinkingOff(t *testing.T) {
 	require.Equal(t, "Fix the flaky test", sess.Title)
 }
 
-// A session named before its first prompt, with klash -n, keeps the name,
+// A session named before its first prompt, with gnosh -n, keeps the name,
 // as Claude Code keeps a --name: no title is asked for. One created with a
 // stand-in title is titled.
 func TestGenerateTitleKeepsAGivenName(t *testing.T) {

@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -23,7 +23,7 @@ const (
 	maxJSONSteps = 100
 )
 
-// JSON returns, for klash and hooks, the goals with names, or with no names:
+// JSON returns, for gnosh and hooks, the goals with names, or with no names:
 // the counts, the rules, the open items waiting for a day (soonest first,
 // with the day, so a reader can tell what is due on any day), the questions
 // for the user, the newest 20 open goals and the newest facts. A goal comes

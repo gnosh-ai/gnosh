@@ -33,7 +33,7 @@ func contextServer(t *testing.T, requests *atomic.Int32) *httptest.Server {
 func loadQwen(t *testing.T, baseURL, models, discover string) []int64 {
 	t.Helper()
 	workDir, dataDir := isolateReloadEnv(t)
-	t.Setenv("KLASH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	t.Setenv("GNOSH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
 	if discover != "" {
 		discover = `, "discover_models": ` + discover
 	}
@@ -41,7 +41,7 @@ func loadQwen(t *testing.T, baseURL, models, discover string) []int64 {
 	// fixes the provider catalog (providerOnce), and with them off it is
 	// empty, so a later test's "provider add openai" is no known provider.
 	cfg := `{"providers": {"qwen": {"type": "llamacpp", "base_url": "` + baseURL + `", "models": ` + models + discover + `}}}`
-	require.NoError(t, os.WriteFile(filepath.Join(workDir, "klash.json"), []byte(cfg), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "gnosh.json"), []byte(cfg), 0o644))
 	store, err := config.Load(workDir, dataDir, false)
 	require.NoError(t, err)
 	p, ok := store.Config().Providers.Get("qwen")
@@ -54,7 +54,7 @@ func loadQwen(t *testing.T, baseURL, models, discover string) []int64 {
 }
 
 // A model the config lists with no context window gets it from its
-// llama.cpp server, as a discovered model does. Klash asked the server
+// llama.cpp server, as a discovered model does. Gnosh asked the server
 // only when a provider listed no models, so the AI box's Qwen, named in a
 // crushrc with no window, was taken for 32,768 tokens and compacted at
 // 26,215 of its 262,144. The list stays as written: the server's other

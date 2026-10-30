@@ -40,7 +40,7 @@ func TestReadsInAddedDirsNeedNoPermission(t *testing.T) {
 // The MCP resource tools and gnokey ask with the same action names for a
 // path that is no file read from disk (an MCP URI joined to the working
 // directory, a directory the model chose); with the working directory
-// under an added one (`klash --add-dir ..`), every MCP resource read and
+// under an added one (`gnosh --add-dir ..`), every MCP resource read and
 // every `gnokey list` went through unasked.
 func TestOtherReadsInAddedDirsStillAsk(t *testing.T) {
 	t.Parallel()

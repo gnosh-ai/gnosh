@@ -278,7 +278,7 @@ func (c *Client) Restart() error {
 
 	// Register handlers before Initialize so servers that send
 	// requests during the handshake (e.g. window/workDoneProgress/create)
-	// don't klash on an unhandled response.
+	// don't gnosh on an unhandled response.
 	c.registerHandlers()
 
 	if err := c.client.Initialize(initCtx, false); err != nil {

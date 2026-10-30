@@ -61,7 +61,7 @@ type ArtifactResponseMetadata struct {
 }
 
 // ArtifactPublisher serves a recorded file so the user can open it from
-// another machine; artifacts.Server is the one Klash uses. Register
+// another machine; artifacts.Server is the one Gnosh uses. Register
 // returns the URL of a file of this machine, or "" when artifacts are
 // not served, and CacheDir is where a copy from another machine belongs.
 type ArtifactPublisher interface {

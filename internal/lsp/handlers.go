@@ -26,7 +26,7 @@ func HandleWorkDoneProgressCreate(_ context.Context, _ string, _ json.RawMessage
 }
 
 // HandleRegisterCapability answers a server's capability registrations.
-// Klash does not watch the files a server registers for: it tells
+// Gnosh does not watch the files a server registers for: it tells
 // servers about changes itself (NotifyWorkspaceChange and the open
 // files), so a workspace/didChangeWatchedFiles registration is accepted
 // and dropped.

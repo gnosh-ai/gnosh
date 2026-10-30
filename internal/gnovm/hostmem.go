@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-// HostMemory is what the host klash runs on can give it.
+// HostMemory is what the host gnosh runs on can give it.
 type HostMemory struct {
 	Total       uint64 // bytes; 0 when unknown
 	Available   uint64 // bytes obtainable without swapping; 0 when unknown

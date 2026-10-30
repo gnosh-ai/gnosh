@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Only a session with a sidebar serves artifacts: a `klash run` is given
+// Only a session with a sidebar serves artifacts: a `gnosh run` is given
 // no artifact tool, so it would be a port open for nothing.
 func TestArtifactServerFor(t *testing.T) {
 	opts := &config.Options{ArtifactServer: "127.0.0.1:0", DataDirectory: t.TempDir()}
@@ -25,7 +25,7 @@ func TestArtifactServerFor(t *testing.T) {
 		`"off" serves nothing`)
 }
 
-// A `klash run` gives the port back. app.New initializes the coder agent
+// A `gnosh run` gives the port back. app.New initializes the coder agent
 // interactively, and only then does a run re-initialize it headless, so
 // the server made by that first init has to be closed — otherwise every
 // headless run sits on the artifact port, and the next session with a

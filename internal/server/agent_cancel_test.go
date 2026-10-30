@@ -159,7 +159,7 @@ func TestPostAgent_ReturnsOKOnContextCanceled(t *testing.T) {
 	// Wait for the dispatched run to fully return. Backend.runAgent
 	// swallows context.Canceled, so it must not publish a
 	// notify.TypeAgentError. Publishing would dereference the synthetic
-	// workspace's nil notification broker and klash this goroutine,
+	// workspace's nil notification broker and gnosh this goroutine,
 	// which is the explicit guard that a cancel produces no top-level
 	// error event.
 	require.Eventually(t, func() bool {

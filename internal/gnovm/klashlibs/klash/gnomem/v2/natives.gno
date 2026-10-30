@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -9,9 +9,9 @@
 
 package gnomem
 
-// Natives that klash provides. Each one that reads or changes mem panics
+// Natives that gnosh provides. Each one that reads or changes mem panics
 // unless it runs in a mem call, inside the realm klash.local/r/mem, with
-// klash's own context, so a Mem the model's code makes or copies for itself
+// gnosh's own context, so a Mem the model's code makes or copies for itself
 // can do nothing.
 
 // caller is who runs this input: a session's id, "user" or "klash".
@@ -20,14 +20,14 @@ func caller() string
 // today is the user's local date, "2026-10-29".
 func today() string
 
-// record hands klash an Op of this call.
+// record hands gnosh an Op of this call.
 func record(kind, name, field, old, new, by string)
 
-// pending is the Ops klash hands Apply, field by field, each with its
+// pending is the Ops gnosh hands Apply, field by field, each with its
 // call's time.
 func pending() (kinds, names, fields, olds, news, bys []string, ats []int64)
 
-// find is klash's index, by words and by meaning: the best matches for
+// find is gnosh's index, by words and by meaning: the best matches for
 // words, with their kinds ("item", "fact" or "rule").
 func find(words string, max int) (names, kinds []string)
 

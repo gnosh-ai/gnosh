@@ -143,7 +143,7 @@ func TestLookupConfigs_BoundedByProject(t *testing.T) {
 		// A global crushrc is discovered only beside the user config. The data
 		// directory is machine-owned state and must never execute a crushrc.
 		for _, rc := range shellConfigSiblings(GlobalConfig()) {
-			require.Contains(t, got, rc, "klashrc and, from before the rename, crushrc")
+			require.Contains(t, got, rc, "gnoshrc and, from before the rename, crushrc")
 		}
 		for _, rc := range shellConfigSiblings(GlobalConfigData()) {
 			require.NotContains(t, got, rc)
@@ -170,7 +170,7 @@ func TestLookupConfigs_BoundedByProject(t *testing.T) {
 		// The system-wide configs must be first so they have the lowest
 		// priority when configs are merged, the one from before the rename
 		// lowest of all.
-		require.Equal(t, []string{"/etc/crush/crush.json", "/etc/klash/klash.json"}, got[:2])
+		require.Equal(t, []string{"/etc/crush/crush.json", "/etc/gnosh/gnosh.json"}, got[:2])
 	})
 }
 
@@ -268,7 +268,7 @@ func TestConfig_setDefaults(t *testing.T) {
 		require.NotNil(t, cfg.Models)
 		require.NotNil(t, cfg.LSP)
 		require.NotNil(t, cfg.MCP)
-		require.Equal(t, filepath.Join(workingDir, ".klash"), cfg.Options.DataDirectory)
+		require.Equal(t, filepath.Join(workingDir, ".gnosh"), cfg.Options.DataDirectory)
 		require.Equal(t, "AGENTS.md", cfg.Options.InitializeAs)
 		// DiffMode is deliberately left empty: the permissions dialog treats
 		// the zero value as "pick split or unified based on terminal width".
@@ -429,13 +429,13 @@ func TestConfig_setDefaults(t *testing.T) {
 		require.Equal(t, filepath.Join(subEval, defaultDataDirectory), gotEval)
 	})
 
-	t.Run("a closer .crush beats a .klash farther up", func(t *testing.T) {
+	t.Run("a closer .crush beats a .gnosh farther up", func(t *testing.T) {
 		if _, err := exec.LookPath("git"); err != nil {
 			t.Skip("git not available")
 		}
 
 		// The sessions live in repo/sub/.crush; a later run at the
-		// repository root made repo/.klash. Running in sub must still
+		// repository root made repo/.gnosh. Running in sub must still
 		// find sub's own sessions.
 		repo := t.TempDir()
 		gitInit := exec.CommandContext(t.Context(), "git", "init", "-q")
@@ -457,7 +457,7 @@ func TestConfig_setDefaults(t *testing.T) {
 		require.Equal(t, want, got)
 	})
 
-	t.Run("a .klash beats a .crush in the same directory", func(t *testing.T) {
+	t.Run("a .gnosh beats a .crush in the same directory", func(t *testing.T) {
 		dir := t.TempDir()
 		require.NoError(t, os.Mkdir(filepath.Join(dir, defaultDataDirectory), 0o755))
 		require.NoError(t, os.Mkdir(filepath.Join(dir, legacyDataDirectory), 0o755))
@@ -880,7 +880,7 @@ func TestConfig_setupAgentsWithDisabledTools(t *testing.T) {
 	coderAgent, ok := cfg.Agents[AgentCoder]
 	require.True(t, ok)
 
-	assert.Equal(t, []string{"agent", "artifact", "bash", "gnokey", "klash_info", "klash_logs", "job_output", "job_kill", "multiedit", "lsp_diagnostics", "lsp_references", "lsp_restart", "lsp_symbols", "lsp_definition", "lsp_call_hierarchy", "lsp_rename", "lsp_replace_symbol", "fetch", "agentic_fetch", "x402_fetch", "gnovm_run", "gnovm_new", "gnovm_list", "gnovm_drop", "glob", "ls", "question", "sourcegraph", "view", "write", "list_mcp_resources", "read_mcp_resource"}, coderAgent.AllowedTools)
+	assert.Equal(t, []string{"agent", "artifact", "bash", "gnokey", "gnosh_info", "gnosh_logs", "job_output", "job_kill", "multiedit", "lsp_diagnostics", "lsp_references", "lsp_restart", "lsp_symbols", "lsp_definition", "lsp_call_hierarchy", "lsp_rename", "lsp_replace_symbol", "fetch", "agentic_fetch", "x402_fetch", "gnovm_run", "gnovm_new", "gnovm_list", "gnovm_drop", "glob", "ls", "question", "sourcegraph", "view", "write", "list_mcp_resources", "read_mcp_resource"}, coderAgent.AllowedTools)
 
 	taskAgent, ok := cfg.Agents[AgentTask]
 	require.True(t, ok)
@@ -911,7 +911,7 @@ func TestConfig_setupAgentsWithEveryReadOnlyToolDisabled(t *testing.T) {
 	cfg.SetupAgents()
 	coderAgent, ok := cfg.Agents[AgentCoder]
 	require.True(t, ok)
-	assert.Equal(t, []string{"artifact", "bash", "gnokey", "klash_info", "klash_logs", "job_output", "job_kill", "download", "edit", "multiedit", "lsp_diagnostics", "lsp_references", "lsp_restart", "lsp_rename", "lsp_replace_symbol", "fetch", "agentic_fetch", "x402_fetch", "gnovm_run", "gnovm_new", "gnovm_list", "gnovm_drop", "question", "write", "list_mcp_resources", "read_mcp_resource"}, coderAgent.AllowedTools)
+	assert.Equal(t, []string{"artifact", "bash", "gnokey", "gnosh_info", "gnosh_logs", "job_output", "job_kill", "download", "edit", "multiedit", "lsp_diagnostics", "lsp_references", "lsp_restart", "lsp_rename", "lsp_replace_symbol", "fetch", "agentic_fetch", "x402_fetch", "gnovm_run", "gnovm_new", "gnovm_list", "gnovm_drop", "question", "write", "list_mcp_resources", "read_mcp_resource"}, coderAgent.AllowedTools)
 
 	taskAgent, ok := cfg.Agents[AgentTask]
 	require.True(t, ok)

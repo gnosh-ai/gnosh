@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// GET .../doctor answers the check of the workspace's setup that klash
+// GET .../doctor answers the check of the workspace's setup that gnosh
 // doctor prints: here a provider it can use and a model none was chosen
 // for. A workspace with no config yet is refused.
 func TestGetDoctorReport(t *testing.T) {

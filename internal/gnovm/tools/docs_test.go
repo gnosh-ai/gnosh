@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -23,14 +23,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The gnovm_run examples in Klash's documents are runs, not illustrations.
+// The gnovm_run examples in Gnosh's documents are runs, not illustrations.
 // In a fenced block, a line `gnovm_run {...}` is a call, its JSON exactly the
 // tool's input, and the lines under it indented by two spaces are what the
 // call shows the model: everything above the status line. The status line
 // (gas and time, which vary from run to run) and notes are left out. Each
 // block runs on a fresh project, call by call, through the real tool, so a
 // change to what the board prints names the example that no longer says what
-// Klash does. Every call in a block is checked, so one run lists every
+// Gnosh does. Every call in a block is checked, so one run lists every
 // example that has drifted, not only the first.
 
 // repoRoot is the repository root, from this package's directory.
@@ -317,7 +317,7 @@ func TestDocLinkProblems(t *testing.T) {
 }
 
 // docPrompts binds a user's words quoted in a document to the real-model
-// scenario that shows Klash doing what the document says it does: every
+// scenario that shows Gnosh doing what the document says it does: every
 // prompt of the scenario must appear in the document word for word. Change
 // the example and this fails until the scenario says the same, and is run.
 var docPrompts = []struct{ doc, scenario string }{

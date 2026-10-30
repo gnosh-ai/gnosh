@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -127,7 +127,7 @@ func memHint(code, msg string) string {
 		}
 	}
 	if memAssignRe.MatchString(code) {
-		return "mem is your memory, kept by klash: change it with its calls (mem.Goal, mem.Done, mem.Fact, …), never by setting it"
+		return "mem is your memory, kept by gnosh: change it with its calls (mem.Goal, mem.Done, mem.Fact, …), never by setting it"
 	}
 	return ""
 }

@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://klash.pro"><img src="docs/brand/banner.svg" width="100%" alt="Klash: a coding agent that remembers, in Gno"></a>
+  <a href="https://gnosh.ai"><img src="docs/brand/banner.svg" width="100%" alt="Gnosh: a coding agent that remembers, in Gno"></a>
 </p>
 
 <p align="center">
@@ -11,7 +11,7 @@
 </p>
 
 <p align="center"><strong>A coding agent that remembers, in Gno.</strong><br>
-Klash runs the GnoVM, gno.land's interpreter, inside itself. The agent keeps its goals, what it found and the facts you gave it in a Gno machine on your disk, and a new session is told what is still open, so it can pick up where the last one stopped.</p>
+Gnosh runs the GnoVM, gno.land's interpreter, inside itself. The agent keeps its goals, what it found and the facts you gave it in a Gno machine on your disk, and a new session is told what is still open, so it can pick up where the last one stopped.</p>
 
 <p align="center">Security-first underneath: a fork of Charm's <a href="https://github.com/charmbracelet/crush">Crush</a> that closes the doors a coding agent usually leaves open.</p>
 
@@ -33,7 +33,7 @@ Klash runs the GnoVM, gno.land's interpreter, inside itself. The agent keeps its
 <p align="center"><em>“Yo dawg, I heard you like Go, so I put Go in your Go
 and slapped it onto Qwen, so it can run Go while it writes Go.”</em></p>
 
-Klash is a fork of Charm's [Crush](https://github.com/charmbracelet/crush):
+Gnosh is a fork of Charm's [Crush](https://github.com/charmbracelet/crush):
 the same terminal UI, sessions, LSP and MCP support, and any model you like,
 from a hosted API to one running on your own machine. On top of that:
 
@@ -41,7 +41,7 @@ from a hosted API to one running on your own machine. On top of that:
   tried and found, and the facts you told it in `mem`, a persistent Gno
   machine. A new session is told what is open and which facts it holds:
   [memory that runs](#memory-that-runs).
-- **Runs Go in Go.** The GnoVM, gno.land's interpreter, runs inside Klash:
+- **Runs Go in Go.** The GnoVM, gno.land's interpreter, runs inside Gnosh:
   named machines with memory caps, gas (1 gas is about 1 ns) and optional
   persistence, in a worker process of their own. The agent works an answer out
   in one instead of estimating it.
@@ -51,7 +51,7 @@ from a hosted API to one running on your own machine. On top of that:
   web page or command output are defused before the model reads them.
 - **The web reader can't read your files.** The sub-agent that reads web pages
   for it can open only the pages it fetched.
-- **Mistakes fail closed.** A misspelt guard stops Klash instead of being
+- **Mistakes fail closed.** A misspelt guard stops Gnosh instead of being
   ignored, and a check that cannot run holds the work up instead of waving it
   through.
 - **Speaks Claude Code.** Its flags and its hooks.
@@ -64,7 +64,7 @@ from a hosted API to one running on your own machine. On top of that:
 ## Memory that runs
 
 A model forgets. Each session starts empty, and a compaction throws away most
-of what came before. Klash gives the agent `mem`, a persistent Gno machine
+of what came before. Gnosh gives the agent `mem`, a persistent Gno machine
 that holds its goals and their steps, what it tried and found, and facts. It is typed
 data on your disk rather than a page of notes, and the agent asks it questions
 instead of re-reading it. [GNOMEM](GNOMEM.md) has the design and real runs.
@@ -117,7 +117,7 @@ an alarm: a session that starts straight on something else gets on with that.
 ### What the agent runs
 
 These are mem's own calls as the agent makes them, and what each one
-shows it. A test runs this block against every change to Klash, so it stays
+shows it. A test runs this block against every change to Gnosh, so it stays
 true.
 
 ```
@@ -154,7 +154,7 @@ facts.
 
 ### Go in your Go: the machines underneath
 
-`mem` is one machine among many. Klash carries the GnoVM, gno.land's
+`mem` is one machine among many. Gnosh carries the GnoVM, gno.land's
 interpreter for its Go dialect, and runs named virtual machines in it for the
 agent:
 
@@ -167,15 +167,15 @@ agent:
   whole program; a program with `package main` and `func main` runs fresh each
   time, like `go run`.
 - **Persistence when you want it.** A persistent machine keeps its state on
-  disk across restarts of Klash, as a journal of the calls that succeeded,
-  which another Klash on the same project catches up with. Other machines last
-  as long as the Klash process.
-- **Memory, managed.** Klash reads how much memory the host can give, cgroup
+  disk across restarts of Gnosh, as a journal of the calls that succeeded,
+  which another Gnosh on the same project catches up with. Other machines last
+  as long as the Gnosh process.
+- **Memory, managed.** Gnosh reads how much memory the host can give, cgroup
   limits included, keeps the machines within a budget, and evicts the least
   recently used to make room for a large task, rebuilding them from their
   journals when they are next used.
 - **Out of harm's way.** The machines run in a worker process of their own,
-  which the out-of-memory killer takes first, and which Klash restarts if it
+  which the out-of-memory killer takes first, and which Gnosh restarts if it
   dies.
 
 The agent has four tools for them:
@@ -192,7 +192,7 @@ The agent has four tools for them:
 The design, and every review of it, is in
 [internal/gnovm/DESIGN.md](internal/gnovm/DESIGN.md).
 
-This part of Klash is under the GNO Network General Public License, with
+This part of Gnosh is under the GNO Network General Public License, with
 Additional Terms (Strong Attribution): see
 [internal/gnovm/LICENSE.md](internal/gnovm/LICENSE.md). Built on
 [gno.land](https://gno.land).
@@ -203,27 +203,27 @@ Additional Terms (Strong Attribution): see
 
 Upstream Crush talks to Charm from its first start: usage metrics to its
 analytics service, the provider catalog from its servers, and a release check
-on GitHub. Klash does none of that unless you ask. With a fresh config, the
+on GitHub. Gnosh does none of that unless you ask. With a fresh config, the
 only traffic is to the model provider you chose.
 
-| Upstream Crush does this unless switched off           | Klash does it only when turned on                                             |
+| Upstream Crush does this unless switched off           | Gnosh does it only when turned on                                             |
 | ------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| Sends usage metrics to Charm                           | The first-run question, `option metrics true`, or `KLASH_DISABLE_METRICS=0` — and only ever to your own collector |
-| Fetches the provider catalog from Charm's servers      | `option provider-auto-update true`, or `KLASH_DISABLE_PROVIDER_AUTO_UPDATE=0` |
-| Checks GitHub for a newer release of upstream Crush    | `KLASH_DISABLE_UPDATE_CHECK=0`                                                |
+| Sends usage metrics to Charm                           | The first-run question, `option metrics true`, or `GNOSH_DISABLE_METRICS=0` — and only ever to your own collector |
+| Fetches the provider catalog from Charm's servers      | `option provider-auto-update true`, or `GNOSH_DISABLE_PROVIDER_AUTO_UPDATE=0` |
+| Checks GitHub for a newer release of upstream Crush    | `GNOSH_DISABLE_UPDATE_CHECK=0`                                                |
 
-The first time you run Klash on a machine it asks, once, whether to allow
+The first time you run Gnosh on a machine it asks, once, whether to allow
 anonymous analytics. Pressing Enter declines, and the answer is remembered, so
 nothing is sent until you say yes and nothing goes to Charm either way. Without
-the catalog fetch, Klash uses the list built into the binary, and
-`klash update-providers` refreshes it by hand. `DO_NOT_TRACK=1` keeps metrics
+the catalog fetch, Gnosh uses the list built into the binary, and
+`gnosh update-providers` refreshes it by hand. `DO_NOT_TRACK=1` keeps metrics
 off whatever else is set. [Metrics](#metrics) is the detail.
 
 ### Untrusted text stays untrusted
 
 Web pages, command output and server replies can carry a model's own control
 tokens, such as `<|im_start|>` or llama.cpp's media marker, to rewrite the
-conversation from inside a tool result. Klash defuses them before the model
+conversation from inside a tool result. Gnosh defuses them before the model
 reads them. Tool output is capped by its raw size, so a runaway command cannot
 flood the context.
 
@@ -236,7 +236,7 @@ you let it open cannot redirect it there.
 
 ### Mistakes fail closed
 
-- A hook with a misspelt event name, or a `klashrc` option Klash does not
+- A hook with a misspelt event name, or a `gnoshrc` option Gnosh does not
   know, stops it at startup with the names it does know. Upstream ignored
   such a hook, so a misspelt guard simply never ran.
 - A check that cannot run holds the work up instead of passing it. A hook
@@ -245,14 +245,14 @@ you let it open cannot redirect it there.
   "could not evaluate") blocks as a failed check does, and says why. A hook
   that only wants to warn says so with Claude Code's `systemMessage`. Upstream, and Claude Code, let such a hook pass,
   so a check that never ran read as one that passed. See
-  [Could not evaluate](docs/hooks/README.md#could-not-evaluate-klash-fails-closed).
-- A hook whose answer Klash cannot read, a misspelt `"Deny"` say, blocks too,
+  [Could not evaluate](docs/hooks/README.md#could-not-evaluate-gnosh-fails-closed).
+- A hook whose answer Gnosh cannot read, a misspelt `"Deny"` say, blocks too,
   and a deny it gave still holds.
 - Your hooks see a helper agent's tool calls too. Upstream did not run them on
   those calls, so a hook that refused to read a key file could be walked
   around by handing the read to a helper (the `agent` tool, or
   `agentic_fetch`).
-- A guard copied from Claude Code also covers the Klash tools Claude Code has
+- A guard copied from Claude Code also covers the Gnosh tools Claude Code has
   nothing like. A hook on `Edit|Write` also stops `multiedit`, `lsp_rename`
   and `lsp_replace_symbol`, which change files, and `download`, which writes
   one; a hook on `WebFetch` also stops `download` and `x402_fetch`. Before,
@@ -261,16 +261,16 @@ you let it open cannot redirect it there.
   let a download run without asking.
 - A hook that answers Claude Code's `"ask"` puts the call to you, with its
   reason, even when the call would run without asking (yolo, `--allowedTools`,
-  `acceptEdits`); in `klash run`, where no one can answer, the call is refused.
+  `acceptEdits`); in `gnosh run`, where no one can answer, the call is refused.
   Upstream read `"ask"` as no opinion, so the call ran unasked.
-- A project's `klash.json` written by another user, with sudo say, stops
-  Klash and says whose it is and what to do, instead of being skipped without
+- A project's `gnosh.json` written by another user, with sudo say, stops
+  Gnosh and says whose it is and what to do, instead of being skipped without
   a word along with any tools it turned off.
 
 ### What still leaves your machine
 
 - Your prompts, and the files the agent reads, go to the model provider you
-  choose. Point Klash at a [local model](#local-models) and nothing leaves.
+  choose. Point Gnosh at a [local model](#local-models) and nothing leaves.
 - `fetch`, `download`, `agentic_fetch` and `x402_fetch` reach the sites the
   agent asks for, after asking you. `x402_fetch` also reads the paying account
   from a node of the seller's chain.
@@ -282,29 +282,29 @@ you let it open cannot redirect it there.
 
 Claude Code's names work here too.
 
-| Claude Code                      | Klash                                              | What it does                                                |
+| Claude Code                      | Gnosh                                              | What it does                                                |
 | -------------------------------- | -------------------------------------------------- | ----------------------------------------------------------- |
-| `claude "…"`                     | `klash "…"`; `klash -r <id> "…"` in a session      | Start the TUI with this prompt sent, in a new session or the one resumed |
-| `claude -p "…"`                  | `klash run "…"`, or `klash -p "…"`                 | Answer one prompt without the TUI                           |
-| `-p --output-format json`        | `klash run --output-format json`                   | Print one JSON result at the end                            |
-| `-p --output-format stream-json` | `klash run --output-format stream-json`            | A JSON line per message and tool result, then the result    |
-| `claude -r <id>`                 | `klash -s <id>`, or `klash -r <id>`                | Continue a session by ID                                    |
-| `claude -r`                      | `klash -r`                                         | Pick a session to continue from a list                      |
-| `claude -c`                      | `klash -C`                                         | Continue the last session; `-c` sets the working directory |
+| `claude "…"`                     | `gnosh "…"`; `gnosh -r <id> "…"` in a session      | Start the TUI with this prompt sent, in a new session or the one resumed |
+| `claude -p "…"`                  | `gnosh run "…"`, or `gnosh -p "…"`                 | Answer one prompt without the TUI                           |
+| `-p --output-format json`        | `gnosh run --output-format json`                   | Print one JSON result at the end                            |
+| `-p --output-format stream-json` | `gnosh run --output-format stream-json`            | A JSON line per message and tool result, then the result    |
+| `claude -r <id>`                 | `gnosh -s <id>`, or `gnosh -r <id>`                | Continue a session by ID                                    |
+| `claude -r`                      | `gnosh -r`                                         | Pick a session to continue from a list                      |
+| `claude -c`                      | `gnosh -C`                                         | Continue the last session; `-c` sets the working directory |
 | `--fork-session`                 | `--fork-session`, with `-C`, `-r` or `-s`          | Go on in a copy of the session you resume, as `/branch` makes one, and leave the session as it was |
 | `-n "nightly check"`             | `-n "nightly check"`, or `--name`                  | Name the session as `/rename` does: a new one from its start (no title is made for it), the one you resume, or the `--fork-session` copy |
 | `--model sonnet`                 | `-m qwen3.8-27b`, or `--model` (`provider/model` too) | Use this model for the session without saving it; a session you resume does not switch it back to the model it last used |
 | `--dangerously-skip-permissions` | `--yolo`, or `--dangerously-skip-permissions`      | Skip every permission prompt                                |
-| `--permission-mode plan`         | `--permission-mode plan` (or `acceptEdits`, `dontAsk`, `bypassPermissions`) | Start in plan mode; or let edits in the project (not `.git`, shell or tool settings) run without asking; or deny, instead of asking, whatever is not read-only or allowed (`klash run` then approves nothing else, for scripts and CI); or run everything without asking |
+| `--permission-mode plan`         | `--permission-mode plan` (or `acceptEdits`, `dontAsk`, `bypassPermissions`) | Start in plan mode; or let edits in the project (not `.git`, shell or tool settings) run without asking; or deny, instead of asking, whatever is not read-only or allowed (`gnosh run` then approves nothing else, for scripts and CI); or run everything without asking |
 | `--safe-mode`                    | `--safe-mode`, or `CLAUDE_CODE_SAFE_MODE=1`        | Start with the config's hooks, MCP servers, context files, skills and custom commands off, to troubleshoot a broken one |
 | `--add-dir ../other`            | `--add-dir ../other` (repeatable), or `/add-dir ../other` in a session | Let the agent read another directory without asking         |
 | `--mcp-config ./mcp.json`        | `--mcp-config ./mcp.json` (repeatable), `--strict-mcp-config` | Load MCP servers from a file in `.mcp.json`'s shape, or its JSON; with the second flag, only those |
 | `--allowedTools Read Grep`       | `--allowedTools "Read Grep"`, or `Read,Grep`       | Let these tools run without asking; the file tools still ask before changing `.git`, shell or tool settings, or keys; `"Bash(git diff *)"` lets the commands it matches run, as `permissions.allow` does |
 | `--disallowedTools Bash Edit`    | `--disallowedTools "Bash Edit"`, or `Bash,Edit`    | Do not give the agent these tools; `"Bash(git push *)"` refuses the commands it matches, as `permissions.deny` does |
 | `--tools "Read,Grep"`            | `--tools "Read,Grep"` (`""`: none)                 | Give the agent only these built-in tools                    |
-| `--system-prompt "…"`            | `--system-prompt "…"`, or `--system-prompt-file`   | Use these instructions in place of Klash's own              |
+| `--system-prompt "…"`            | `--system-prompt "…"`, or `--system-prompt-file`   | Use these instructions in place of Gnosh's own              |
 | `--append-system-prompt "…"`     | `--append-system-prompt "…"`, or its `-file` form  | Add this text at the end of the system prompt               |
-| `claude doctor`                  | `klash doctor`, or `/doctor` in a session          | Check config, providers, models, hooks and tools            |
+| `claude doctor`                  | `gnosh doctor`, or `/doctor` in a session          | Check config, providers, models, hooks and tools            |
 
 - **Hooks** take Claude Code's events and answers: `PreToolUse`,
   `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit`, `SessionStart`,
@@ -316,7 +316,7 @@ Claude Code's names work here too.
   `hook_event_name`, `permission_mode`, `continue: false`, `systemMessage` and
   `hookSpecificOutput`. Matchers know Claude Code's tool names (`Bash`,
   `Edit|Write`, `mcp__github__.*`), so the `hooks` block of your
-  `~/.claude/settings.json` can be pasted into `klash.json`; an entry Klash
+  `~/.claude/settings.json` can be pasted into `gnosh.json`; an entry Gnosh
   cannot run the same way stops it with an error that says so. A
   UserPromptSubmit hook can add context to every prompt or block one, a
   SessionStart hook can add context when a session starts and set the
@@ -324,8 +324,8 @@ Claude Code's names work here too.
   keep the agent working until your tests pass. One difference: a hook that
   could not check blocks here, where Claude Code lets it pass. See
   [docs/hooks](docs/hooks/README.md).
-- **Context and skills.** Klash reads `CLAUDE.md` and `CLAUDE.local.md`
-  alongside `KLASH.md` and `AGENTS.md`, from the working directory and the
+- **Context and skills.** Gnosh reads `CLAUDE.md` and `CLAUDE.local.md`
+  alongside `GNOSH.md` and `AGENTS.md`, from the working directory and the
   directories above it (and a subdirectory's own, the first time the agent
   reads, writes or edits a file there; one over 40,000 characters comes cut,
   with a note to read the rest), and follows their `@path` imports, as Claude
@@ -334,7 +334,7 @@ Claude Code's names work here too.
   only files you or root own, so a repository or a shared directory cannot put
   your keys or its instructions in the prompt. Skills load from
   `~/.claude/skills` and a project's `.claude/skills`. `--system-prompt` keeps
-  them and the environment, as Claude Code keeps `CLAUDE.md`: only Klash's own
+  them and the environment, as Claude Code keeps `CLAUDE.md`: only Gnosh's own
   instructions give way. Plan mode keeps its own, with `--append-system-prompt`
   added.
 - **Tools take Claude Code's parameters.** `grep` takes `-A`, `-B` and `-C`
@@ -345,7 +345,7 @@ Claude Code's names work here too.
   background (2 minutes unless set, as in Claude Code), the most a call's
   `timeout` can ask for, and how much of its output the model reads;
   `CLAUDE_CODE_GLOB_TIMEOUT_SECONDS` how long a `glob` may search, and
-  `CLAUDE_CODE_MAX_OUTPUT_TOKENS` how long a reply may run. Klash
+  `CLAUDE_CODE_MAX_OUTPUT_TOKENS` how long a reply may run. Gnosh
   used to drop these without a word, so a model asking for context
   lines, a list of files or a ten-minute test run got none of them, and one
   viewing from line 120 started at line 121. A file the agent looked at in
@@ -392,7 +392,7 @@ or failed without saying so. The ones you will notice:
   kept as if it were whole.
 - A helper agent no longer pushes the main conversation out of a local model
   server's cache, which cost minutes each time one finished. One started by
-  `klash run` gets the run's permission to act, where it used to wait forever
+  `gnosh run` gets the run's permission to act, where it used to wait forever
   for an answer nobody could give.
 - A request to Anthropic is never refused for carrying one cache marker more
   than Anthropic accepts.
@@ -401,7 +401,7 @@ or failed without saying so. The ones you will notice:
 
 **It tells you what happened.**
 
-- `klash run --verbose` shows every tool call, a sub-agent's included, and
+- `gnosh run --verbose` shows every tool call, a sub-agent's included, and
   marks the ones that failed. Bash results carry their exit code.
 - When an edit is refused because the file changed, when a multi-edit fails,
   or when a grep for code with brackets finds nothing, the agent is told why
@@ -413,9 +413,9 @@ or failed without saying so. The ones you will notice:
   changes it has not seen; any looser match is refused, with word to view the
   file again. `git stash` and `pop`, which put the same content back, do not
   count as a change.
-- A Klash tool typed as a shell command, `job_kill 077` say, is answered with
+- A Gnosh tool typed as a shell command, `job_kill 077` say, is answered with
   the tool to call.
-- With your model server out of reach, Klash still starts and says which
+- With your model server out of reach, Gnosh still starts and says which
   provider it could not use and why, instead of claiming that none is
   configured.
 - A language server that is not installed is reported once, and one that
@@ -424,12 +424,12 @@ or failed without saying so. The ones you will notice:
 **It is yours to change.**
 
 - The system prompt and every tool description are files you can edit:
-  `klash prompt export`, `show`, `path` and `tools`.
-- `klash session web` serves a local page to read and edit a session's
+  `gnosh prompt export`, `show`, `path` and `tools`.
+- `gnosh session web` serves a local page to read and edit a session's
   messages.
 - `/think` and `/no_think` switch a model's thinking on or off, and it sticks.
 - Prompts typed while the agent works are queued, and <kbd>Up</kbd> edits
-  them in place. A prompt a hook refused, or one typed while Klash was
+  them in place. A prompt a hook refused, or one typed while Gnosh was
   starting, comes back into the editor, attachments and all.
 
 **The sidebar tracks what you make.**
@@ -438,9 +438,9 @@ or failed without saying so. The ones you will notice:
   deliverables the agent produced — a rendered video to open, a report, a URL
   to share. The agent tags one with the `artifact` tool; re-using a label
   replaces the old entry, so the sidebar shows the latest version of a thing,
-  not every version it went through. Klash serves each one at a URL on
+  not every version it went through. Gnosh serves each one at a URL on
   `127.0.0.1:7777` (the `artifact_server` option moves it or turns it off).
-  When Klash runs on another machine, `LocalForward 7777 127.0.0.1:7777` in
+  When Gnosh runs on another machine, `LocalForward 7777 127.0.0.1:7777` in
   your `~/.ssh/config` entry for it brings those URLs to yours.
 - Click an artifact to copy its URL and paste it into your browser. In a
   terminal that shows hyperlinks every line of it is also a link, opened the
@@ -464,7 +464,7 @@ file work, since they keep track of what it has read.
 ## Built for gno.land
 
 [gno.land](https://gno.land) is a smart-contract platform whose contracts,
-called realms, are written in Gno, an interpreted and deterministic Go. Klash
+called realms, are written in Gno, an interpreted and deterministic Go. Gnosh
 knows it the way it knows Go.
 
 **The gno skill.** A built-in skill loads itself whenever a task touches
@@ -491,7 +491,7 @@ it:
   feed a password in by another door.
 - Key management (`gnokey add`, `delete`, `export` and the rest) is refused
   outright and stays in your own terminal.
-- A run with nobody there to type, such as `klash run`, has no signing tool at
+- A run with nobody there to type, such as `gnosh run`, has no signing tool at
   all, so the agent prints the command for you to run yourself.
 
 So every signature is one you saw and typed for.
@@ -508,7 +508,7 @@ key, a session, within limits the chain itself enforces:
   sessions, and never add a package.
 
 Realms see the master as the caller, so nothing on the realm side changes.
-Klash's `gnokey` tool creates and revokes sessions (`gnokey maketx session
+Gnosh's `gnokey` tool creates and revokes sessions (`gnokey maketx session
 create`, `revoke`, `revokeall`) through the same masked prompt. Sign with a
 session key instead of your master key, and the chain bounds the damage when a
 confused or hijacked agent gets you to approve the wrong transaction, or the
@@ -523,23 +523,23 @@ price on a gno.land chain. When you tell the agent to pay, its `x402_fetch`
 tool shows you the price, the payee, the chain and the network fee, and asks
 for the key's password in the masked prompt above. gnokey signs one bank send
 of exactly that price, the seller's facilitator settles it, and the agent gets
-the resource and the transaction hash. Klash checks the signature before the
+the resource and the transaction hash. Gnosh checks the signature before the
 payment leaves, pays only in ugnot, at most 1 GNOT at a time plus a network
 fee of at most 1 GNOT, and only on local and test chains: x402 on gno.land is
 unaudited, testnet-only work, so mainnet is refused. Pay from a session key and
 the chain caps what it can spend as well. Nothing is paid without you at the
-prompt: a run with nobody there to type has no paying tool. Klash signs these
+prompt: a run with nobody there to type has no paying tool. Gnosh signs these
 payments with the Go x402 client from
 [gnolang/x402](https://github.com/gnolang/x402).
 
 **gnopls.** Install the [Gno language server](https://github.com/gnoverse/gnopls)
-and Klash starts it for `.gno` files on its own, as it does gopls for Go.
+and Gnosh starts it for `.gno` files on its own, as it does gopls for Go.
 
 **gno-mcp.** The gno team's MCP server, [gno-mcp](https://mcp.gno.dev), runs in
-Klash like any other:
+Gnosh like any other:
 
 ```bash
-# klashrc
+# gnoshrc
 mcp add gnomcp --command gnomcp
 ```
 
@@ -550,12 +550,12 @@ that you sign with gnokey yourself.
 
 ## Installation
 
-Klash is built from source, with Go 1.27 or newer. From a checkout of this
+Gnosh is built from source, with Go 1.27 or newer. From a checkout of this
 repository:
 
 ```bash
-go build -o klash .
-install -m 755 klash ~/.local/bin/klash   # or anywhere on your PATH
+go build -o gnosh .
+install -m 755 gnosh ~/.local/bin/gnosh   # or anywhere on your PATH
 ```
 
 On Oracle Solaris, add `-tags sqlite3_dotlk` so the local database uses
@@ -563,13 +563,13 @@ dot-file locking.
 
 Everything named `crush` keeps working. An existing `~/.config/crush`, a
 project's `.crush/`, a `crushrc` or `crush.json`, `CRUSH.md` and `CRUSH_*`
-variables are all still read, and where a `klash` one exists it wins.
-`klash dirs` shows which directories are in use.
+variables are all still read, and where a `gnosh` one exists it wins.
+`gnosh dirs` shows which directories are in use.
 
 ## Getting started
 
-Run `klash` in a project directory and press <kbd>ctrl+l</kbd> to pick a
-model. Klash works with Anthropic, OpenAI, Google, OpenRouter, Groq and many
+Run `gnosh` in a project directory and press <kbd>ctrl+l</kbd> to pick a
+model. Gnosh works with Anthropic, OpenAI, Google, OpenRouter, Groq and many
 more hosted providers, with any OpenAI- or Anthropic-compatible endpoint, and
 with models on your own machine through llama.cpp, Ollama or LM Studio (see
 [Local Models](#local-models)). Charm's own provider, [Hyper][hyper], is there
@@ -577,7 +577,7 @@ too.
 
 ## API Keys
 
-You can also use Klash with many other providers such as Anthropic, OpenAI,
+You can also use Gnosh with many other providers such as Anthropic, OpenAI,
 Gemini, OpenRouter and so on. Press <kbd>ctrl+l</kbd> to open the model picker,
 choose the provider of your choice, and paste your API key.
 
@@ -616,21 +616,21 @@ That said, you can also set environment variables for preferred providers:
 
 [hyper]: https://hyper.charm.land
 
-Also note that Klash can support nearly any provider, including
+Also note that Gnosh can support nearly any provider, including
 [Local Models](#local-models). For more info see
 [Custom Providers](#custom-providers) below.
 
 ## Configuration
 
 > [!TIP]
-> Klash ships with a builtin skill for configuring itself. Most of the time
+> Gnosh ships with a builtin skill for configuring itself. Most of the time
 > you can just tell what you want it to configure and it will get the job done.
 
-Klash runs great with no configuration. That said, if you do need or want to
-customize Klash, you can, with a `klashrc`.
+Gnosh runs great with no configuration. That said, if you do need or want to
+customize Gnosh, you can, with a `gnoshrc`.
 
-A `klashrc` is just Bash with some Klash-specific builtins. It’s a lot like
-a `.bashrc`, just for your Klash. Because Klash has a native, built-in Bash
+A `gnoshrc` is just Bash with some Gnosh-specific builtins. It’s a lot like
+a `.bashrc`, just for your Gnosh. Because Gnosh has a native, built-in Bash
 interpreter, Bash-based config works identically across all platforms, including
 Windows.
 
@@ -663,24 +663,24 @@ with the following priority:
 
 | Priority | Unix-like                 | Windows                               |
 | -------- | ------------------------- | ------------------------------------- |
-| 1        | `./.klashrc`              | `.\.klashrc`                          |
-| 2        | `./klashrc`               | `.\klashrc`                           |
-| 3        | `~/.config/klash/klashrc` | `%USERPROFILE%\.config\klash\klashrc` |
+| 1        | `./.gnoshrc`              | `.\.gnoshrc`                          |
+| 2        | `./gnoshrc`               | `.\gnoshrc`                           |
+| 3        | `~/.config/gnosh/gnoshrc` | `%USERPROFILE%\.config\gnosh\gnoshrc` |
 
-(Klash respects the [XDG Base Directory Specification][xdg], so your paths
+(Gnosh respects the [XDG Base Directory Specification][xdg], so your paths
 may differ depending on your `XDG_CONFIG_HOME` value. Data directories such as
-`~/.local/share/klash` and `%LOCALAPPDATA%\klash` contain JSON state only; Klash
-does not execute a `klashrc` from them.)
+`~/.local/share/gnosh` and `%LOCALAPPDATA%\gnosh` contain JSON state only; Gnosh
+does not execute a `gnoshrc` from them.)
 
-Klash was called Crush, and every crush name still works: `~/.config/crush`,
+Gnosh was called Crush, and every crush name still works: `~/.config/crush`,
 `~/.local/share/crush`, `~/.cache/crush`, a project's `.crush/` data directory
 with its `crush.db`, and `crush.json`, `crushrc`, `.crushignore` and `CRUSH.md`.
 Wherever only the crush one exists, that one is used, so an existing setup and
-its sessions keep working without being moved; once the klash one exists, it
-wins. `~/.config/klash` and `~/.local/share/klash` count only once they hold a
-config file (`klash.json`, `crush.json`, `klashrc` or `crushrc`), so a `klash`
+its sessions keep working without being moved; once the gnosh one exists, it
+wins. `~/.config/gnosh` and `~/.local/share/gnosh` count only once they hold a
+config file (`gnosh.json`, `crush.json`, `gnoshrc` or `crushrc`), so a `gnosh`
 folder made for something else doesn't hide the `crush` one in use. A project
-uses the closest `.klash/` or `.crush/` on the way up to its root.
+uses the closest `.gnosh/` or `.crush/` on the way up to its root.
 
 [xdg]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 
@@ -690,28 +690,28 @@ considered deprecated. See: [the config docs](./docs/config/) for details.
 > [!TIP]
 > You can override the user and data config locations by setting:
 >
-> - `KLASH_GLOBAL_CONFIG`
-> - `KLASH_GLOBAL_DATA`
+> - `GNOSH_GLOBAL_CONFIG`
+> - `GNOSH_GLOBAL_DATA`
 >
-> Every `KLASH_` environment variable in this document also works under its
-> `CRUSH_` name, from before the rename; when both are set, `KLASH_` wins.
+> Every `GNOSH_` environment variable in this document also works under its
+> `CRUSH_` name, from before the rename; when both are set, `GNOSH_` wins.
 
-As an additional note, Klash also stores ephemeral data, such as application
+As an additional note, Gnosh also stores ephemeral data, such as application
 state, in one additional location. This is state and should not be edited by
 hand, nor should it be considered configuration.
 
 ```bash
 # Unix
-$HOME/.local/share/klash/klash.json
+$HOME/.local/share/gnosh/gnosh.json
 
 # Windows
-%LOCALAPPDATA%\klash\klash.json
+%LOCALAPPDATA%\gnosh\gnosh.json
 ```
 
 #### A note on security
 
-Both `klashrc` and `klash.json` are trusted code; `klashrc` runs in a full
-shell, and any `$(...)` in `klash.json` runs at load time. Don't launch Klash
+Both `gnoshrc` and `gnosh.json` are trusted code; `gnoshrc` runs in a full
+shell, and any `$(...)` in `gnosh.json` runs at load time. Don't launch Gnosh
 in a directory whose config you haven't reviewed, and don't randomly `source`
 files from the internet into your config.
 
@@ -720,7 +720,7 @@ files from the internet into your config.
 The top-level `env` field sets environment variables at startup, before
 providers are configured. This is useful for variables that affect provider
 authentication (e.g. the AWS SDK credential chain) without wrapping the
-`klash` command in a shell script or exporting them in your shell profile:
+`gnosh` command in a shell script or exporting them in your shell profile:
 
 ```json
 {
@@ -737,7 +737,7 @@ a value.
 
 ### Themes
 
-Klash ships with built-in color themes.
+Gnosh ships with built-in color themes.
 
 #### Switching Themes
 
@@ -749,7 +749,7 @@ confirms the selection. Press `esc` to cancel and revert.
 
 Open **Themes**, highlight the theme to customize, and press `ctrl+e`.
 Changes preview live as you type. Press `enter` or `ctrl+s` to save, or `esc`
-to cancel and revert. User themes are stored globally in the Klash config
+to cancel and revert. User themes are stored globally in the Gnosh config
 directory under `themes/`.
 
 You can also select a theme directly in your config with `active_theme`:
@@ -766,7 +766,7 @@ You can also select a theme directly in your config with `active_theme`:
 ```
 
 Custom theme palettes are stored as JSON files in the global theme directory.
-For example, `~/.config/klash/themes/my-theme.json`:
+For example, `~/.config/gnosh/themes/my-theme.json`:
 
 ```json
 {
@@ -783,17 +783,17 @@ dialog.
 
 | Theme | Name |
 | --- | --- |
-| Klash Cosmos | `klash-cosmos` (default) |
+| Gnosh Cosmos | `gnosh-cosmos` (default) |
 | Charmtone Pantera | `charmtone-panther`, upstream Crush's default |
 | Gruvbox Dark | `gruvbox-dark` |
 
 ### LSPs
 
-Klash can use LSPs for additional context to help inform its decisions, just
+Gnosh can use LSPs for additional context to help inform its decisions, just
 like you would. LSPs can be added manually like so:
 
 ```bash
-# klashrc
+# gnoshrc
 
 lsp add go --command "gopls" --env "GOTOOLCHAIN go1.24.5"
 lsp add typescript --command "typescript-language-server" --args --stdio
@@ -802,12 +802,12 @@ lsp add nix --command "nil"
 
 ### MCPs
 
-Klash also supports Model Context Protocol (MCP) servers through three transport
+Gnosh also supports Model Context Protocol (MCP) servers through three transport
 types: `stdio` for command-line servers, `http` for HTTP endpoints, and `sse`
 for Server-Sent Events.
 
 ```bash
-# klashrc
+# gnoshrc
 
 # Add a local MCP server that runs a Node.js script.
 mcp add filesystem --command node --args /path/to/mcp-server.js \
@@ -825,7 +825,7 @@ mcp add streaming-service --type sse --url "https://example.com/mcp/sse" \
 
 #### MCP OAuth
 
-HTTP and SSE MCP servers that require OAuth can use Klash's built-in
+HTTP and SSE MCP servers that require OAuth can use Gnosh's built-in
 authorization-code flow instead of a static `Authorization` header. Set
 `"oauth": true` to enable it:
 
@@ -862,28 +862,28 @@ credentials directly. All values support shell expansion:
 }
 ```
 
-When `oauth_client_id` is set, Klash skips dynamic client registration
-and authenticates as the specified client. When omitted, Klash attempts
+When `oauth_client_id` is set, Gnosh skips dynamic client registration
+and authenticates as the specified client. When omitted, Gnosh attempts
 dynamic registration automatically (works with Linear, Notion, and other
 servers that support RFC 7591).
 
 #### Sessionless servers
 
 Some HTTP MCP servers are sessionless — they never issue a
-`Mcp-Session-Id` and reject the `subscriptions/listen` stream Klash opens
+`Mcp-Session-Id` and reject the `subscriptions/listen` stream Gnosh opens
 for list-changed notifications, which would otherwise break the
-connection. Klash auto-detects known sessionless servers (GitHub MCP,
+connection. Gnosh auto-detects known sessionless servers (GitHub MCP,
 `api.githubcopilot.com/mcp`), so those need no extra configuration.
 
 For other sessionless servers, mark them explicitly with
-`"sessionless": true` (or `--sessionless true` in `klashrc`); set it to
+`"sessionless": true` (or `--sessionless true` in `gnoshrc`); set it to
 `false` to force the default behavior for an auto-detected URL. The
 tradeoff is that a sessionless server won't push live
 tool/prompt/resource list-changed notifications.
 
 ### Hosts
 
-A command runs on the machine Klash is on unless the call names another
+A command runs on the machine Gnosh is on unless the call names another
 one. Declare the other machines once, and the model runs commands on them
 by name, through ssh, with every result stamped with where it ran:
 
@@ -911,14 +911,14 @@ permission (the safe-command shortcut is for this machine only), and
 
 ### Hooks
 
-Klash has preliminary support for hooks.
+Gnosh has preliminary support for hooks.
  For details, see
 [the hook guide](./docs/hooks/).
 
 ### Sharing a workspace across clients
 
-When Klash is run against a shared backend (for example two TUIs talking to
-the same `klash serve`), clients are grouped into **workspaces** keyed by
+When Gnosh is run against a shared backend (for example two TUIs talking to
+the same `gnosh serve`), clients are grouped into **workspaces** keyed by
 their resolved `--cwd`. Two clients with the same `--cwd` join the same
 underlying workspace, so they share the session list, message history,
 permission queue, LSP, and MCP state.
@@ -951,14 +951,14 @@ does not get reaped before it can attach.
 
 ### Global context files
 
-Klash automatically includes two files for cross-project instructions. Think of
+Gnosh automatically includes two files for cross-project instructions. Think of
 these are personal additions to the system prompt.
 
-- `~/.config/klash/KLASH.md`: Klash-specific rules that would confuse other
-  agentic coding tools. If you only use Klash, this is the only one you need to
+- `~/.config/gnosh/GNOSH.md`: Gnosh-specific rules that would confuse other
+  agentic coding tools. If you only use Gnosh, this is the only one you need to
   edit.
 - `~/.config/AGENTS.md`: generic instructions that other coding tools might
-  read. Avoid referring to Klash-specific features or workflows here. You
+  read. Avoid referring to Gnosh-specific features or workflows here. You
   probably only care about this if you use multiple agentic coding tools and
   want to share instructions between them.
 
@@ -975,17 +975,17 @@ option global-context-path "/full/path/to/folder/of/files/"
 
 ### Ignoring Files
 
-Klash respects `.gitignore` files by default, but you can also create a
-`.klashignore` file to specify additional files and directories that Klash
+Gnosh respects `.gitignore` files by default, but you can also create a
+`.gnoshignore` file to specify additional files and directories that Gnosh
 should ignore. This is useful for excluding files that you want in version
-control but don't want Klash to consider when providing context.
+control but don't want Gnosh to consider when providing context.
 
-The `.klashignore` file uses the same syntax as `.gitignore` and can be placed
+The `.gnoshignore` file uses the same syntax as `.gitignore` and can be placed
 in the root of your project or in subdirectories.
 
 ### Allowing Tools
 
-By default, Klash will ask you for permission before running tool calls. If
+By default, Gnosh will ask you for permission before running tool calls. If
 you'd like, you can allow tools to be executed without prompting you for
 permissions. Use this with care.
 
@@ -1009,7 +1009,7 @@ Code strips (`timeout`, `nice`, `nohup`, `stdbuf`, `time`, `command`, a bare
 `xargs`) come off first. A command line runs without asking only when each
 command in it matches a rule or only reads, so `Bash(git diff *)` does not let
 `git diff && rm -rf ~` through, and a rule with a `*` never approves `watch`,
-`setsid`, `ionice`, `flock` or a `find` that runs, deletes or writes. Klash
+`setsid`, `ionice`, `flock` or a `find` that runs, deletes or writes. Gnosh
 asks where Claude Code would look further: at a command substitution, a
 variable assignment, a background job, a subshell or loop, or a redirect to a
 file.
@@ -1026,44 +1026,44 @@ To disable tools from MCP servers, see the [MCP config section](#mcps).
 
 ### You only live once
 
-You can also skip all permission prompts completely by running Klash with the
+You can also skip all permission prompts completely by running Gnosh with the
 `--yolo` flag (or `--dangerously-skip-permissions`, as Claude Code calls it).
 Be very, very careful with this feature.
 
 ### Disabling Skills
 
-You can prevent Klash from using certain skills entirely. Disabled skills are
+You can prevent Gnosh from using certain skills entirely. Disabled skills are
 hidden from the agent, including builtin skills and skills discovered from
 disk.
 
 ```bash
-option disable-skill klash-config
+option disable-skill gnosh-config
 ```
 
 ### Agent Skills
 
-Klash supports the [Agent Skills](https://agentskills.io) open standard for
+Gnosh supports the [Agent Skills](https://agentskills.io) open standard for
 extending agent capabilities with reusable skill packages. Skills are folders
-containing a `SKILL.md` file with instructions that Klash can discover and
+containing a `SKILL.md` file with instructions that Gnosh can discover and
 activate on demand.
 
 The global paths we looks for skills are:
 
-- `$KLASH_SKILLS_DIR`
+- `$GNOSH_SKILLS_DIR`
 - `$XDG_CONFIG_HOME/agents/skills` or `~/.config/agents/skills/`
-- `$XDG_CONFIG_HOME/klash/skills` or `~/.config/klash/skills/`
+- `$XDG_CONFIG_HOME/gnosh/skills` or `~/.config/gnosh/skills/`
 - `~/.agents/skills/`
 - `~/.claude/skills/`
 - On Windows, we _also_ look at
   - `%LOCALAPPDATA%\agents\skills\` or `%USERPROFILE%\AppData\Local\agents\skills\`
-  - `%LOCALAPPDATA%\klash\skills\` or `%USERPROFILE%\AppData\Local\klash\skills\`
+  - `%LOCALAPPDATA%\gnosh\skills\` or `%USERPROFILE%\AppData\Local\gnosh\skills\`
 - Additional paths configured via `options.skills_paths`
 
 On top of that, we _also_ load skills in your project from the following
 relative paths:
 
 - `.agents/skills`
-- `.klash/skills`
+- `.gnosh/skills`
 - `.claude/skills`
 - `.cursor/skills`
 
@@ -1077,16 +1077,16 @@ You can get started with example skills from [anthropics/skills](https://github.
 
 ```bash
 # Unix
-mkdir -p ~/.config/klash/skills
-cd ~/.config/klash/skills
+mkdir -p ~/.config/gnosh/skills
+cd ~/.config/gnosh/skills
 git clone https://github.com/anthropics/skills.git _temp
 mv _temp/skills/* . && rm -rf _temp
 ```
 
 ```powershell
 # Windows (PowerShell)
-mkdir -Force "$env:LOCALAPPDATA\klash\skills"
-cd "$env:LOCALAPPDATA\klash\skills"
+mkdir -Force "$env:LOCALAPPDATA\gnosh\skills"
+cd "$env:LOCALAPPDATA\gnosh\skills"
 git clone https://github.com/anthropics/skills.git _temp
 mv _temp/skills/* . ; rm -r -force _temp
 ```
@@ -1127,7 +1127,7 @@ Skills with `disable-model-invocation` won't appear in the model's available ski
 
 ### Desktop notifications
 
-Klash sends desktop notifications when a tool call requires permission and when
+Gnosh sends desktop notifications when a tool call requires permission and when
 the agent finishes its turn. They're only sent when the terminal window isn't
 focused _and_ your terminal supports reporting the focus state.
 
@@ -1141,24 +1141,24 @@ supported.
 
 ### Initialization
 
-When you initialize a project, Klash analyzes your codebase and creates
+When you initialize a project, Gnosh analyzes your codebase and creates
 a context file that helps it work more effectively in future sessions. By
 default, this file is named `AGENTS.md`, but you can customize the name and
 location with the `initialize-as` option:
 
 ```bash
-# klashrc
+# gnoshrc
 option initialize-as AGENTS.md
 ```
 
 This is useful if you prefer a different naming convention or want to place the
-file in a specific directory (e.g., `KLASH.md` or `docs/LLMs.md`). Klash will
+file in a specific directory (e.g., `GNOSH.md` or `docs/LLMs.md`). Gnosh will
 fill the file with project-specific context like build commands, code patterns,
 and conventions it discovered during initialization.
 
 ### Attribution Settings
 
-By default, Klash adds attribution information to Git commits and pull requests
+By default, Gnosh adds attribution information to Git commits and pull requests
 it creates. You can customize this behavior with `option` commands:
 
 ```bash
@@ -1168,15 +1168,15 @@ option attribution-generated-with true
 
 - `trailer_style`: Controls the attribution trailer added to commit messages
   (default: `assisted-by`)
-  - `assisted-by`: Adds `Assisted-by: Klash:[ModelID]` as specified in [the convention](https://docs.kernel.org/process/coding-assistants.html#attribution)
-  - `co-authored-by`: Adds `Co-Authored-By: Klash <klash@charm.land>`
+  - `assisted-by`: Adds `Assisted-by: Gnosh:[ModelID]` as specified in [the convention](https://docs.kernel.org/process/coding-assistants.html#attribution)
+  - `co-authored-by`: Adds `Co-Authored-By: Gnosh <gnosh@charm.land>`
   - `none`: No attribution trailer
-- `generated_with`: When true (default), adds `💘 Generated with Klash` line to
+- `generated_with`: When true (default), adds `💘 Generated with Gnosh` line to
   commit messages and PR descriptions
 
 ### Custom Providers
 
-Klash supports custom provider configurations for both OpenAI-compatible and
+Gnosh supports custom provider configurations for both OpenAI-compatible and
 Anthropic-compatible APIs.
 
 > [!NOTE]
@@ -1231,24 +1231,24 @@ model add custom-anthropic/claude-sonnet-4-20250514 \
 
 ### Amazon Bedrock
 
-Klash currently supports running Anthropic models through Bedrock, with caching disabled.
+Gnosh currently supports running Anthropic models through Bedrock, with caching disabled.
 
-A Bedrock provider appears once Klash can find AWS credentials. You can
+A Bedrock provider appears once Gnosh can find AWS credentials. You can
 authenticate in one of two ways:
 
 **API key.** Set `AWS_BEARER_TOKEN_BEDROCK` to a Bedrock API key. This is the
 simplest option and never expires mid-session.
 
 **AWS credential chain (SSO, profiles, access keys).** Configure AWS the usual
-way with `aws configure` or `aws configure sso`. Klash picks up whatever the
+way with `aws configure` or `aws configure sso`. Gnosh picks up whatever the
 AWS SDK credential chain resolves, including `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`
 / `AWS_SECRET_ACCESS_KEY`, or an SSO session. To select a specific profile,
-set `AWS_PROFILE` in your shell (`AWS_PROFILE=myprofile klash`) or in the
+set `AWS_PROFILE` in your shell (`AWS_PROFILE=myprofile gnosh`) or in the
 top-level [`env`](#environment-variables) config.
 
 If you authenticate via AWS SSO, your session expires periodically. Set
 `aws_auth_refresh` to a command that refreshes it. When Bedrock returns a
-credential error, Klash runs the command, then retries the request in place
+credential error, Gnosh runs the command, then retries the request in place
 (no duplicate messages, no manual restart):
 
 ```json
@@ -1281,7 +1281,7 @@ $ gcloud auth application-default login
 To add specific models to the configuration, configure as such:
 
 ```bash
-# klashrc — authentication still comes from gcloud and the VERTEXAI_* env vars.
+# gnoshrc — authentication still comes from gcloud and the VERTEXAI_* env vars.
 provider add vertexai --type google-vertex
 
 model add vertexai/claude-sonnet-4@20250514 \
@@ -1298,9 +1298,9 @@ model add vertexai/claude-sonnet-4@20250514 \
 
 ### Local Models
 
-Klash can auto-discovers models from local providers. Add a custom provider
+Gnosh can auto-discovers models from local providers. Add a custom provider
 with `type` set to `llamacpp`, `omlx`, `lmstudio`, `litellm`, or `ollama`
-and leave out the models list. Klash will populate the model list
+and leave out the models list. Gnosh will populate the model list
 automatically.
 
 ```bash
@@ -1332,7 +1332,7 @@ server, unless `"discover_models"` is `false`: an unknown window is taken for
 32,768 tokens, and the conversation is compacted long before it needs to be.
 
 ```bash
-# klashrc
+# gnoshrc
 provider add ollama \
   --name Ollama \
   --type ollama \
@@ -1350,7 +1350,7 @@ your explicit model fields win on conflicts.
 
 #### Compacting earlier
 
-Klash summarizes a long conversation when it comes within 20k tokens of the
+Gnosh summarizes a long conversation when it comes within 20k tokens of the
 model's context window (within a fifth of a small one). Claude Code's
 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, how full the context may get (`100k` to
 `1M`), and `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, the percentage of that at which
@@ -1378,10 +1378,10 @@ than while you wait. It applies from 200k tokens
 
 #### Waiting for a local model
 
-Klash waits as long as a model on your machine or local network takes to
+Gnosh waits as long as a model on your machine or local network takes to
 start answering. Such a server can send nothing for more than ten minutes
 while it reads a long conversation or works through another request first;
-Klash used to give up after ten and show "Provider Error". A model API
+Gnosh used to give up after ten and show "Provider Error". A model API
 elsewhere still gets ten minutes, as in Claude Code, and `API_TIMEOUT_MS`
 sets the wait in milliseconds for the Anthropic, OpenAI and OpenAI-compatible
 providers, as it does there, with `0` for no limit. Local means `localhost`, a loopback, private,
@@ -1391,99 +1391,99 @@ link-local or Tailscale address, a host name of one label, or a name under
 A server that was answering and stops, as when it restarts, is waited for up
 to five minutes before the error is shown. One that has not answered since
 you picked the model, because it is not running, gets fifteen seconds before
-each of the retries, so Klash says so in about a minute and a half rather
+each of the retries, so Gnosh says so in about a minute and a half rather
 than twenty.
 
 ## Logging
 
-Sometimes you need to look at logs. Luckily, Klash logs all sorts of
-stuff. Logs are stored in `./.klash/logs/klash.log` relative to the project
+Sometimes you need to look at logs. Luckily, Gnosh logs all sorts of
+stuff. Logs are stored in `./.gnosh/logs/gnosh.log` relative to the project
 (or `./.crush/logs/crush.log` in a project from before the rename).
 
 The CLI also contains some helper commands to make perusing recent logs easier:
 
 ```bash
 # Print the last 1000 lines
-klash logs
+gnosh logs
 
 # Print the last 500 lines
-klash logs --tail 500
+gnosh logs --tail 500
 
 # Follow logs in real time
-klash logs --follow
+gnosh logs --follow
 ```
 
-Want more logging? Run `klash` with the `--debug` flag, or enable it in your
-`klashrc`:
+Want more logging? Run `gnosh` with the `--debug` flag, or enable it in your
+`gnoshrc`:
 
 ```bash
-# klashrc
+# gnoshrc
 option debug true
 option debug-lsp true
 ```
 
 ## The provider catalog
 
-Klash's list of providers and models comes from
+Gnosh's list of providers and models comes from
 [Catwalk](https://github.com/charmbracelet/catwalk), Charm's open source
 catalog, and a copy is built into the binary. Upstream Crush fetches a fresh
-one from Charm's servers on every start. Klash uses the built-in copy unless
+one from Charm's servers on every start. Gnosh uses the built-in copy unless
 you ask for the fetch:
 
 ```bash
-# klashrc
+# gnoshrc
 option provider-auto-update true
 ```
 
-Or set `KLASH_DISABLE_PROVIDER_AUTO_UPDATE=0`. To point the fetch at another
+Or set `GNOSH_DISABLE_PROVIDER_AUTO_UPDATE=0`. To point the fetch at another
 catalog, for testing or a fork of Catwalk, set `CATWALK_URL`
 (`export CATWALK_URL=http://localhost:8000`).
 
-To refresh the catalog once, by hand, use `klash update-providers`:
+To refresh the catalog once, by hand, use `gnosh update-providers`:
 
 ```bash
 # Update providers remotely from Catwalk.
-klash update-providers
+gnosh update-providers
 
 # Update providers from a custom Catwalk base URL.
-klash update-providers https://example.com/
+gnosh update-providers https://example.com/
 
 # Update providers from a local file.
-klash update-providers /path/to/local-providers.json
+gnosh update-providers /path/to/local-providers.json
 
-# Reset providers to the copy built into klash.
-klash update-providers embedded
+# Reset providers to the copy built into gnosh.
+gnosh update-providers embedded
 
 # For more info:
-klash update-providers --help
+gnosh update-providers --help
 ```
 
 ## Metrics
 
-Klash sends no usage metrics unless you allow them, and never to Charm. The
-first time you run Klash on a machine, it asks once:
+Gnosh sends no usage metrics unless you allow them, and never to Charm. The
+first time you run Gnosh on a machine, it asks once:
 
 > Allow anonymous analytics? [y/N] (press Enter to decline)
 
 Pressing Enter, or anything but yes, declines, and the answer is stored per
-machine so you are not asked again. A run with no terminal (a pipe, `klash
+machine so you are not asked again. A run with no terminal (a pipe, `gnosh
 run`) never asks and sends nothing. You can change the answer any time with
 `option metrics true` or `false`, and `DO_NOT_TRACK=1` or
-`KLASH_DISABLE_METRICS=1` force it off.
+`GNOSH_DISABLE_METRICS=1` force it off.
 
-When allowed, Klash sends pseudonymous events keyed to a hash of your machine's
+When allowed, Gnosh sends pseudonymous events keyed to a hash of your machine's
 ID:
 
 - when it starts and exits, and how long it ran;
 - sessions created, switched and deleted;
 - for each prompt and reply, the session ID, provider, model, reasoning effort,
   whether yolo mode is on, and the tokens used;
-- errors, your OS and CPU architecture, terminal, shell and Klash's version.
+- errors, your OS and CPU architecture, terminal, shell and Gnosh's version.
 
-Prompts, replies and code are never sent. The events go to Klash's own
+Prompts, replies and code are never sent. The events go to Gnosh's own
 collector, `https://metrics.klash.pro`, or to a `metrics-url` you set instead;
 Charm's analytics is not a destination. The collector is a small open service
-(a small Go service, klash-metrics); run your own and point `metrics-url` at it to keep the
+(a small Go service, gnosh-metrics); run your own and point `metrics-url` at it to keep the
 data yourself. The events are defined in [internal/event](internal/event) and
 [internal/agent/event.go](internal/agent/event.go).
 
@@ -1509,7 +1509,7 @@ licensed to the maintainer only. You keep every right to your own work.
 
 ## License
 
-Klash's primary licence is the [GNO Network General Public License, version
+Gnosh's primary licence is the [GNO Network General Public License, version
 6](./LICENSE.md), with Additional Terms (Strong Attribution) that run to
 NewTendermint, LLC. It covers the work written for this fork.
 
@@ -1521,10 +1521,10 @@ worked out, not papered over. `internal/gnovm/`, the GnoVM machines, carries
 its own copy of the same License: see
 [internal/gnovm/LICENSE.md](./internal/gnovm/LICENSE.md).
 
-Klash is a fork of [Crush](https://github.com/charmbracelet/crush) by
+Gnosh is a fork of [Crush](https://github.com/charmbracelet/crush) by
 [Charm](https://charm.land). Crush and Charm are Charmbracelet's names; this
 fork is not affiliated with or endorsed by them.
 
 <p align="center">
-  <a href="https://klash.pro"><img src="docs/brand/signoff.svg" width="100%" alt="Klash, klash.pro"></a>
+  <a href="https://gnosh.ai"><img src="docs/brand/signoff.svg" width="100%" alt="Gnosh, gnosh.ai"></a>
 </p>

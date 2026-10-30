@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -28,7 +28,7 @@ type memStory struct {
 	now   time.Time
 	out   strings.Builder
 	calls []memCall
-	// holding answers Redact's question, as klash's journal would.
+	// holding answers Redact's question, as gnosh's journal would.
 	holding func(string, []memOp) ([]string, []string, bool)
 }
 
@@ -65,7 +65,7 @@ func (s *memStory) check(r *memRealm, after string) {
 // TestMemStory runs a story through every call of gnomem v2, and checks
 // its transcript against testdata/gnomem/v2/story.golden (GNOMEM_V2_WRITE=1
 // rewrites it). Then it rebuilds the mem from the story's Ops alone, as
-// klash rebuilds from its journal, and checks that the rebuilt mem shows
+// gnosh rebuilds from its journal, and checks that the rebuilt mem shows
 // and answers JSON exactly as the live one.
 func TestMemStory(t *testing.T) {
 	s := newMemStory(t)
@@ -90,7 +90,7 @@ func TestMemStory(t *testing.T) {
 	s.run("s1", `mem.Fact("cmd/test", "go test -race ./...")`)
 	s.run("s1", `mem.Fact("cmd/tests", "go test ./internal/...")`)
 	s.run("s1", `mem.Fact("Cmd/Test", "x")`)
-	s.run("user", `mem.Rule("push-after-landing", "push klash main to GitHub only after land-branch.sh prints landed:")`)
+	s.run("user", `mem.Rule("push-after-landing", "push gnosh main to GitHub only after land-branch.sh prints landed:")`)
 	s.run("s1", `mem.Drop("bump-gno-pin", "the PR was closed")`)
 	s.run("s1", `mem.Reopen("bump-gno-pin")`)
 	s.run("s1", `mem.Done("release-v2/2", "tagged v2.0.0")`)

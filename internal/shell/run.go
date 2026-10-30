@@ -204,7 +204,7 @@ func newRunner(cwd string, env []string, stdin io.Reader, stdout, stderr io.Writ
 // interp.DefaultExecHandler as the final handler, which lacks process group
 // isolation. Without isolation, shells like zsh that set up job control
 // when sourcing framework files can send SIGINT/SIGTERM to Crush's process
-// group and klash the parent.
+// group and gnosh the parent.
 func execHandlerOption(blockFuncs []BlockFunc) interp.RunnerOption {
 	base := processGroupExecHandler(defaultKillTimeout)
 	handler := base
@@ -299,7 +299,7 @@ type execMiddleware = func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc
 //     that deny rules see the already-resolved argv of anything the
 //     script exec's rather than the outer path-prefixed wrapper;
 //  3. block list;
-//  4. tool names (a Klash tool run as a command is told to be called);
+//  4. tool names (a Gnosh tool run as a command is told to be called);
 //  5. optional Go coreutils (only when useGoCoreUtils is on).
 func standardHandlers(blockFuncs []BlockFunc) []execMiddleware {
 	handlers := []execMiddleware{
@@ -356,7 +356,7 @@ func blockHandler(blockFuncs []BlockFunc) execMiddleware {
 }
 
 // toolNameHandler returns middleware that says so when a command the
-// shell cannot find is named like one of Klash's tools: a model that runs
+// shell cannot find is named like one of Gnosh's tools: a model that runs
 // "job_kill 077" in bash meant the job_kill tool, and the shell's own
 // "executable file not found" left an agent on the AI box with a server
 // it never stopped. A command of that name on the PATH runs as usual.
@@ -371,7 +371,7 @@ func toolNameHandler() execMiddleware {
 			if _, lookErr := interp.LookPathDir(hc.Dir, hc.Env, args[0]); lookErr == nil {
 				return err
 			}
-			fmt.Fprintf(hc.Stderr, "%s is a Klash tool, not a shell command: call the %s tool instead.\n", args[0], tooldefs.Canonical(args[0]))
+			fmt.Fprintf(hc.Stderr, "%s is a Gnosh tool, not a shell command: call the %s tool instead.\n", args[0], tooldefs.Canonical(args[0]))
 			return err
 		}
 	}

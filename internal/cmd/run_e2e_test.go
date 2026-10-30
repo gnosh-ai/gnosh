@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// standInModel is an OpenAI-compatible model server for a whole klash run
+// standInModel is an OpenAI-compatible model server for a whole gnosh run
 // turn: it answers model discovery (two models, stand-in and stand-in-2),
 // gives a title request (one offering no tools) a title, answers the first
 // request that offers tools with text and a call to ls, and the request
@@ -60,7 +60,7 @@ func standInModel(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// runForTest runs `klash run args...` in-process against the stand-in
+// runForTest runs `gnosh run args...` in-process against the stand-in
 // model, in a project of its own, and returns what it wrote to stdout.
 func runForTest(t *testing.T, args ...string) (string, error) {
 	t.Helper()
@@ -88,7 +88,7 @@ func runForTestWith(t *testing.T, args ...string) (string, error) {
 	return string(b), runErr
 }
 
-// A whole klash run turn, a tool call and all, against a stand-in model
+// A whole gnosh run turn, a tool call and all, against a stand-in model
 // server: text output keeps the steps apart, json's result is the answer,
 // and stream-json writes each message in Claude Code's order. Tried by
 // hand first, this flow found the step texts run together and json's
@@ -98,16 +98,16 @@ func TestRunEndToEnd(t *testing.T) {
 	t.Setenv("HOME", isolated)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(isolated, ".config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(isolated, ".local", "share"))
-	t.Setenv("KLASH_GLOBAL_CONFIG", filepath.Join(isolated, ".config", "klash"))
-	t.Setenv("KLASH_GLOBAL_DATA", filepath.Join(isolated, ".local", "share", "klash"))
-	for _, name := range []string{"KLASH_DISABLE_PROVIDER_AUTO_UPDATE", "KLASH_DISABLE_DEFAULT_PROVIDERS", "KLASH_DISABLE_METRICS", "KLASH_DISABLE_UPDATE_CHECK"} {
+	t.Setenv("GNOSH_GLOBAL_CONFIG", filepath.Join(isolated, ".config", "gnosh"))
+	t.Setenv("GNOSH_GLOBAL_DATA", filepath.Join(isolated, ".local", "share", "gnosh"))
+	for _, name := range []string{"GNOSH_DISABLE_PROVIDER_AUTO_UPDATE", "GNOSH_DISABLE_DEFAULT_PROVIDERS", "GNOSH_DISABLE_METRICS", "GNOSH_DISABLE_UPDATE_CHECK"} {
 		t.Setenv(name, "1")
 	}
 	srv := standInModel(t)
 	proj := t.TempDir()
 	cfg := `{"providers": {"standin": {"type": "llamacpp", "base_url": "` + srv.URL + `"}},
 		"models": {"large": {"model": "stand-in", "provider": "standin"}, "small": {"model": "stand-in", "provider": "standin"}}}`
-	require.NoError(t, os.WriteFile(filepath.Join(proj, "klash.json"), []byte(cfg), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(proj, "gnosh.json"), []byte(cfg), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(proj, "a.txt"), []byte("alpha\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(proj, "b.txt"), []byte("beta\n"), 0o644))
 	t.Chdir(proj)

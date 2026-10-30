@@ -17,13 +17,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestKlashInfo_MinimalConfig(t *testing.T) {
+func TestGnoshInfo_MinimalConfig(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.NotContains(t, output, "[providers]")
 	require.NotContains(t, output, "[lsp]")
 	require.NotContains(t, output, "[mcp]")
@@ -31,7 +31,7 @@ func TestKlashInfo_MinimalConfig(t *testing.T) {
 	require.NotContains(t, output, "[tools]")
 }
 
-func TestKlashInfo_ConfigFiles(t *testing.T) {
+func TestGnoshInfo_ConfigFiles(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.NewTestStore(
@@ -39,13 +39,13 @@ func TestKlashInfo_ConfigFiles(t *testing.T) {
 		"/home/user/.config/crush/crush.json",
 		"/project/.crush/crush.json",
 	)
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[config_files]")
 	require.Contains(t, output, "/home/user/.config/crush/crush.json")
 	require.Contains(t, output, "/project/.crush/crush.json")
 }
 
-func TestKlashInfo_Models(t *testing.T) {
+func TestGnoshInfo_Models(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.NewTestStore(&config.Config{
@@ -55,13 +55,13 @@ func TestKlashInfo_Models(t *testing.T) {
 		},
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[model]")
 	require.Contains(t, output, "large = claude-sonnet-4-20250514 (anthropic)")
 	require.Contains(t, output, "small = claude-haiku-3-20250307 (anthropic)")
 }
 
-func TestKlashInfo_Providers(t *testing.T) {
+func TestGnoshInfo_Providers(t *testing.T) {
 	t.Parallel()
 
 	providers := csync.NewMap[string, config.ProviderConfig]()
@@ -69,7 +69,7 @@ func TestKlashInfo_Providers(t *testing.T) {
 	providers.Set("anthropic", config.ProviderConfig{Models: make([]catwalk.Model, 12)})
 
 	cfg := config.NewTestStore(&config.Config{Providers: providers})
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[providers]")
 	anthropicIdx := strings.Index(output, "anthropic = enabled")
 	openaiIdx := strings.Index(output, "openai = enabled")
@@ -80,7 +80,7 @@ func TestKlashInfo_Providers(t *testing.T) {
 	require.Contains(t, output, "openai = enabled (8 models)")
 }
 
-func TestKlashInfo_DisabledProvidersOmitted(t *testing.T) {
+func TestGnoshInfo_DisabledProvidersOmitted(t *testing.T) {
 	t.Parallel()
 
 	providers := csync.NewMap[string, config.ProviderConfig]()
@@ -88,12 +88,12 @@ func TestKlashInfo_DisabledProvidersOmitted(t *testing.T) {
 	providers.Set("anthropic", config.ProviderConfig{Models: make([]catwalk.Model, 12)})
 
 	cfg := config.NewTestStore(&config.Config{Providers: providers})
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "anthropic = enabled")
 	require.NotContains(t, output, "openai")
 }
 
-func TestKlashInfo_LSPStates(t *testing.T) {
+func TestGnoshInfo_LSPStates(t *testing.T) {
 	t.Parallel()
 
 	mgr := lsp.NewManager(config.NewTestStore(&config.Config{
@@ -108,7 +108,7 @@ func TestKlashInfo_LSPStates(t *testing.T) {
 	mgr.Clients().Set("pyright", errorClient)
 
 	cfg := config.NewTestStore(&config.Config{Providers: csync.NewMap[string, config.ProviderConfig]()})
-	output := buildKlashInfo(cfg, mgr, nil, nil, nil)
+	output := buildGnoshInfo(cfg, mgr, nil, nil, nil)
 	require.Contains(t, output, "[lsp]")
 	require.Contains(t, output, "gopls = ready")
 	require.Contains(t, output, "pyright = error")
@@ -117,7 +117,7 @@ func TestKlashInfo_LSPStates(t *testing.T) {
 	require.Less(t, goplsIdx, pyrightIdx, "gopls should appear before pyright")
 }
 
-func TestKlashInfo_MCPStates(t *testing.T) {
+func TestGnoshInfo_MCPStates(t *testing.T) {
 	t.Parallel()
 
 	connectedAt := time.Date(2025, 1, 15, 15, 4, 5, 0, time.UTC)
@@ -150,7 +150,7 @@ func TestKlashInfo_MCPStates(t *testing.T) {
 	require.Less(t, filesystemIdx, githubIdx, "filesystem should appear before github")
 }
 
-func TestKlashInfo_YoloMode(t *testing.T) {
+func TestGnoshInfo_YoloMode(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.NewTestStore(&config.Config{
@@ -159,12 +159,12 @@ func TestKlashInfo_YoloMode(t *testing.T) {
 	})
 	cfg.Overrides().SkipPermissionRequests = true
 
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[permissions]")
 	require.Contains(t, output, "mode = yolo")
 }
 
-func TestKlashInfo_AllowedTools(t *testing.T) {
+func TestGnoshInfo_AllowedTools(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.NewTestStore(&config.Config{
@@ -172,12 +172,12 @@ func TestKlashInfo_AllowedTools(t *testing.T) {
 		Permissions: &config.Permissions{AllowedTools: []string{"edit:write", "bash"}},
 	})
 
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[permissions]")
 	require.Contains(t, output, "allowed_tools = bash, edit:write")
 }
 
-func TestKlashInfo_DisabledTools(t *testing.T) {
+func TestGnoshInfo_DisabledTools(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.NewTestStore(&config.Config{
@@ -185,12 +185,12 @@ func TestKlashInfo_DisabledTools(t *testing.T) {
 		Options:   &config.Options{DisabledTools: []string{"sourcegraph", "agentic_fetch"}},
 	})
 
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[tools]")
 	require.Contains(t, output, "disabled = agentic_fetch, sourcegraph")
 }
 
-func TestKlashInfo_Options(t *testing.T) {
+func TestGnoshInfo_Options(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.NewTestStore(&config.Config{
@@ -202,7 +202,7 @@ func TestKlashInfo_Options(t *testing.T) {
 		},
 	})
 
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[options]")
 	require.Contains(t, output, "auto_lsp = true")
 	require.Contains(t, output, "auto_summarize = false")
@@ -210,7 +210,7 @@ func TestKlashInfo_Options(t *testing.T) {
 	require.Contains(t, output, "debug = true")
 }
 
-func TestKlashInfo_TUIOptions(t *testing.T) {
+func TestGnoshInfo_TUIOptions(t *testing.T) {
 	t.Parallel()
 
 	transparent := true
@@ -229,7 +229,7 @@ func TestKlashInfo_TUIOptions(t *testing.T) {
 		},
 	})
 
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "compact_mode = true")
 	require.Contains(t, output, "diff_mode = split")
 	require.Contains(t, output, "scrollbar = never")
@@ -239,7 +239,7 @@ func TestKlashInfo_TUIOptions(t *testing.T) {
 	require.Contains(t, output, "completions_max_items = 42")
 }
 
-func TestKlashInfo_TUIOptionsUnpinnedCompletionsOmitted(t *testing.T) {
+func TestGnoshInfo_TUIOptionsUnpinnedCompletionsOmitted(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.NewTestStore(&config.Config{
@@ -247,31 +247,31 @@ func TestKlashInfo_TUIOptionsUnpinnedCompletionsOmitted(t *testing.T) {
 		Options:   &config.Options{TUI: &config.TUIOptions{}},
 	})
 
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "transparent = false")
 	require.NotContains(t, output, "completions_max_depth")
 	require.NotContains(t, output, "completions_max_items")
 }
 
-func TestKlashInfo_AutoSummarizeInversion(t *testing.T) {
+func TestGnoshInfo_AutoSummarizeInversion(t *testing.T) {
 	t.Parallel()
 
 	cfgFalse := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 		Options:   &config.Options{DisableAutoSummarize: true},
 	})
-	outputFalse := buildKlashInfo(cfgFalse, nil, nil, nil, nil)
+	outputFalse := buildGnoshInfo(cfgFalse, nil, nil, nil, nil)
 	require.Contains(t, outputFalse, "auto_summarize = false")
 
 	cfgTrue := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 		Options:   &config.Options{DisableAutoSummarize: false},
 	})
-	outputTrue := buildKlashInfo(cfgTrue, nil, nil, nil, nil)
+	outputTrue := buildGnoshInfo(cfgTrue, nil, nil, nil, nil)
 	require.Contains(t, outputTrue, "auto_summarize = true")
 }
 
-func TestKlashInfo_NoSecrets(t *testing.T) {
+func TestGnoshInfo_NoSecrets(t *testing.T) {
 	t.Parallel()
 
 	providers := csync.NewMap[string, config.ProviderConfig]()
@@ -281,13 +281,13 @@ func TestKlashInfo_NoSecrets(t *testing.T) {
 	})
 
 	cfg := config.NewTestStore(&config.Config{Providers: providers})
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.NotContains(t, output, "sk-super-secret-key-12345")
 	require.NotContains(t, output, "secret")
 	require.Contains(t, output, "openai = enabled (8 models)")
 }
 
-func TestKlashInfo_DeterministicOrdering(t *testing.T) {
+func TestGnoshInfo_DeterministicOrdering(t *testing.T) {
 	t.Parallel()
 
 	providers := csync.NewMap[string, config.ProviderConfig]()
@@ -317,7 +317,7 @@ func TestKlashInfo_DeterministicOrdering(t *testing.T) {
 	zMcpIdx := strings.Index(mcpOutput, "z-mcp = connected")
 	require.Less(t, aMcpIdx, zMcpIdx)
 
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 
 	alphaIdx := strings.Index(output, "alpha = enabled")
 	middleIdx := strings.Index(output, "middle = enabled")
@@ -329,7 +329,7 @@ func TestKlashInfo_DeterministicOrdering(t *testing.T) {
 	require.Contains(t, output, "allowed_tools = a-perm, z-perm")
 }
 
-func TestKlashInfo_EmptySectionsOmitted(t *testing.T) {
+func TestGnoshInfo_EmptySectionsOmitted(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.NewTestStore(&config.Config{
@@ -338,7 +338,7 @@ func TestKlashInfo_EmptySectionsOmitted(t *testing.T) {
 		Options:     &config.Options{},
 	})
 
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.NotContains(t, output, "[tools]")
 	require.NotContains(t, output, "[permissions]")
 	require.NotContains(t, output, "[lsp]")
@@ -346,7 +346,7 @@ func TestKlashInfo_EmptySectionsOmitted(t *testing.T) {
 	require.NotContains(t, output, "[skills]")
 }
 
-func TestKlashInfo_ConfigStaleness_Clean(t *testing.T) {
+func TestGnoshInfo_ConfigStaleness_Clean(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -360,14 +360,14 @@ func TestKlashInfo_ConfigStaleness_Clean(t *testing.T) {
 	// Capture snapshot (normally done in Load)
 	store.CaptureStalenessSnapshot([]string{configPath})
 
-	output := buildKlashInfo(store, nil, nil, nil, nil)
+	output := buildGnoshInfo(store, nil, nil, nil, nil)
 	require.Contains(t, output, "[config]")
 	require.Contains(t, output, "dirty = false")
 	require.NotContains(t, output, "changed_paths")
 	require.NotContains(t, output, "missing_paths")
 }
 
-func TestKlashInfo_ConfigStaleness_Dirty(t *testing.T) {
+func TestGnoshInfo_ConfigStaleness_Dirty(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -385,14 +385,14 @@ func TestKlashInfo_ConfigStaleness_Dirty(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	require.NoError(t, os.WriteFile(configPath, []byte(`{"debug": true}`), 0o600))
 
-	output := buildKlashInfo(store, nil, nil, nil, nil)
+	output := buildGnoshInfo(store, nil, nil, nil, nil)
 	require.Contains(t, output, "[config]")
 	require.Contains(t, output, "dirty = true")
 	require.Contains(t, output, "changed_paths")
 	require.Contains(t, output, configPath)
 }
 
-func TestKlashInfo_ConfigStaleness_MissingPath(t *testing.T) {
+func TestGnoshInfo_ConfigStaleness_MissingPath(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -409,58 +409,58 @@ func TestKlashInfo_ConfigStaleness_MissingPath(t *testing.T) {
 	// Delete file to trigger missing state
 	require.NoError(t, os.Remove(configPath))
 
-	output := buildKlashInfo(store, nil, nil, nil, nil)
+	output := buildGnoshInfo(store, nil, nil, nil, nil)
 	require.Contains(t, output, "[config]")
 	require.Contains(t, output, "dirty = true")
 	require.Contains(t, output, "missing_paths")
 	require.Contains(t, output, configPath)
 }
 
-func TestKlashInfo_Skills_NoSkills(t *testing.T) {
+func TestGnoshInfo_Skills_NoSkills(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.NotContains(t, output, "[skills]")
 }
 
-func TestKlashInfo_Skills_MixedLoadedUnloaded(t *testing.T) {
+func TestGnoshInfo_Skills_MixedLoadedUnloaded(t *testing.T) {
 	t.Parallel()
 
 	allSkills := []*skills.Skill{
 		{Name: "go-doc", Builtin: false},
 		{Name: "bash", Builtin: false},
-		{Name: "klash-config", Builtin: true},
+		{Name: "gnosh-config", Builtin: true},
 	}
 	activeSkills := allSkills
 
 	tracker := skills.NewTracker(activeSkills)
 	tracker.MarkLoaded("bash")
-	tracker.MarkLoaded("klash-config")
+	tracker.MarkLoaded("gnosh-config")
 
 	cfg := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
-	output := buildKlashInfo(cfg, nil, allSkills, activeSkills, tracker)
+	output := buildGnoshInfo(cfg, nil, allSkills, activeSkills, tracker)
 	require.Contains(t, output, "[skills]")
 	require.Contains(t, output, "bash = user, loaded")
-	require.Contains(t, output, "klash-config = builtin, loaded")
+	require.Contains(t, output, "gnosh-config = builtin, loaded")
 	require.Contains(t, output, "go-doc = user, unloaded")
 }
 
-func TestKlashInfo_Skills_DisabledSkills(t *testing.T) {
+func TestGnoshInfo_Skills_DisabledSkills(t *testing.T) {
 	t.Parallel()
 
 	allSkills := []*skills.Skill{
 		{Name: "bash", Builtin: false},
-		{Name: "klash-config", Builtin: true},
+		{Name: "gnosh-config", Builtin: true},
 		{Name: "image-convert", Builtin: false},
 	}
 	activeSkills := []*skills.Skill{
 		{Name: "bash", Builtin: false},
-		{Name: "klash-config", Builtin: true},
+		{Name: "gnosh-config", Builtin: true},
 	}
 
 	tracker := skills.NewTracker(activeSkills)
@@ -469,14 +469,14 @@ func TestKlashInfo_Skills_DisabledSkills(t *testing.T) {
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 		Options:   &config.Options{DisabledSkills: []string{"image-convert"}},
 	})
-	output := buildKlashInfo(cfg, nil, allSkills, activeSkills, tracker)
+	output := buildGnoshInfo(cfg, nil, allSkills, activeSkills, tracker)
 	require.Contains(t, output, "[skills]")
 	require.Contains(t, output, "bash = user, unloaded")
-	require.Contains(t, output, "klash-config = builtin, unloaded")
+	require.Contains(t, output, "gnosh-config = builtin, unloaded")
 	require.Contains(t, output, "image-convert = user, disabled")
 }
 
-func TestKlashInfo_Skills_Ordering(t *testing.T) {
+func TestGnoshInfo_Skills_Ordering(t *testing.T) {
 	t.Parallel()
 
 	allSkills := []*skills.Skill{
@@ -490,7 +490,7 @@ func TestKlashInfo_Skills_Ordering(t *testing.T) {
 	cfg := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
-	output := buildKlashInfo(cfg, nil, allSkills, activeSkills, tracker)
+	output := buildGnoshInfo(cfg, nil, allSkills, activeSkills, tracker)
 
 	aIdx := strings.Index(output, "a-skill")
 	mIdx := strings.Index(output, "m-skill")
@@ -499,11 +499,11 @@ func TestKlashInfo_Skills_Ordering(t *testing.T) {
 	require.Less(t, mIdx, zIdx)
 }
 
-func TestKlashInfo_Skills_BuiltinOrigin(t *testing.T) {
+func TestGnoshInfo_Skills_BuiltinOrigin(t *testing.T) {
 	t.Parallel()
 
 	allSkills := []*skills.Skill{
-		{Name: "klash-config", Builtin: true},
+		{Name: "gnosh-config", Builtin: true},
 		{Name: "my-skill", Builtin: false},
 	}
 	activeSkills := allSkills
@@ -512,12 +512,12 @@ func TestKlashInfo_Skills_BuiltinOrigin(t *testing.T) {
 	cfg := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
-	output := buildKlashInfo(cfg, nil, allSkills, activeSkills, tracker)
-	require.Contains(t, output, "klash-config = builtin, unloaded")
+	output := buildGnoshInfo(cfg, nil, allSkills, activeSkills, tracker)
+	require.Contains(t, output, "gnosh-config = builtin, unloaded")
 	require.Contains(t, output, "my-skill = user, unloaded")
 }
 
-func TestKlashInfo_Hooks(t *testing.T) {
+func TestGnoshInfo_Hooks(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.NewTestStore(&config.Config{
@@ -530,19 +530,19 @@ func TestKlashInfo_Hooks(t *testing.T) {
 		},
 	})
 
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[hooks]")
 	require.Contains(t, output, "PreToolUse (matcher: edit|write) = check-privates.sh")
 	require.Contains(t, output, "PreToolUse = audit.sh")
 }
 
-func TestKlashInfo_Hooks_NoHooks(t *testing.T) {
+func TestGnoshInfo_Hooks_NoHooks(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.NewTestStore(&config.Config{
 		Providers: csync.NewMap[string, config.ProviderConfig](),
 	})
 
-	output := buildKlashInfo(cfg, nil, nil, nil, nil)
+	output := buildGnoshInfo(cfg, nil, nil, nil, nil)
 	require.NotContains(t, output, "[hooks]")
 }

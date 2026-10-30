@@ -25,7 +25,7 @@ func doctorConfig() *config.Config {
 		},
 		Hooks:   map[string][]config.HookConfig{config.EventStop: {{Command: "true"}}, config.EventUserPromptSubmit: {{Command: "a"}, {Command: "b"}}},
 		LSP:     config.LSPs{"gopls": {Command: "gopls"}, "off": {Command: "nope", Disabled: true}},
-		Options: &config.Options{DataDirectory: "/tmp/proj/.klash"},
+		Options: &config.Options{DataDirectory: "/tmp/proj/.gnosh"},
 	}
 }
 
@@ -43,7 +43,7 @@ func foundAllBut(missing string) func(string) (string, error) {
 
 // A hook that starts with a bare program name has it looked up, since a
 // program that is not installed makes the hook fail closed every time it
-// fires. The shell's own keywords and builtins, Klash's jq, and commands
+// fires. The shell's own keywords and builtins, Gnosh's jq, and commands
 // that start with a path, an assignment or other shell syntax are not.
 func TestHookCommandProblem(t *testing.T) {
 	t.Parallel()
@@ -144,12 +144,12 @@ func TestHookScriptProblem(t *testing.T) {
 	// often quoted. They were skipped for the $, and a missing one fails
 	// its hook each time, which lets the call go ahead.
 	require.Equal(t, "${CLAUDE_PROJECT_DIR}/missing.sh does not exist", hookScriptProblem(`"${CLAUDE_PROJECT_DIR}/missing.sh"`, dir))
-	require.Equal(t, "$KLASH_PROJECT_DIR/missing.sh does not exist", hookScriptProblem("$KLASH_PROJECT_DIR/missing.sh arg", dir))
+	require.Equal(t, "$GNOSH_PROJECT_DIR/missing.sh does not exist", hookScriptProblem("$GNOSH_PROJECT_DIR/missing.sh arg", dir))
 	require.Empty(t, hookScriptProblem(`"${CLAUDE_PROJECT_DIR}/ok.sh"`, dir))
 }
 
 // The report names the hook whose script is missing, and what that
-// costs: Klash fails closed, so where a hook can block, a hook that cannot
+// costs: Gnosh fails closed, so where a hook can block, a hook that cannot
 // run blocks every time, an error; where none can, it is a warning.
 func TestDoctorReportNamesABrokenHook(t *testing.T) {
 	t.Parallel()
@@ -174,17 +174,17 @@ func TestDoctorReportNamesABrokenHook(t *testing.T) {
 	require.Contains(t, strings.Join(lines, "\n"), `! hook SessionStart "memsync": `+missing+" does not exist, so it is skipped, with a warning, each time it fires")
 }
 
-// /doctor shows the report as klash doctor prints it, a line per check
+// /doctor shows the report as gnosh doctor prints it, a line per check
 // with its text kept as written (Markdown would read the asterisks and
 // underscores of rules and paths as emphasis), then whether a turn can
 // run here.
 func TestMarkdown(t *testing.T) {
 	t.Parallel()
 
-	lines := []string{"✓ klash v1", `✗ hook PreToolUse "Bash(*)": ./my_gate.sh does not exist, so every tool call it matches is blocked`}
-	require.Equal(t, "## Doctor\n\n- ✓ klash v1\n"+
+	lines := []string{"✓ gnosh v1", `✗ hook PreToolUse "Bash(*)": ./my_gate.sh does not exist, so every tool call it matches is blocked`}
+	require.Equal(t, "## Doctor\n\n- ✓ gnosh v1\n"+
 		"- ✗ hook PreToolUse \"Bash(\\*)\": ./my\\_gate.sh does not exist, so every tool call it matches is blocked\n"+
-		"\nKlash could not run a turn here: see the lines marked ✗.\n", Markdown(lines, false))
+		"\nGnosh could not run a turn here: see the lines marked ✗.\n", Markdown(lines, false))
 	require.True(t, strings.HasSuffix(Markdown(lines[:1], true), "\n\nA turn can run here.\n"))
 	require.Equal(t, `\\ \`+"`"+` \* \_ \[ \] \< \> \|`, markdownEscaper.Replace("\\ ` * _ [ ] < > |"))
 }

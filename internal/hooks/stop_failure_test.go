@@ -32,7 +32,7 @@ func TestRunStopFailure(t *testing.T) {
 	dir := t.TempDir()
 	payloadPath := filepath.Join(dir, "payload.json")
 	envPath := filepath.Join(dir, "env")
-	r := runner(t, "", `cat > `+payloadPath, `echo "$KLASH_STOP_FAILURE_ERROR" > `+envPath)
+	r := runner(t, "", `cat > `+payloadPath, `echo "$GNOSH_STOP_FAILURE_ERROR" > `+envPath)
 	_, err := r.RunStopFailure(context.Background(), "sess", "rate_limit", "429 Too Many Requests", "Rate limit: slow down")
 	require.NoError(t, err)
 

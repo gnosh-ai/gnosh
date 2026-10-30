@@ -55,14 +55,14 @@ func NewFromMap(m map[string]string) Env {
 }
 
 // LookupEnv is os.LookupEnv for the program's own settings while it is
-// renamed from Crush to Klash: a KLASH_ name that is not set falls back to
+// renamed from Crush to Gnosh: a GNOSH_ name that is not set falls back to
 // the CRUSH_ name it replaces, so existing setups keep working, and the
-// KLASH_ name wins when both are set. Other names are looked up as given.
+// GNOSH_ name wins when both are set. Other names are looked up as given.
 func LookupEnv(key string) (string, bool) {
 	if v, ok := os.LookupEnv(key); ok {
 		return v, true
 	}
-	if name, ok := strings.CutPrefix(key, "KLASH_"); ok {
+	if name, ok := strings.CutPrefix(key, "GNOSH_"); ok {
 		return os.LookupEnv("CRUSH_" + name)
 	}
 	return "", false

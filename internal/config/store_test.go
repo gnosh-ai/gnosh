@@ -22,7 +22,7 @@ func TestNewTestStoreIn(t *testing.T) {
 
 	dir := t.TempDir()
 	require.Equal(t, dir, NewTestStoreIn(&Config{}, dir).WorkingDir())
-	require.Empty(t, NewTestStore(&Config{}, filepath.Join(dir, "klash.json")).WorkingDir())
+	require.Empty(t, NewTestStore(&Config{}, filepath.Join(dir, "gnosh.json")).WorkingDir())
 }
 
 func TestConfigStore_ConfigPath_GlobalAlwaysWorks(t *testing.T) {

@@ -37,7 +37,7 @@ type toolHooks struct {
 	workingDir string
 	// permissions puts a call a PreToolUse hook answered "ask" for to the
 	// user, when there is one: interactive is false where no one can
-	// answer, as in klash run. Without them, as in tests, such a call is
+	// answer, as in gnosh run. Without them, as in tests, such a call is
 	// refused.
 	permissions permission.Service
 	interactive bool
@@ -78,7 +78,7 @@ func (h *hookedTool) Info() fantasy.ToolInfo {
 
 func (h *hookedTool) Unwrap() fantasy.AgentTool { return h.inner }
 
-// innermostTool is tool without the wrappers Klash puts around tools
+// innermostTool is tool without the wrappers Gnosh puts around tools
 // (hooks, user descriptions, the fetch agent's confinement), each of which
 // says what it wraps with Unwrap: the tool itself, with the methods a
 // wrapper does not pass on, such as an MCP tool's MCP. With hooks or user
@@ -214,7 +214,7 @@ func (h *hookedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 // confirm puts a call a PreToolUse hook answered "ask" for to the user, as
 // Claude Code does: even a call that would run without asking (yolo,
 // --allowedTools, acceptEdits, a tool that never asks) waits for their
-// answer, with the hook's reason. Where no one can answer, in klash run,
+// answer, with the hook's reason. Where no one can answer, in gnosh run,
 // the call is refused with that reason, as Claude Code refuses one in a
 // -p run. A sub-agent's call is asked about as the main agent's is, even
 // agentic_fetch's, whose session grants its own requests. A
@@ -262,7 +262,7 @@ func (h *hookedTool) confirm(ctx context.Context, sessionID string, call fantasy
 // user's, which ends the turn; here the turn goes on, as in Claude Code,
 // where dontAsk is for runs no one watches.
 func notAskedResponse(result hooks.AggregateResult) fantasy.ToolResponse {
-	resp := fantasy.NewTextErrorResponse("Permission denied: Klash runs with --permission-mode dontAsk, which denies a call it would ask about instead of asking. Only read-only commands and calls allowed with --allowedTools or permissions.allow run.")
+	resp := fantasy.NewTextErrorResponse("Permission denied: Gnosh runs with --permission-mode dontAsk, which denies a call it would ask about instead of asking. Only read-only commands and calls allowed with --allowedTools or permissions.allow run.")
 	if result.HookCount > 0 {
 		resp.Metadata = hookMetadataJSON(result)
 	}
@@ -296,7 +296,7 @@ func (h *hookedTool) answerPermission(ctx context.Context, sessionID string, cal
 	case len(couldNot) > 0:
 		return permission.HookAnswer{Note: "A PermissionRequest hook could not answer this, so you are asked: " + strings.Join(couldNot, "; ")}, result
 	case result.Decision == hooks.DecisionAllow && result.UpdatedInput != "":
-		return permission.HookAnswer{Note: "A PermissionRequest hook allowed this with changed input, which Klash cannot run, so you are asked about the input as it is."}, result
+		return permission.HookAnswer{Note: "A PermissionRequest hook allowed this with changed input, which Gnosh cannot run, so you are asked about the input as it is."}, result
 	case result.Decision == hooks.DecisionAllow:
 		return permission.HookAnswer{Allow: true}, result
 	}

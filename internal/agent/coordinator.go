@@ -383,7 +383,7 @@ const onDemandContextLimit = 40000
 // subdirectory's CLAUDE.md once it reads, writes or edits a file there.
 // A file over onDemandContextLimit characters is given cut, with a note
 // to read the rest with the view tool. Started at the root of Jae's gno
-// checkout, Klash never read misc/gnoe2e's own AGENTS.md. A call with no
+// checkout, Gnosh never read misc/gnoe2e's own AGENTS.md. A call with no
 // session gives nothing: what is given is recorded per session. A
 // relative filePath, as lsp_replace_symbol passes on as the model wrote
 // it, is taken from the working directory.
@@ -516,7 +516,7 @@ func onDemandContextFile(f prompt.ContextFile) string {
 
 // permissionMode is a session's permission mode as Claude Code names it
 // to hooks, for any agent but the plan agent: bypassPermissions when its
-// permission requests are all granted (yolo, or a klash run's session and
+// permission requests are all granted (yolo, or a gnosh run's session and
 // its sub-agents'), acceptEdits or dontAsk under that --permission-mode,
 // else default.
 func (c *coordinator) permissionMode(sessionID string) string {
@@ -1195,8 +1195,8 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 			workingDir: c.cfg.WorkingDir(),
 			named:      c.named,
 		},
-		wrap(tools.NewKlashInfoTool(c.cfg, c.lspManager, c.allSkills, c.activeSkills, c.skillTracker)),
-		wrap(tools.NewKlashLogsTool(logFile)),
+		wrap(tools.NewGnoshInfoTool(c.cfg, c.lspManager, c.allSkills, c.activeSkills, c.skillTracker)),
+		wrap(tools.NewGnoshLogsTool(logFile)),
 		wrap(tools.NewJobOutputTool(c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory)),
 		wrap(tools.NewJobKillTool(c.cfg.WorkingDir())),
 		wrap(tools.NewDownloadTool(c.permissions, c.cfg.WorkingDir(), nil)),
@@ -1758,7 +1758,7 @@ func (c *coordinator) Cancel(sessionID string) {
 	c.currentAgent().Cancel(sessionID)
 }
 
-// CancelAll stops every turn, as klash shuts down; from then on a
+// CancelAll stops every turn, as gnosh shuts down; from then on a
 // background job that ends starts no turn.
 func (c *coordinator) CancelAll() {
 	if c.jobs != nil {
@@ -1769,8 +1769,8 @@ func (c *coordinator) CancelAll() {
 
 // backgroundWatcher is what the bash tool tells of a command that
 // becomes a background job: the job watcher, for the main agent of an
-// interactive klash, which goes on after a turn ends. A sub-agent's turn
-// is over by the time its job ends, and `klash run` exits with its turn.
+// interactive gnosh, which goes on after a turn ends. A sub-agent's turn
+// is over by the time its job ends, and `gnosh run` exits with its turn.
 func (c *coordinator) backgroundWatcher(isSubAgent bool) tools.BackgroundWatcher {
 	if isSubAgent || !c.interactive || c.jobs == nil {
 		return nil
@@ -2165,7 +2165,7 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 	// A sub-agent works on its parent's behalf, so when the parent's
 	// session is auto-approved, as a non-interactive run's is, the
 	// sub-agent's is too. Otherwise its first permission request waits
-	// for an answer nobody is there to give: in a klash run on the AI box
+	// for an answer nobody is there to give: in a gnosh run on the AI box
 	// a sub-agent hung that way, reading a file in the Go module cache.
 	if c.permissions != nil && c.permissions.IsSessionAutoApproved(params.SessionID) {
 		c.permissions.AutoApproveSession(session.ID)

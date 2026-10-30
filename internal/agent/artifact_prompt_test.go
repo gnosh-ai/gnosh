@@ -13,7 +13,7 @@ import (
 
 // The coder is asked to record what it produced only when there is a
 // sidebar to show it in: the artifact tool is given to an interactive
-// session alone, and a prompt that asked a `klash run` for it would send
+// session alone, and a prompt that asked a `gnosh run` for it would send
 // it after a tool it was never given.
 func TestTheCoderIsAskedForArtifactsOnlyWhenInteractive(t *testing.T) {
 	env := testEnv(t)

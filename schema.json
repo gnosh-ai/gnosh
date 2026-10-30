@@ -22,7 +22,7 @@
         },
         "generated_with": {
           "type": "boolean",
-          "description": "Add Generated with Klash line to commit messages and issues and PRs",
+          "description": "Add Generated with Gnosh line to commit messages and issues and PRs",
           "default": true
         }
       },
@@ -123,7 +123,7 @@
         },
         "matcher": {
           "type": "string",
-          "description": "Which tools the hook runs for as in Claude Code: empty or * for all; exact names separated by | such as Bash|edit (klash's or Claude Code's names); anything else is an unanchored regular expression."
+          "description": "Which tools the hook runs for as in Claude Code: empty or * for all; exact names separated by | such as Bash|edit (gnosh's or Claude Code's names); anything else is an unanchored regular expression."
         },
         "command": {
           "type": "string",
@@ -388,7 +388,7 @@
         },
         "sessionless": {
           "type": "boolean",
-          "description": "Mark a sessionless MCP server (no Mcp-Session-Id) so Klash skips the subscriptions/listen stream it would otherwise reject. Leave unset to auto-detect known sessionless servers (e.g. GitHub MCP)",
+          "description": "Mark a sessionless MCP server (no Mcp-Session-Id) so Gnosh skips the subscriptions/listen stream it would otherwise reject. Leave unset to auto-detect known sessionless servers (e.g. GitHub MCP)",
           "default": false
         },
         "headers": {
@@ -632,7 +632,7 @@
         },
         "disable_provider_auto_update": {
           "type": "boolean",
-          "description": "Disable fetching the provider catalog from Charm's servers (catwalk.charm.land and hyper.charm.land). Unset it is not fetched and the catalog built into Klash is used; set false to fetch it",
+          "description": "Disable fetching the provider catalog from Charm's servers (catwalk.charm.land and hyper.charm.land). Unset it is not fetched and the catalog built into Gnosh is used; set false to fetch it",
           "default": true
         },
         "disable_default_providers": {
@@ -655,11 +655,11 @@
         },
         "metrics_key": {
           "type": "string",
-          "description": "Project key sent with metrics to metrics_url; a self-hosted collector may ignore it. Defaults to klash when metrics_url is set."
+          "description": "Project key sent with metrics to metrics_url; a self-hosted collector may ignore it. Defaults to gnosh when metrics_url is set."
         },
         "update_repo": {
           "type": "string",
-          "description": "GitHub owner/repo whose latest release the update check compares against (e.g. klash-pro/klash). Empty disables the check; Charm's repo is never a default."
+          "description": "GitHub owner/repo whose latest release the update check compares against (e.g. gnosh-ai/gnosh). Empty disables the check; Charm's repo is never a default."
         },
         "initialize_as": {
           "type": "string",
@@ -698,7 +698,7 @@
           "items": {
             "type": "string",
             "examples": [
-              "klash-config"
+              "gnosh-config"
             ]
           },
           "type": "array",
@@ -983,9 +983,9 @@
         "active_theme": {
           "type": "string",
           "description": "Name of the currently active theme",
-          "default": "klash-cosmos",
+          "default": "gnosh-cosmos",
           "examples": [
-            "klash-cosmos",
+            "gnosh-cosmos",
             "charmtone-panther",
             "gruvbox-dark"
           ]
@@ -1021,7 +1021,7 @@
             "compact",
             "none"
           ],
-          "description": "Exit banner style after quitting Klash",
+          "description": "Exit banner style after quitting Gnosh",
           "default": "default"
         }
       },

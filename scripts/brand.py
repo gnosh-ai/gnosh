@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draws Klash's brand images into docs/brand/.
+"""Draws Gnosh's brand images into docs/brand/.
 
 The wordmark is the TUI's own: the half-block letterforms in
 internal/ui/logo/letterforms.go, where each terminal cell holds two square
@@ -75,7 +75,7 @@ def letter_rows(ch, stretch=None):
     return [left[r] + middle[r] * n + (right[r] if right else "") for r in range(3)]
 
 
-def word_rows(word="KLASH", spacing=1):
+def word_rows(word="GNOSH", spacing=1):
     """The word as three rows of half-block text, one cell between letters."""
     parts = [letter_rows(c) for c in word]
     rows = ["", "", ""]
@@ -272,7 +272,7 @@ def banner(W=1280, H=520, p=24):
     left = diagonals(lx0, x0 - cw, y0, 4, cw, ch)
     right = diagonals(x0 + word_w + cw, W + cw, y0, 4, cw, ch)
 
-    o = [svg_open(W, H, "Klash, a coding agent that remembers, in Gno")]
+    o = [svg_open(W, H, "Gnosh, a coding agent that remembers, in Gno")]
     o.append(anim())
     o.append("<defs>")
     o.append(sky_defs())
@@ -284,7 +284,7 @@ def banner(W=1280, H=520, p=24):
     o.append(sky(rng, W, H, keep, 165, twinkle=True))
     o.append(f'<path d="{left}{right}" stroke="url(#field)" stroke-width="2" fill="none"/>')
     ty = meta_y + ch * 0.66
-    o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="{MONO}" font-size="21" fill="{GOLD}">klash.pro</text>')
+    o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="{MONO}" font-size="21" fill="{GOLD}">gnosh.ai</text>')
     o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="{MONO}" font-size="21" fill="{HAZE}">a coding agent that remembers, in Gno</text>')
     o.append(layers)
     o.append("</g>")
@@ -320,7 +320,7 @@ def signoff(W=1280, H=260, p=10):
     keep = (x0 - 30, top - 10, x0 + word_w + 30, meta_y + 2 * ch + 10)
     fields = diagonals(x0, x0 + word_w, top, 2, cw, ch) + diagonals(x0, x0 + word_w, meta_y + ch, 1, cw, ch)
 
-    o = [svg_open(W, H, "Klash")]
+    o = [svg_open(W, H, "Gnosh")]
     o.append(anim())
     o.append("<defs>")
     o.append(sky_defs())
@@ -331,7 +331,7 @@ def signoff(W=1280, H=260, p=10):
     o.append('<g clip-path="url(#frame)">')
     o.append(sky(rng, W, H, keep, 90, twinkle=True))
     o.append(f'<path d="{fields}" stroke="url(#field)" stroke-width="1.4" fill="none"/>')
-    o.append(f'<text x="{x0}" y="{fmt(meta_y + ch * 0.72)}" font-family="{MONO}" font-size="13" fill="{GOLD}">klash.pro</text>')
+    o.append(f'<text x="{x0}" y="{fmt(meta_y + ch * 0.72)}" font-family="{MONO}" font-size="13" fill="{GOLD}">gnosh.ai</text>')
     o.append(word_layers(on, x0, y0, p))
     o.append("</g>")
     o.append(f'<rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="22" fill="none" stroke="{RIM}"/>')
@@ -349,7 +349,7 @@ def avatar(S=512, p=60):
     y0 = round((S - word_h) / 2) - 22
     keep = (x0 - 30, y0 - 30, x0 + word_w + 30, y0 + word_h + 30)
 
-    o = [svg_open(S, S, "Klash")]
+    o = [svg_open(S, S, "Gnosh")]
     o.append("<defs>")
     o.append(sky_defs())
     o.append(word_defs(x0, y0, word_w, word_h))
@@ -365,7 +365,7 @@ def favicon(S=64, p=10):
     """The tab icon: the K on a dark rounded square, readable on light tabs too."""
     on = pixels(letter_rows("K"))
     x0, y0 = (S - 4 * p) / 2, (S - 5 * p) / 2
-    o = [svg_open(S, S, "Klash")]
+    o = [svg_open(S, S, "Gnosh")]
     o.append("<defs>" + word_defs(x0, y0, 4 * p, 5 * p) + "</defs>")
     o.append(f'<rect width="{S}" height="{S}" rx="{S * 0.22:g}" fill="{NIGHT}"/>')
     o.append(f'<path d="{runs_path(on, x0, y0, p)}" fill="url(#word)"/>')
@@ -416,7 +416,7 @@ def og_svg(W=1280, H=640, p=28):
     left = diagonals(lx0, x0 - cw, y0, 4, cw, ch)
     right = diagonals(x0 + word_w + cw, W + cw, y0, 4, cw, ch)
 
-    o = [svg_open(W, H, "Klash")]
+    o = [svg_open(W, H, "Gnosh")]
     o.append("<defs>")
     o.append(sky_defs())
     o.append(word_defs(x0, y0, word_w, word_h))
@@ -425,8 +425,8 @@ def og_svg(W=1280, H=640, p=28):
     o.append(sky(rng, W, H, keep, 145, twinkle=False))
     o.append(f'<path d="{left}{right}" stroke="url(#field)" stroke-width="2.2" fill="none"/>')
     ty = meta_y + ch * 0.66
-    o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="JetBrains Mono,{MONO}" font-weight="500" font-size="24" fill="{GOLD}">klash.pro</text>')
-    o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="JetBrains Mono,{MONO}" font-size="24" fill="{HAZE}">github.com/klash-pro/klash</text>')
+    o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="JetBrains Mono,{MONO}" font-weight="500" font-size="24" fill="{GOLD}">gnosh.ai</text>')
+    o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="JetBrains Mono,{MONO}" font-size="24" fill="{HAZE}">github.com/gnosh-ai/gnosh</text>')
     o.append(word_layers(on, x0, y0, p))
     o.append("</svg>")
     return "\n".join(o)

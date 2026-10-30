@@ -1,4 +1,4 @@
-# GnoVM machines in klash — design and plan (v4)
+# GnoVM machines in gnosh — design and plan (v4)
 
 Status: revision 4 (2026-10-29), after review rounds 1–3. Phases 1 (the core
 host) and 2 (the worker, its protocol and the client), and the four `gnovm_*`
@@ -10,11 +10,11 @@ Licensed with the rest of `internal/gnovm/` under the GNO Network GPL v6 (or a
 later version the Licensor accepts as proxy), with the Additional Terms in
 [LICENSE.md](LICENSE.md). Appendices A–C record every review finding and what
 was done with it. In prose, "VM" means a Gno virtual machine; "machine"
-already means an ssh host in klash.
+already means an ssh host in gnosh.
 
 ## 1. What Jae asked for
 
-Klash should (1) know how much memory is available for Gno VMs; (2) create
+Gnosh should (1) know how much memory is available for Gno VMs; (2) create
 VMs with limits; (3) declare state and evaluate expressions in them; (4)
 optionally persist them; (5) name each VM, with a persistence option; (6) list
 them; (7) evict VMs to make room for large work; (8) understand gas, 1 gas ≈
@@ -35,12 +35,12 @@ favour (§14).
 | One store per VM vs shared base + overlay | ~88 MB, ~1 s per VM vs **345 KB, 8 ms** |
 | All 50 stdlibs into a base | 1.8 s, +149 MB; decoded copies per VM ≤ 0.2 MB per package |
 | 800 VMs created and dropped; `noEvictStore` at 315 GCs | heap flat |
-| `x := 1` then `x` | persists; gno's `Eval` wrapper shadows `x`, so klash wraps itself |
+| `x := 1` then `x` | persists; gno's `Eval` wrapper shadows `x`, so gnosh wraps itself |
 | Declarations in one file: `main` first, mutual recursion, method before type, `const (iota)` | all work through `RunFiles` |
 | An import inside a file | **visible only in that file**: imports are bound package-wide instead (§6) |
 | A file's `var y = x + 1` after a top-level `x := 1` | **gno panics** (`*AssignStmt is not Decl`); a `var` from `RunDeclaration` is refused too ("unsatisfied deps"); a `var` in a file works, so `x := …` of new names becomes `var x = …` (§6) |
-| Redeclaring a `func` across files | silently keeps the first body; klash refuses redeclaration itself |
-| Heap kept per declaration | **291–375× its source** (measured 291× in klash's test); statements keep nothing; ~1 KB of the VM's cap per declaration input |
+| Redeclaring a `func` across files | silently keeps the first body; gnosh refuses redeclaration itself |
+| Heap kept per declaration | **291–375× its source** (measured 291× in gnosh's test); statements keep nothing; ~1 KB of the VM's cap per declaration input |
 | Replay cost | statements linear (50,000 in 0.72 s); **declarations quadratic** (0.13 ms per file at 300 files, 17 ms at 20,000; 20,000 inputs 151 s): bounded by limits (§7) |
 | GC stack | 0.5–1.1 B per byte of cap (64 MB chain: +64 MB stack, 195 MB RSS) |
 | A panicking statement | VM unusable (`m.Exception` set, stacks half-run) |
@@ -48,16 +48,16 @@ favour (§14).
 ## 3. Architecture
 
 ```
-klash process ── refcounted process-wide client (lazy spawn) ─────────┐
+gnosh process ── refcounted process-wide client (lazy spawn) ─────────┐
    │   holds .clients/<client>.lock for its life                      │ fds 3/4 (ExtraFiles):
    ▼                                                                  │ length-prefixed JSON
-gnovm worker = the klash binary as `klash gnovm-worker` (child) ◄──────┘ + heartbeats
+gnovm worker = the gnosh binary as `gnosh gnovm-worker` (child) ◄──────┘ + heartbeats
    └── gnovm.Host   one VM operation at a time; a reader goroutine takes cancels
        ├── base            shared gno store; stdlibs + klashlibs loaded on demand
        ├── vms             journal on disk (+ resident VM when admitted)
        ├── budget          host probe, accounting, LRU eviction
        └── per-VM locks    cross-process safety for persistent VMs
-klash reads the goals snapshots directly for injection, checking them against the journal (§12)
+gnosh reads the goals snapshots directly for injection, checking them against the journal (§12)
 ```
 
 - **Why a worker**: it isolates what the VM can do to a process — a Go
@@ -77,9 +77,9 @@ klash reads the goals snapshots directly for injection, checking them against th
   - App-level tests use `in_process`, and a test asserts that `go test` cannot
     spawn a worker.
 - **Worker hygiene**: exec `/proc/self/exe` on Linux (survives a deploy that
-  replaced the binary); the handshake compares protocol, klash, gno and stdlib
+  replaced the binary); the handshake compares protocol, gnosh, gno and stdlib
   versions; `Setpgid`, SIGINT/SIGHUP ignored; exits on EOF of fd 3; reaped with
-  `cmd.Wait`; `KLASH_PROFILE` dropped; **`cmd.Dir` is the gnovm data directory**
+  `cmd.Wait`; `GNOSH_PROFILE` dropped; **`cmd.Dir` is the gnovm data directory**
   (`godotenv/autoload` in `main.go` loads `.env` from the working directory
   before main dispatches, and the project's `.env` is agent-writable);
   **stdout to `/dev/null`, stderr to a bounded log** (`worker.log`, 1 MB,
@@ -94,7 +94,7 @@ klash reads the goals snapshots directly for injection, checking them against th
   kept".
 - **One operation at a time** keeps the GnoVM single-threaded (its stores and
   shared stdlib nodes are not safe for concurrent use). One agent's tool calls
-  are sequential, so only *different sessions* in one klash (server mode,
+  are sequential, so only *different sessions* in one gnosh (server mode,
   channels) wait on each other. The wait is bounded by the running call's wall
   limit (default 5 s; up to 10 min only when a session asks for high gas) plus
   one replay slice (§7). In server mode, per-request wall is clamped to 60 s
@@ -113,7 +113,7 @@ klash reads the goals snapshots directly for injection, checking them against th
   embedded `stdlibs/` (synced from go.mod's gno by `go generate`; VERSION and
   byte-for-byte reader tests) and `klashlibs/`: `fmt` (gno's `ufmt` v0, renamed,
   with a dated modification notice; its `%v` and float limits are in the tool
-  description) and `klash/goals/v1` (§12).
+  description) and `gnosh/goals/v1` (§12).
 - **On demand**: the imports of an input — or of a whole journal before replay —
   are loaded into the base first (`base.ensure`; required: an overlay's cache
   remembers a miss). The heap delta of each load is measured (single-threaded,
@@ -135,16 +135,16 @@ klash reads the goals snapshots directly for injection, checking them against th
   `noEvictStore{tx}`; package `repl` registered before
   `NewMachineWithOptions{Store, Alloc: NewAllocator(cap), GasMeter: meter,
   Context, BoundedPanicRender: true}`. `repl` is a stdlib-shaped path, so gno
-  skips its own duplicate check for it: klash checks names itself (§6). Never
+  skips its own duplicate check for it: gnosh checks names itself (§6). Never
   `m.Release()` a kept VM; a changed `memory_mb` rebuilds the VM (an
   allocator's cap is fixed).
 - **Every entry** (live or replayed) runs between `meter.begin` and
   `meter.end`, with a **fresh** preprocess allocator capped at the VM's cap and
   charged to its meter (it never collects).
-- **ExecContext** per entry: ChainID `klash`, Height = seq, Timestamp from the
+- **ExecContext** per entry: ChainID `gnosh`, Height = seq, Timestamp from the
   entry's recorded time (so `time.Now` replays identically); Banker and Params
   nil (their packages cannot be imported); a fresh `sdk.NewEventLogger()`.
-- **Evaluation** uses klash's own wrapper, `func() any { return (<expr>) }()`; a
+- **Evaluation** uses gnosh's own wrapper, `func() any { return (<expr>) }()`; a
   call expression is evaluated as is.
 
 ## 6. Running code (`gnovm_run`)
@@ -207,20 +207,20 @@ klash reads the goals snapshots directly for injection, checking them against th
 
 ## 7. Persistence and durability
 
-- **Layout**, all under `<XDG data>/klash/gnovm/` (a cloned repo cannot ship
-  VMs or goals; the agent-writable project `.klash` stays out):
-  - `.clients/<client>.lock`: held by each klash process for its life; client
+- **Layout**, all under `<XDG data>/gnosh/gnovm/` (a cloned repo cannot ship
+  VMs or goals; the agent-writable project `.gnosh` stays out):
+  - `.clients/<client>.lock`: held by each gnosh process for its life; client
     = `<pid>-<8 random hex>`;
   - `<project-key>/vms/<name>/`: a persistent VM's `machine.json`,
     `journal.jsonl` (and for `goals`, `summary.json` and `state.json`);
   - `<project-key>/.ephemeral/<client>/<name>/`: a memory-only VM's files,
-    keyed by the klash process so they survive a worker restart; deleted when
+    keyed by the gnosh process so they survive a worker restart; deleted when
     the client closes, or swept by any host whose client lock is found free or
     missing;
   - `<project-key>/locks/<name>.lock`: persistent VMs only, outside the VM's
     directory and never unlinked, so a path always names the same inode (the
     lock API gives no descriptor, so no inode check is needed or possible);
-    the holder writes its pid into it, for "busy — in use by klash process N";
+    the holder writes its pid into it, for "busy — in use by gnosh process N";
   - `<project-key>/.trash/`: deleted persistent VMs.
   The project key is the sanitised path plus 8 hex of its hash.
 - **Creation** builds the VM in a temporary directory and renames it into
@@ -335,8 +335,8 @@ klash reads the goals snapshots directly for injection, checking them against th
 > the user's goal is a mem goal, judged when the agent closes it. This section stays
 > as the record of the design it replaced.
 
-- **Library** `klash/goals/v1` (embedded, versioned, immutable). The `goals`
-  VM's journal begins `import goals "klash/goals/v1"; var G = goals.New()`;
+- **Library** `gnosh/goals/v1` (embedded, versioned, immutable). The `goals`
+  VM's journal begins `import goals "gnosh/goals/v1"; var G = goals.New()`;
   later entries are calls on `G` with literal arguments, generated by the
   goals operations in the worker. **Replay of the goals VM accepts only those
   shapes** (the prelude, `G.<Method>(<literals>)`, and an `Import` of a state
@@ -346,7 +346,7 @@ klash reads the goals snapshots directly for injection, checking them against th
   note, check or close adds the writer); `App.BranchSession` adds a branch to
   its source's open goals. Goals whose owners are all deleted are **unowned**
   and shown in full everywhere.
-- **Fields and caps**: ids and fact keys `[a-z0-9_.-]{1,64}` (the `klash.`
+- **Fields and caps**: ids and fact keys `[a-z0-9_.-]{1,64}` (the `gnosh.`
   prefix is the harness's); title ≤ 200 B, success ≤ 500 B, check ≤ 512 B, fact
   value and note ≤ 1 KB; per goal, the latest 64 facts and notes (older dropped
   with a count); at most 100 open goals; goals closed over 7 days move to
@@ -367,7 +367,7 @@ klash reads the goals snapshots directly for injection, checking them against th
   `met` needs a check that passes in that same operation, if the goal has a
   check.
 - **Snapshots**: after every goals operation the worker writes `summary.json`
-  (what klash renders) and `state.json` (`G.Export()`), both stamped with the
+  (what gnosh renders) and `state.json` (`G.Export()`), both stamped with the
   journal's generation, seq and last-line hash. Upgrade, repair and compaction
   rebuild from `state.json` only if its stamp matches the journal's last good
   entry; otherwise they replay and export afresh. The worker refreshes stale
@@ -379,7 +379,7 @@ klash reads the goals snapshots directly for injection, checking them against th
   - a separate `call.goalsBlock`, a hidden part after the hook block, in both
     `createUserMessage` and the live turn (re-rendered identically,
     `message/content.go:613-629`);
-  - before rendering, klash compares the snapshot's stamp with the journal's
+  - before rendering, gnosh compares the snapshot's stamp with the journal's
     header and last line (read without the lock); if they differ it renders
     "(may be stale: goals_list shows the current state)" and asks the worker to
     refresh;
@@ -403,7 +403,7 @@ klash reads the goals snapshots directly for injection, checking them against th
     session S" or "added by the user"), and facts and notes labelled "recorded
     claims".
 - **Notices**: every add and close is announced — a TUI notice; on stderr in
-  `klash run` (as hook warnings are); in a channel's reply — and recent closes
+  `gnosh run` (as hook warnings are); in a channel's reply — and recent closes
   are in the injected block, so an unattended lane leaves a trace.
 - **`/goals`**: list, `adopt <id>`, `close <id> --force`, `reopen <id>`,
   `repair [vm]`. `/goal` refuses a condition whose first word is a `/goals`
@@ -416,15 +416,15 @@ klash reads the goals snapshots directly for injection, checking them against th
 
 ## 13. Configuration
 
-`options.gnovm` (pointer struct; klashrc `option gnovm …` special-cased like
+`options.gnovm` (pointer struct; gnoshrc `option gnovm …` special-cased like
 `option ui`): `memory_budget_mb` (0 = auto), `default_memory_mb` (16),
 `default_gas` (1e9), `ns_per_gas` (1), `goals` (true: the goals tools, the
 injection and the template flag together), `in_process` (false). Numbers are
 float64. `memory_budget_mb` and `in_process` are honoured only from the
 global config (`GlobalConfig()`, its rc siblings, `GlobalConfigData()`); a
-project or workspace file (`.klash/klash.json` included) may lower the budget
+project or workspace file (`.gnosh/gnosh.json` included) may lower the budget
 but not raise it, and cannot set `in_process`. Lands with the worker (phase
-2); `schema.json`, `docs/config/README.md` and the klash-config skill follow.
+2); `schema.json`, `docs/config/README.md` and the gnosh-config skill follow.
 
 ## 14. Licensing and attribution
 
@@ -450,28 +450,28 @@ but not raise it, and cannot set `in_process`. Lands with the worker (phase
   `cmd/run.go` (stderr notices), `permission` (the protected path), and the UI
   (`/goals`, `/goal`'s refusal, the notices, the attribution line, the License
   palette item).
-- **Known interactions**, stated plainly in LICENSE.md: the klash binary is a
+- **Known interactions**, stated plainly in LICENSE.md: the gnosh binary is a
   combined work, and the GNGPL admits no further restrictions, which the FSL's
   Competing Use clause is. This subsystem is what put the GnoVM (and its
-  embedded standard library) into the klash binary: before it, klash's x402
+  embedded standard library) into the gnosh binary: before it, gnosh's x402
   client used only tm2 and gno.land's small `ugnot` package (round 4 corrected
   an earlier claim that x402 already linked the GnoVM). The worker, being the
   same binary, does not change that. The ways out (§18) are (a) one binary,
   with linking exceptions (NewTendermint for the GnoVM, the Licensor for this
   subsystem) or time (each Crush version's FSL becomes MIT two years after
-  release); or (b) a separate `klash-gnovm-worker` program holding everything
-  that links gno, with klash's own binary free of it. Changing Charm's licence
-  is not the Licensor's to do. No klash binary is released meanwhile (the
+  release); or (b) a separate `gnosh-gnovm-worker` program holding everything
+  that links gno, with gnosh's own binary free of it. Changing Charm's licence
+  is not the Licensor's to do. No gnosh binary is released meanwhile (the
   nightly workflow is gated to upstream). CONTRIBUTING.md, the README's Contributing and License sections, the
   CLA bot text and the release archive (`LICENSE-gnovm*.md`) match the
-  `internal/gnovm/` exception. GNGPL §13 binds klash's own remote interfaces,
+  `internal/gnovm/` exception. GNGPL §13 binds gnosh's own remote interfaces,
   so server mode and channels link the source.
 - **Attribution notices**, in every layout: the landing screen, the compact
-  header and the sidebar footer (OSC 8 links); `klash --version` and `klash run
+  header and the sidebar footer (OSC 8 links); `gnosh --version` and `gnosh run
   --help`; a **License** item in the command palette (GNGPL §5(d) Appropriate
-  Legal Notices); the README and klash.pro pages that promote klash. Each says
-  "built on gno.land" (NewTendermint's, owed since klash includes the GnoVM)
-  and gives this subsystem's Designation. Landed so far: `klash --version`, the
+  Legal Notices); the README and gnosh.ai pages that promote gnosh. Each says
+  "built on gno.land" (NewTendermint's, owed since gnosh includes the GnoVM)
+  and gives this subsystem's Designation. Landed so far: `gnosh --version`, the
   landing screen and `gnovm_list`. When the tools are usable, the README opens with
   Jae's line: "Yo dawg, I heard you like Go, so I put Go in your Go and slapped
   it onto Qwen, so it can run Go while it writes Go."
@@ -489,7 +489,7 @@ but not raise it, and cannot set `in_process`. Lands with the worker (phase
 | Heap beyond the caps | accounting at 400× declarations, imports, reserve; worker memory limit; RSS watchdog; `oom_score_adj` |
 | Replay too slow or quadratic | limits before running; slices within the caller's budget; resident partial VM |
 | Long calls starve other sessions | wall limits; heartbeats for every request; per-request clamp in server mode |
-| Two klash on one VM; delete, repair, recreate | per-VM lock outside the VM dir; generation + last-line hash; machine.json re-read; torn tail cut |
+| Two gnosh on one VM; delete, repair, recreate | per-VM lock outside the VM dir; generation + last-line hash; machine.json re-read; torn tail cut |
 | Worker killed (cancel, watchdog, OOM, deploy) | journals on disk; replay on demand; outcome by request id |
 | Import scope, `:=` deps, redeclaration | imports bound package-wide; `:=` of new names becomes `var`; names checked before running |
 | A state-changing eval not kept | only provably pure evals are left out; shadowed builtins counted |
@@ -546,7 +546,7 @@ but not raise it, and cannot set `in_process`. Lands with the worker (phase
   - a fixed task with a script-checked outcome (N functions with tests in a
     scratch repo), split over batches;
   - pinned model, reasoning level and context size;
-  - a scripted `/compact` at batch k and a SIGKILL of klash and the worker at
+  - a scripted `/compact` at batch k and a SIGKILL of gnosh and the worker at
     batch m;
   - at least 3 runs with goals on, at least 1 resumed in a fresh session (via
     `goals adopt` or an unowned goal), and at least 1 control with goals off.
@@ -574,12 +574,12 @@ but not raise it, and cannot set `in_process`. Lands with the worker (phase
 
 ## 18. Open questions for Jae
 
-- The attribution designation for this subsystem (placeholder: https://klash.pro,
-  "built on klash"), and NewTendermint's for the GnoVM notice (assumed
+- The attribution designation for this subsystem (placeholder: https://gnosh.ai,
+  "built on gnosh"), and NewTendermint's for the GnoVM notice (assumed
   https://gno.land, "built on gno.land").
 - The binary-level licence conflict (§14), and which way out to take: (a) one
   binary, with NewTendermint's linking exception (or waiting for FSL→MIT); or
-  (b) a separate `klash-gnovm-worker` binary, which needs nobody's consent but
+  (b) a separate `gnosh-gnovm-worker` binary, which needs nobody's consent but
   the Licensor's and also ends the self-re-exec hazard that §3's spawn rules
   guard against.
 - (Answered: the work went public on 29 October 2026.)
@@ -606,7 +606,7 @@ supersedes both, see the note at §12.)
   item. Titles clip at 200 bytes and notes and results at 1000, never refused;
   Show's outline is capped near 3000 bytes.
 - **Frozen storage.** A persistent VM is rebuilt by replaying its calls against
-  the library this klash embeds, so a call never changes what it stores or the
+  the library this gnosh embeds, so a call never changes what it stores or the
   ids it returns, and never refuses what it once accepted; it may store new
   trailing fields, refuse less, and print or show things differently.
   `TestMemV1IsFrozen` replays a fixed corpus against a field-by-field dump that
@@ -637,7 +637,7 @@ Review findings are in Appendices E (round 1) and F (round 2).
 
 ## Appendix A. Review round 1: findings and dispositions
 
-Three independent reviewers (GnoVM correctness; klash integration and UX;
+Three independent reviewers (GnoVM correctness; gnosh integration and UX;
 failure modes, safety and licensing). Every factual claim used was checked in
 the source.
 
@@ -681,7 +681,7 @@ conclusions: `x := 1` does persist; gno's `Eval` wrapper had shadowed `x`.
 |---|---|---|---|
 | S1 | **Blocker**: the spawner's env-var guard is unset by `testenv`, so App-level tests would exec the test binary (the Oct 25 fork bomb again) | yes: testenv.go:14, 33-44 | accepted: `testing.Testing()` refusal, fd-3 handshake, in-process App tests, a test that `go test` cannot spawn (§3, §16) |
 | S2 | Redefining a func silently keeps the old body; forward references fail | yes, spike | accepted: declarations run as files through `RunFiles`, explicit refusal, `main` renamed per input, splitter rules, parse everything first (§6) |
-| S3 | A worker kill loses memory-only VMs and misreports outcomes | yes | accepted differently: every journal is on disk (ephemeral ones per klash process); outcomes resolved by request id (§3, §7) |
+| S3 | A worker kill loses memory-only VMs and misreports outcomes | yes | accepted differently: every journal is on disk (ephemeral ones per gnosh process); outcomes resolved by request id (§3, §7) |
 | S4 | Replay can fail or never finish (preprocess allocator never collects; budget from gas) | yes: alloc.go:409; store.go:177-191 | accepted: fresh preprocess allocator per entry; budget from recorded `wall_ns`; the partial VM stays resident (§5, §7) |
 | S5 | Catch-up trusts sequence numbers alone (delete renames the lock's dir; repair; torn tail) | yes: lock.go:12-15 | accepted: locks outside the VM dir, inode check, generation and last-line hash, torn tail truncated, raised cap persisted first (§7) |
 | S6 | The `replaying` marker brands healthy VMs broken | design | accepted: lock held across load and replay; marker with pid, boot id, start; broken only on an unexplained death (§7) |
@@ -689,11 +689,11 @@ conclusions: `x := 1` does persist; gno's `Eval` wrapper had shadowed `x`.
 | S8 | One-at-a-time worker blocks every session; spurious kills during base loads and fsync | yes: lock_unix.go:20-35 | accepted: reader goroutine, cancel ack, heartbeats, `TryFile` "busy"; the remaining cross-session wait is stated and bounded by the 5 s default, a worker pool is phase 6 (§3) |
 | S9 | Worker hygiene: version skew, Ctrl-C, framing, orphans; §15 wording on `Error()` | yes: root.go:310-315; op_call.go:912-916 | accepted (§3, §6 step 7) |
 | S10 | Memory: GC stack, retained ASTs, pinned stdlib objects, base growth | estimate | accepted: base charged per load, ASTs and imports charged, transient reserve; RSS measured on the devbox (§8, §16) |
-| G1 | Close-as-met bypassed by code in a check; stale checks; `gnovm_run` can write `goals` | yes | accepted, stronger: checks are a whitelisted language evaluated in Go, so no check text becomes Gno code; `Fact` clears; a fresh check at close; `gnovm_run` refuses `goals`; `klash.` prefix reserved; every close shows a notice (§12) |
+| G1 | Close-as-met bypassed by code in a check; stale checks; `gnovm_run` can write `goals` | yes | accepted, stronger: checks are a whitelisted language evaluated in Go, so no check text becomes Gno code; `Fact` clears; a fresh check at close; `gnovm_run` refuses `goals`; `gnosh.` prefix reserved; every close shows a notice (§12) |
 | G2 | The close judge costs minutes on the box and cannot see older evidence | yes: agent.go:1136-1140; goal.go:36 | **deferred to phase 6** (asked the way compaction asks, to hit the prompt cache); until then checks, the notice and `/goals reopen` guard closes |
 | G3 | Test (A) can pass without any replay | yes | accepted: singleton closed between Apps, replay asserted, stored vs live message byte-identical, more cases, a real-worker run, ≥3 real-model runs (§16) |
 | G4 | Injection: (c) re-fires, continuations re-send, `/rewind` loses the block, ownership unrecorded | yes: agent.go:569-572; coordinator.go:454-472 | accepted, plus branch lineage (§12) |
-| G5 | Licence notes overclaim the worker, the CONTRIBUTING exception does not exist, §13 offer and promotional material missing, timing | yes: CONTRIBUTING.md:5-7, 38-42, 98-100 | accepted: claim dropped, exception written, source offer, README and klash.pro, decided before phase 1 lands (§14) |
+| G5 | Licence notes overclaim the worker, the CONTRIBUTING exception does not exist, §13 offer and promotional material missing, timing | yes: CONTRIBUTING.md:5-7, 38-42, 98-100 | accepted: claim dropped, exception written, source offer, README and gnosh.ai, decided before phase 1 lands (§14) |
 | G6 | Drafting holes: headers, publisher, proxy, canonical copy, prospective rule, "conclusively govern", severability | yes | accepted (LICENSE.md, §14) |
 | G7 | Scratch VMs vanish on a worker restart, are never cleaned up, and their names break the 32-character rule | yes: session.go:114 | accepted: on-disk ephemeral journals, hashed names, LRU, exempt from the VM cap, "new scratch VM" notice (§7, §10) |
 | G8 | The `goals` tool's shape is hard for a 27B model | design | accepted: `goals_list` and `goals`, per-action fields, `num`/`has`, one line on goals vs todos vs `/goal` (§10) |
@@ -701,7 +701,7 @@ conclusions: `x := 1` does persist; gno's `Eval` wrapper had shadowed `x`.
 | G10 | A project config can raise the budget or set `in_process`; float decoding; three switches | yes: config/load.go:989-1007 | accepted (§13) |
 
 Not adopted: a separate worker binary (on the premise that x402 already linked
-the GnoVM into klash, which round 4 found false: it is an open choice again,
+the GnoVM into gnosh, which round 4 found false: it is an open choice again,
 §18); a cross-process memory ledger
 (phase 6, as in round 1).
 
@@ -742,9 +742,9 @@ it is named.
 | G11 | Goals files can be forged; adds are silent | yes | accepted: protected path, shape-checked replay, add notices, source labels (§12) |
 | G12 | Size limits and growth | yes | accepted: field caps, latest facts and notes, archive, chunked import, compaction rule, fuzzing (§12, §16) |
 | G13 | `/goal` vs `/goals`; repair takes no VM; `/goal` not recorded | yes (ui/model/goal.go) | accepted (§12) |
-| G14 | The workspace `.klash/klash.json` must not raise the budget either | yes (config/load.go) | accepted (§13) |
+| G14 | The workspace `.gnosh/gnosh.json` must not raise the budget either | yes (config/load.go) | accepted (§13) |
 | G15 | CONTRIBUTING, README and CLA bot text do not match the exception | yes | fixed: all three, plus the date and mixed contributions |
-| G16 | Attribution missing in compact layouts and `klash run`; legal notices; `.gno` headers; release archive; §13 wording; "change klash's licence" | yes | fixed: dated notice in `klashlibs/fmt`, release archive, §13 and ways-out wording; the rest planned for phase 4 (§14) |
+| G16 | Attribution missing in compact layouts and `gnosh run`; legal notices; `.gno` headers; release archive; §13 wording; "change gnosh's licence" | yes | fixed: dated notice in `klashlibs/fmt`, release archive, §13 and ways-out wording; the rest planned for phase 4 (§14) |
 | G17 | Phase order (licence files, config) | yes | accepted (§17) |
 
 Not adopted: nothing in round 3. Deferred as before: the LLM judge on close,
@@ -771,7 +771,7 @@ regression tests (`round4_test.go`).
 | S11 | Wait bound understated | stated; one deadline per call is a follow-up |
 | S12 | A full journal refuses pure reads | fixed |
 | S13 | Small items (imports count, temp dirs, .bak fsync, empty-cgroup budget, lookup order) | fixed; tiny declarations measured at ~420× (charge 400×) noted |
-| G1 | The licence record's central fact is false: klash did not link the GnoVM before | fixed in LICENSE.md and §14; the choice is put to Jae (§18); nightly gated; notice in `--version` and on the landing screen |
+| G1 | The licence record's central fact is false: gnosh did not link the GnoVM before | fixed in LICENSE.md and §14; the choice is put to Jae (§18); nightly gated; notice in `--version` and on the landing screen |
 | G2 | Goals export in Gno costs seconds per op; the store can wedge at its caps | accepted for phase 3: snapshots produced in Go by walking the VM's values; bounded state; fixed goals-VM options; `/goals compact` |
 | G3 | Test (B) can pass without the goal being met | accepted: pass needs the script's check met in ≥2 of 3 runs, one a fresh-session resume, and an improvement over the control |
 | G4–G16 | Keying by worktree root; G10 hash rule; `/goal` record rules; snapshot-failure variant; block size; channel notices; `.env` moving the root; call sites; `/goal` refusal; tool alias; headers; attribution coverage; stale status | the alias, headers and status fixed now; the rest carried into phase 3–4 work |
@@ -792,7 +792,7 @@ foundation (F).
 | F3 | Show had no real bound, rendered twice, and a newline could fake a line | fixed: one pass, closed items one line, newest 10 closed top-level, 20 facts, hard cap, newlines shown as ⏎ |
 | F4/M1 | The tree stored four ways (`Items`/`Subs`/`Parent`/`byID`), so hand edits break it | fixed: one append-only `Items` slice indexed by id, `Parent` the only link |
 | F5 | Caps must exist from the first release | fixed: clipping (not refusal) at 200 and 1000 bytes; Show's cap |
-| F6 | `ImportablePackages` would expose the harness-only goals library | fixed: `klash/goals` excluded |
+| F6 | `ImportablePackages` would expose the harness-only goals library | fixed: `gnosh/goals` excluded |
 | F7 | `TestGnomemSurvivesARestart` compared a value with itself | fixed: captured on the first host |
 | M2/E4/F-b | `Check` closures prove nothing (a VM cannot run `go test`), cannot be shown or exported, and capture variables that later change; `When` is just more title | removed: a condition is a step |
 | M3 | `Fact` and `Note` structs carry timestamps nothing shows | removed: `Facts map[string]string`, `Notes []string`; the board keeps one `Changed` time |
@@ -825,7 +825,7 @@ files were written again once.
 | S6 | Boards have no way out of v1 when they reach the journal or replay limits | open: a harness rebase (replay, then rewrite the journal as the first entry plus the data) needs no v1 change while the data stays plain |
 | A1 | **State divergence**: `fmt` was trusted by name; a VM's own `var fmt` with a mutating Println had its print dropped from the journal | fixed: prints count as reads only when the VM's fmt is the real package |
 | A2 | **State divergence**: `%p` printed a Go address, different on every rebuild, into stored strings | fixed: refused |
-| A3 | ensureMem could delete, without the VM lock, a board another klash had written | fixed: the first entry is written under the lock on first use; ensureMem never deletes |
+| A3 | ensureMem could delete, without the VM lock, a board another gnosh had written | fixed: the first entry is written under the lock on first use; ensureMem never deletes |
 | A4 | Show cut the next item when an open goal had many closed steps; Show(ids...) had no cap | fixed: the newest five closed steps under an open item, the rest counted; both capped |
 | A5 | Drop then Reopen left a goal's condition step dropped, so the goal could be marked done untested | fixed: Reopen restores the steps dropped with an item; Drop needs a reason |
 | A6 | An older VM named mem was quietly used, or its prelude refused as "already declared" | fixed: refused with what to do; its Show never runs for the summary |

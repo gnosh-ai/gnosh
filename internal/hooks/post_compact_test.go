@@ -34,7 +34,7 @@ func TestRunPostCompact(t *testing.T) {
 	dir := t.TempDir()
 	payloadPath := filepath.Join(dir, "payload.json")
 	envPath := filepath.Join(dir, "env")
-	r := postCompactRunner(t, "", `cat > `+payloadPath, `echo "$KLASH_POST_COMPACT_TRIGGER" > `+envPath)
+	r := postCompactRunner(t, "", `cat > `+payloadPath, `echo "$GNOSH_POST_COMPACT_TRIGGER" > `+envPath)
 	_, err := r.RunPostCompact(context.Background(), "sess", PreCompactTriggerManual, "what was done")
 	require.NoError(t, err)
 

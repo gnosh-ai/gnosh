@@ -28,16 +28,16 @@ func writeProviderConfig(t *testing.T, dir, baseURL string) {
 	t.Helper()
 	cfg := `{"options": {"disable_default_providers": true},
   "providers": {"qwen": {"type": "llamacpp", "base_url": "` + baseURL + `"}}}`
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "klash.json"), []byte(cfg), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "gnosh.json"), []byte(cfg), 0o644))
 }
 
 // With the default providers off, a configured provider whose model
 // server does not answer no longer fails the whole load as "no custom
 // providers are configured": the load goes on, and says which provider
-// was left out and why, for the TUI, klash run and klash doctor to show.
+// was left out and why, for the TUI, gnosh run and gnosh doctor to show.
 func TestLoadWithOnlyAnUnreachableProviderSaysWhy(t *testing.T) {
 	workDir, dataDir := isolateReloadEnv(t)
-	t.Setenv("KLASH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	t.Setenv("GNOSH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
 	srv := modelServer(t)
 	url := srv.URL
 	srv.Close()
@@ -53,7 +53,7 @@ func TestLoadWithOnlyAnUnreachableProviderSaysWhy(t *testing.T) {
 // its provider, rather than drop every model from under the session.
 func TestReloadWhileTheModelServerIsDownKeepsTheConfig(t *testing.T) {
 	workDir, dataDir := isolateReloadEnv(t)
-	t.Setenv("KLASH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	t.Setenv("GNOSH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
 	srv := modelServer(t)
 	writeProviderConfig(t, workDir, srv.URL)
 

@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	RegisterBuiltin("klash-test-not-a-builtin-here", func(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	RegisterBuiltin("gnosh-test-not-a-builtin-here", func(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		return ErrNotABuiltinHere
 	})
 }
@@ -21,7 +21,7 @@ func TestBuiltinThatStepsAsideReachesThePath(t *testing.T) {
 	t.Parallel()
 
 	sh := NewShell(&Options{WorkingDir: t.TempDir()})
-	_, _, err := sh.Exec(context.Background(), "klash-test-not-a-builtin-here")
+	_, _, err := sh.Exec(context.Background(), "gnosh-test-not-a-builtin-here")
 	require.Error(t, err)
 	require.Equal(t, 127, ExitCode(err), "not on the PATH, not silently done: %v", err)
 }

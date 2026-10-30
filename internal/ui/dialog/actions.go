@@ -136,7 +136,7 @@ type (
 	// ActionDiffReport shows what the session changed, as Claude Code's
 	// /diff shows changes.
 	ActionDiffReport struct{}
-	// ActionDoctorReport checks the setup klash runs with, as Claude Code's
+	// ActionDoctorReport checks the setup gnosh runs with, as Claude Code's
 	// /doctor does.
 	ActionDoctorReport struct{}
 	// ActionExportConversation exports the conversation, as Claude Code's

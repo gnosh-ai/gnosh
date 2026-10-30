@@ -115,7 +115,7 @@ func TestRunnerReportsTimeout(t *testing.T) {
 	require.Contains(t, result.Reason, "could not run (timed out after 1s). A check that could not run does not pass.")
 }
 
-// A hook that could not check says so with exit 3, and Klash fails
+// A hook that could not check says so with exit 3, and Gnosh fails
 // closed: the call is blocked, the reason is the hook's own, and it reads
 // as could not check, not as a fault found. Without stderr it still
 // blocks.
@@ -158,7 +158,7 @@ func TestRunnerCommandItRunsIsMissing(t *testing.T) {
 	}
 }
 
-// An answer Klash cannot read is no answer: a hook that wrote "Deny"
+// An answer Gnosh cannot read is no answer: a hook that wrote "Deny"
 // meant to deny, and it blocks with its reason kept. "ask" is an answer.
 func TestRunnerUnreadableAnswerBlocks(t *testing.T) {
 	t.Parallel()
@@ -168,7 +168,7 @@ func TestRunnerUnreadableAnswerBlocks(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, DecisionDeny, result.Decision)
 	require.True(t, result.Hooks[0].CouldNotEvaluate)
-	require.Contains(t, result.Reason, `hook "no-rm" gave an answer Klash could not read (unknown decision "Deny"`)
+	require.Contains(t, result.Reason, `hook "no-rm" gave an answer Gnosh could not read (unknown decision "Deny"`)
 	require.Contains(t, result.Reason, "its reason: rm is not allowed")
 
 	r = preRunner(t, config.HookConfig{Command: `echo '{"hookSpecificOutput":{"permissionDecision":"ask"}}'`})

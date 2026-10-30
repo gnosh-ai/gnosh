@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const userAgent = "klash/1.0"
+const userAgent = "gnosh/1.0"
 
 // Info contains information about an available update.
 type Info struct {

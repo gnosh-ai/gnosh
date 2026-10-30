@@ -8,7 +8,7 @@ import (
 )
 
 // DefaultMetricsURL is where opted-in usage metrics go when metrics_url is not
-// set: klash's own analytics, never Charm's. A custom collector overrides it
+// set: gnosh's own analytics, never Charm's. A custom collector overrides it
 // with metrics_url.
 const DefaultMetricsURL = "https://metrics.klash.pro"
 

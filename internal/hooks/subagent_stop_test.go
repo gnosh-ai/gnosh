@@ -117,7 +117,7 @@ func TestRunSubagentStopPayloadFirstPass(t *testing.T) {
 	envOut := filepath.Join(dir, "env.txt")
 	r := subagentStopRunner(t,
 		"cat > "+out+
-			"; printf '%s|%s|%s|%s|%s' \"$CRUSH_EVENT\" \"$CRUSH_STOP_HOOK_ACTIVE\" \"$KLASH_SESSION_ID\" \"$KLASH_AGENT_ID\" \"$KLASH_AGENT_TYPE\" > "+envOut)
+			"; printf '%s|%s|%s|%s|%s' \"$CRUSH_EVENT\" \"$CRUSH_STOP_HOOK_ACTIVE\" \"$GNOSH_SESSION_ID\" \"$GNOSH_AGENT_ID\" \"$GNOSH_AGENT_TYPE\" > "+envOut)
 
 	_, err := r.RunSubagentStop(context.Background(), "main-1", "sub-1", "task", "", false)
 	require.NoError(t, err)
@@ -138,14 +138,14 @@ func TestRunSubagentStopEnvMarksActive(t *testing.T) {
 
 	dir := t.TempDir()
 	envOut := filepath.Join(dir, "env.txt")
-	r := subagentStopRunner(t, `printf '%s|%s' "$KLASH_STOP_HOOK_ACTIVE" "$CRUSH_STOP_HOOK_ACTIVE" > `+envOut)
+	r := subagentStopRunner(t, `printf '%s|%s' "$GNOSH_STOP_HOOK_ACTIVE" "$CRUSH_STOP_HOOK_ACTIVE" > `+envOut)
 
 	_, err := r.RunSubagentStop(context.Background(), "main", "sub", "task", "", true)
 	require.NoError(t, err)
 
 	envLine, err := os.ReadFile(envOut)
 	require.NoError(t, err)
-	require.Equal(t, "1|1", string(envLine), "under the KLASH_ name and the CRUSH_ name before it")
+	require.Equal(t, "1|1", string(envLine), "under the GNOSH_ name and the CRUSH_ name before it")
 }
 
 // updated_input patches a tool's arguments; with no tool call in flight

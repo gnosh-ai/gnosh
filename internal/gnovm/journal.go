@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -27,7 +27,7 @@ import (
 // journalVersion is the journal format; the header line carries it.
 const journalVersion = 1
 
-// maxEntry is the largest journal line klash writes.
+// maxEntry is the largest journal line gnosh writes.
 const maxEntry = 256 << 10
 
 // journalHeader is a journal's first line. Generation is new whenever the

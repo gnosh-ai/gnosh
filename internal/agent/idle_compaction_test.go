@@ -50,7 +50,7 @@ func summaryRequests(llm *requestRecordingModel) int {
 
 // A long conversation left idle is summarized when the wait is over, as
 // Claude Code's idle compaction does, so the next prompt sends a summary;
-// a short one, a klash run's, and one whose next turn starts in time are
+// a short one, a gnosh run's, and one whose next turn starts in time are
 // not.
 func TestIdleCompaction(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS", "")
@@ -67,7 +67,7 @@ func TestIdleCompaction(t *testing.T) {
 
 	for name, run := range map[string]func(*sessionAgent, string) error{
 		"short": nil,
-		"klash run": func(a *sessionAgent, sessionID string) error {
+		"gnosh run": func(a *sessionAgent, sessionID string) error {
 			_, err := a.Run(t.Context(), SessionAgentCall{SessionID: sessionID, Prompt: "go on", NonInteractive: true})
 			return err
 		},

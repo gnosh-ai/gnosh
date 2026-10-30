@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// permissions.allow takes Claude Code's allow rules of the two kinds klash
+// permissions.allow takes Claude Code's allow rules of the two kinds gnosh
 // applies: a tool's name lets the tool run without asking, as
 // permissions.allowed_tools does, and Bash(pattern) lets the commands the
 // pattern matches run without asking; Bash(*) is Bash. Any other rule is

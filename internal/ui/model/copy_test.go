@@ -45,7 +45,7 @@ func copyUI(t *testing.T) *UI {
 // copyFile is where /copy writes what it copies under the temp directory
 // tmp.
 func copyFile(tmp string) string {
-	return filepath.Join(tmp, "klash-"+strconv.Itoa(os.Getuid()), "response.md")
+	return filepath.Join(tmp, "gnosh-"+strconv.Itoa(os.Getuid()), "response.md")
 }
 
 // The latest responses come newest first, as many as asked for, leaving
@@ -59,7 +59,7 @@ func TestRecentResponses(t *testing.T) {
 }
 
 // /copy copies the latest response, or with N the Nth-latest, as Claude
-// Code's does, and writes it to response.md in a directory of klash's
+// Code's does, and writes it to response.md in a directory of gnosh's
 // only the user can open; typed, from the palette's item, or as "copy N"
 // in the palette. N must be a count of responses there are.
 func TestCopyResponse(t *testing.T) {
@@ -116,7 +116,7 @@ func TestCopyResponseOfOne(t *testing.T) {
 	require.Equal(t, util.NewWarnMsg("Only 1 assistant message available to copy"), u.copyResponse("2")())
 }
 
-// The temp directory is shared, so the copy is not written where klash's
+// The temp directory is shared, so the copy is not written where gnosh's
 // directory is a link, or is open to others; the clipboard still gets it.
 func TestWriteCopyNeedsAPrivateDirectory(t *testing.T) {
 	tmp := t.TempDir()

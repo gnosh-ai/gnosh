@@ -11,7 +11,7 @@ import (
 // off is not followed by another, and another, on every step: the session
 // first drops the point CLAUDE_AUTOCOMPACT_PCT_OVERRIDE gave for the
 // default, and if it is over that too, stops compacting. On the AI box a
-// stand-in reporting 60k tokens after each summary had Klash summarize
+// stand-in reporting 60k tokens after each summary had Gnosh summarize
 // 1,562 times in two minutes with the percentage at 50.
 func TestCompactionDoesNotLoop(t *testing.T) {
 	for name, tc := range map[string]struct {

@@ -15,7 +15,7 @@ const defaultOutputTokens = 25000
 
 // outputTokens is how many tokens an MCP tool's text may bring into the
 // conversation: MAX_MCP_OUTPUT_TOKENS, as in Claude Code, which a
-// klash.json's env can set too, or defaultOutputTokens.
+// gnosh.json's env can set too, or defaultOutputTokens.
 func outputTokens() int {
 	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv("MAX_MCP_OUTPUT_TOKENS"))); err == nil && n > 0 {
 		return n

@@ -122,22 +122,22 @@ func LoadMCPPrompts() ([]MCPPrompt, error) {
 	return commands, nil
 }
 
-// buildCommandSources lists where commands are read from. The klash and
-// crush user directories are both read, klash first: picking whichever
+// buildCommandSources lists where commands are read from. The gnosh and
+// crush user directories are both read, gnosh first: picking whichever
 // exists let a commands directory made under the new name hide every
 // command in the old one.
 func buildCommandSources(cfg *config.Config) []commandSource {
 	return []commandSource{
-		{path: filepath.Join(home.Config(), "klash", "commands"), prefix: userCommandPrefix},
+		{path: filepath.Join(home.Config(), "gnosh", "commands"), prefix: userCommandPrefix},
 		{path: filepath.Join(home.Config(), "crush", "commands"), prefix: userCommandPrefix},
-		{path: filepath.Join(home.Dir(), ".klash", "commands"), prefix: userCommandPrefix},
+		{path: filepath.Join(home.Dir(), ".gnosh", "commands"), prefix: userCommandPrefix},
 		{path: filepath.Join(home.Dir(), ".crush", "commands"), prefix: userCommandPrefix},
 		{path: filepath.Join(cfg.Options.DataDirectory, "commands"), prefix: projectCommandPrefix},
 	}
 }
 
 // loadAll loads every source's commands in order. A command found again
-// under the same name, as after copying crush's commands into klash's, is
+// under the same name, as after copying crush's commands into gnosh's, is
 // shown once: the first one wins.
 func loadAll(sources []commandSource) ([]CustomCommand, error) {
 	var commands []CustomCommand

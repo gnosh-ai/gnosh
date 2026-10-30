@@ -27,7 +27,7 @@ func TestRun_SessionStartRunsOnceForConcurrentPrompts(t *testing.T) {
 	count := filepath.Join(dir, "count")
 	source := filepath.Join(dir, "source")
 	r := sessionStartAgent(t, false, "",
-		sessionStartHooks("", `sleep 2; echo x >> `+count+`; echo "$KLASH_SESSION_START_SOURCE" > `+source)...)
+		sessionStartHooks("", `sleep 2; echo x >> `+count+`; echo "$GNOSH_SESSION_START_SOURCE" > `+source)...)
 
 	var wg sync.WaitGroup
 	wg.Add(2)

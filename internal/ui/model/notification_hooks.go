@@ -13,7 +13,7 @@ import (
 	"github.com/charmbracelet/crush/internal/version"
 )
 
-// How long each of Klash's two notifications waits for the user before
+// How long each of Gnosh's two notifications waits for the user before
 // its Notification hooks fire, as in Claude Code: a permission prompt
 // that has waited about six seconds, and a finished turn with no reply
 // for about a minute. They are variables, not constants, so a test

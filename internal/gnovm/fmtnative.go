@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -25,7 +25,7 @@ import (
 
 // The natives behind klashlibs/fmt: Go's fmt over the operands of a Gno
 // call. Models write Go's fmt (%-10s, %5.2f, %+v of a struct, %w), and gno's
-// ufmt, which klash shipped first, printed "(unhandled)" for most of it.
+// ufmt, which gnosh shipped first, printed "(unhandled)" for most of it.
 
 const (
 	// maxFmtWidth caps a width or precision: Go's fmt allocates the

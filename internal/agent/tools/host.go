@@ -66,7 +66,7 @@ func hostCommand(dest, workingDir, command string) (string, error) {
 
 // hostDenied is the first of the user's Bash deny rules that a command
 // meant for a host matches, or "". This machine's shell refuses such a
-// command as it runs; a host's shell is not Klash's, so the command is
+// command as it runs; a host's shell is not Gnosh's, so the command is
 // read here first, each command in it as plain words. The ban list of
 // this machine (ssh among it) is not applied to a host: it protects this
 // machine, and the host is the user's declaration plus a permission

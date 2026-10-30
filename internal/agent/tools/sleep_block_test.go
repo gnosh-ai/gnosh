@@ -55,7 +55,7 @@ func TestForegroundSleep(t *testing.T) {
 // command that starts with a long sleep, in Claude Code's words, before
 // asking to run it, and its description says so. In the background it
 // runs, and so it does where nothing tells the agent: a sub-agent's bash,
-// or klash run's.
+// or gnosh run's.
 func TestBashBlocksALongForegroundSleep(t *testing.T) {
 	t.Parallel()
 

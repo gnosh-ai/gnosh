@@ -112,14 +112,14 @@ When user asks to create git commit:
 Commit message here.
 
 {{ if .Attribution.GeneratedWith }}
-💘 Generated with Klash
+💘 Generated with Gnosh
 {{ end}}
 {{if eq .Attribution.TrailerStyle "assisted-by" }}
 
-Assisted-by: Klash:{{ .ModelID }}
+Assisted-by: Gnosh:{{ .ModelID }}
 {{ else if eq .Attribution.TrailerStyle "co-authored-by" }}
 
-Co-Authored-By: Klash <crush@charm.land>
+Co-Authored-By: Gnosh <crush@charm.land>
 {{ end }}
 EOF
 )"
@@ -173,7 +173,7 @@ When user asks you to create or update a PR:
 <summary>
 
 {{ if .Attribution.GeneratedWith -}}
-💘 Generated with Klash
+💘 Generated with Gnosh
 {{- end }}
 
 EOF

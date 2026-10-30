@@ -126,7 +126,7 @@ func TestCanAutoStartCachesMissingCommand(t *testing.T) {
 func TestStartServerBacksOffAfterFailedStart(t *testing.T) {
 	t.Parallel()
 
-	const missing = "klash-test-no-such-lsp-binary"
+	const missing = "gnosh-test-no-such-lsp-binary"
 	base := time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC)
 	now := base
 	cfg := &config.Config{
@@ -180,9 +180,9 @@ func TestStartServerBacksOffWhenAutoStartedServerFails(t *testing.T) {
 		callback:    func(string, *Client) {},
 		now:         func() time.Time { return base },
 		// Claim it is installed, so the failure comes from the start itself.
-		lookPath: func(string) (string, error) { return "/usr/bin/klash-test-no-such-lsp-binary", nil },
+		lookPath: func(string) (string, error) { return "/usr/bin/gnosh-test-no-such-lsp-binary", nil },
 	}
-	server := &powernapconfig.ServerConfig{Command: "klash-test-no-such-lsp-binary", FileTypes: []string{"go"}}
+	server := &powernapconfig.ServerConfig{Command: "gnosh-test-no-such-lsp-binary", FileTypes: []string{"go"}}
 
 	m.startServer("fakels", "main.go", server)
 	require.True(t, m.recentlyUnavailable("fakels"),
@@ -195,7 +195,7 @@ func TestStartServerBacksOffWhenAutoStartedServerFails(t *testing.T) {
 func TestStartServerReportsAMissingConfiguredProgram(t *testing.T) {
 	t.Parallel()
 
-	const command = "klash-test-no-such-lsp-binary"
+	const command = "gnosh-test-no-such-lsp-binary"
 	base := time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC)
 	now := base
 	var installed bool

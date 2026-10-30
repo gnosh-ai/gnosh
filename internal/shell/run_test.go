@@ -256,17 +256,17 @@ func TestRun_ToolNameAsCommand(t *testing.T) {
 	if !strings.Contains(stderr, "executable file not found") {
 		t.Fatalf("the shell's own error is gone: %q", stderr)
 	}
-	if !strings.Contains(stderr, "job_kill is a Klash tool, not a shell command: call the job_kill tool instead.") {
+	if !strings.Contains(stderr, "job_kill is a Gnosh tool, not a shell command: call the job_kill tool instead.") {
 		t.Fatalf("stderr does not say job_kill is a tool: %q", stderr)
 	}
 
 	_, stderr, _ = run("crush_info", nil)
-	if !strings.Contains(stderr, "call the klash_info tool instead") {
+	if !strings.Contains(stderr, "call the gnosh_info tool instead") {
 		t.Fatalf("a tool's old name does not lead to the tool: %q", stderr)
 	}
 
 	_, stderr, code = run("no_such_command_here", nil)
-	if code != 127 || strings.Contains(stderr, "Klash tool") {
+	if code != 127 || strings.Contains(stderr, "Gnosh tool") {
 		t.Fatalf("a missing command that names no tool: exit %d, stderr %q", code, stderr)
 	}
 
@@ -277,7 +277,7 @@ func TestRun_ToolNameAsCommand(t *testing.T) {
 		useGoCoreUtils = true
 		t.Cleanup(func() { useGoCoreUtils = saved })
 		_, stderr, code = run("ls", nil)
-		if code != 0 || strings.Contains(stderr, "Klash tool") {
+		if code != 0 || strings.Contains(stderr, "Gnosh tool") {
 			t.Fatalf("ls through Go's coreutils: exit %d, stderr %q", code, stderr)
 		}
 		useGoCoreUtils = saved
@@ -291,7 +291,7 @@ func TestRun_ToolNameAsCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	stdout, stderr, code := run("view", []string{"PATH=" + bin})
-	if stdout != "ran\n" || code != 127 || strings.Contains(stderr, "Klash tool") {
+	if stdout != "ran\n" || code != 127 || strings.Contains(stderr, "Gnosh tool") {
 		t.Fatalf("a view command on the PATH: stdout %q, exit %d, stderr %q", stdout, code, stderr)
 	}
 }

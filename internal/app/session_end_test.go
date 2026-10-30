@@ -47,7 +47,7 @@ func TestReportCurrentSessionClearEndsTheSession(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$KLASH_SESSION_END_REASON" > ` + filepath.Join(dir, "reason")})
+	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$GNOSH_SESSION_END_REASON" > ` + filepath.Join(dir, "reason")})
 	app.ReportCurrentSession("s1")
 	app.ReportCurrentSession("")
 	waitSessionEndHooks(t, app)
@@ -63,7 +63,7 @@ func TestReportCurrentSessionSwitchEndsTheSession(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$KLASH_SESSION_ID $KLASH_SESSION_END_REASON" > ` + filepath.Join(dir, "ended")})
+	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$GNOSH_SESSION_ID $GNOSH_SESSION_END_REASON" > ` + filepath.Join(dir, "ended")})
 	app.ReportCurrentSession("s1")
 	app.ReportCurrentSession("s2")
 	waitSessionEndHooks(t, app)
@@ -74,12 +74,12 @@ func TestReportCurrentSessionSwitchEndsTheSession(t *testing.T) {
 }
 
 // Shutdown with a session open ends it: "prompt_input_exit" in the
-// TUI's case, "other" after a klash run.
+// TUI's case, "other" after a gnosh run.
 func TestShutdownEndsTheOpenSession(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$KLASH_SESSION_END_REASON" >> ` + filepath.Join(dir, "reasons")})
+	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$GNOSH_SESSION_END_REASON" >> ` + filepath.Join(dir, "reasons")})
 	app.ReportCurrentSession("s1")
 	app.Shutdown()
 
@@ -89,7 +89,7 @@ func TestShutdownEndsTheOpenSession(t *testing.T) {
 }
 
 // A session ends with its hooks run even when the process's context was
-// cancelled first, as SIGINT cancels it: klash ending on SIGINT is an end
+// cancelled first, as SIGINT cancels it: gnosh ending on SIGINT is an end
 // the hook is there for (Claude Code runs SessionEnd on SIGINT too), and
 // under the cancelled context the hook never ran.
 func TestShutdownAfterSIGINTStillEndsTheSession(t *testing.T) {
@@ -98,7 +98,7 @@ func TestShutdownAfterSIGINTStillEndsTheSession(t *testing.T) {
 	dir := t.TempDir()
 	ctx, cancel := context.WithCancel(t.Context())
 	cfg := &config.Config{Hooks: map[string][]config.HookConfig{hooks.EventSessionEnd: {
-		{Command: `echo "$KLASH_SESSION_END_REASON" >> ` + filepath.Join(dir, "reasons")},
+		{Command: `echo "$GNOSH_SESSION_END_REASON" >> ` + filepath.Join(dir, "reasons")},
 	}}}
 	require.NoError(t, cfg.ValidateHooks())
 	app := NewForTest(ctx)
@@ -114,14 +114,14 @@ func TestShutdownAfterSIGINTStillEndsTheSession(t *testing.T) {
 	require.Equal(t, "prompt_input_exit\n", string(data))
 }
 
-// A session open when a signal stopped klash ends with reason "other",
+// A session open when a signal stopped gnosh ends with reason "other",
 // as Claude Code's does on SIGINT and SIGTERM; prompt_input_exit says the
 // user left from the prompt.
 func TestShutdownAfterASignalEndsWithOther(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$KLASH_SESSION_END_REASON" >> ` + filepath.Join(dir, "reasons")})
+	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$GNOSH_SESSION_END_REASON" >> ` + filepath.Join(dir, "reasons")})
 	app.ReportCurrentSession("s1")
 	app.StoppedBySignal()
 	app.Shutdown()
@@ -135,7 +135,7 @@ func TestShutdownAfterRunEndsWithOther(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$KLASH_SESSION_END_REASON" >> ` + filepath.Join(dir, "reasons")})
+	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$GNOSH_SESSION_END_REASON" >> ` + filepath.Join(dir, "reasons")})
 	app.nonInteractive = true
 	app.ReportCurrentSession("s1")
 	app.Shutdown()
@@ -153,7 +153,7 @@ func TestSessionEndsOnce(t *testing.T) {
 	// The switch ends s1; the exit ends s2, the session open then. Each
 	// ends exactly once, so the file has exactly two lines.
 	dir := t.TempDir()
-	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$KLASH_SESSION_ID" > ` + filepath.Join(dir, "$KLASH_SESSION_ID")})
+	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$GNOSH_SESSION_ID" > ` + filepath.Join(dir, "$GNOSH_SESSION_ID")})
 	app.ReportCurrentSession("s1")
 	app.ReportCurrentSession("s2")
 	app.Shutdown()
@@ -251,7 +251,7 @@ func TestConfigAcceptsSessionEndWithMatcher(t *testing.T) {
 	require.True(t, os.IsNotExist(err), "a prompt_input_exit exit does not match clear|other")
 }
 
-// An App that serves a klash run and then a TUI session must end the
+// An App that serves a gnosh run and then a TUI session must end the
 // TUI's exit with reason "prompt_input_exit", not "other": the
 // nonInteractive flag set by RunNonInteractive is reset when the
 // interactive agent is reinitialized, so a hook matched on
@@ -260,7 +260,7 @@ func TestNonInteractiveFlagResetForTUI(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$KLASH_SESSION_END_REASON" > ` + filepath.Join(dir, "reason")})
+	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$GNOSH_SESSION_END_REASON" > ` + filepath.Join(dir, "reason")})
 	app.setNonInteractive(true)
 	app.ReportCurrentSession("s1")
 	// Simulate the TUI reinitializing the interactive agent, which
@@ -331,7 +331,7 @@ func TestSessionEndsEachTimeItIsLeft(t *testing.T) {
 
 	dir := t.TempDir()
 	app, _ := sessionEndApp(t, config.HookConfig{
-		Command: `echo "$KLASH_SESSION_ID" >> ` + filepath.Join(dir, "ended") + ` && sleep 0.3`,
+		Command: `echo "$GNOSH_SESSION_ID" >> ` + filepath.Join(dir, "ended") + ` && sleep 0.3`,
 		Timeout: 60,
 	})
 	app.ReportCurrentSession("s1")
@@ -356,7 +356,7 @@ func TestSessionEndsAgainAfterReopen(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$KLASH_SESSION_ID" >> ` + filepath.Join(dir, "ended")})
+	app, _ := sessionEndApp(t, config.HookConfig{Command: `echo "$GNOSH_SESSION_ID" >> ` + filepath.Join(dir, "ended")})
 	// Report s1, then s2: s1 ends, s2 is open.
 	app.ReportCurrentSession("s1")
 	app.ReportCurrentSession("s2")

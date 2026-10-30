@@ -113,8 +113,8 @@ func TestValidateIncludesTools(t *testing.T) {
 	require.ErrorContains(t, cfg.Validate(), "invalid tool configuration")
 }
 
-// A tool named as it was before the rename to Klash is the tool it is now:
-// a config written for crush_logs keeps loading, and means klash_logs.
+// A tool named as it was before the rename to Gnosh is the tool it is now:
+// a config written for crush_logs keeps loading, and means gnosh_logs.
 func TestValidateToolsTakesLegacyToolNames(t *testing.T) {
 	t.Parallel()
 
@@ -123,7 +123,7 @@ func TestValidateToolsTakesLegacyToolNames(t *testing.T) {
 		Permissions: &Permissions{AllowedTools: []string{"crush_info", "bash"}},
 	}
 	require.NoError(t, cfg.ValidateTools())
-	require.Equal(t, []string{"klash_logs"}, cfg.Options.DisabledTools)
-	require.Equal(t, []string{"klash_info", "bash"}, cfg.Permissions.AllowedTools)
-	require.Equal(t, []string{"klash-config", "jq"}, cfg.Options.DisabledSkills, "skills renamed with Crush are the same")
+	require.Equal(t, []string{"gnosh_logs"}, cfg.Options.DisabledTools)
+	require.Equal(t, []string{"gnosh_info", "bash"}, cfg.Permissions.AllowedTools)
+	require.Equal(t, []string{"gnosh-config", "jq"}, cfg.Options.DisabledSkills, "skills renamed with Crush are the same")
 }

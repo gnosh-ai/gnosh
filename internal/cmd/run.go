@@ -41,33 +41,33 @@ var runCmd = &cobra.Command{
 The prompt can be provided as arguments or piped from stdin.`,
 	Example: `
 # Run a simple prompt
-klash run "Guess my 5 favorite Pokémon"
+gnosh run "Guess my 5 favorite Pokémon"
 
 # Pipe input from stdin
-curl https://charm.land | klash run "Summarize this website"
+curl https://charm.land | gnosh run "Summarize this website"
 
 # Read from a file
-klash run "What is this code doing?" <<< prrr.go
+gnosh run "What is this code doing?" <<< prrr.go
 
 # Redirect output to a file
-klash run "Generate a hot README for this project" > MY_HOT_README.md
+gnosh run "Generate a hot README for this project" > MY_HOT_README.md
 
 # Run in quiet mode (hide the spinner)
-klash run --quiet "Generate a README for this project"
+gnosh run --quiet "Generate a README for this project"
 
 # Run in verbose mode (show logs)
-klash run --verbose "Generate a README for this project"
+gnosh run --verbose "Generate a README for this project"
 
 # Use a specific reasoning effort
 # Levels depend on the model, unsupported values are rejected
 # with the accepted values listed
-klash run --reasoning-effort high "What is the meaning of life?"
+gnosh run --reasoning-effort high "What is the meaning of life?"
 
 # Continue a previous session
-klash run --session {session-id} "Follow up on your last response"
+gnosh run --session {session-id} "Follow up on your last response"
 
 # Continue the most recent session
-klash run --continue "Follow up on your last response"
+gnosh run --continue "Follow up on your last response"
 
   `,
 	RunE: stopsOnSignal(func(ctx context.Context, cmd *cobra.Command, args []string) error {
@@ -86,7 +86,7 @@ klash run --continue "Follow up on your last response"
 		// takes a session's name.
 		sessionID := sessionFlag(cmd)
 		if sessionID == pickSession {
-			return errors.New("a session ID or name must follow -r in klash run; `klash -r` on its own lists the sessions to pick from")
+			return errors.New("a session ID or name must follow -r in gnosh run; `gnosh -r` on its own lists the sessions to pick from")
 		}
 		if err := forkAlone(cmd); err != nil {
 			return err
@@ -112,7 +112,7 @@ klash run --continue "Follow up on your last response"
 		}
 
 		if output.stream != nil && useClientServer() {
-			return fmt.Errorf("--output-format stream-json is not supported with %s=1 yet; use text or json", "KLASH_CLIENT_SERVER")
+			return fmt.Errorf("--output-format stream-json is not supported with %s=1 yet; use text or json", "GNOSH_CLIENT_SERVER")
 		}
 
 		event.SetNonInteractive(true)
@@ -227,7 +227,7 @@ func init() {
 	addRunFlags(runCmd)
 }
 
-// addRunFlags adds klash run's flags to cmd.
+// addRunFlags adds gnosh run's flags to cmd.
 func addRunFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolP("quiet", "q", false, "Hide spinner")
 	cmd.Flags().BoolP("verbose", "v", false, "Show logs and a line per tool call on stderr")
@@ -252,7 +252,7 @@ func addRunFlags(cmd *cobra.Command) {
 	addPermissionModeFlag(cmd)
 	addAddDirFlag(cmd)
 	addMCPConfigFlags(cmd)
-	cmd.Flags().Lookup("yolo").Usage = "Accepted for Claude Code's sake; changes nothing, as klash run already accepts its session's permission requests"
+	cmd.Flags().Lookup("yolo").Usage = "Accepted for Claude Code's sake; changes nothing, as gnosh run already accepts its session's permission requests"
 	cmd.Flags().Lookup("dangerously-skip-permissions").Usage = "Same as --yolo"
 }
 
@@ -1015,7 +1015,7 @@ func localSessionID(ctx context.Context, svc session.Service, ref string, byName
 	return named.ID, err
 }
 
-// namedSession is the session `klash run -r <name>` names when name is no
+// namedSession is the session `gnosh run -r <name>` names when name is no
 // session's ID (idErr says why), as Claude Code's print mode takes a
 // title: the one session with that name, ignoring case. Several are an
 // error listing their IDs, as Claude Code's is; none is idErr.
@@ -1058,7 +1058,7 @@ func setThinking(ws workspace.Workspace, enabled bool, out io.Writer) error {
 	return err
 }
 
-// runOutput is where klash run writes its answer, by --output-format:
+// runOutput is where gnosh run writes its answer, by --output-format:
 // streamed as it comes for text, or collected and printed as one result
 // object at the end for json, as Claude Code's -p --output-format json
 // does, for scripts that read the answer and the session to resume;
@@ -1182,7 +1182,7 @@ func (o *runOutput) finish(runErr error) error {
 	return runErr
 }
 
-// noProviderError says why klash run has no provider to use. When the
+// noProviderError says why gnosh run has no provider to use. When the
 // config names providers that loading had to leave out, such as one whose
 // model server did not answer, it says which and why; "no providers
 // configured" sent a user whose server was down to set one up again.

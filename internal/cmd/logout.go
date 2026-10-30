@@ -29,22 +29,22 @@ var logoutCmd = &cobra.Command{
 	Aliases: []string{"signout"},
 	Use:     "logout [platform]",
 	Short:   "Logout " + version.Name + " from a platform",
-	Long: `Logout Klash from a specified platform, removing stored credentials.
+	Long: `Logout Gnosh from a specified platform, removing stored credentials.
 The platform should be provided as an argument.
 If no argument is given, a list of logged-in platforms will be shown.
 Available platforms are: hyper, copilot, openai (chatgpt), grok (xai).`,
 	Example: `
 # Sign out from Charm Hyper
-klash logout hyper
+gnosh logout hyper
 
 # Sign out from GitHub Copilot
-klash logout copilot
+gnosh logout copilot
 
 # Sign out from your ChatGPT (OpenAI) account
-klash logout openai
+gnosh logout openai
 
 # Sign out from your Grok (xAI) account
-klash logout grok
+gnosh logout grok
   `,
 	ValidArgs: []cobra.Completion{
 		"hyper",

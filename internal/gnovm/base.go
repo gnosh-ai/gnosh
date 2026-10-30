@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -24,7 +24,7 @@ import (
 )
 
 // base is the gno store that every VM's overlay reads through. It holds the
-// standard library and klash's libraries, each loaded once per process, on
+// standard library and gnosh's libraries, each loaded once per process, on
 // demand: an empty VM costs ~43 KB, but a store per VM that loads its own
 // strings, strconv and time costs ~88 MB.
 //
@@ -122,7 +122,7 @@ func (b *base) ensure(paths []string) (map[string]string, error) {
 
 func (b *base) load(pkgPath string) (name string, err error) {
 	if hint := unavailablePackage(pkgPath); hint != "" {
-		return "", fmt.Errorf("package %q is not available in klash VMs: %s", pkgPath, hint)
+		return "", fmt.Errorf("package %q is not available in gnosh VMs: %s", pkgPath, hint)
 	}
 	defer func() {
 		if r := recover(); r != nil {
@@ -131,7 +131,7 @@ func (b *base) load(pkgPath string) (name string, err error) {
 	}()
 	pv := b.store.GetPackage(pkgPath, true)
 	if pv == nil {
-		return "", fmt.Errorf("package %q is not available in klash VMs: %s", pkgPath, unknownPackageHint(pkgPath))
+		return "", fmt.Errorf("package %q is not available in gnosh VMs: %s", pkgPath, unknownPackageHint(pkgPath))
 	}
 	b.names[pkgPath] = string(pv.PkgName)
 	return string(pv.PkgName), nil

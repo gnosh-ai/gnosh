@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// permissions.deny takes Claude Code's deny rules of the two kinds klash
+// permissions.deny takes Claude Code's deny rules of the two kinds gnosh
 // applies: a tool's name takes the tool away, as options.disabled_tools
 // does, and Bash(pattern) stops the commands the pattern matches. Any
 // other rule is refused at load, so a rule meant to protect something is

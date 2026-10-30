@@ -15,14 +15,14 @@ import (
 	"github.com/charmbracelet/crush/internal/skills"
 )
 
-const KlashInfoToolName = "klash_info"
+const GnoshInfoToolName = "gnosh_info"
 
-//go:embed klash_info.md
-var klashInfoDescription string
+//go:embed gnosh_info.md
+var gnoshInfoDescription string
 
-type KlashInfoParams struct{}
+type GnoshInfoParams struct{}
 
-func NewKlashInfoTool(
+func NewGnoshInfoTool(
 	cfg *config.ConfigStore,
 	lspManager *lsp.Manager,
 	allSkills []*skills.Skill,
@@ -30,15 +30,15 @@ func NewKlashInfoTool(
 	skillTracker *skills.Tracker,
 ) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
-		KlashInfoToolName,
-		klashInfoDescription,
-		func(ctx context.Context, _ KlashInfoParams, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
-			return fantasy.NewTextResponse(buildKlashInfo(cfg, lspManager, allSkills, activeSkills, skillTracker)), nil
+		GnoshInfoToolName,
+		gnoshInfoDescription,
+		func(ctx context.Context, _ GnoshInfoParams, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			return fantasy.NewTextResponse(buildGnoshInfo(cfg, lspManager, allSkills, activeSkills, skillTracker)), nil
 		},
 	)
 }
 
-func buildKlashInfo(cfg *config.ConfigStore, lspManager *lsp.Manager, allSkills []*skills.Skill, activeSkills []*skills.Skill, skillTracker *skills.Tracker) string {
+func buildGnoshInfo(cfg *config.ConfigStore, lspManager *lsp.Manager, allSkills []*skills.Skill, activeSkills []*skills.Skill, skillTracker *skills.Tracker) string {
 	var b strings.Builder
 
 	writeConfigFiles(&b, cfg)

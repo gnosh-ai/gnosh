@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -22,13 +22,13 @@ import (
 )
 
 // memContext is the context a mem call runs in: gno's own, which its natives
-// read through the interface ExecContext answers, and what klash's mem
+// read through the interface ExecContext answers, and what gnosh's mem
 // natives read.
 type memContext struct {
 	stdlibs.ExecContext
 	caller string
 	ops    *[]memOp
-	// pending is the Ops klash hands Apply, and pendingAt each one's call's
+	// pending is the Ops gnosh hands Apply, and pendingAt each one's call's
 	// time.
 	pending   []memOp
 	pendingAt []int64
@@ -42,7 +42,7 @@ type memContext struct {
 	holding func(text string, ops []memOp) (names, kinds []string, statements bool)
 }
 
-// memOp is one change to a mem, as gnomem's do hands it to klash and the
+// memOp is one change to a mem, as gnomem's do hands it to gnosh and the
 // journal keeps it (gnomem's Op).
 type memOp struct {
 	Kind  string `json:"kind"`

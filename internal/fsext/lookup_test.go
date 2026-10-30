@@ -428,11 +428,11 @@ func TestLookupClosestBounded(t *testing.T) {
 
 		// The first target sits farther up than the second: the closer
 		// one must win, not the first one found anywhere.
-		require.NoError(t, os.Mkdir(filepath.Join(boundary, ".klash"), 0o755))
+		require.NoError(t, os.Mkdir(filepath.Join(boundary, ".gnosh"), 0o755))
 		closer := filepath.Join(subDir, ".crush")
 		require.NoError(t, os.Mkdir(closer, 0o755))
 
-		foundPath, found := LookupClosestBounded(subDir, boundary, ".klash", ".crush")
+		foundPath, found := LookupClosestBounded(subDir, boundary, ".gnosh", ".crush")
 		require.True(t, found)
 		require.Equal(t, closer, foundPath)
 	})
@@ -440,11 +440,11 @@ func TestLookupClosestBounded(t *testing.T) {
 	t.Run("earlier target wins within a directory", func(t *testing.T) {
 		testDir := t.TempDir()
 
-		first := filepath.Join(testDir, ".klash")
+		first := filepath.Join(testDir, ".gnosh")
 		require.NoError(t, os.Mkdir(first, 0o755))
 		require.NoError(t, os.Mkdir(filepath.Join(testDir, ".crush"), 0o755))
 
-		foundPath, found := LookupClosestBounded(testDir, testDir, ".klash", ".crush")
+		foundPath, found := LookupClosestBounded(testDir, testDir, ".gnosh", ".crush")
 		require.True(t, found)
 		require.Equal(t, first, foundPath)
 	})
@@ -596,12 +596,12 @@ func TestForeignOwnedIn(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfg := filepath.Join(dir, "klash.json")
+	cfg := filepath.Join(dir, "gnosh.json")
 	require.NoError(t, os.WriteFile(cfg, []byte(`{}`), 0o644))
 	owner, err := Owner(dir)
 	require.NoError(t, err)
 
-	targets := []string{"klash.json", "missing.json"}
+	targets := []string{"gnosh.json", "missing.json"}
 	require.Empty(t, foreignOwnedIn(dir, owner, targets))
 	require.Equal(t, []string{cfg}, foreignOwnedIn(dir, owner+1, targets))
 	require.Empty(t, foreignOwnedIn(dir, -1, targets), "-1 turns the check off, as in probeEnt")
@@ -616,17 +616,17 @@ func TestForeignOwnedBoundedMatchesWhatLookupBoundedSkips(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	mine := filepath.Join(dir, "klash.json")
+	mine := filepath.Join(dir, "gnosh.json")
 	theirs := filepath.Join(dir, "crush.json")
 	require.NoError(t, os.WriteFile(mine, []byte(`{}`), 0o644))
 	require.NoError(t, os.WriteFile(theirs, []byte(`{}`), 0o644))
 	require.NoError(t, os.Chown(theirs, 65534, 65534))
 
-	found, err := LookupBounded(dir, dir, "klash.json", "crush.json")
+	found, err := LookupBounded(dir, dir, "gnosh.json", "crush.json")
 	require.NoError(t, err)
 	require.Equal(t, []string{mine}, found)
 
-	foreign, err := ForeignOwnedBounded(dir, dir, "klash.json", "crush.json")
+	foreign, err := ForeignOwnedBounded(dir, dir, "gnosh.json", "crush.json")
 	require.NoError(t, err)
 	require.Equal(t, []string{theirs}, foreign)
 }

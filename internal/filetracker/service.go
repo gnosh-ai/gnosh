@@ -80,7 +80,7 @@ func (s *service) RecordRead(ctx context.Context, sessionID, path string) {
 
 // UnchangedSinceRead reports whether a file holds what it held when it
 // was last read in the session. Where this process kept no hash of what
-// was read, because the read was in an earlier run of Klash (a resumed
+// was read, because the read was in an earlier run of Gnosh (a resumed
 // session) or the file is larger than maxComparedSize, the file is
 // judged by its modification time, as the edit and write tools judge
 // every file: unchanged unless modified in a later second than the read,

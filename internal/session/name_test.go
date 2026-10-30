@@ -49,7 +49,7 @@ func TestNamed(t *testing.T) {
 }
 
 // A session is untitled until its first prompt titles it: it has no title,
-// or the one it was created with by the TUI, a channel or klash run. Any
+// or the one it was created with by the TUI, a channel or gnosh run. Any
 // other title was given to it.
 func TestUntitled(t *testing.T) {
 	t.Parallel()

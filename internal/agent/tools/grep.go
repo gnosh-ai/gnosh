@@ -70,7 +70,7 @@ var (
 )
 
 // GrepParams are the grep tool's parameters, with Claude Code's Grep
-// names beside Klash's own: a model used to those passed glob, -i, -C or
+// names beside Gnosh's own: a model used to those passed glob, -i, -C or
 // output_mode, and they were dropped without a word.
 type GrepParams struct {
 	Pattern      string `json:"pattern" description:"The regex pattern to search for in file contents"`
@@ -460,7 +460,7 @@ func searchWithRipgrep(ctx context.Context, pattern, path string, opts grepOptio
 	}
 
 	// Only add ignore files if they exist
-	for _, ignoreFile := range []string{".gitignore", ".klashignore", ".crushignore"} {
+	for _, ignoreFile := range []string{".gitignore", ".gnoshignore", ".crushignore"} {
 		ignorePath := filepath.Join(path, ignoreFile)
 		if _, err := os.Stat(ignorePath); err == nil {
 			cmd.Args = append(cmd.Args, "--ignore-file", ignorePath)

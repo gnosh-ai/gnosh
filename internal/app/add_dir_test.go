@@ -64,7 +64,7 @@ func TestAddDir(t *testing.T) {
 		"":                              "Please provide a directory path.",
 		"  ":                            "Please provide a directory path.",
 		"../missing":                    "Path " + filepath.Join(root, "missing") + " was not found.",
-		"~/no-such-dir-for-klash-tests": "Path " + filepath.Join(home.Dir(), "no-such-dir-for-klash-tests") + " was not found.",
+		"~/no-such-dir-for-gnosh-tests": "Path " + filepath.Join(home.Dir(), "no-such-dir-for-gnosh-tests") + " was not found.",
 		file:                            file + " is not a directory. Did you mean to add the parent directory " + root + "?",
 		".":                             ". is already the current working directory.",
 		"sub":                           "sub is already accessible within the current working directory " + workingDir + ".",

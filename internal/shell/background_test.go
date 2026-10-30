@@ -421,7 +421,7 @@ func TestBackgroundShellManager_PruneDropsOldestFinished(t *testing.T) {
 	require.NoError(t, manager.Kill(bgShell.ID))
 }
 
-// A job's end is taken once; KillAll takes every job's, so the jobs klash
+// A job's end is taken once; KillAll takes every job's, so the jobs gnosh
 // stops as it exits are told of to nobody.
 func TestBackgroundShell_ClaimEnd(t *testing.T) {
 	t.Parallel()

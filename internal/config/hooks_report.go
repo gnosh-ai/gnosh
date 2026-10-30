@@ -30,7 +30,7 @@ func HooksReport(hooks map[string][]HookConfig) string {
 		}
 	}
 	if len(rows) == 0 {
-		sb.WriteString("No hooks are configured. They go under `hooks` in klash.json, in Claude Code's shape or klash's.\n")
+		sb.WriteString("No hooks are configured. They go under `hooks` in gnosh.json, in Claude Code's shape or gnosh's.\n")
 		return sb.String()
 	}
 	sb.WriteString("| Event | Matcher | Command | Timeout |\n|-------|---------|---------|---------|\n")

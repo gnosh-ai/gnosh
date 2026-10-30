@@ -16,12 +16,12 @@ import (
 )
 
 // ErrDataDirLocked is returned by Connect when the data directory is
-// already in use by another klash process.
-var ErrDataDirLocked = errors.New("data directory already in use by another klash process")
+// already in use by another gnosh process.
+var ErrDataDirLocked = errors.New("data directory already in use by another gnosh process")
 
 // dataDirLockFile is the lock file inside the data directory. It lives
 // next to the database so users can `ls` and find it, and is named for
-// it: klash.lock beside klash.db, crush.lock beside the crush.db from
+// it: gnosh.lock beside gnosh.db, crush.lock beside the crush.db from
 // before the rename. A process from before the rename locks crush.lock
 // for crush.db, so a newer one sharing that database must lock the same
 // file, or both would open it at once.
@@ -52,7 +52,7 @@ type dataDirLock struct {
 // includes whatever owner info that process wrote.
 //
 // Acquisition is skipped (returning a no-op lock) when
-// KLASH_SKIP_DATADIR_LOCK is set to a truthy value. This is intended
+// GNOSH_SKIP_DATADIR_LOCK is set to a truthy value. This is intended
 // as an escape hatch for hostile filesystems that do not implement
 // advisory locking; it should not be used in normal operation.
 func acquireDataDirLock(dataDir string) (*dataDirLock, error) {
@@ -88,7 +88,7 @@ func acquireDataDirLock(dataDir string) (*dataDirLock, error) {
 
 // skipDataDirLock reports whether the data-dir lock should be bypassed.
 func skipDataDirLock() bool {
-	v, _ := strconv.ParseBool(env.Getenv("KLASH_SKIP_DATADIR_LOCK"))
+	v, _ := strconv.ParseBool(env.Getenv("GNOSH_SKIP_DATADIR_LOCK"))
 	return v
 }
 

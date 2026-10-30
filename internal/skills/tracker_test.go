@@ -60,20 +60,20 @@ func TestTracker_NilSafety(t *testing.T) {
 func TestTracker_BuiltinSkillTracking(t *testing.T) {
 	t.Parallel()
 
-	// Simulate active skills including a builtin skill (klash-config).
+	// Simulate active skills including a builtin skill (gnosh-config).
 	activeSkills := []*Skill{
-		{Name: "klash-config", Description: "Klash config", Builtin: true},
+		{Name: "gnosh-config", Description: "Gnosh config", Builtin: true},
 		{Name: "go-doc", Description: "Go docs", Builtin: false},
 	}
 	tracker := NewTracker(activeSkills)
 
 	// Initially not loaded.
-	require.False(t, tracker.IsLoaded("klash-config"))
+	require.False(t, tracker.IsLoaded("gnosh-config"))
 	require.False(t, tracker.IsLoaded("go-doc"))
 
-	// Mark builtin skill as loaded (simulating read via klash://...).
-	tracker.MarkLoaded("klash-config")
-	require.True(t, tracker.IsLoaded("klash-config"))
+	// Mark builtin skill as loaded (simulating read via gnosh://...).
+	tracker.MarkLoaded("gnosh-config")
+	require.True(t, tracker.IsLoaded("gnosh-config"))
 
 	// Mark user skill as loaded.
 	tracker.MarkLoaded("go-doc")

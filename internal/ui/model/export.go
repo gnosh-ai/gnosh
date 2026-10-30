@@ -45,7 +45,7 @@ func (m *UI) copyConversation() tea.Cmd {
 }
 
 // conversationText is the conversation as Claude Code's /export writes
-// it, as plain text: a header with klash's version, the session and the
+// it, as plain text: a header with gnosh's version, the session and the
 // working directory, as Claude Code's welcome header has its own, then
 // each message as the chat shows it.
 func (m *UI) conversationText() string {

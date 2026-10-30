@@ -270,7 +270,7 @@ func (m *Models) HandleMsg(msg tea.Msg) Action {
 }
 
 // persistLevel stores a model's reasoning level so it holds for that model
-// in every later session, and in `klash run`. It is written per model, not
+// in every later session, and in `gnosh run`. It is written per model, not
 // per slot, so switching models brings each one's own level back.
 func (m *Models) persistLevel(item *ModelItem, level string) tea.Cmd {
 	provider := string(item.prov.ID)

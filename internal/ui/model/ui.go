@@ -231,7 +231,7 @@ type UI struct {
 	// continueLastSession is set to continue the most recent session on startup.
 	continueLastSession bool
 	// pickSessionAtStart opens the sessions list on startup, for a bare
-	// `klash -r` (see PickSessionAtStart), filtered by pickSessionSearch.
+	// `gnosh -r` (see PickSessionAtStart), filtered by pickSessionSearch.
 	pickSessionAtStart bool
 	pickSessionSearch  string
 	// forkAtStart makes the session the UI starts in a copy of the one
@@ -765,7 +765,7 @@ func (m *UI) initTipCmd() tea.Cmd {
 		return nil
 	}
 	initFile := cmp.Or(m.com.Config().Options.InitializeAs, "AGENTS.md")
-	tip := util.InfoMsg{Type: util.InfoTypeInfo, Msg: fmt.Sprintf("Run /init to create %s %s file with instructions for Klash", article(initFile), initFile), TTL: initTipTTL}
+	tip := util.InfoMsg{Type: util.InfoTypeInfo, Msg: fmt.Sprintf("Run /init to create %s %s file with instructions for Gnosh", article(initFile), initFile), TTL: initTipTTL}
 	return tea.Batch(util.CmdHandler(tip), m.markProjectInitializedCmd())
 }
 
@@ -799,8 +799,8 @@ func (m *UI) StartInPlanMode() {
 }
 
 // PickSessionAtStart makes the UI open the list of sessions to pick from
-// as it starts, for a bare `klash -r`, as Claude Code's `claude -r` opens
-// its picker, and for `klash -r <name>` with a name that is not one
+// as it starts, for a bare `gnosh -r`, as Claude Code's `claude -r` opens
+// its picker, and for `gnosh -r <name>` with a name that is not one
 // session's, the list filtered by search. Like a session named on the
 // command line, it goes before the question whether to initialize the
 // project (see startState).
@@ -4202,7 +4202,7 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	}
 
 	// Debugging rendering (visually see when the tui rerenders)
-	if env.Getenv("KLASH_UI_DEBUG") == "true" {
+	if env.Getenv("GNOSH_UI_DEBUG") == "true" {
 		debugView := lipgloss.NewStyle().Background(lipgloss.ANSIColor(rand.Intn(256))).Width(4).Height(2)
 		debug := uv.NewStyledString(debugView.String())
 		debug.Draw(scr, image.Rectangle{
@@ -5760,7 +5760,7 @@ func (m *UI) sendMessage(content string, attachments ...message.Attachment) tea.
 	return m.sendMessageInternal(content, false, attachments...)
 }
 
-// builtinCommand runs content when it is one of klash's own commands, as
+// builtinCommand runs content when it is one of gnosh's own commands, as
 // typed in the editor, and reports whether it was.
 func (m *UI) builtinCommand(content string) (tea.Cmd, bool) {
 	if enabled, ok := config.ParseThinkingCommand(content); ok {
@@ -5904,8 +5904,8 @@ func (m *UI) permissionsReport() tea.Cmd {
 	}
 }
 
-// doctorReport checks the setup klash runs with, as Claude Code's /doctor
-// does and klash doctor prints it, off the update loop: it looks for the
+// doctorReport checks the setup gnosh runs with, as Claude Code's /doctor
+// does and gnosh doctor prints it, off the update loop: it looks for the
 // programs hooks and LSP servers run.
 func (m *UI) doctorReport() tea.Cmd {
 	return func() tea.Msg {

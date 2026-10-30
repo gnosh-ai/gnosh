@@ -206,7 +206,7 @@ func TestViewToolOffsetIsALineNumber(t *testing.T) {
 	}
 }
 
-// An image that cannot be scaled down to fit, as one klash cannot
+// An image that cannot be scaled down to fit, as one gnosh cannot
 // decode, is refused when it is over what goes to the model; a file too
 // big to be read at all is refused unread.
 func TestViewToolBlocksOversizedImages(t *testing.T) {
@@ -371,25 +371,25 @@ func TestReadBuiltinFile(t *testing.T) {
 			FilePath: "crush://skills/crush-config/SKILL.md",
 		})
 		require.False(t, resp.IsError, resp.Content)
-		require.Contains(t, resp.Content, "Klash Configuration")
+		require.Contains(t, resp.Content, "Gnosh Configuration")
 	})
 
-	t.Run("reads klash-config skill", func(t *testing.T) {
+	t.Run("reads gnosh-config skill", func(t *testing.T) {
 		t.Parallel()
 
 		resp, err := readBuiltinFile(ViewParams{
-			FilePath: "klash://skills/klash-config/SKILL.md",
+			FilePath: "gnosh://skills/gnosh-config/SKILL.md",
 		}, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, resp.Content)
-		require.Contains(t, resp.Content, "Klash Configuration")
+		require.Contains(t, resp.Content, "Gnosh Configuration")
 	})
 
 	t.Run("not found", func(t *testing.T) {
 		t.Parallel()
 
 		resp, err := readBuiltinFile(ViewParams{
-			FilePath: "klash://skills/nonexistent/SKILL.md",
+			FilePath: "gnosh://skills/nonexistent/SKILL.md",
 		}, nil)
 		require.NoError(t, err)
 		require.True(t, resp.IsError)
@@ -399,14 +399,14 @@ func TestReadBuiltinFile(t *testing.T) {
 		t.Parallel()
 
 		resp, err := readBuiltinFile(ViewParams{
-			FilePath: "klash://skills/klash-config/SKILL.md",
+			FilePath: "gnosh://skills/gnosh-config/SKILL.md",
 		}, nil)
 		require.NoError(t, err)
 
 		var meta ViewResponseMetadata
 		require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
 		require.Equal(t, ViewResourceSkill, meta.ResourceType)
-		require.Equal(t, "klash-config", meta.ResourceName)
+		require.Equal(t, "gnosh-config", meta.ResourceName)
 		require.NotEmpty(t, meta.ResourceDescription)
 	})
 
@@ -414,7 +414,7 @@ func TestReadBuiltinFile(t *testing.T) {
 		t.Parallel()
 
 		resp, err := readBuiltinFile(ViewParams{
-			FilePath: "klash://skills/klash-config/SKILL.md",
+			FilePath: "gnosh://skills/gnosh-config/SKILL.md",
 			Offset:   5,
 			Limit:    2,
 		}, nil)
@@ -548,7 +548,7 @@ func noise(w, h int) *image.RGBA {
 }
 
 // An image goes to a model that sees images as Claude Code sends it: as
-// it is when it is at most 2000 pixels a side and 3.75 MB, where klash
+// it is when it is at most 2000 pixels a side and 3.75 MB, where gnosh
 // refused everything over 200 KB, most screenshots; scaled down to fit
 // when it is larger, kept a PNG when that fits, else made a JPEG.
 func TestViewFitsImagesAsClaudeCodeDoes(t *testing.T) {
@@ -632,8 +632,8 @@ func vastPNG(t *testing.T, w, h int) []byte {
 	return append(out, chunk("IEND", nil)...)
 }
 
-// An image of more pixels than klash decodes to scale is refused from its
-// header, undecoded; one klash cannot decode goes as it is when it is
+// An image of more pixels than gnosh decodes to scale is refused from its
+// header, undecoded; one gnosh cannot decode goes as it is when it is
 // small enough.
 func TestFitImageRefusesWhatItCannotScale(t *testing.T) {
 	t.Parallel()

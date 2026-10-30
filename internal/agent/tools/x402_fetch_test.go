@@ -650,7 +650,7 @@ func TestGnotAmount(t *testing.T) {
 	require.Equal(t, "5uother", gnotAmount(std.Coin{Denom: "uother", Amount: 5}))
 }
 
-// TestX402ChainAllowed pins which chains klash pays on: local and test
+// TestX402ChainAllowed pins which chains gnosh pays on: local and test
 // chains, and nothing else.
 func TestX402ChainAllowed(t *testing.T) {
 	for _, chain := range []string{"dev", "staging", "onyx-1", "onyx-2", "test12"} {
@@ -686,7 +686,7 @@ func TestX402Fetch_ALyingNodesFeeIsRefusedUnasked(t *testing.T) {
 
 // TestX402Fetch_ANodeWithNoAnswerIsNotAnUnfundedAccount: a node, or a proxy in
 // front of it, that answers a query with no result has said nothing about the
-// account. Klash reports that, rather than tell the user to fund an address,
+// account. Gnosh reports that, rather than tell the user to fund an address,
 // and asks nothing.
 func TestX402Fetch_ANodeWithNoAnswerIsNotAnUnfundedAccount(t *testing.T) {
 	buyer := newX402Key(t, x402Mnemonic)
@@ -744,7 +744,7 @@ func TestX402Fetch_ANodeThatNeverAnswersIsGivenUp(t *testing.T) {
 }
 
 // TestX402Fetch_AFeeInAnotherCoinIsRefusedUnasked: a node whose gas price is
-// not in ugnot cannot price a fee klash pays, and the refusal names the coin
+// not in ugnot cannot price a fee gnosh pays, and the refusal names the coin
 // rather than an amount, before the user is asked and before anything is
 // signed.
 func TestX402Fetch_AFeeInAnotherCoinIsRefusedUnasked(t *testing.T) {

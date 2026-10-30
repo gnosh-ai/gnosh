@@ -16,7 +16,7 @@ import (
 func printError(t *testing.T, msg string, opts ...fang.Option) string {
 	t.Helper()
 	var out bytes.Buffer
-	cmd := &cobra.Command{Use: "klash", RunE: func(*cobra.Command, []string) error { return errors.New(msg) }}
+	cmd := &cobra.Command{Use: "gnosh", RunE: func(*cobra.Command, []string) error { return errors.New(msg) }}
 	cmd.SetArgs(nil)
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -37,7 +37,7 @@ func TestErrorHandlerKeepsTheFirstWord(t *testing.T) {
 		{"unknown tool \"bsh\" (in --disallowed-tools)", "Unknown tool \"bsh\" (in --disallowed-tools)."},
 		{"--disallowed-tools: unknown tool", "--disallowed-tools: unknown tool."},
 		{"\"Bash(git:*)\" is a command pattern", "\"Bash(git:*)\" is a command pattern."},
-		{"KLASH_CLIENT_SERVER=1 is set", "KLASH_CLIENT_SERVER=1 is set."},
+		{"GNOSH_CLIENT_SERVER=1 is set", "GNOSH_CLIENT_SERVER=1 is set."},
 	} {
 		require.Contains(t, printError(t, tc.err, fang.WithErrorHandler(errorHandler)), tc.want, tc.err)
 	}

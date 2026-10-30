@@ -54,7 +54,7 @@ fact `cmd/test` changed (was "go test ./...")
 fact `cmd/tests` is new; `cmd/` also has `cmd/build` and `cmd/test`
 > s1: mem.Fact("Cmd/Test", "x")
 error: names are lowercase: `cmd/test`
-> user: mem.Rule("push-after-landing", "push klash main to GitHub only after land-branch.sh prints landed:")
+> user: mem.Rule("push-after-landing", "push gnosh main to GitHub only after land-branch.sh prints landed:")
 rule `push-after-landing` is new; every session will be given it
 > s1: mem.Drop("bump-gno-pin", "the PR was closed")
 dropped `bump-gno-pin` "bump the gno pin"
@@ -69,7 +69,7 @@ done `release-v2` "release v2" → shipped
 > s1: println(mem.Show())
 mem: 2 goals open · 1 closed · 1 rule · 3 facts
 rules:
-  `push-after-landing` = push klash main to GitHub only after land-branch.sh prints landed:
+  `push-after-landing` = push gnosh main to GitHub only after land-branch.sh prints landed:
 goals:
   [ ] `bump-gno-pin` "bump the gno pin" (this session · 4m ago · waits for: PR #6399 merged)
   [ ] `renew-cert` "renew the gno.shop TLS cert" (this session · 16m ago · waits until 2026-12-01)
@@ -92,7 +92,7 @@ facts, newest first:
 under `cmd/`: fact `cmd/build`, fact `cmd/test`, fact `cmd/tests`
 
 > s1: mem.Forget("release-v2")
-forgot `release-v2` and its 4 steps; klash erases their text from its files
+forgot `release-v2` and its 4 steps; gnosh erases their text from its files
 > s1: mem.Goal("make tea").Steps("boil water", "pour water")
 added goal `make-tea` "make tea"
 added `make-tea/1` "boil water", `make-tea/2` "pour water"; next: `make-tea/1` "boil water"
@@ -133,13 +133,13 @@ dropped `tidy-docs` "tidy the docs", with its open steps `tidy-docs/1`, `tidy-do
 > s1: mem.Note("bump-gno-pin", "the token is sk-live-4f9c2b")
 noted on `bump-gno-pin` "bump the gno pin"
 > s1: mem.Redact("sk-live-4f9c2b")
-redacted it in 1 place; klash rewrites mem's files
+redacted it in 1 place; gnosh rewrites mem's files
 > s1: mem.Redact("nothing")
 error: mem holds no such text; Redact takes a secret's exact text
 > s1: println(mem.Show())
 mem: 4 goals open · 2 closed · 1 rule · 3 facts
 rules:
-  `push-after-landing` = push klash main to GitHub only after land-branch.sh prints landed:
+  `push-after-landing` = push gnosh main to GitHub only after land-branch.sh prints landed:
 due:
   [ ] `renew-cert` "renew the gno.shop TLS cert" (since 2026-12-01)
 goals:

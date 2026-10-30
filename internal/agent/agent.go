@@ -814,7 +814,7 @@ func ValidateCall(call SessionAgentCall) error {
 func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *fantasy.AgentResult, retErr error) {
 	// The model reads the prompt trimmed whenever the conversation is
 	// rebuilt (ToAIMessage), so it is sent trimmed now too. Sent as typed,
-	// a prompt with a trailing newline, as `klash run` makes from piped
+	// a prompt with a trailing newline, as `gnosh run` makes from piped
 	// stdin, differed from its rebuilt copy, and the local server's prompt
 	// cache missed from that message on.
 	call.Prompt = strings.TrimSpace(call.Prompt)
@@ -1162,7 +1162,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	if !hasUserTextMessage(msgs) && currentSession.ParentSessionID == "" {
 		titleCtx := context.WithoutCancel(ctx)
 		provisional := a.nameAfterPrompt(ctx, call.SessionID, call.Prompt)
-		// A non-interactive run (klash run) ends with its turn: the name
+		// A non-interactive run (gnosh run) ends with its turn: the name
 		// from its prompt stands.
 		if !call.NonInteractive {
 			defer func() { go a.generateTitle(titleCtx, call.SessionID, call.Prompt, provisional) }()
@@ -2394,7 +2394,7 @@ func (unrunnableTool) Run(context.Context, fantasy.ToolCall) (fantasy.ToolRespon
 }
 
 func (a *sessionAgent) getCacheControlOptions() fantasy.ProviderOptions {
-	if t, _ := strconv.ParseBool(env.Getenv("KLASH_DISABLE_ANTHROPIC_CACHE")); t {
+	if t, _ := strconv.ParseBool(env.Getenv("GNOSH_DISABLE_ANTHROPIC_CACHE")); t {
 		return fantasy.ProviderOptions{}
 	}
 	return fantasy.ProviderOptions{
@@ -2904,15 +2904,15 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID, userPrompt,
 	// (/rename, the sessions dialog) is kept instead of the one made here.
 	sess, getErr := a.sessions.Get(context.WithoutCancel(ctx), sessionID)
 	if getErr != nil {
-		// Asked for after the turn, a title may come as klash shuts down.
+		// Asked for after the turn, a title may come as gnosh shuts down.
 		if strings.Contains(getErr.Error(), "database is closed") {
-			slog.Debug("Not titling the session: klash is closing", "error", getErr)
+			slog.Debug("Not titling the session: gnosh is closing", "error", getErr)
 		} else {
 			slog.Error("Failed to read the session to title", "error", getErr)
 		}
 		return
 	}
-	// A name the session was given before its first prompt (klash -n) is
+	// A name the session was given before its first prompt (gnosh -n) is
 	// kept, as Claude Code keeps a --name: only an untitled one is titled.
 	if !session.Untitled(sess.Title) && (provisional == "" || sess.Title != provisional) {
 		return
@@ -3348,7 +3348,7 @@ func (a *sessionAgent) QueuedPromptsList(sessionID string) []string {
 // queue, oldest first, along with the attachments that came with each, and
 // leaves everything else queued:
 //   - hidden continuations, for the turn-end handoff to pick up;
-//   - prompts that carry a RunID: a caller such as `klash run` is waiting
+//   - prompts that carry a RunID: a caller such as `gnosh run` is waiting
 //     for their RunComplete and would hang;
 //   - channel messages (a Signal message, say): the user did not write
 //     them, and in the editor they would lose the channel their reply

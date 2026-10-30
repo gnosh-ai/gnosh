@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// klash run reads what is piped into it before the prompt, but a pipe
+// gnosh run reads what is piped into it before the prompt, but a pipe
 // that is open and never written to, as an ssh session without -n gives,
 // used to keep it waiting forever. Like Claude Code's -p, it now waits a
 // few seconds for the first byte, then warns and goes on without stdin.

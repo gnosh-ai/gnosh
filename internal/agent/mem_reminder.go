@@ -62,7 +62,7 @@ func memReminderDue(msgs []message.Message) bool {
 	return sinceMem >= memReminderTurns && sinceReminder >= memReminderTurns
 }
 
-// isMemReminder reports whether msg is a mem reminder klash put in.
+// isMemReminder reports whether msg is a mem reminder gnosh put in.
 func isMemReminder(msg message.Message) bool {
 	text := msg.Content()
 	return text.Hidden && strings.Contains(text.Text, memReminderOpening)

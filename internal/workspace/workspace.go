@@ -150,7 +150,7 @@ type Workspace interface {
 	BackgroundJobs(ctx context.Context) ([]shell.JobInfo, error)
 	// KillBackgroundJob stops one of them.
 	KillBackgroundJob(ctx context.Context, id string) error
-	// DoctorReport is the check of the setup that klash doctor prints,
+	// DoctorReport is the check of the setup that gnosh doctor prints,
 	// the Markdown /doctor shows, as Claude Code's /doctor checks it.
 	DoctorReport(ctx context.Context) (string, error)
 	// ContextReport is what fills the session's context window ("" for a

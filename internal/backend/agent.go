@@ -257,7 +257,7 @@ func (b *Backend) KillBackgroundJob(workspaceID, jobID string) error {
 	return shell.GetBackgroundShellManager().KillIn(ws.Path, jobID)
 }
 
-// DoctorReport is the check of the workspace's setup that klash doctor
+// DoctorReport is the check of the workspace's setup that gnosh doctor
 // prints, as the Markdown /doctor shows.
 func (b *Backend) DoctorReport(workspaceID string) (string, error) {
 	ws, err := b.GetWorkspace(workspaceID)

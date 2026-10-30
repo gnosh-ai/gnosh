@@ -24,7 +24,7 @@ func (w *pickSessionWorkspace) ListSessions(context.Context) ([]session.Session,
 	return w.sessions, w.err
 }
 
-// A bare `klash -r` opens the sessions list as the UI starts, as Claude
+// A bare `gnosh -r` opens the sessions list as the UI starts, as Claude
 // Code's `claude -r` opens its picker; with no session to pick, it says so
 // instead of opening an empty list.
 func TestStartupSessionPicker(t *testing.T) {
@@ -114,7 +114,7 @@ func TestStartInPlanMode(t *testing.T) {
 	require.Equal(t, uiInputModePlan, u.mode)
 }
 
-// `klash -r <name>` with a name no session or several have opens the list
+// `gnosh -r <name>` with a name no session or several have opens the list
 // filtered by the name, as Claude Code's --resume opens its picker on the
 // search; the filter reaches the list, so Enter takes the first match.
 func TestStartupSessionPickerSearches(t *testing.T) {
@@ -179,12 +179,12 @@ func TestInitTip(t *testing.T) {
 		}
 		return infos
 	}
-	ws := &initTipWorkspace{initializeAs: "KLASH.md"}
-	require.Equal(t, []util.InfoMsg{{Type: util.InfoTypeInfo, Msg: "Run /init to create a KLASH.md file with instructions for Klash", TTL: initTipTTL}}, tips(ws))
+	ws := &initTipWorkspace{initializeAs: "GNOSH.md"}
+	require.Equal(t, []util.InfoMsg{{Type: util.InfoTypeInfo, Msg: "Run /init to create a GNOSH.md file with instructions for Gnosh", TTL: initTipTTL}}, tips(ws))
 	// The default, AGENTS.md, takes "an": the tip said "a AGENTS.md".
-	require.Equal(t, "Run /init to create an AGENTS.md file with instructions for Klash", tips(&initTipWorkspace{})[0].Msg)
+	require.Equal(t, "Run /init to create an AGENTS.md file with instructions for Gnosh", tips(&initTipWorkspace{})[0].Msg)
 	require.Greater(t, initTipTTL, DefaultStatusTTL, "longer than a status message's usual life")
-	for name, want := range map[string]string{"AGENTS.md": "an", "agents.md": "an", "CLAUDE.md": "a", "KLASH.md": "a", "docs/LLMs.md": "a", "": "a"} {
+	for name, want := range map[string]string{"AGENTS.md": "an", "agents.md": "an", "CLAUDE.md": "a", "GNOSH.md": "a", "docs/LLMs.md": "a", "": "a"} {
 		require.Equal(t, want, article(name), name)
 	}
 	require.Equal(t, 1, ws.marked, "told once")

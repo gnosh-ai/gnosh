@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A prompt may follow klash's flags, as Claude Code's `claude "query"`
+// A prompt may follow gnosh's flags, as Claude Code's `claude "query"`
 // does; a first word naming a subcommand is that subcommand.
 func TestRootTakesAPrompt(t *testing.T) {
 	t.Parallel()

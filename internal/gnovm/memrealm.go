@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -65,7 +65,7 @@ var memRunAddr = crypto.AddressFromPreimage([]byte("klash mem"))
 
 // memRealm is a project's mem: the realm in a goleveldb store on disk. The
 // libraries it runs on stay in the base, in memory, and are never written
-// to the store: a klash upgrade brings new library code.
+// to the store: a gnosh upgrade brings new library code.
 type memRealm struct {
 	b  *base
 	db *goleveldb.GoLevelDB
@@ -131,7 +131,7 @@ func (r *memRealm) deploy() (err error) {
 
 // preprocessMemRealm puts the realm's block nodes in the base, once: gno
 // keeps a package's syntax trees in memory only, so every process rebuilds
-// them, as a chain node does at restart, from klash's own copy of the source.
+// them, as a chain node does at restart, from gnosh's own copy of the source.
 func (b *base) preprocessMemRealm() (err error) {
 	if b.memRealmReady {
 		return nil
@@ -388,7 +388,7 @@ func memInput(src memSource) (*std.MemPackage, int) {
 	return mpkg, bodyLine
 }
 
-// memBinding is the file klash adds to every mem input: mem, bound to the
+// memBinding is the file gnosh adds to every mem input: mem, bound to the
 // realm's Mem, and how a trailing read of it is shown.
 const memBinding = `package main
 

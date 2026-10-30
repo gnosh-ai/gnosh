@@ -618,11 +618,11 @@ func TestStreamingMarkdown_NoSafeBoundaryAlwaysFullRenders(t *testing.T) {
 		"stable prefix must remain empty when no safe boundary ever exists")
 }
 
-// TestStreamingMarkdown_NoSafeBoundaryDoesNotKlash is the
+// TestStreamingMarkdown_NoSafeBoundaryDoesNotGnosh is the
 // minimum-viability assertion of T4: even when boundary
 // detection fails on every flush the streaming path must not
-// klash and must produce non-empty output for non-empty input.
-func TestStreamingMarkdown_NoSafeBoundaryDoesNotKlash(t *testing.T) {
+// gnosh and must produce non-empty output for non-empty input.
+func TestStreamingMarkdown_NoSafeBoundaryDoesNotGnosh(t *testing.T) {
 	t.Parallel()
 
 	const width = 80

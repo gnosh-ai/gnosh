@@ -51,7 +51,7 @@ func stopOnSignal(parent context.Context) (ctx context.Context, stop func()) {
 // stopsOnSignal is run as a command's RunE that stops on SIGINT or
 // SIGTERM: either cancels run's ctx, and a command stopped by SIGTERM
 // exits 143 once run has returned, its deferred cleanup done, as Claude
-// Code does. klash run asked for os.Kill, which cannot be caught, rather
+// Code does. gnosh run asked for os.Kill, which cannot be caught, rather
 // than SIGTERM, so SIGTERM ended it on the spot: its Stop hook's checks,
 // reviewers among them, ran on with nothing to stop them. The TUI already
 // quit cleanly on SIGTERM (Bubble Tea's own handler), but exited 0.

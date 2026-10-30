@@ -237,7 +237,7 @@ type RewindResult struct {
 	Kept      *Session `json:"kept,omitempty"`
 }
 
-// DoctorReport is the check of the workspace's setup that klash doctor
+// DoctorReport is the check of the workspace's setup that gnosh doctor
 // prints, as the Markdown /doctor shows.
 type DoctorReport struct {
 	Markdown string `json:"markdown"`

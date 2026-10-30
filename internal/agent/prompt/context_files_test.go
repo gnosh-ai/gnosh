@@ -91,14 +91,14 @@ func TestLoadContextFilesKeepsTheConfiguredOrder(t *testing.T) {
 
 	dir := t.TempDir()
 	var paths []string
-	for _, name := range []string{"CLAUDE.md", "GEMINI.md", "KLASH.md", "CRUSH.md", "AGENTS.md"} {
+	for _, name := range []string{"CLAUDE.md", "GEMINI.md", "GNOSH.md", "CRUSH.md", "AGENTS.md"} {
 		paths = append(paths, writeContextFile(t, dir, name, "about "+name))
 	}
 	store := config.NewTestStore(&config.Config{Options: &config.Options{}})
 
 	for range 20 {
 		require.Equal(t,
-			[]string{"CLAUDE.md", "GEMINI.md", "KLASH.md", "CRUSH.md", "AGENTS.md"},
+			[]string{"CLAUDE.md", "GEMINI.md", "GNOSH.md", "CRUSH.md", "AGENTS.md"},
 			contextPaths(LoadContextFiles(paths, store, dir)))
 	}
 }
@@ -219,7 +219,7 @@ func filesUnder(files []ContextFile, dir string) []string {
 	return out
 }
 
-// Started in a subdirectory, klash reads the context files of the
+// Started in a subdirectory, gnosh reads the context files of the
 // directories above it too, the outermost first and the working
 // directory's last, as Claude Code reads CLAUDE.md files. An import in a
 // directory above stays inside that directory.

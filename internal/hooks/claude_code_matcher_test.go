@@ -8,15 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A matcher written for Claude Code matches Klash's tool that does the
+// A matcher written for Claude Code matches Gnosh's tool that does the
 // same job: Bash matches bash, Read view, Edit|Write edit and write, and
 // an MCP tool by its Claude Code name, mcp__<server>__<tool>. Those hooks
-// never fired before: their matchers were tested against Klash's names
+// never fired before: their matchers were tested against Gnosh's names
 // only. It also matches the tools Claude Code has nothing like, by the
 // name of the one whose job they do: Edit|Write matches lsp_rename and
 // download, WebFetch download and x402_fetch. Before, a guard on file
 // edits copied from Claude Code was walked around through those tools.
-func TestClaudeCodeMatchersMatchKlashTools(t *testing.T) {
+func TestClaudeCodeMatchersMatchGnoshTools(t *testing.T) {
 	t.Parallel()
 
 	var cfgs []config.HookConfig

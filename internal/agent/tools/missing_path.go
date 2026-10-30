@@ -105,7 +105,7 @@ func extension(name string) string {
 //
 // The bare error names the path asked for, which reads as though it is
 // there and merely locked: on the AI box, view of /root/renders answered
-// "permission denied" because /root is not readable by the user klash runs
+// "permission denied" because /root is not readable by the user gnosh runs
 // as, and the agent spent its turn hunting for sudo. /root/renders does
 // not exist on that machine at all — it is a directory on another host —
 // but the kernel cannot say so without first reading /root. Naming the

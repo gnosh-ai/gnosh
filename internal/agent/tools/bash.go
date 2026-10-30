@@ -42,7 +42,7 @@ const maxBashTimeoutSeconds = 600
 // parameter, as the whole seconds to wait before a command moves to the
 // background: rounded up, at most maxWaitSeconds, 0 for none. A model
 // used to Claude Code's Bash gives a long test run timeout 600000, and
-// Klash dropped it: the run moved to the background after a minute, to be
+// Gnosh dropped it: the run moved to the background after a minute, to be
 // read with job_output, a model round trip each time.
 func timeoutSeconds(ms int) int {
 	if ms <= 0 {
@@ -53,7 +53,7 @@ func timeoutSeconds(ms int) int {
 
 // envInt is the positive whole number the environment variable name
 // holds, or def: Claude Code's BASH_* limits and its
-// CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS, which a klash.json's env can
+// CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS, which a gnosh.json's env can
 // set too.
 func envInt(name string, def int) int {
 	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name))); err == nil && n > 0 {

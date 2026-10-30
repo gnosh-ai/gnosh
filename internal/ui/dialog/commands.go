@@ -541,7 +541,7 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		WithDescription("What the agent runs in the background: see its output, or stop it"))
 	commands = append(commands, NewCommandItem(c.com.Styles, "doctor_report", "Doctor", "", ActionDoctorReport{}).
 		WithAliases("doctor", "checkup").
-		WithDescription("Check the config, providers, models, hooks and programs klash runs with"))
+		WithDescription("Check the config, providers, models, hooks and programs gnosh runs with"))
 	commands = append(commands, NewCommandItem(c.com.Styles, "status_report", "Status", "", ActionStatusReport{}).
 		WithAliases("status").
 		WithDescription("Version, session, models, context, and the MCP and LSP servers, as Claude Code's /status shows them"))

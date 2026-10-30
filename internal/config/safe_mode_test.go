@@ -20,7 +20,7 @@ func TestApplySafeMode(t *testing.T) {
 			Options: &Options{
 				ContextPaths:       []string{"AGENTS.md"},
 				GlobalContextPaths: []string{"~/.config/AGENTS.md"},
-				SkillsPaths:        []string{"~/.config/klash/skills"},
+				SkillsPaths:        []string{"~/.config/gnosh/skills"},
 			},
 		}
 	}

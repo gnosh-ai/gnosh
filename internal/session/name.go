@@ -12,7 +12,7 @@ import (
 const maxNameLength = 200
 
 // The titles a session is created with until its first prompt titles it:
-// the TUI's and a channel's (NewTitle), and klash run's through a server
+// the TUI's and a channel's (NewTitle), and gnosh run's through a server
 // (RunTitle) and in process (UntitledTitle).
 const (
 	NewTitle      = "New Session"
@@ -22,7 +22,7 @@ const (
 
 // Untitled reports whether title is one a session has until its first
 // prompt titles it: none, or a title a session is created with. Any other
-// was given to it, by klash -n or a client of the server, and the first
+// was given to it, by gnosh -n or a client of the server, and the first
 // prompt keeps it, as Claude Code keeps a --name.
 func Untitled(title string) bool {
 	switch title {

@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// permissionTool asks for permission to run, as Klash's tools do, and runs
+// permissionTool asks for permission to run, as Gnosh's tools do, and runs
 // once it has it.
 type permissionTool struct {
 	perms permission.Service
@@ -99,7 +99,7 @@ func claudeCodeDecision(decision string) string {
 // A PermissionRequest hook answers the dialog in the user's place, as in
 // Claude Code: an allow runs the call and a deny refuses it with the
 // hook's message, both without a dialog; a deny that interrupts ends the
-// turn, where a plain one lets the model go on. Klash's own answer works
+// turn, where a plain one lets the model go on. Gnosh's own answer works
 // too.
 func TestPermissionRequestHookAnswersTheDialog(t *testing.T) {
 	t.Parallel()
@@ -111,7 +111,7 @@ func TestPermissionRequestHookAnswersTheDialog(t *testing.T) {
 		stopTurn bool
 	}{
 		"allow":            {cmd: claudeCodeDecision(`{"behavior":"allow"}`), ran: true, content: "ran"},
-		"Klash's allow":    {cmd: `echo '{"decision":"allow"}'`, ran: true, content: "ran"},
+		"Gnosh's allow":    {cmd: `echo '{"decision":"allow"}'`, ran: true, content: "ran"},
 		"deny":             {cmd: claudeCodeDecision(`{"behavior":"deny","message":"no deploys on Friday"}`), content: "Tool call denied by a PermissionRequest hook. Reason: no deploys on Friday"},
 		"deny, interrupt":  {cmd: claudeCodeDecision(`{"behavior":"deny","message":"stop","interrupt":true}`), content: "Reason: stop", stopTurn: true},
 		"halt (exit 49)":   {cmd: `echo "out of budget" >&2; exit 49`, content: "Reason: out of budget", stopTurn: true},
@@ -134,7 +134,7 @@ func TestPermissionRequestHookAnswersTheDialog(t *testing.T) {
 // With no answer from its hooks the user is asked, as before: a hook that
 // is silent, exits 2 (Claude Code's "leave the flow as it was"), or asks.
 // A hook that could not check leaves the user to answer too, and the
-// dialog says why; so does an allow with changed input, which Klash
+// dialog says why; so does an allow with changed input, which Gnosh
 // cannot run once the tool has read its input.
 func TestPermissionRequestHookWithoutAnAnswerAsksTheUser(t *testing.T) {
 	t.Parallel()
@@ -149,7 +149,7 @@ func TestPermissionRequestHookWithoutAnAnswerAsksTheUser(t *testing.T) {
 		"could not check": {cmd: `echo "the pager is down" >&2; exit 3`, note: "could not answer this, so you are asked: hook"},
 		"not installed":   {cmd: `no_such_approver --check`, note: "could not answer this"},
 		"unreadable":      {cmd: claudeCodeDecision(`{"behavior":"maybe"}`), note: "could not answer this"},
-		"changed input":   {cmd: claudeCodeDecision(`{"behavior":"allow","updatedInput":{"command":"deploy --dry-run"}}`), note: "with changed input, which Klash cannot run"},
+		"changed input":   {cmd: claudeCodeDecision(`{"behavior":"allow","updatedInput":{"command":"deploy --dry-run"}}`), note: "with changed input, which Gnosh cannot run"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -222,7 +222,7 @@ func TestPermissionRequestHookRunsWhenADialogIsDue(t *testing.T) {
 	})
 }
 
-// Where no one can answer a PreToolUse hook's "ask", as in klash run, a
+// Where no one can answer a PreToolUse hook's "ask", as in gnosh run, a
 // PermissionRequest hook still can, as in Claude Code, which denies the
 // call when none allows it.
 func TestPermissionRequestHookAnswersWhereNoOneCan(t *testing.T) {

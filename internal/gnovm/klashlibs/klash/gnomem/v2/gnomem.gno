@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -9,7 +9,7 @@
 
 // Package gnomem is an agent's memory: the work it means to get done, as
 // goals with steps, and what came of each; what it waits for; what the user
-// must answer or do; facts to keep; and the user's standing rules. Klash
+// must answer or do; facts to keep; and the user's standing rules. Gnosh
 // keeps one Mem per project, in the realm klash.local/r/mem on disk, and
 // binds it to the name mem in every input the model runs there:
 //
@@ -36,8 +36,8 @@
 // or a request) is never the agent's next. A day is the user's local date.
 //
 // Every change is an Op, and one function, apply, changes a Mem. The calls
-// only decide which Ops to make, and hand each to klash, which journals it.
-// What an Op means never changes, so klash can rebuild a Mem from its Ops
+// only decide which Ops to make, and hand each to gnosh, which journals it.
+// What an Op means never changes, so gnosh can rebuild a Mem from its Ops
 // whatever this package's code or layout becomes. Items, facts and rules
 // sit in B+trees keyed by name, so a call loads only what it touches, and a
 // Mem has no size limit. Every call refuses text that is not valid UTF-8.
@@ -385,7 +385,7 @@ func (m *Mem) Fact(name, fact string) {
 }
 
 // Rule keeps a standing instruction from the user under name; "" removes
-// it. Every session is given every rule in full, and klash tells the user
+// it. Every session is given every rule in full, and gnosh tells the user
 // of each change. Only the user's words become rules.
 func (m *Mem) Rule(name, rule string) {
 	m.checkName(name, "rule")
@@ -413,7 +413,7 @@ func (m *Mem) Rule(name, rule string) {
 }
 
 // Forget empties closed item name and every item under it (title, result,
-// wait, notes) and closes them as forgotten. Klash erases their text from
+// wait, notes) and closes them as forgotten. Gnosh erases their text from
 // the journal and the index. It refuses an open item (Drop it first);
 // every other call refuses a forgotten item. Its receipt names no text.
 func (m *Mem) Forget(name string) {
@@ -440,7 +440,7 @@ func (m *Mem) Forget(name string) {
 	if len(gone) > 0 {
 		msg += " and its " + plural(len(gone), "step")
 	}
-	println(msg + "; klash erases their text from its files")
+	println(msg + "; gnosh erases their text from its files")
 }
 
 // Redact replaces a secret's exact text with "(redacted)" wherever mem holds
@@ -474,24 +474,24 @@ func (m *Mem) Redact(secret string) {
 	if len(names) == 0 {
 		m.do(Op{Kind: "redact", Field: "statements", Old: secret})
 	}
-	println("redacted it in " + plural(places, "place") + "; klash rewrites mem's files")
+	println("redacted it in " + plural(places, "place") + "; gnosh rewrites mem's files")
 }
 
-// do applies op and hands it to klash; nothing else changes a Mem.
-// time.Now() is the call's time, which klash fixes once per call, so all
+// do applies op and hands it to gnosh; nothing else changes a Mem.
+// time.Now() is the call's time, which gnosh fixes once per call, so all
 // its Ops share it.
 func (m *Mem) do(op Op) {
 	m.apply(op, time.Now().Unix())
 	record(op.Kind, op.Name, op.Field, op.Old, op.New, op.By)
 }
 
-// Apply applies the Ops klash hands it, each stamped with its call's time,
-// without recording them: klash rebuilds a Mem from its journal with it,
-// many entries at a time, and undoes with it. It panics unless klash runs
+// Apply applies the Ops gnosh hands it, each stamped with its call's time,
+// without recording them: gnosh rebuilds a Mem from its journal with it,
+// many entries at a time, and undoes with it. It panics unless gnosh runs
 // the input.
 func (m *Mem) Apply() {
 	if who := caller(); who != "klash" && who != "user" {
-		panic("only klash may apply Ops")
+		panic("only gnosh may apply Ops")
 	}
 	kinds, names, fields, olds, news, bys, ats := pending()
 	for i := range kinds {

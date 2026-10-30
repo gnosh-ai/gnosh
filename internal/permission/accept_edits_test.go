@@ -39,7 +39,7 @@ func runsUnaskedAt(t *testing.T, ctx context.Context, s Service, tool, path, req
 // As in Claude Code, acceptEdits lets the file edit tools change files in
 // the project and in directories added with --add-dir without asking, and
 // nothing else: a file elsewhere, or one that runs code or holds settings
-// (a git hook, a shell's startup file, Klash's or Claude Code's config),
+// (a git hook, a shell's startup file, Gnosh's or Claude Code's config),
 // is asked about as without the mode, as is anything a symlink leads out
 // to. It used to let them write anywhere.
 func TestAcceptEditsLetsEditsInTheProjectRun(t *testing.T) {
@@ -67,8 +67,8 @@ func TestAcceptEditsLetsEditsInTheProjectRun(t *testing.T) {
 		filepath.Join(project, "sub", ".git", "config"):       false,
 		filepath.Join(project, ".bashrc"):                     false,
 		filepath.Join(project, ".zshrc"):                      false,
-		filepath.Join(project, "klash.json"):                  false,
-		filepath.Join(project, ".klash", "crush.db"):          false,
+		filepath.Join(project, "gnosh.json"):                  false,
+		filepath.Join(project, ".gnosh", "crush.db"):          false,
 		filepath.Join(project, ".claude", "settings.json"):    false,
 		filepath.Join(project, ".config", "git", "config"):    false,
 		filepath.Join(project, "out.go"):                      false,
@@ -77,7 +77,7 @@ func TestAcceptEditsLetsEditsInTheProjectRun(t *testing.T) {
 		filepath.Join(project, "gitdir", "config"):            false,
 		filepath.Join(project, ".vscode", "settings.json"):    false,
 		filepath.Join(project, ".GIT", "hooks", "pre-commit"): false,
-		filepath.Join(project, "KLASH.JSON"):                  false,
+		filepath.Join(project, "GNOSH.JSON"):                  false,
 		filepath.Join(project, ".Claude", "settings.json"):    false,
 		filepath.Join(project, ".config", "GIT", "config"):    false,
 		filepath.Join(project, ".ssh", "authorized_keys"):     false,
@@ -148,7 +148,7 @@ func TestProtectedFilesAreAskedAboutHoweverTheToolIsAllowed(t *testing.T) {
 	require.True(t, runsUnasked(t, t.Context(), yolo, "edit", hook))
 	auto := New(Options{WorkingDir: project})
 	auto.AutoApproveSession("s1")
-	require.True(t, runsUnasked(t, t.Context(), auto, "edit", hook), "a klash run's session")
+	require.True(t, runsUnasked(t, t.Context(), auto, "edit", hook), "a gnosh run's session")
 	require.True(t, runsUnasked(t, WithHookApproval(t.Context(), "call-1"), New(Options{WorkingDir: project}), "edit", hook), "a hook's allow")
 }
 

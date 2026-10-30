@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -55,7 +55,7 @@ type ClientOptions struct {
 	Binary string
 }
 
-// Client is a klash process's way to its VMs: a worker it spawns on first
+// Client is a gnosh process's way to its VMs: a worker it spawns on first
 // use (and again if the worker dies), or a host of its own in-process. It
 // is shared by the process (server mode has one App per workspace) and
 // counted: the last Release closes it.
@@ -365,7 +365,7 @@ func spawnWorker(opts ClientOptions) (*workerConn, error) {
 	}
 	cmd := exec.Command(bin, "gnovm-worker")
 	cmd.ExtraFiles = []*os.File{reqR, repW} // fds 3 and 4
-	// Not the project directory: klash loads a .env from its working
+	// Not the project directory: gnosh loads a .env from its working
 	// directory before main runs, and the project's is agent-writable.
 	cmd.Dir = opts.Dir
 	cmd.Env = workerEnv()
@@ -483,7 +483,7 @@ func sameFile(a, b string) bool {
 func workerEnv() []string {
 	var env []string
 	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, "KLASH_PROFILE=") || strings.HasPrefix(kv, "CRUSH_PROFILE=") {
+		if strings.HasPrefix(kv, "GNOSH_PROFILE=") || strings.HasPrefix(kv, "CRUSH_PROFILE=") {
 			continue
 		}
 		env = append(env, kv)
@@ -594,11 +594,11 @@ func (c *workerConn) verdict(now time.Time) string {
 		return ""
 	}
 	if silent := now.Sub(time.Unix(0, c.last.Load())); silent > silenceKill {
-		return fmt.Sprintf("killed by klash: no heartbeat for %s", silent.Round(time.Second))
+		return fmt.Sprintf("killed by gnosh: no heartbeat for %s", silent.Round(time.Second))
 	}
 	for _, p := range c.pending {
 		if now.After(p.deadline.Add(overdueKill)) {
-			return "killed by klash: a request ran past its deadline"
+			return "killed by gnosh: a request ran past its deadline"
 		}
 	}
 	return ""
@@ -625,7 +625,7 @@ func (c *workerConn) close() {
 	select {
 	case <-c.dead:
 	case <-time.After(3 * time.Second):
-		c.kill("killed by klash at close: did not exit in 3 s")
+		c.kill("killed by gnosh at close: did not exit in 3 s")
 		<-c.dead
 	}
 }

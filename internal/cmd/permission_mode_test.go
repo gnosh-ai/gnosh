@@ -17,7 +17,7 @@ func permissionModeCmd(t *testing.T, args ...string) *cobra.Command {
 	return cmd
 }
 
-// Claude Code's permission modes that klash has: plan, acceptEdits,
+// Claude Code's permission modes that gnosh has: plan, acceptEdits,
 // bypassPermissions and default; dontAsk and auto are refused by name.
 func TestPermissionModeFlag(t *testing.T) {
 	for _, tc := range []struct {
@@ -51,7 +51,7 @@ func TestBypassPermissionsIsYolo(t *testing.T) {
 	require.False(t, yoloFlag(permissionModeCmd(t)))
 }
 
-// Both klash and klash run take the flag.
+// Both gnosh and gnosh run take the flag.
 func TestRootAndRunTakePermissionMode(t *testing.T) {
 	for _, c := range []*cobra.Command{rootCmd, runCmd} {
 		require.NotNil(t, c.Flags().Lookup("permission-mode"), c.Name())

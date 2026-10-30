@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// `klash run -r <name>`, as Claude Code's `claude -p --resume <title>`:
+// `gnosh run -r <name>`, as Claude Code's `claude -p --resume <title>`:
 // the one session with that name, ignoring case; several are an error
 // that lists their IDs; none is the ID lookup's error. An ID still
 // works, and --session (byName false) takes IDs only.

@@ -13,7 +13,7 @@ func TestClaudeCodeFlagNames(t *testing.T) {
 	t.Parallel()
 
 	parse := func(args ...string) (*cobra.Command, error) {
-		cmd := &cobra.Command{Use: "klash", RunE: func(*cobra.Command, []string) error { return nil }}
+		cmd := &cobra.Command{Use: "gnosh", RunE: func(*cobra.Command, []string) error { return nil }}
 		cmd.SilenceErrors, cmd.SilenceUsage = true, true
 		addYoloFlags(cmd)
 		addSessionFlags(cmd)
@@ -93,7 +93,7 @@ func TestRunAcceptsClaudeCodeFlags(t *testing.T) {
 	require.Error(t, err, "-r and -s are exclusive")
 }
 
-// klash run accepts the yolo flags for Claude Code's sake but keeps them
+// gnosh run accepts the yolo flags for Claude Code's sake but keeps them
 // from the workspace: a yolo workspace it created on a shared server would
 // hand yolo to a TUI that joined it later. The TUI's own --yolo still
 // reaches its workspace.
@@ -104,13 +104,13 @@ func TestRunKeepsYoloFromTheWorkspace(t *testing.T) {
 	require.False(t, workspaceYolo(runCmd))
 	require.Contains(t, runCmd.Flags().Lookup("yolo").Usage, "changes nothing")
 
-	root := &cobra.Command{Use: "klash"}
+	root := &cobra.Command{Use: "gnosh"}
 	addYoloFlags(root)
 	require.NoError(t, root.ParseFlags([]string{"--yolo"}))
 	require.True(t, workspaceYolo(root))
 }
 
-// Claude Code's -p/--print, one question without the TUI, is klash run.
+// Claude Code's -p/--print, one question without the TUI, is gnosh run.
 func TestPrintAsRun(t *testing.T) {
 	t.Parallel()
 

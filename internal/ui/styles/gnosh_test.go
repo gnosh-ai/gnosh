@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/fade"
 )
 
-func TestKlashCosmosIsTheDefault(t *testing.T) {
+func TestGnoshCosmosIsTheDefault(t *testing.T) {
 	if !IsBuiltinTheme(DefaultThemeName) {
 		t.Fatalf("%q is not a built-in theme", DefaultThemeName)
 	}
@@ -16,23 +16,23 @@ func TestKlashCosmosIsTheDefault(t *testing.T) {
 		"an empty theme name": must(LoadTheme("")),
 		"an unknown theme":    ThemeFromConfig("no-such-theme"),
 	} {
-		if got, want := *hex(s.Logo.CharmColor), *hex(KlashGold); got != want {
-			t.Errorf("%s gave a mark in %s, want Klash's gold %s", name, got, want)
+		if got, want := *hex(s.Logo.CharmColor), *hex(GnoshGold); got != want {
+			t.Errorf("%s gave a mark in %s, want Gnosh's gold %s", name, got, want)
 		}
 	}
 }
 
-func TestKlashCosmos_KeepsCrushsColors(t *testing.T) {
-	// Klash adds green and gold to Charmtone; it doesn't recolor it.
-	k, c := KlashCosmos(), CharmtonePantera()
-	for _, p := range []struct{ name, klash, crush string }{
+func TestGnoshCosmos_KeepsCrushsColors(t *testing.T) {
+	// Gnosh adds green and gold to Charmtone; it doesn't recolor it.
+	k, c := GnoshCosmos(), CharmtonePantera()
+	for _, p := range []struct{ name, gnosh, crush string }{
 		{"fields", *hex(k.Logo.FieldColor), *hex(c.Logo.FieldColor)},
 		{"background", *hex(k.Background), *hex(c.Background)},
 		{"dialog border", *hex(k.Dialog.View.GetBorderTopForeground()), *hex(c.Dialog.View.GetBorderTopForeground())},
 		{"selected item", *hex(k.Dialog.SelectedItem.GetBackground()), *hex(c.Dialog.SelectedItem.GetBackground())},
 	} {
-		if p.klash != p.crush {
-			t.Errorf("%s is %s, want Charmtone's %s", p.name, p.klash, p.crush)
+		if p.gnosh != p.crush {
+			t.Errorf("%s is %s, want Charmtone's %s", p.name, p.gnosh, p.crush)
 		}
 	}
 	if k.Logo.FieldColorB == nil {
@@ -43,11 +43,11 @@ func TestKlashCosmos_KeepsCrushsColors(t *testing.T) {
 	}
 }
 
-func TestKlashCosmos_FadesRunThroughTheNebula(t *testing.T) {
+func TestGnoshCosmos_FadesRunThroughTheNebula(t *testing.T) {
 	// Every fade starts green and ends gold, with Crush's purple and hot
 	// pink between them.
-	want := []string{*hex(KlashGreen), *hex(KlashPurple), *hex(KlashPink), *hex(KlashGold)}
-	s := KlashCosmos()
+	want := []string{*hex(GnoshGreen), *hex(GnoshPurple), *hex(GnoshPink), *hex(GnoshGold)}
+	s := GnoshCosmos()
 	for name, ends := range map[string][2]color.Color{
 		"wordmark":       {s.Logo.TitleColorA, s.Logo.TitleColorB},
 		"small wordmark": {s.Logo.SmallGradFromColor, s.Logo.SmallGradToColor},
@@ -66,11 +66,11 @@ func TestKlashCosmos_FadesRunThroughTheNebula(t *testing.T) {
 	}
 }
 
-func TestKlashCosmos_HintsReadable(t *testing.T) {
+func TestGnoshCosmos_HintsReadable(t *testing.T) {
 	// The green and gold sit on the background; they must stay legible.
 	const minAA = 4.5
-	bg := *hex(KlashCosmos().Background)
-	for name, c := range map[string]string{"gold": *hex(KlashGold), "green": *hex(KlashGreen)} {
+	bg := *hex(GnoshCosmos().Background)
+	for name, c := range map[string]string{"gold": *hex(GnoshGold), "green": *hex(GnoshGreen)} {
 		if ratio := contrastRatio(c, bg); ratio < minAA {
 			t.Errorf("%s %s on %s is %.2f:1, below WCAG AA (%.1f)", name, c, bg, ratio, minAA)
 		}

@@ -22,7 +22,7 @@ type startWorkspace struct {
 func (startWorkspace) AgentReadyErr() error { return errors.New("not ready") }
 
 func (startWorkspace) Config() *config.Config {
-	return &config.Config{Options: &config.Options{TUI: &config.TUIOptions{ActiveTheme: "klash-cosmos"}}}
+	return &config.Config{Options: &config.Options{TUI: &config.TUIOptions{ActiveTheme: "gnosh-cosmos"}}}
 }
 
 func (startWorkspace) WorkingDir() string { return "/project" }

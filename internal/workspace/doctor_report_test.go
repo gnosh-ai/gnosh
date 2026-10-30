@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// In process, /doctor's report is klash doctor's check of the store the
+// In process, /doctor's report is gnosh doctor's check of the store the
 // session runs with.
 func TestAppWorkspaceDoctorReport(t *testing.T) {
 	t.Parallel()

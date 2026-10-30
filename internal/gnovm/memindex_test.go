@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -18,7 +18,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// TestMemIndexFTS5 checks that the SQLite klash links has what mem's index
+// TestMemIndexFTS5 checks that the SQLite gnosh links has what mem's index
 // needs: FTS5 with the trigram tokenizer, so that "flak" finds "flakes",
 // and secure-delete, so that a deleted row's text leaves the file.
 func TestMemIndexFTS5(t *testing.T) {

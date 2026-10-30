@@ -8,16 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A Claude Code settings.json hooks block, pasted into klash.json as it
-// is, loads as one Klash hook per command, in order, each under its
+// A Claude Code settings.json hooks block, pasted into gnosh.json as it
+// is, loads as one Gnosh hook per command, in order, each under its
 // group's matcher. This is the shape of Jae's own: SessionStart and
 // UserPromptSubmit groups with no matcher. It was a config error before
-// ("command is required"), so a Claude Code hooks block kept Klash from
+// ("command is required"), so a Claude Code hooks block kept Gnosh from
 // starting.
 func TestClaudeCodeHookGroupsLoad(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), "klash.json")
+	path := filepath.Join(t.TempDir(), "gnosh.json")
 	require.NoError(t, os.WriteFile(path, []byte(`{"hooks": {
 		"SessionStart": [{"hooks": [
 			{"type": "command", "command": "~/.claude/hooks-renice.sh"},
@@ -26,7 +26,7 @@ func TestClaudeCodeHookGroupsLoad(t *testing.T) {
 		]}],
 		"UserPromptSubmit": [{"matcher": "", "hooks": [{"type": "command", "command": "jmem-hook.sh"}]}],
 		"PreToolUse": [
-			{"matcher": "^bash$", "command": "./klash-style.sh"},
+			{"matcher": "^bash$", "command": "./gnosh-style.sh"},
 			{"matcher": "Edit|Write", "hooks": [
 				{"type": "command", "command": "./a.sh", "statusMessage": "checking", "once": true, "shell": "bash", "async": false, "asyncRewake": false, "onFailure": "continue"},
 				{"type": "command", "command": "./b.sh"}
@@ -44,15 +44,15 @@ func TestClaudeCodeHookGroupsLoad(t *testing.T) {
 	}, cfg.Hooks[EventSessionStart])
 	require.Equal(t, []HookConfig{{Command: "jmem-hook.sh"}}, cfg.Hooks[EventUserPromptSubmit])
 	require.Equal(t, []HookConfig{
-		{Matcher: "^bash$", Command: "./klash-style.sh"},
+		{Matcher: "^bash$", Command: "./gnosh-style.sh"},
 		{Matcher: "Edit|Write", Command: "./a.sh"},
 		{Matcher: "Edit|Write", Command: "./b.sh"},
 	}, cfg.Hooks[EventPreToolUse])
 }
 
-// What Klash cannot do as Claude Code would is an error that names it,
+// What Gnosh cannot do as Claude Code would is an error that names it,
 // with where it is, not a hook run some other way than written.
-func TestClaudeCodeHookGroupsRefuseWhatKlashCannotDo(t *testing.T) {
+func TestClaudeCodeHookGroupsRefuseWhatGnoshCannotDo(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -78,14 +78,14 @@ func TestClaudeCodeHookGroupsRefuseWhatKlashCannotDo(t *testing.T) {
 	_, err := flattenHookGroups([]byte(`{"hooks": {"Stop": [{"hooks": [], "description": "x"}]}}`))
 	require.ErrorContains(t, err, `unknown field "description" in a hook group`)
 
-	path := filepath.Join(t.TempDir(), "klash.json")
+	path := filepath.Join(t.TempDir(), "gnosh.json")
 	require.NoError(t, os.WriteFile(path, []byte(`{"hooks": {"Stop": [{"hooks": [{"type": "agent", "prompt": "check"}]}]}}`), 0o644))
 	_, _, err = loadFromConfigPaths(t.Context(), []string{path})
 	require.ErrorContains(t, err, path, "the error names the file")
 }
 
 // A file with no groups is left byte for byte as it is.
-func TestFlattenHookGroupsLeavesKlashEntriesAlone(t *testing.T) {
+func TestFlattenHookGroupsLeavesGnoshEntriesAlone(t *testing.T) {
 	t.Parallel()
 
 	data := []byte(`{"hooks": {"PreToolUse": [{"matcher": "^bash$", "command": "x"}]}, "options": {"debug": true}}`)

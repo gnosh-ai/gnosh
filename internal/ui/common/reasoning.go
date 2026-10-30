@@ -11,7 +11,7 @@ import (
 // ReasoningSummary is the line the sidebar shows for how hard the current
 // model thinks, or "" when the model has no reasoning to describe.
 //
-// Klash settles reasoning two different ways and the line has to follow
+// Gnosh settles reasoning two different ways and the line has to follow
 // whichever one actually governs the request:
 //
 //   - A model with a reasoning axis -- gpt-oss, Qwen, or anything given

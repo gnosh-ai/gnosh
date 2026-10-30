@@ -672,7 +672,7 @@ func (c *Client) KillBackgroundJob(ctx context.Context, id, jobID string) error 
 	return nil
 }
 
-// DoctorReport is the check of the workspace's setup that klash doctor
+// DoctorReport is the check of the workspace's setup that gnosh doctor
 // prints, as the Markdown /doctor shows.
 func (c *Client) DoctorReport(ctx context.Context, id string) (string, error) {
 	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/doctor", id), nil, nil)

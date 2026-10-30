@@ -40,9 +40,9 @@ func TestAddDirCommand(t *testing.T) {
 	ws.said, ws.added = "Please provide a directory path.", false
 	require.Equal(t, util.NewWarnMsg(ws.said), u.sendMessage("/add-dir")())
 
-	ws.err = errors.New("/add-dir cannot reach the server's permissions with KLASH_CLIENT_SERVER=1 yet")
+	ws.err = errors.New("/add-dir cannot reach the server's permissions with GNOSH_CLIENT_SERVER=1 yet")
 	msg, ok := u.sendMessage("/add-dir x")().(util.InfoMsg)
 	require.True(t, ok)
 	require.Equal(t, util.InfoTypeError, msg.Type)
-	require.Equal(t, "failed to add a working directory: /add-dir cannot reach the server's permissions with KLASH_CLIENT_SERVER=1 yet", msg.Msg)
+	require.Equal(t, "failed to add a working directory: /add-dir cannot reach the server's permissions with GNOSH_CLIENT_SERVER=1 yet", msg.Msg)
 }

@@ -12,12 +12,12 @@ import (
 // separate from the names on disk (config and data directories, config
 // files, environment variables), which keep their established spellings so
 // existing setups go on working.
-const Name = "Klash"
+const Name = "Gnosh"
 
 // Command is the command users type to run it. The old "crush" command is
 // still installed alongside, so either works; this is the one shown in help
 // and in hints such as the resume line printed on exit.
-const Command = "klash"
+const Command = "gnosh"
 
 // Build-time parameters set via -ldflags.
 

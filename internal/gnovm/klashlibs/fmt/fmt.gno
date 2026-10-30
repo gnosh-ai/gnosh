@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -8,7 +8,7 @@
 // the Additional Terms (Strong Attribution) in that file.
 
 // Package fmt formats as Go's fmt does. Gno has no fmt, and models write Go,
-// so klash's VMs run this one's formatting natively, with Go's own fmt
+// so gnosh's VMs run this one's formatting natively, with Go's own fmt
 // (internal/gnovm/fmtnative.go): every verb, flag, width and precision works
 // as in Go, %v and %+v print structs, slices and maps, and Errorf wraps
 // with %w.

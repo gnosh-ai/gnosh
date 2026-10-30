@@ -91,7 +91,7 @@ reference. The docs are also at https://docs.gno.land.
 
 Before writing or reviewing a realm that holds assets, has an admin, or
 takes callbacks or interfaces, view
-`klash://skills/gno/references/security-review.md`.
+`gnosh://skills/gno/references/security-review.md`.
 
 ## Test, lint, run
 
@@ -224,13 +224,13 @@ one payment.
   cover the price and the fee.
 - Selling something takes gnolang/x402 (https://github.com/gnolang/x402),
   which has the seller's gno scheme for x402's middleware and the
-  facilitator, beside the Go client klash pays with.
+  facilitator, beside the Go client gnosh pays with.
 
 ## More
 
-- `klash://skills/gno/references/security-review.md`: the review checklist
+- `gnosh://skills/gno/references/security-review.md`: the review checklist
   and the cases behind it.
-- `klash://skills/gno/references/toolchain.md`: gno, gnokey and gnodev
+- `gnosh://skills/gno/references/toolchain.md`: gno, gnokey and gnodev
   flags, query paths, the airgapped signing flow.
 - `$GNOROOT/docs/resources/`: `effective-gno.md`, `gno-interrealm-v2.md`,
   `gno-security-guide.md`, `gno-testing.md`, `gnodev.md`,

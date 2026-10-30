@@ -11,7 +11,7 @@ import (
 )
 
 // A SessionStart hook is handed the session's env file as CLAUDE_ENV_FILE,
-// as Claude Code hands it, and as KLASH_ENV_FILE and CRUSH_ENV_FILE; with
+// as Claude Code hands it, and as GNOSH_ENV_FILE and CRUSH_ENV_FILE; with
 // no file to hand, none of them is set.
 func TestRunSessionStartHandsOverTheEnvFile(t *testing.T) {
 	t.Parallel()
@@ -19,7 +19,7 @@ func TestRunSessionStartHandsOverTheEnvFile(t *testing.T) {
 	dir := t.TempDir()
 	seen := filepath.Join(dir, "seen")
 	cfg := &config.Config{Hooks: map[string][]config.HookConfig{EventSessionStart: {{
-		Command: `echo "[${CLAUDE_ENV_FILE-unset}][${KLASH_ENV_FILE-unset}][${CRUSH_ENV_FILE-unset}]" > ` + seen,
+		Command: `echo "[${CLAUDE_ENV_FILE-unset}][${GNOSH_ENV_FILE-unset}][${CRUSH_ENV_FILE-unset}]" > ` + seen,
 	}}}}
 	require.NoError(t, cfg.ValidateHooks())
 	r := NewRunner(cfg.Hooks[EventSessionStart], dir, dir)

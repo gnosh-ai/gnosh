@@ -28,7 +28,7 @@ func (w *attachWorkspace) Config() *config.Config {
 func (w *attachWorkspace) AgentReadyErr() error { return errors.New("not ready") }
 
 // What is attached to a command typed in the editor is not lost: a
-// command of klash's own, the palette's or one no command has leaves it
+// command of gnosh's own, the palette's or one no command has leaves it
 // in the editor for the prompt it was meant for, and a custom command's
 // prompt takes it, as Claude Code sends what was pasted with one, even
 // once its arguments are asked for, while it waits in the editor. A
@@ -56,7 +56,7 @@ func TestCommandsKeepAttachments(t *testing.T) {
 	}
 
 	u.sendMessage("/branch", shot)
-	require.Equal(t, []message.Attachment{shot}, kept(), "a command of klash's own")
+	require.Equal(t, []message.Attachment{shot}, kept(), "a command of gnosh's own")
 	u.sendMessage("/help", shot)
 	require.Equal(t, []message.Attachment{shot}, kept(), "the palette's")
 	require.Equal(t, util.NewWarnMsg("Unknown command: /nosuch"), u.sendMessage("/nosuch", shot)())

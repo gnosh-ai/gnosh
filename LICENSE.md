@@ -1,10 +1,10 @@
-Klash's primary licence is the GNO Network General Public License, version 6,
+Gnosh's primary licence is the GNO Network General Public License, version 6,
 with the Additional Terms (Strong Attribution) below. It is the licence under
 which the Licensor offers everything in this repository that is the Licensor's
 to offer.
 
 What that does not reach, and why, is set out in full under "Known licence
-interactions" below. In short: klash is a fork of Charm's
+interactions" below. In short: gnosh is a fork of Charm's
 [Crush](https://github.com/charmbracelet/crush), and the files derived from
 Crush remain under Charmbracelet, Inc.'s Functional Source License
 (FSL-1.1-MIT), reproduced at the end of this file. The Licensor cannot change
@@ -55,7 +55,7 @@ exercise every power this clause gives the Licensor, on NewTendermint, LLC's
 behalf and subject to its direction; this stands in for whatever NewTendermint,
 LLC settles on, and a statement of theirs in the canonical copy replaces it.
 The "canonical copy" of this file is `LICENSE.md` on the `main` branch of
-<https://github.com/klash-pro/klash>, or at another location the Licensor names
+<https://github.com/gnosh-ai/gnosh>, or at another location the Licensor names
 in that copy. A "version" of the Covered Work is each commit or tag the
 Licensor publishes in the repository that holds the canonical copy, with every
 copy made from it. The "Designation" is the last section of this clause; it is
@@ -131,8 +131,8 @@ other terms.
 Dated 29 October 2026. It governs every version that carries it; a later
 Designation governs only versions first published after it (see Status).
 
-- Attribution URL: <https://klash.pro>
-- Words: "built on klash"
+- Attribution URL: <https://gnosh.ai>
+- Words: "built on gnosh"
 
 
 # GNO NETWORK GENERAL PUBLIC LICENSE
@@ -784,23 +784,23 @@ specific requirements.
 
 Recorded plainly so they are not forgotten. Jae Kwon's instruction, 29 October
 2026: make the GNO Network GPL and the strong attribution clause above the
-primary licence of klash, with the attribution running to NewTendermint, LLC or
+primary licence of gnosh, with the attribution running to NewTendermint, LLC or
 standing in for whatever NewTendermint, LLC settles on; the details and
 conflicts will be worked out later.
 
-- **This licence reaches only what the Licensor owns.** klash is a fork of
+- **This licence reaches only what the Licensor owns.** gnosh is a fork of
   Charm's Crush. The files derived from Crush are Charmbracelet, Inc.'s, under
   the Functional Source License (FSL-1.1-MIT), reproduced at the end of this
   file. Changing their licence is not the Licensor's to do, and nothing above
   purports to. What the terms above cover is the Licensor's own work in this
   repository: the code written for this fork.
-- **The klash binary is a combined work, and its licences conflict.** The FSL's
+- **The gnosh binary is a combined work, and its licences conflict.** The FSL's
   Competing Use clause restricts use. A binary that includes GNO Network GPL
   code must be conveyed under that License as a whole (sections 5(c) and 6)
   with no further restrictions (section 10), which the Competing Use clause is.
-  Since `internal/gnovm/` links the GnoVM into the klash binary and embeds the
+  Since `internal/gnovm/` links the GnoVM into the gnosh binary and embeds the
   Gno standard library in it, that conflict is live today, not hypothetical. No
-  klash binary should be released until it is settled. The ways out are the
+  gnosh binary should be released until it is settled. The ways out are the
   ones recorded in `internal/gnovm/LICENSE.md`: a linking exception from
   NewTendermint, LLC plus an additional permission from the Licensor; waiting
   for each Crush version's FSL to become MIT two years after Charm released it,
@@ -817,13 +817,13 @@ conflicts will be worked out later.
   they are not a grant of anyone's rights under this file.
 - **Remote users.** Section 13 of the License asks that whoever modifies the
   Program, and lets people use the modified version remotely (for instance
-  through klash's server mode or its channels), offer them its Corresponding
-  Source. That binds klash's own remote interfaces: they should link to klash's
+  through gnosh's server mode or its channels), offer them its Corresponding
+  Source. That binds gnosh's own remote interfaces: they should link to gnosh's
   source.
-- **The GnoVM's own terms.** The GnoVM and the Gno standard library klash
+- **The GnoVM's own terms.** The GnoVM and the Gno standard library gnosh
   embeds are under the GNO Network GPL v6 with NewTendermint, LLC's own
   Additional Terms (Strong Attribution). Those terms apply independently of
-  this file: klash's interface must carry NewTendermint's attribution notice
+  this file: gnosh's interface must carry NewTendermint's attribution notice
   too.
 - **Authorship.** Much of this fork was written with AI assistance at Jae
   Kwon's direction. How much copyright that leaves for the clause above to rest

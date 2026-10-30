@@ -70,7 +70,7 @@ func TestStatusReport(t *testing.T) {
 	report := u.statusReport()
 	for _, want := range []string{
 		"## Status\n",
-		"| Version | Klash " + version.Version + " |",
+		"| Version | Gnosh " + version.Version + " |",
 		"| Session | fix-login-bug (s1) |",
 		"| Working directory | /home/jae/project |",
 		"| Model | Qwen 3.8 via Stand-in |",

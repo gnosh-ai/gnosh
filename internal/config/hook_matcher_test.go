@@ -49,7 +49,7 @@ func TestCompileHookMatcher(t *testing.T) {
 }
 
 // "*" loads and matches everything, as in Claude Code; it was an invalid
-// regular expression, which kept Klash from starting. On an event that
+// regular expression, which kept Gnosh from starting. On an event that
 // takes no matcher it counts as none.
 func TestValidateHooksAcceptsAStar(t *testing.T) {
 	t.Parallel()
@@ -63,7 +63,7 @@ func TestValidateHooksAcceptsAStar(t *testing.T) {
 
 // A Notification hook loads with or without a matcher, as in Claude Code:
 // its matcher is tested against the notification type. Before this event
-// was known, a config with one stopped Klash at startup with "unknown
+// was known, a config with one stopped Gnosh at startup with "unknown
 // event name".
 func TestValidateHooksAcceptsNotification(t *testing.T) {
 	t.Parallel()
@@ -83,7 +83,7 @@ func TestValidateHooksAcceptsNotification(t *testing.T) {
 func TestNamesSomeTool(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"bash", "Bash", "Read", "crush_logs", "klash_logs", "web_fetch", "web_search", "WebSearch", "LSP", "TaskStop", "mcp_github_create_issue", "mcp__github__create_issue"} {
+	for _, name := range []string{"bash", "Bash", "Read", "crush_logs", "gnosh_logs", "web_fetch", "web_search", "WebSearch", "LSP", "TaskStop", "mcp_github_create_issue", "mcp__github__create_issue"} {
 		require.Truef(t, namesSomeTool(name), name)
 	}
 	for _, name := range []string{"Notebook", "NotebookEdit", "bassh", "mcp_github", "mcp__github", "mcp_", "mcp__github__"} {

@@ -18,19 +18,19 @@ var acceptEditsTools = map[string]bool{"edit": true, "multiedit": true, "write":
 // unasked, as Claude Code's never do: what they hold runs code, sets
 // things up or lets someone in (git hooks and config, a shell's startup
 // files, editor and package-manager settings, ssh and gpg keys, Claude
-// Code's and Klash's own settings), so such a change is asked about in
+// Code's and Gnosh's own settings), so such a change is asked about in
 // every mode but yolo. A directory counts anywhere in a path;
 // ".config/git" is two names in a row. Names match in any case: on a
 // case-insensitive disk, as a Mac's, .GIT/hooks is .git/hooks.
 var (
 	protectedDirs = []string{
 		".git", ".vscode", ".idea", ".husky", ".cargo", ".devcontainer", ".yarn", ".mvn",
-		".claude", ".klash", ".crush", ".ssh", ".gnupg",
+		".claude", ".gnosh", ".crush", ".ssh", ".gnupg",
 	}
 	protectedFiles = []string{
 		".gitconfig", ".gitmodules", ".bashrc", ".bash_profile", ".bash_login", ".profile",
 		".zshrc", ".zshenv", ".zprofile", ".zlogin", ".npmrc", ".mcp.json", ".claude.json",
-		"klash.json", ".klash.json", "crush.json", ".crush.json",
+		"gnosh.json", ".gnosh.json", "crush.json", ".crush.json",
 	}
 )
 
@@ -41,7 +41,7 @@ var (
 // protected paths or in one. Anything else is asked about as without
 // acceptEdits. Before, the mode put the edit tools in the allowed tools,
 // which let them write anywhere unasked: a shell's startup file, a git
-// hook, Klash's own config.
+// hook, Gnosh's own config.
 func (s *permissionService) acceptsEdit(path string) bool {
 	if !filepath.IsAbs(path) || s.protectedFile(path) {
 		return false

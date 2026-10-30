@@ -57,7 +57,7 @@ var DefaultCreateGrace = 30 * time.Second
 // new client can attach to — or create a workspace on — a server that is
 // already tearing down, and then observe its coder agent as "offline".
 // Any workspace create within the window cancels the pending shutdown.
-// Overridable via KLASH_SERVER_IDLE_TIMEOUT (seconds; 0 restores the
+// Overridable via GNOSH_SERVER_IDLE_TIMEOUT (seconds; 0 restores the
 // old shut-down-immediately behavior).
 var DefaultIdleShutdownDelay = 60 * time.Second
 
@@ -68,7 +68,7 @@ var DefaultIdleShutdownDelay = 60 * time.Second
 // timeout) into a permanently lost workspace: the client's reconnect comes
 // back milliseconds later to an ID the server no longer knows. A client
 // that released its claim first (a clean exit) skips the grace. Overridable
-// via KLASH_SERVER_DETACH_GRACE (seconds; 0 restores immediate teardown).
+// via GNOSH_SERVER_DETACH_GRACE (seconds; 0 restores immediate teardown).
 var DefaultDetachGrace = 10 * time.Second
 
 // ShutdownFunc is called when the backend needs to trigger a server
@@ -282,16 +282,16 @@ func New(ctx context.Context, cfg *config.ConfigStore, shutdownFn ShutdownFunc) 
 		shutdownFn:  shutdownFn,
 		createGrace: DefaultCreateGrace,
 		lingerDelay: idleShutdownDelayFromEnv(),
-		detachGrace: durationFromEnv("KLASH_SERVER_DETACH_GRACE", DefaultDetachGrace),
+		detachGrace: durationFromEnv("GNOSH_SERVER_DETACH_GRACE", DefaultDetachGrace),
 	}
 	b.startChannelRouter()
 	return b
 }
 
 // idleShutdownDelayFromEnv returns the idle-shutdown delay, honoring a
-// KLASH_SERVER_IDLE_TIMEOUT override (in seconds; 0 disables lingering).
+// GNOSH_SERVER_IDLE_TIMEOUT override (in seconds; 0 disables lingering).
 func idleShutdownDelayFromEnv() time.Duration {
-	return durationFromEnv("KLASH_SERVER_IDLE_TIMEOUT", DefaultIdleShutdownDelay)
+	return durationFromEnv("GNOSH_SERVER_IDLE_TIMEOUT", DefaultIdleShutdownDelay)
 }
 
 // durationFromEnv reads a whole number of seconds from the named

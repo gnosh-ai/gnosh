@@ -40,7 +40,7 @@ func TestToolHooksOfASubAgentsCallNameTheSubAgent(t *testing.T) {
 			dir := t.TempDir()
 			payload, envOut := filepath.Join(dir, "payload.json"), filepath.Join(dir, "env.txt")
 			cfg := &config.Config{Hooks: map[string][]config.HookConfig{event: {{
-				Command: `cat > ` + payload + `; printf '%s|%s|%s' "$KLASH_SESSION_ID" "$KLASH_AGENT_ID" "$KLASH_AGENT_TYPE" > ` + envOut,
+				Command: `cat > ` + payload + `; printf '%s|%s|%s' "$GNOSH_SESSION_ID" "$GNOSH_AGENT_ID" "$GNOSH_AGENT_TYPE" > ` + envOut,
 			}}}}
 			require.NoError(t, cfg.ValidateHooks())
 			r := NewRunner(cfg.Hooks[event], dir, dir)

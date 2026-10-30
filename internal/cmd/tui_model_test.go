@@ -17,5 +17,5 @@ func TestTUIModelFlag(t *testing.T) {
 	require.NotNil(t, f)
 	require.Equal(t, "m", f.Shorthand)
 	err := overrideTUIModel(t.Context(), struct{ workspace.Workspace }{}, "qwen3.8-27b")
-	require.EqualError(t, err, "--model is not supported with KLASH_CLIENT_SERVER=1 yet; pick the model with /model")
+	require.EqualError(t, err, "--model is not supported with GNOSH_CLIENT_SERVER=1 yet; pick the model with /model")
 }

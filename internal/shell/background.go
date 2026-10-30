@@ -69,8 +69,8 @@ type BackgroundShell struct {
 
 // ClaimEnd takes the job's end and reports whether the caller is the
 // first to. The agent learns once that a job ended: from the job_output
-// result that shows it, from its own job_kill, or from the notice klash
-// sends it; and of a job klash stops as it exits, not at all.
+// result that shows it, from its own job_kill, or from the notice gnosh
+// sends it; and of a job gnosh stops as it exits, not at all.
 func (bs *BackgroundShell) ClaimEnd() bool {
 	return bs.endClaimed.CompareAndSwap(false, true)
 }

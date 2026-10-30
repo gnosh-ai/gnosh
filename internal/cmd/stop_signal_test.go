@@ -95,10 +95,10 @@ func TestStopOnSignal(t *testing.T) {
 	require.ErrorIs(t, stoppedStatus(ctx, context.Canceled), context.Canceled)
 }
 
-// klash run's RunE: SIGTERM cancels the run, the run's deferred cleanup
+// gnosh run's RunE: SIGTERM cancels the run, the run's deferred cleanup
 // (the app's shutdown, which stops its hooks, tools and jobs) is done
 // before the command returns, and the command then exits 143, printing
-// nothing. klash run listened for os.Kill, which cannot be caught, so
+// nothing. gnosh run listened for os.Kill, which cannot be caught, so
 // SIGTERM ended it on the spot and its Stop hook ran on.
 func TestRunStopsOnSIGTERMAfterItsCleanup(t *testing.T) {
 	f := useFakeSignals(t)

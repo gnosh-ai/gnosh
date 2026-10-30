@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Jae Kwon
 //
-// This file is part of klash's GnoVM machine subsystem. It is licensed under
+// This file is part of gnosh's GnoVM machine subsystem. It is licensed under
 // the GNO Network General Public License, version 6, as published by
 // NewTendermint, LLC or its successor, or any later version of that License
 // that the Licensor accepts as the proxy under its section 14, by a statement
@@ -32,38 +32,38 @@ import (
 )
 
 // TestScenarios runs the use cases in testdata/scenarios against a real
-// klash and a real model, with klash's own system prompt ("v0") and with
+// gnosh and a real model, with gnosh's own system prompt ("v0") and with
 // each prompt variant in testdata/prompts appended to it, and writes what
 // happened: each turn's tool calls and answer, each check, and what the
 // persistent Gno machines hold at the end.
 //
-// It is skipped unless GNOVM_SCENARIO_KLASH names the klash to run. Every
+// It is skipped unless GNOVM_SCENARIO_GNOSH names the gnosh to run. Every
 // run gets its own config and data directories (copied from
 // GNOVM_SCENARIO_HOME, default $HOME: the crushrc and the files that keep
 // first-run questions away), so it never touches the user's settings.
 //
-//	GNOVM_SCENARIO_KLASH     the klash to run (required)
+//	GNOVM_SCENARIO_GNOSH     the gnosh to run (required)
 //	GNOVM_SCENARIO_HOME      whose config to copy (default $HOME)
 //	GNOVM_SCENARIO_OUT       where runs and reports go (default a temp dir)
 //	GNOVM_SCENARIO_VARIANTS  comma-separated, e.g. "v0" (default v0 and
 //	                         every testdata/prompts file)
 //	GNOVM_SCENARIO_ONLY      a regexp on scenario names
-//	GNOVM_SCENARIO_MODEL     a model for klash run -m
+//	GNOVM_SCENARIO_MODEL     a model for gnosh run -m
 //	GNOVM_SCENARIO_REASONING the large model's reasoning level (default
 //	                         "nothink": these runs measure tool use, and
 //	                         Qwen's thinking is most of their time); "" keeps
 //	                         the user's
 //	GNOVM_SCENARIO_STRICT=1  fail the test when a check fails (by default
 //	                         the checks are reported: the scenarios measure
-//	                         the model and the prompt as much as klash)
+//	                         the model and the prompt as much as gnosh)
 //
 // Run it with -test.parallel below the model server's slots, so that live
 // sessions keep one: a conversation whose slot another request takes
 // re-reads all of itself on its next step.
 func TestScenarios(t *testing.T) {
-	klash := os.Getenv("GNOVM_SCENARIO_KLASH")
-	if klash == "" {
-		t.Skip("set GNOVM_SCENARIO_KLASH to a klash binary to run the real-model scenarios")
+	gnosh := os.Getenv("GNOVM_SCENARIO_GNOSH")
+	if gnosh == "" {
+		t.Skip("set GNOVM_SCENARIO_GNOSH to a gnosh binary to run the real-model scenarios")
 	}
 	home := cmp.Or(os.Getenv("GNOVM_SCENARIO_HOME"), os.Getenv("HOME"))
 	out := cmp.Or(os.Getenv("GNOVM_SCENARIO_OUT"), t.TempDir())
@@ -104,7 +104,7 @@ func TestScenarios(t *testing.T) {
 				mu.Lock()
 				results = append(results, r)
 				mu.Unlock()
-				r.run(t, sc, klash, home, reasoning)
+				r.run(t, sc, gnosh, home, reasoning)
 				for _, c := range r.checks {
 					if !c.ok && os.Getenv("GNOVM_SCENARIO_STRICT") == "1" {
 						t.Errorf("check failed: %s (%s)", c.line, c.got)
@@ -241,7 +241,7 @@ type checkResult struct {
 	ok        bool
 }
 
-func (r *scenarioRun) run(t *testing.T, sc *scenario, klash, home, reasoning string) {
+func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning string) {
 	start := time.Now()
 	defer func() { r.took = time.Since(start) }()
 	project := filepath.Join(r.dir, "project")
@@ -297,7 +297,7 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, klash, home, reasoning str
 		args = append(args, ts.prompt)
 		turnStart := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Minute)
-		cmd := exec.CommandContext(ctx, klash, args...)
+		cmd := exec.CommandContext(ctx, gnosh, args...)
 		cmd.Dir, cmd.Env = project, env
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -308,7 +308,7 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, klash, home, reasoning str
 		tr := parseStream(&stdout)
 		tr.prompt, tr.took = ts.prompt, time.Since(turnStart)
 		if err != nil && tr.answer == "" {
-			tr.answer = fmt.Sprintf("(klash failed: %v; %s)", err, lastLine(stderr.String()))
+			tr.answer = fmt.Sprintf("(gnosh failed: %v; %s)", err, lastLine(stderr.String()))
 			tr.isError = true
 		}
 		session = cmp.Or(tr.session, session)
@@ -377,7 +377,7 @@ func copyIfThere(t *testing.T, from, to string) {
 	}
 }
 
-// parseStream reads klash run's stream-json output: the session id, each
+// parseStream reads gnosh run's stream-json output: the session id, each
 // tool call with its result, and the final answer.
 func parseStream(r io.Reader) turnResult {
 	var tr turnResult
@@ -448,7 +448,7 @@ func listFiles(dir string) map[string]string {
 	return files
 }
 
-// dumpPersistentVMs opens the run's VMs as klash left them and renders every
+// dumpPersistentVMs opens the run's VMs as gnosh left them and renders every
 // package-level value of each persistent one.
 func dumpPersistentVMs(t *testing.T, gnovmDir, project string) map[string]string {
 	dumps := map[string]string{}

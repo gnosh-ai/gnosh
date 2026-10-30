@@ -74,7 +74,7 @@ func TestHookedTool_MatchesAnMCPToolByItsClaudeCodeName(t *testing.T) {
 	require.False(t, inner.called, "the hook blocked the call")
 	require.Contains(t, resp.Content, "no github")
 
-	// Under another of Klash's wrappers too.
+	// Under another of Gnosh's wrappers too.
 	inner = fakeMCPTool{fakeTool: &fakeTool{name: "mcp_github_create_issue"}, server: "github", tool: "create_issue"}
 	tool = newHookedTool(describedTool{AgentTool: inner, description: "the user's"}, toolHooks{pre: runner})
 	resp, err = tool.Run(t.Context(), fantasy.ToolCall{ID: "call-2", Name: "mcp_github_create_issue", Input: "{}"})
@@ -151,7 +151,7 @@ func TestHookedTool_DenySkipsInnerTool(t *testing.T) {
 }
 
 // A PreToolUse hook that could not check, here because the command it
-// runs is missing, blocks the call: Klash fails closed where Claude Code
+// runs is missing, blocks the call: Gnosh fails closed where Claude Code
 // would run the tool unchecked. The model reads that the hook could not
 // run, not that the call was wrong.
 func TestHookedTool_CouldNotEvaluateBlocksTheCall(t *testing.T) {
@@ -199,7 +199,7 @@ func TestWrapToolsWithHooks(t *testing.T) {
 // Claude Code, even where it would run unasked (yolo here, or a session
 // that grants its own requests, as agentic_fetch's sub-agent's does), and
 // the tool runs only once they allow it, then needing no other approval.
-// Where no one can answer, as in klash run, the call is refused with the
+// Where no one can answer, as in gnosh run, the call is refused with the
 // reason, and so is a call with no ID to ask about.
 func TestHookedTool_AskPutsTheCallToTheUser(t *testing.T) {
 	t.Parallel()

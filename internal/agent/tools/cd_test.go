@@ -10,7 +10,7 @@ import (
 
 // A cd into the project, or a directory in it, written in plain text,
 // counts as read-only, as in Claude Code, so "cd sub && ls" runs without
-// asking; a cd anywhere else, or one Klash cannot be sure of, asks. A line
+// asking; a cd anywhere else, or one Gnosh cannot be sure of, asks. A line
 // that cds into another directory and runs git asks too: git in another
 // repository can run what that repository's config names.
 func TestReadOnlyCd(t *testing.T) {

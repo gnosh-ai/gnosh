@@ -26,13 +26,13 @@ func ThemeKeyForProvider(providerID string) string {
 }
 
 // ThemeForProvider returns the Styles associated with the given provider
-// ID. Unknown or empty provider IDs yield the default Klash Cosmos theme.
+// ID. Unknown or empty provider IDs yield the default Gnosh Cosmos theme.
 func ThemeForProvider(providerID string) Styles {
 	switch ThemeKeyForProvider(providerID) {
 	case "hyper":
 		return HypercrushObsidiana()
 	default:
-		return KlashCosmos()
+		return GnoshCosmos()
 	}
 }
 
@@ -251,7 +251,7 @@ func gruvboxDarkOverrides(s Styles) Styles {
 var builtinThemes = map[string]func() quickStyleOpts{
 	"charmtone-panther": charmtoneOpts,
 	"gruvbox-dark":      gruvboxDarkOpts,
-	DefaultThemeName:    klashOpts,
+	DefaultThemeName:    gnoshOpts,
 }
 
 // builtinThemeOverrides maps theme names to functions that apply
@@ -260,7 +260,7 @@ var builtinThemes = map[string]func() quickStyleOpts{
 var builtinThemeOverrides = map[string]func(Styles) Styles{
 	"charmtone-panther": charmtoneOverrides,
 	"gruvbox-dark":      gruvboxDarkOverrides,
-	DefaultThemeName:    klashOverrides,
+	DefaultThemeName:    gnoshOverrides,
 }
 
 // deprecatedThemeNames maps legacy built-in theme names to their current
@@ -291,11 +291,11 @@ func BuiltinThemeNames() []string {
 
 // LoadTheme loads a theme by name. Global user theme files take precedence
 // over built-in themes of the same name. An empty name gives the default,
-// Klash Cosmos. Returns an error if the name is not recognized as either a
+// Gnosh Cosmos. Returns an error if the name is not recognized as either a
 // user file or a built-in.
 func LoadTheme(name string) (Styles, error) {
 	if name == "" {
-		return KlashCosmos(), nil
+		return GnoshCosmos(), nil
 	}
 	key := normalizeThemeName(name)
 
@@ -319,14 +319,14 @@ func LoadTheme(name string) (Styles, error) {
 }
 
 // ThemeFromConfig resolves the configured theme name, falling back to the
-// default Klash Cosmos theme when the config value is empty or invalid. The
+// default Gnosh Cosmos theme when the config value is empty or invalid. The
 // fallback is logged so a missing or broken theme file is not silently
 // replaced by different colors.
 func ThemeFromConfig(name string) Styles {
 	s, err := LoadTheme(name)
 	if err != nil {
 		slog.Warn("Falling back to the default theme", "configured_theme", name, "reason", err)
-		return KlashCosmos()
+		return GnoshCosmos()
 	}
 	return s
 }

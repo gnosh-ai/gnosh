@@ -117,11 +117,11 @@ type App struct {
 	// visible to a reader on another goroutine.
 	sessionEndHooks []chan struct{}
 
-	// nonInteractive is set for klash run, whose exit ends the open
+	// nonInteractive is set for gnosh run, whose exit ends the open
 	// session with reason "other" instead of the TUI's
 	// "prompt_input_exit".
 	nonInteractive bool
-	// stoppedBySignal is set when SIGINT or SIGTERM stopped klash, whose
+	// stoppedBySignal is set when SIGINT or SIGTERM stopped gnosh, whose
 	// exit then ends the open session with reason "other" too.
 	stoppedBySignal bool
 }
@@ -318,7 +318,7 @@ func (app *App) ReportCurrentSession(sessionID string) {
 type sessionEndReason string
 
 // sessionEndReasonOther covers a session ending any way this one does not
-// name: the user switched to another session, or klash run exited with it
+// name: the user switched to another session, or gnosh run exited with it
 // open.
 const sessionEndReasonOther sessionEndReason = hooks.SessionEndReasonOther
 
@@ -377,7 +377,7 @@ func (app *App) endSession(id string, reason sessionEndReason) {
 	app.sessionEndHooks = append(app.sessionEndHooks, done)
 	// The hook runs under the process's context without its
 	// cancellation, its own timeout (default 1.5s, capped 60s) its
-	// bound: SIGINT cancels that context, and klash ending on SIGINT is
+	// bound: SIGINT cancels that context, and gnosh ending on SIGINT is
 	// an end the hook is there for, as Claude Code runs SessionEnd on
 	// SIGINT and SIGTERM alike. Under the cancelled context it never ran.
 	// It is not a child of the Shutdown's 5-second budget, because the
@@ -436,7 +436,7 @@ func (app *App) waitForSessionEndHooks(bound context.Context) {
 // ended, with the reason it ended. As in Claude Code a hook cannot stop
 // the exit and what it prints is ignored; a hook that fails is logged
 // (runOne already warns about it). Their default timeout is Claude
-// Code's 1.5 seconds, so exiting Klash is not held up for long.
+// Code's 1.5 seconds, so exiting Gnosh is not held up for long.
 func (app *App) runSessionEndHooks(ctx context.Context, cfgs []config.HookConfig, id string, reason sessionEndReason) {
 	workingDir := app.config.WorkingDir()
 	if workingDir == "" {
@@ -922,7 +922,7 @@ func (app *App) restoreModelFromSession(ctx context.Context, sessionID string) e
 }
 
 // OverrideModels parses the model strings and overrides the model
-// configurations in memory, not saved, for klash run's --model and
+// configurations in memory, not saved, for gnosh run's --model and
 // --small-model and the TUI's --model, then rebuilds the agent.
 // Format: "model-name" (searches all providers) or "provider/model-name".
 // Model matching is case-insensitive.
@@ -1212,7 +1212,7 @@ func (app *App) subscribeMustDeliver[T any](
 }
 
 // setNonInteractive records whether the next agent initialization is for
-// a klash run (true) or the TUI (false). The flag is what Shutdown reads
+// a gnosh run (true) or the TUI (false). The flag is what Shutdown reads
 // to pick the SessionEnd reason for the open session: "other" for a run,
 // "prompt_input_exit" for the TUI.
 func (app *App) setNonInteractive(nonInteractive bool) {
@@ -1221,7 +1221,7 @@ func (app *App) setNonInteractive(nonInteractive bool) {
 	app.sessionEndMu.Unlock()
 }
 
-// StoppedBySignal makes the session open when klash exits end with
+// StoppedBySignal makes the session open when gnosh exits end with
 // reason "other", as Claude Code's does when SIGINT or SIGTERM stops it:
 // "prompt_input_exit" says the user left from the prompt.
 func (app *App) StoppedBySignal() {
@@ -1232,7 +1232,7 @@ func (app *App) StoppedBySignal() {
 
 func (app *App) InitCoderAgent(ctx context.Context) error {
 	// The interactive agent is for the TUI, which exits with reason
-	// prompt_input_exit; reset the flag a klash run may have set so a
+	// prompt_input_exit; reset the flag a gnosh run may have set so a
 	// TUI session that follows a run on the same App is not mislabeled.
 	app.setNonInteractive(false)
 	return app.initCoderAgent(ctx, true)
@@ -1247,7 +1247,7 @@ func (app *App) InitCoderAgentNonInteractive(ctx context.Context) error {
 
 // setArtifactServer makes or drops the artifact server to match how the
 // coder agent is being initialized. Both directions matter: app.New
-// initializes the agent interactively, and a `klash run` only then
+// initializes the agent interactively, and a `gnosh run` only then
 // re-initializes it without the interactive tools, so a server made for
 // that first init has to go. Otherwise every headless run holds the
 // artifact port open for a tool its agent is never given, and the next
@@ -1362,7 +1362,7 @@ func (app *App) Shutdown() {
 
 	// The process exits with the reported session open: end it, with the
 	// reason it is exiting. "prompt_input_exit" for the TUI, "other" for
-	// klash run, which is not in a prompt input loop. The reason is read
+	// gnosh run, which is not in a prompt input loop. The reason is read
 	// under sessionEndMu, the same lock setNonInteractive writes it
 	// under, so a TUI reinitializing its agent concurrently with the
 	// exit cannot read a half-updated flag. A session already ended —
@@ -1442,9 +1442,9 @@ func (app *App) Shutdown() {
 // check reads the configured update_repo's latest release, which says nothing about
 // this fork, and a source build's version reads as a prerelease, so it
 // would report an update on every start. It runs only when asked for with
-// KLASH_DISABLE_UPDATE_CHECK=0.
+// GNOSH_DISABLE_UPDATE_CHECK=0.
 func updateCheckEnabled() bool {
-	disable, ok := env.LookupBool("KLASH_DISABLE_UPDATE_CHECK")
+	disable, ok := env.LookupBool("GNOSH_DISABLE_UPDATE_CHECK")
 	return ok && !disable
 }
 

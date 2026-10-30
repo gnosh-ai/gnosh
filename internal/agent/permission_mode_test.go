@@ -77,7 +77,7 @@ func TestRun_HooksAreToldThePermissionMode(t *testing.T) {
 }
 
 // The coordinator's permission mode for a session: bypassPermissions
-// when its requests are all granted, by yolo or as a klash run's own
+// when its requests are all granted, by yolo or as a gnosh run's own
 // session; acceptEdits under --permission-mode acceptEdits; else
 // default.
 func TestCoordinatorPermissionMode(t *testing.T) {
@@ -90,7 +90,7 @@ func TestCoordinatorPermissionMode(t *testing.T) {
 	store.Overrides().AcceptEdits = true
 	require.Equal(t, config.PermissionModeAcceptEdits, c.permissionMode("s1"))
 	perms.AutoApproveSession("s1")
-	require.Equal(t, config.PermissionModeBypass, c.permissionMode("s1"), "a klash run's session")
+	require.Equal(t, config.PermissionModeBypass, c.permissionMode("s1"), "a gnosh run's session")
 	require.Equal(t, config.PermissionModeAcceptEdits, c.permissionMode("s2"))
 	perms.SetSkipRequests(true)
 	require.Equal(t, config.PermissionModeBypass, c.permissionMode("s2"), "yolo")

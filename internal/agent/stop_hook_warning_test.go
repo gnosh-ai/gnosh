@@ -242,8 +242,8 @@ func TestCompactReason(t *testing.T) {
 	require.True(t, strings.HasSuffix(got, "…"))
 }
 
-// A Stop hook answering with a word Klash does not know has not reached a
-// verdict Klash can read, and says so. It meant "not done", so the turn
+// A Stop hook answering with a word Gnosh does not know has not reached a
+// verdict Gnosh can read, and says so. It meant "not done", so the turn
 // goes on, with its reason kept for the agent.
 func TestStopHook_UnknownDecisionWarns(t *testing.T) {
 	t.Parallel()

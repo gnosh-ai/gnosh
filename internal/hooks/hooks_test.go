@@ -191,9 +191,9 @@ func TestBuildEnv(t *testing.T) {
 		}
 	}
 
-	// Each variable is set under its KLASH_ name and under the CRUSH_ name
+	// Each variable is set under its GNOSH_ name and under the CRUSH_ name
 	// that hooks written before the rename read.
-	for _, prefix := range []string{"KLASH_", "CRUSH_"} {
+	for _, prefix := range []string{"GNOSH_", "CRUSH_"} {
 		require.Equal(t, EventPreToolUse, envMap[prefix+"EVENT"])
 		require.Equal(t, "bash", envMap[prefix+"TOOL_NAME"])
 		require.Equal(t, "sess-1", envMap[prefix+"SESSION_ID"])
@@ -206,7 +206,7 @@ func TestBuildEnv(t *testing.T) {
 	// Shared Crush markers must be present so hook-authored scripts can
 	// detect they're running under Crush the same way bash-tool-invoked
 	// scripts can.
-	require.Equal(t, "1", envMap["KLASH"])
+	require.Equal(t, "1", envMap["GNOSH"])
 	require.Equal(t, "1", envMap["CRUSH"])
 	require.Equal(t, "crush", envMap["AGENT"])
 	require.Equal(t, "crush", envMap["AI_AGENT"])
@@ -926,13 +926,13 @@ func TestParseStdoutClaudeCodeFormat(t *testing.T) {
 	})
 }
 
-// A matcher written for a tool's name from before the rename to Klash
+// A matcher written for a tool's name from before the rename to Gnosh
 // still matches the tool under its new name.
 func TestMatcherMatchesALegacyToolName(t *testing.T) {
 	t.Parallel()
 
 	r := NewRunner([]config.HookConfig{{Command: "true", Matcher: "^crush_logs$"}}, t.TempDir(), t.TempDir())
-	require.Len(t, r.matchingHooks("klash_logs", "crush_logs"), 1)
+	require.Len(t, r.matchingHooks("gnosh_logs", "crush_logs"), 1)
 	require.Empty(t, r.matchingHooks("bash", ""))
 }
 

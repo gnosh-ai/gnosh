@@ -88,7 +88,7 @@ type hookAskKey struct{}
 // the user even when yolo, --allowedTools, an added directory, an earlier
 // "allow for this session" or a session that grants all its requests
 // would grant it unasked. Whether anyone is there to answer is the
-// caller's to know (klash run has no one).
+// caller's to know (gnosh run has no one).
 func WithHookAsk(ctx context.Context, toolCallID string) context.Context {
 	return context.WithValue(ctx, hookAskKey{}, toolCallID)
 }

@@ -17,23 +17,23 @@ import (
 	"charm.land/fantasy"
 )
 
-const KlashLogsToolName = "klash_logs"
+const GnoshLogsToolName = "gnosh_logs"
 
-//go:embed klash_logs.md.tpl
-var klashLogsDescriptionTmpl []byte
+//go:embed gnosh_logs.md.tpl
+var gnoshLogsDescriptionTmpl []byte
 
-var klashLogsDescriptionTpl = template.Must(
-	template.New("klashLogsDescription").
-		Parse(string(klashLogsDescriptionTmpl)),
+var gnoshLogsDescriptionTpl = template.Must(
+	template.New("gnoshLogsDescription").
+		Parse(string(gnoshLogsDescriptionTmpl)),
 )
 
-type klashLogsDescriptionData struct {
+type gnoshLogsDescriptionData struct {
 	DefaultLines int
 	MaxLines     int
 }
 
-func klashLogsDescription() string {
-	return renderTemplate(klashLogsDescriptionTpl, klashLogsDescriptionData{
+func gnoshLogsDescription() string {
+	return renderTemplate(gnoshLogsDescriptionTpl, gnoshLogsDescriptionData{
 		DefaultLines: defaultLogLines,
 		MaxLines:     maxLogLines,
 	})
@@ -69,23 +69,23 @@ var sensitiveKeys = []string{
 	"credential",
 }
 
-type KlashLogsParams struct {
+type GnoshLogsParams struct {
 	Lines int `json:"lines,omitempty" description:"Number of recent log entries to return (default 50, max 100)"`
 }
 
-func NewKlashLogsTool(logFile string) fantasy.AgentTool {
+func NewGnoshLogsTool(logFile string) fantasy.AgentTool {
 	return fantasy.NewAgentTool(
-		KlashLogsToolName,
-		klashLogsDescription(),
-		func(ctx context.Context, params KlashLogsParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-			result := runKlashLogs(logFile, params)
+		GnoshLogsToolName,
+		gnoshLogsDescription(),
+		func(ctx context.Context, params GnoshLogsParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+			result := runGnoshLogs(logFile, params)
 			return fantasy.NewTextResponse(result), nil
 		},
 	)
 }
 
-// runKlashLogs reads and formats the last N log entries from the given file.
-func runKlashLogs(logFile string, params KlashLogsParams) string {
+// runGnoshLogs reads and formats the last N log entries from the given file.
+func runGnoshLogs(logFile string, params GnoshLogsParams) string {
 	// Validate and clamp the lines parameter.
 	lines := params.Lines
 	if lines <= 0 {

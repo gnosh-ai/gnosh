@@ -4,7 +4,7 @@
 > This document was designed for both humans and agents.
 
 Hooks are user-defined shell scripts that run when various events happen during
-the agent lifecycle, allowing you to both build on top of Klash, customize
+the agent lifecycle, allowing you to both build on top of Gnosh, customize
 its behavior, and exert deterministic control over an agent's wily behavior.
 
 Hooks are just shell commands, and were designed to be both simple and future
@@ -15,9 +15,9 @@ forward.
 - Hooks are just shell commands
 - Hooks can be written in any language because they’re just executables: Bash, Python, Node, Rust, Haskell, whatever
 - Hooks are Claude Code-compatible
-- Klash ships with a builtin `klash-hook` skill write, edit, and configure
-  hooks; just tell Klash how to configure Klash
-- Klash supports fifteen hooks: `PreToolUse`, which fires before a tool call,
+- Gnosh ships with a builtin `gnosh-hook` skill write, edit, and configure
+  hooks; just tell Gnosh how to configure Gnosh
+- Gnosh supports fifteen hooks: `PreToolUse`, which fires before a tool call,
   `PostToolUse` and `PostToolUseFailure`, which fire after one succeeds or
   fails, `UserPromptSubmit`, which fires when you send a prompt and can add
   context to it or block it, `SessionStart`, which fires before the first
@@ -31,7 +31,7 @@ forward.
   been, with the summary, `SessionEnd`, which fires when a session ends,
   `InstructionsLoaded`, which fires when a context file is loaded into
   context, for observability only, and `Notification`, which fires on the
-  notifications Klash sends (a permission prompt that has waited, a finished
+  notifications Gnosh sends (a permission prompt that has waited, a finished
   turn with no reply) for observability only; plans are to support the full
   gamut, so please let us know which hooks you'd like to see next
 - Hooks run in parallel for speed, but their results compose in config order
@@ -59,9 +59,9 @@ disallow the use of Haskell (but we love you, Simon Peyton Jones).
 ### Config
 
 The first thing we need to do is hook up our hook. Let's add the following to
-our **project-level** `klash.json`. Relative paths like `./no-haskell.sh` work
+our **project-level** `gnosh.json`. Relative paths like `./no-haskell.sh` work
 here because the project root is your working directory. If you're configuring
-a global hook (`~/.config/klash/klash.json`), use an absolute path instead.
+a global hook (`~/.config/gnosh/gnosh.json`), use an absolute path instead.
 
 ```jsonc
 {
@@ -88,8 +88,8 @@ Now, let's make our `no-haskell.sh` hook script.
 #!/usr/bin/env bash
 
 # Disallow ghc, cabal, and stack. Pipe the bash command output
-# ($KLASH_TOOL_INPUT_COMMAND) to grep and match on a regexp.
-if echo "$KLASH_TOOL_INPUT_COMMAND" | grep -qE '(^| )((ghc|cabal|stack)(\.exe)?)( |$)'; then
+# ($GNOSH_TOOL_INPUT_COMMAND) to grep and match on a regexp.
+if echo "$GNOSH_TOOL_INPUT_COMMAND" | grep -qE '(^| )((ghc|cabal|stack)(\.exe)?)( |$)'; then
 
   # Someone is trying to use Haskell. Let's send a message back to the model
   # and user explaining why we're blocking this. Note that we send all feedback
@@ -107,7 +107,7 @@ That's basically it. For the full guide on how hooks work, however, read on.
 
 ## Execution model
 
-Hooks run through Klash's embedded POSIX shell (`mvdan.cc/sh`) — the same
+Hooks run through Gnosh's embedded POSIX shell (`mvdan.cc/sh`) — the same
 interpreter the `bash` tool uses. Inline commands and shebang-less scripts
 execute in-process; scripts with a `#!` shebang dispatch to the named
 interpreter via `os/exec`. This contract is identical on macOS, Linux, and
@@ -127,26 +127,26 @@ What this means in practice:
   `#!/usr/bin/env bash` scripts work on Windows the same way they do on
   Unix. CRLF line endings in the shebang line are tolerated.
 - **Permissive shebang fallback**: if the absolute path in a shebang
-  doesn't exist (e.g. `#!/bin/bash` on Windows), Klash falls back to a
+  doesn't exist (e.g. `#!/bin/bash` on Windows), Gnosh falls back to a
   `PATH` lookup of the base name (`bash`) before giving up. A debug-level
   log records the fallback. If the interpreter isn't on `PATH` either, the
   hook could not run, and it blocks as a hook that could not evaluate does
-  (see [Could not evaluate](#could-not-evaluate-klash-fails-closed)).
-- **Environment**: every hook sees `KLASH=1`, `AGENT=crush`, and
-  `AI_AGENT=crush` on top of the `KLASH_*` hook-specific variables. These
+  (see [Could not evaluate](#could-not-evaluate-gnosh-fails-closed)).
+- **Environment**: every hook sees `GNOSH=1`, `AGENT=crush`, and
+  `AI_AGENT=crush` on top of the `GNOSH_*` hook-specific variables. These
   three markers are guaranteed and match what the `bash` tool sets, so
   scripts that detect "am I being run by an AI agent?" behave the same in
   both contexts.
-- **Timeout behavior**: when a hook exceeds its timeout, Klash cancels the
+- **Timeout behavior**: when a hook exceeds its timeout, Gnosh cancels the
   context and waits a short grace period (~1s) for the interpreter to
-  yield. If the hook still hasn't returned, Klash abandons it, logs a
+  yield. If the hook still hasn't returned, Gnosh abandons it, logs a
   warning, and treats it as a hook that could not evaluate, which blocks.
   Long-running work should honor context cancellation or run in a
   subprocess via a shebang.
 
 ## Configuration
 
-Hooks can be added to your `klash.json` (or `.klash.json`) at both the global
+Hooks can be added to your `gnosh.json` (or `.gnosh.json`) at both the global
 and project-level, with project level hooks taking precedence.
 
 ```jsonc
@@ -164,7 +164,7 @@ and project-level, with project level hooks taking precedence.
 }
 ```
 
-A Claude Code `settings.json` hooks block can also be pasted in as it is. Klash
+A Claude Code `settings.json` hooks block can also be pasted in as it is. Gnosh
 reads Claude Code's groups, a matcher and the hooks it runs, as one entry per
 command:
 
@@ -181,7 +181,7 @@ command:
 }
 ```
 
-Klash runs `command` hooks only. `statusMessage` and `once` are accepted and
+Gnosh runs `command` hooks only. `statusMessage` and `once` are accepted and
 change nothing, as are the default values of `shell` (`bash`), `async` and
 `asyncRewake` (`false`) and `onFailure` (`continue`). Anything else a Claude
 Code hook can ask for, another `type` (`http`, `mcp_tool`, `prompt`, `agent`),
@@ -193,17 +193,17 @@ read (lookahead such as `(?!…)`): take those entries out, or rewrite them.
 > [!IMPORTANT]
 > The `command` is resolved relative to your **current working directory** —
 > not relative to the config file. Relative paths like `./hooks/whatever.sh`
-> work fine in project-level `klash.json` because the project root is also
-> your working directory. For **global** config (`~/.config/klash/`),
+> work fine in project-level `gnosh.json` because the project root is also
+> your working directory. For **global** config (`~/.config/gnosh/`),
 > however, you must use either an absolute path or an inline command:
 >
 > ```jsonc
-> // Global ~/.config/klash/klash.json
+> // Global ~/.config/gnosh/gnosh.json
 > {
 >   "hooks": {
 >     "PreToolUse": [
 >       {
->         "command": "/home/you/.config/klash/hooks/no-haskell.sh"
+>         "command": "/home/you/.config/gnosh/hooks/no-haskell.sh"
 >         // or use an inline command:
 >         // "command": "echo '{\"decision\":\"allow\"}'"
 >       }
@@ -235,18 +235,18 @@ written for Claude Code matches here too.
 - empty, or `*`: every tool;
 - only letters, digits, `_`, `-`, spaces, `,` and `|`: exact names, separated
   by `|` or `,` (`bash`, `Edit|Write`, `edit, write`). `Bash` does not match
-  `BashOutput`, and `mcp_github` matches no tool (Klash logs a warning);
+  `BashOutput`, and `mcp_github` matches no tool (Gnosh logs a warning);
 - anything else: a regular expression, unanchored (`^mcp_github_`,
   `mcp__github__.*`, `Notebook.*`).
 
-Claude Code's names Klash knows, today's and older ones: `Agent` and `Task`
+Claude Code's names Gnosh knows, today's and older ones: `Agent` and `Task`
 (agent), `AskUserQuestion` (question), `Bash`, `BashOutput` and `TaskOutput`
 (job_output), `Edit`, `Glob`, `Grep`, `KillShell` and `TaskStop` (job_kill),
 `ListMcpResourcesTool` (list_mcp_resources), `LS`, `MultiEdit`, `Read` (view),
 `ReadMcpResourceTool` (read_mcp_resource), `WebFetch` (fetch, and
 agentic_fetch and its sub-agent's web_fetch), `WebSearch` (agentic_fetch and
-its sub-agent's web_search) and `Write`. The payload's `tool_name` is Klash's
-name, `bash` not `Bash`. Klash has no todos tool: its task list is mem, which
+its sub-agent's web_search) and `Write`. The payload's `tool_name` is Gnosh's
+name, `bash` not `Bash`. Gnosh has no todos tool: its task list is mem, which
 the agent reaches through gnovm_run, so a matcher on `TodoWrite` matches
 nothing.
 
@@ -254,7 +254,7 @@ nothing.
 whose job they do, so a guard written for Claude Code cannot be walked around
 through them:
 
-| Klash tool                                      | Also matches                                |
+| Gnosh tool                                      | Also matches                                |
 | ----------------------------------------------- | ------------------------------------------- |
 | `multiedit`, `lsp_rename`, `lsp_replace_symbol` | `Edit`: they change files                   |
 | `download`                                      | `WebFetch` and `Write`: it saves a URL      |
@@ -272,7 +272,7 @@ name.
 
 > [!IMPORTANT]
 > Event names are matched **exactly**. `pretooluse`, `pre_tool_use` and
-> `PRE_TOOL_USE` are all errors, not spellings of `PreToolUse`. Klash refuses to
+> `PRE_TOOL_USE` are all errors, not spellings of `PreToolUse`. Gnosh refuses to
 > start on an event name it doesn't fire, rather than loading a hook that would
 > look configured and silently never run.
 
@@ -312,7 +312,7 @@ feedback — "lint failed on line 12" — and `context` (or Claude Code's
 ```bash
 #!/usr/bin/env bash
 # hooks/gofumpt.sh — format every Go file the agent writes.
-f="$KLASH_TOOL_INPUT_FILE_PATH"
+f="$GNOSH_TOOL_INPUT_FILE_PATH"
 [[ "$f" == *.go ]] || exit 0
 if ! out=$(gofumpt -w "$f" 2>&1); then
   echo "gofumpt failed on $f: $out" >&2
@@ -322,7 +322,7 @@ fi
 
 **Formatters**: a hook that changes the file the agent just wrote (with edit,
 multiedit, write or lsp_replace_symbol) would make the agent's next edit of it
-fail as "modified since it was last read". Klash
+fail as "modified since it was last read". Gnosh
 records a fresh read of the file instead, and tells the model the hook changed
 it, so it can view it again before editing near what changed. Claude Code does
 the same.
@@ -351,7 +351,7 @@ hook is a config error, and every configured hook runs.
 
 **Context**: whatever the hook prints on stdout, as plain text, is what the
 agent reads after your prompt, inside a `<user-prompt-submit-hook>` tag, as in
-Claude Code. JSON output works too: Klash's `context`, or Claude Code's
+Claude Code. JSON output works too: Gnosh's `context`, or Claude Code's
 `hookSpecificOutput.additionalContext`. The chat shows only what you typed; the
 context is kept with the prompt, so the agent reads the same thing when the
 conversation is rebuilt on a later turn.
@@ -419,19 +419,19 @@ for every source.
 **Context**: whatever the hook prints on stdout, as plain text, is what the
 agent reads with the first prompt, inside a `<user-prompt-submit-hook>` tag,
 as for `UserPromptSubmit`; the prompt's `UserPromptSubmit` hooks run after
-`SessionStart`'s, as in Claude Code, and what they print comes after it. JSON output works too: Klash's `context`, or
+`SessionStart`'s, as in Claude Code, and what they print comes after it. JSON output works too: Gnosh's `context`, or
 Claude Code's `hookSpecificOutput.additionalContext`. The context is kept
 with the prompt, so the agent reads it again when the conversation is
 rebuilt on later turns.
 
 **Environment**: as in Claude Code, a `SessionStart` hook is handed a file
-in `CLAUDE_ENV_FILE` (and `KLASH_ENV_FILE`) to add `export` lines to, and
+in `CLAUDE_ENV_FILE` (and `GNOSH_ENV_FILE`) to add `export` lines to, and
 each `bash` command of the session, and of its helper agents, runs that file
 before itself. So `echo 'export NODE_ENV=development' >> "$CLAUDE_ENV_FILE"`
 sets the variable for every later command, and a line such as
 `export PATH="$PATH:./node_modules/.bin"` is evaluated each time. Append with
-`>>`, so other hooks' lines stay. The file is the session's own, in Klash's
-data directory (`~/.local/share/klash/session-env/`), never in the project,
+`>>`, so other hooks' lines stay. The file is the session's own, in Gnosh's
+data directory (`~/.local/share/gnosh/session-env/`), never in the project,
 and lasts as long as the session: a resumed or summarized session keeps what
 its hooks wrote at startup, and a hook that runs again adds its lines again.
 Permission prompts and `PreToolUse` hooks see the command alone, not what
@@ -525,12 +525,12 @@ giving up on a counter would defeat the point of the hook. Instead, at every
 whether there is a genuine reason to stop — the task cannot be done as asked,
 it is blocked on something only you can provide or decide, the hook's check
 cannot pass in this environment, or it is repeating itself without progress. If
-it finds one, it explains why and the turn ends, and Klash shows a warning
+it finds one, it explains why and the turn ends, and Gnosh shows a warning
 quoting its reason and the hook's last objection. Otherwise it keeps working.
 You can always cancel the turn yourself.
 
 A hook that wants to object only once can still stand down on its own:
-`stop_hook_active` in the payload (and `KLASH_STOP_HOOK_ACTIVE` in the
+`stop_hook_active` in the payload (and `GNOSH_STOP_HOOK_ACTIVE` in the
 environment) is set when the turn is only still running because an earlier
 `Stop` hook blocked it.
 
@@ -565,10 +565,10 @@ sub-agent is asked to judge whether there is a genuine reason to stop (the
 task cannot be done as asked, it is blocked on something only the user can
 provide or decide, the check cannot pass in this environment, or it is
 repeating itself without progress). If it finds one, it explains why and
-finishes, and Klash shows a warning quoting its reason and the hook's last
+finishes, and Gnosh shows a warning quoting its reason and the hook's last
 objection. Otherwise it keeps working. A hook that wants to object only once
 can stand down on its own: `stop_hook_active` in the payload (and
-`KLASH_STOP_HOOK_ACTIVE` in the environment) is set when the sub-agent is only
+`GNOSH_STOP_HOOK_ACTIVE` in the environment) is set when the sub-agent is only
 still working because an earlier `SubagentStop` hook blocked it.
 
 **Payload**: as in Claude Code, the stdin JSON carries, beside the common
@@ -616,9 +616,9 @@ a new session, and a hook with no matcher fires on every reason.
 
 - `"clear"` — the user started a new session: the TUI's New Session
   command, say.
-- `"other"` — the user switched to another session, or Klash exited with
-  the session open under `klash run`.
-- `"prompt_input_exit"` — Klash exited with the session open under the TUI.
+- `"other"` — the user switched to another session, or Gnosh exited with
+  the session open under `gnosh run`.
+- `"prompt_input_exit"` — Gnosh exited with the session open under the TUI.
 
 **Blocking**: none. As in Claude Code, a `SessionEnd` hook cannot stop
 anything and what it prints is ignored: the exit goes ahead whatever the
@@ -626,7 +626,7 @@ hook says. A hook that could not evaluate (it could not run, timed out, or
 failed with a reason on stderr) is logged, and the exit goes ahead without it.
 
 **Timeout**: Claude Code's default for this event is 1.5 seconds, so
-exiting Klash is not held up for long. A hook that sets its own `timeout`
+exiting Gnosh is not held up for long. A hook that sets its own `timeout`
 gets it, up to a cap of 60 seconds.
 
 **Scope**: `SessionEnd` fires only for the **top-level agent**, and not for
@@ -650,7 +650,7 @@ empty one — does not end at all.
 # hooks/log-session-end.sh — record how the session ended.
 read -r input
 reason=$(echo "$input" | jq -r '.reason')
-echo "Session $KLASH_SESSION_ID ended: $reason" >> ~/.local/share/klash/session-ends.log
+echo "Session $GNOSH_SESSION_ID ended: $reason" >> ~/.local/share/gnosh/session-ends.log
 ```
 
 ### PreCompact
@@ -707,9 +707,9 @@ sub-agent reach them.
 
 **Input**: the common fields, with `session_id` the session the sub-agent works
 for, `agent_id` the sub-agent's own session, and `agent_type`.
-`KLASH_AGENT_ID` and `KLASH_AGENT_TYPE` hold them too.
+`GNOSH_AGENT_ID` and `GNOSH_AGENT_TYPE` hold them too.
 
-**Output**: `hookSpecificOutput.additionalContext` (or Klash's `context`) is
+**Output**: `hookSpecificOutput.additionalContext` (or Gnosh's `context`) is
 added to the sub-agent's first prompt.
 
 **Blocking**: none. A hook that could not evaluate is shown as a warning, and
@@ -734,12 +734,12 @@ server goes down.
 **Matched against**: the error's kind, in Claude Code's names: `rate_limit`,
 `overloaded`, `authentication_failed`, `billing_error`, `model_not_found`,
 `invalid_request`, `server_error` or `unknown`. A model server that refused the
-connection, never answered or timed out is `server_error`. (Klash first waits
+connection, never answered or timed out is `server_error`. (Gnosh first waits
 out a model server that is restarting; the hook fires once it gives up.)
 
 **Input**: the common fields, `error` (the kind), `error_details` (what the API
 said) and `last_assistant_message` (the error as the conversation shows it).
-`KLASH_STOP_FAILURE_ERROR` holds the kind.
+`GNOSH_STOP_FAILURE_ERROR` holds the kind.
 
 **Blocking**: none. What the hook prints and how it exits are ignored; one that
 fails is logged.
@@ -750,7 +750,7 @@ fails is logged.
 {
   "hooks": {
     "StopFailure": [
-      { "matcher": "server_error", "command": "notify-send 'klash: the model server is down'" }
+      { "matcher": "server_error", "command": "notify-send 'gnosh: the model server is down'" }
     ]
   }
 }
@@ -760,13 +760,13 @@ fails is logged.
 
 This hook fires once a session's conversation has been summarized, with the
 summary, as in Claude Code: to log the summary, or to update something outside
-Klash. It runs after the summary is saved and before any prompt you queued
+Gnosh. It runs after the summary is saved and before any prompt you queued
 meanwhile.
 
 **Matched against**: the trigger, `"manual"` or `"auto"`, as for `PreCompact`.
 
 **Input**: the common fields, `trigger`, and `compact_summary`, the summary the
-conversation was compacted to. `KLASH_POST_COMPACT_TRIGGER` holds the trigger.
+conversation was compacted to. `GNOSH_POST_COMPACT_TRIGGER` holds the trigger.
 
 **Blocking**: none. The summary is done; a hook that blocks, or that could not
 evaluate, is shown to you as a warning.
@@ -777,7 +777,7 @@ evaluate, is shown to you as a warning.
 {
   "hooks": {
     "PostCompact": [
-      { "command": "jq -r .compact_summary >> ~/.local/share/klash/summaries.log" }
+      { "command": "jq -r .compact_summary >> ~/.local/share/gnosh/summaries.log" }
     ]
   }
 }
@@ -805,7 +805,7 @@ for a `.local.md` file, `"Project"` for the rest; `load_reason`, the reason
 the file was loaded; `trigger_file_path`, for a `nested_traversal` load, the
 file whose access brought the context file in; and `parent_file_path`, for an
 `include` load, the file that imported the one loaded.
-`KLASH_INSTRUCTIONS_LOAD_REASON` holds the load reason.
+`GNOSH_INSTRUCTIONS_LOAD_REASON` holds the load reason.
 
 **Blocking**: none. The load has already happened; a hook that fails is
 logged.
@@ -816,7 +816,7 @@ logged.
 {
   "hooks": {
     "InstructionsLoaded": [
-      { "command": "jq -r .file_path >> ~/.local/share/klash/loaded-files.log" }
+      { "command": "jq -r .file_path >> ~/.local/share/gnosh/loaded-files.log" }
     ]
   }
 }
@@ -831,9 +831,9 @@ This hook fires when a permission dialog about a tool call is about to show,
 and answers it in your place, as in Claude Code: say `allow` and the call runs,
 `deny` and it does not, with no dialog either way. With no answer you are asked
 as usual. It does not fire for a call that needs no permission (an allowed
-tool, a grant for the session, yolo, `klash run`), and `PreToolUse` hooks run
+tool, a grant for the session, yolo, `gnosh run`), and `PreToolUse` hooks run
 first, before every call. Where no one can answer a `PreToolUse` hook's `ask`,
-in `klash run`, its `allow` still lets the call run.
+in `gnosh run`, its `allow` still lets the call run.
 
 **Matched against**: the tool name, as for `PreToolUse`, Claude Code's names
 (`Bash`, `Edit|Write`) included.
@@ -844,13 +844,13 @@ common fields.
 **Output**: Claude Code's `hookSpecificOutput.decision`: `{"behavior":
 "allow"}`, or `{"behavior": "deny", "message": "why"}`, with `"interrupt":
 true` to end the turn. The model reads the message and goes on, unless the
-hook interrupts; a `deny` you give in the dialog ends the turn. Klash's own
+hook interrupts; a `deny` you give in the dialog ends the turn. Gnosh's own
 top-level `"decision": "allow"` or `"deny"` works too, as does exit 49 (a deny
 that ends the turn).
 
 **Blocking**: exit 2 leaves the decision to you, as in Claude Code, and its
 stderr is not used. A hook that could not check (exit 3, a crash, a timeout, an
-answer Klash could not read) gives no answer either: the dialog shows, and
+answer Gnosh could not read) gives no answer either: the dialog shows, and
 says why the hook did not answer. An `allow` with `updatedInput` cannot be run
 as asked, since the tool has already read its input, so the dialog shows the
 call as it is; `updatedPermissions` are not applied.
@@ -870,7 +870,7 @@ call as it is; `updatedPermissions` are not applied.
 
 ### Notification
 
-This hook runs when Klash sends a notification you should see, as in
+This hook runs when Gnosh sends a notification you should see, as in
 Claude Code: a tool-use permission prompt that has waited for you
 (`notification_type` `permission_prompt`, once it has waited about six
 seconds — each keystroke starts the wait again), or a turn that finished
@@ -888,7 +888,7 @@ TUI does not wait for it.
 **Input**: the common fields, plus `message` (the notification's text,
 naming the tool for a permission prompt), an optional `title`, and
 `notification_type`. The environment also carries
-`KLASH_NOTIFICATION_TYPE` with the type.
+`GNOSH_NOTIFICATION_TYPE` with the type.
 
 **Output**: ignored.
 
@@ -896,7 +896,7 @@ naming the tool for a permission prompt), an optional `title`, and
 {
   "hooks": {
     "Notification": [
-      { "command": "phone-alert --message \"$KLASH_NOTIFICATION_TYPE\"" }
+      { "command": "phone-alert --message \"$GNOSH_NOTIFICATION_TYPE\"" }
     ]
   }
 }
@@ -904,24 +904,24 @@ naming the tool for a permission prompt), an optional `title`, and
 
 ## Building Hooks
 
-When a hook fires, Klash:
+When a hook fires, Gnosh:
 
 1. Filters hooks whose `matcher` matches the tool's name, or Claude Code's name
    for it (no matcher, or `*`, matches all; see [Matchers](#pretooluse)).
 2. Deduplicates by `command` (identical commands run once).
-3. Runs all matching hooks **in parallel** through Klash's embedded POSIX
+3. Runs all matching hooks **in parallel** through Gnosh's embedded POSIX
    shell (see [Execution model](#execution-model)).
 4. Waits for all to finish (or time out), then aggregates results **in config
    order**: deny wins over allow, allow wins over none; `updated_input` patches
    shallow-merge in order.
 5. Applies the result **before** permission checks. If the aggregated decision
    is `deny`, the tool call is blocked and you never see a permission prompt
-   for it. If it's `allow`, Klash treats that as affirmative pre-approval and
+   for it. If it's `allow`, Gnosh treats that as affirmative pre-approval and
    also skips the prompt. Silence (no decision) falls through to the normal
    permission flow.
 
 Note that you can omit `matcher` and match in your shell script instead,
-however you'll incur some additional overhead as Klash will still parse and
+however you'll incur some additional overhead as Gnosh will still parse and
 run each hook.
 
 ### Input
@@ -936,35 +936,35 @@ The available environment variables are:
 
 | Variable                     | Description                                    |
 | ---------------------------- | ---------------------------------------------- |
-| `KLASH`                      | Always `1` when running under Klash.           |
+| `GNOSH`                      | Always `1` when running under Gnosh.           |
 | `AGENT`                      | Always `crush`.                                |
 | `AI_AGENT`                   | Always `crush`.                                |
-| `KLASH_EVENT`                | The hook event name (e.g. `PreToolUse`).       |
-| `KLASH_TOOL_NAME`            | The tool being called (e.g. `bash`). Empty on `Stop`. |
-| `KLASH_SESSION_ID`           | Current session ID.                            |
-| `KLASH_CWD`                  | Working directory.                             |
-| `KLASH_PROJECT_DIR`          | Project root directory.                        |
+| `GNOSH_EVENT`                | The hook event name (e.g. `PreToolUse`).       |
+| `GNOSH_TOOL_NAME`            | The tool being called (e.g. `bash`). Empty on `Stop`. |
+| `GNOSH_SESSION_ID`           | Current session ID.                            |
+| `GNOSH_CWD`                  | Working directory.                             |
+| `GNOSH_PROJECT_DIR`          | Project root directory.                        |
 | `CLAUDE_PROJECT_DIR`         | The same, under Claude Code's name, so its hook commands (`"${CLAUDE_PROJECT_DIR}/.claude/hooks/check.sh"`) work unchanged. |
-| `KLASH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command being run. |
-| `KLASH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
-| `KLASH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
-| `KLASH_STOP_HOOK_ACTIVE`     | `Stop` and `SubagentStop` only: `1` when the turn is only still running because an earlier hook for the event blocked it, else `0`. |
-| `KLASH_AGENT_ID`             | `SubagentStop`, and the tool hooks of a sub-agent's call: the sub-agent's own session ID, as `agent_id` in the payload. |
-| `KLASH_AGENT_TYPE`           | `SubagentStop`, and the tool hooks of a sub-agent's call: the sub-agent's type, as `agent_type` in the payload (`task`, or `agentic_fetch`). |
-| `KLASH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, the same as the `trigger` field in the payload. |
-| `KLASH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, the same as the `source` field in the payload. |
-| `KLASH_ENV_FILE`             | `SessionStart` only: the session's env file, also as `CLAUDE_ENV_FILE`, Claude Code's name. `export` lines added to it run before each of the session's `bash` commands. |
-| `KLASH_SESSION_END_REASON`   | `SessionEnd` only: `clear`, `other` or `prompt_input_exit`, the same as the `reason` field in the payload. |
-| `KLASH_INSTRUCTIONS_LOAD_REASON` | `InstructionsLoaded` only: `session_start`, `nested_traversal`, `include` or `compact`, the same as the `load_reason` field in the payload. |
+| `GNOSH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command being run. |
+| `GNOSH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
+| `GNOSH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
+| `GNOSH_STOP_HOOK_ACTIVE`     | `Stop` and `SubagentStop` only: `1` when the turn is only still running because an earlier hook for the event blocked it, else `0`. |
+| `GNOSH_AGENT_ID`             | `SubagentStop`, and the tool hooks of a sub-agent's call: the sub-agent's own session ID, as `agent_id` in the payload. |
+| `GNOSH_AGENT_TYPE`           | `SubagentStop`, and the tool hooks of a sub-agent's call: the sub-agent's type, as `agent_type` in the payload (`task`, or `agentic_fetch`). |
+| `GNOSH_PRE_COMPACT_TRIGGER`  | `PreCompact` only: `manual` or `auto`, the same as the `trigger` field in the payload. |
+| `GNOSH_SESSION_START_SOURCE` | `SessionStart` only: `startup`, `resume`, `clear` or `compact`, the same as the `source` field in the payload. |
+| `GNOSH_ENV_FILE`             | `SessionStart` only: the session's env file, also as `CLAUDE_ENV_FILE`, Claude Code's name. `export` lines added to it run before each of the session's `bash` commands. |
+| `GNOSH_SESSION_END_REASON`   | `SessionEnd` only: `clear`, `other` or `prompt_input_exit`, the same as the `reason` field in the payload. |
+| `GNOSH_INSTRUCTIONS_LOAD_REASON` | `InstructionsLoaded` only: `session_start`, `nested_traversal`, `include` or `compact`, the same as the `load_reason` field in the payload. |
 
-Klash was called Crush, so every `KLASH_` variable above is also set under its
+Gnosh was called Crush, so every `GNOSH_` variable above is also set under its
 `CRUSH_` name (`CRUSH_EVENT`, `CRUSH_TOOL_NAME`, and so on), and `CRUSH=1`
-beside `KLASH=1`. Either works; the `CRUSH_` names stay for hooks written before
+beside `GNOSH=1`. Either works; the `CRUSH_` names stay for hooks written before
 the rename. `AGENT` and `AI_AGENT` still say `crush`, since other tools may
 match on that value.
 
-The `KLASH`, `AGENT`, and `AI_AGENT` markers are also set by the `bash`
-tool, so a script can detect "am I running under Klash?" the same way in
+The `GNOSH`, `AGENT`, and `AI_AGENT` markers are also set by the `bash`
+tool, so a script can detect "am I running under Gnosh?" the same way in
 either context.
 
 #### JSON
@@ -1012,7 +1012,7 @@ command = data.get("tool_input", {}).get("command", "")
 
 ### Output
 
-Hooks communicate back to Klash via **exit code** and `stdout`/`stderr`. The
+Hooks communicate back to Gnosh via **exit code** and `stdout`/`stderr`. The
 simplest way to do this is to return an error code and print additional context
 to stderr. For example:
 
@@ -1043,7 +1043,7 @@ The difference between exit 2 and exit 49:
   between the generic-error range (1-30), the BSD `sysexits.h` range (64-78),
   and the killed-by-signal range (128+) — so it can't be hit by accident.
 
-### Could not evaluate: Klash fails closed
+### Could not evaluate: Gnosh fails closed
 
 A check can fail to check: the tool it runs is missing, the file it reads is
 not there, the service it asks is down. Exiting `0` then passes the work
@@ -1057,13 +1057,13 @@ command -v ffprobe >/dev/null || { echo "ffprobe is not installed, so the audio 
 ...
 ```
 
-Klash treats it as a block, as exit `2`, with your reason: the agent reads
+Gnosh treats it as a block, as exit `2`, with your reason: the agent reads
 that the hook could not check, not that the work is wrong, and the hook's
 line says **Could Not Evaluate**. A hook that could not run at all counts the
 same: one that never started (its script path is wrong), one whose command
 was not found or not executable (exit `127` or `126`, also when a command
 inside the script is missing), one that timed out, and one that answered in
-JSON that Klash could not read (an unknown `decision` such as `"Deny"`, or an
+JSON that Gnosh could not read (an unknown `decision` such as `"Deny"`, or an
 `updated_input` that is not an object). Claude Code lets all of these pass.
 
 Where a hook cannot block (`SessionStart`, `PreCompact`), it is shown as a
@@ -1152,7 +1152,7 @@ EOF
 
 Hooks run in parallel, but their results compose in config order. Whichever hook
 finishes first doesn't get to "win" by virtue of timing; composition is
-deterministic based on the order hooks appear in `klash.json`.
+deterministic based on the order hooks appear in `gnosh.json`.
 
 When multiple hooks match the same tool call:
 
@@ -1169,7 +1169,7 @@ When multiple hooks match the same tool call:
 
 ### Timeouts
 
-If a hook exceeds its timeout, Klash cancels its context and treats the
+If a hook exceeds its timeout, Gnosh cancels its context and treats the
 hook as one that could not evaluate, which blocks. The default
 timeout is Claude Code's for a command hook: 600 seconds, and 30 for
 `UserPromptSubmit`, which holds up the prompt just sent. Shebang-dispatched subprocesses are killed through
@@ -1203,7 +1203,7 @@ Prevent the agent from running `rm -rf` in bash:
 # Block rm -rf commands in the bash tool. Otherwise stay silent so the
 # normal permission flow runs.
 
-if echo "$KLASH_TOOL_INPUT_COMMAND" | grep -qE 'rm\s+-(rf|fr)\s+/'; then
+if echo "$GNOSH_TOOL_INPUT_COMMAND" | grep -qE 'rm\s+-(rf|fr)\s+/'; then
   echo "Refusing to run rm -rf against root" >&2
   exit 2
 fi
@@ -1214,7 +1214,7 @@ exit 0
 ### Auto-approve read-only tools
 
 Skip the permission prompt for tools that can't change anything. The hook
-returns `decision: "allow"`, which tells Klash to pre-approve the call:
+returns `decision: "allow"`, which tells Gnosh to pre-approve the call:
 
 ```jsonc
 {
@@ -1237,7 +1237,7 @@ risk; consider a more targeted allowlist instead:
 #!/usr/bin/env bash
 # hooks/safe-bash.sh — auto-approve read-only bash commands.
 
-case "$KLASH_TOOL_INPUT_COMMAND" in
+case "$GNOSH_TOOL_INPUT_COMMAND" in
   ls*|cat*|grep*|rg*|echo*|pwd*)
     echo '{"decision":"allow"}'
     ;;
@@ -1273,7 +1273,7 @@ Add a reminder to the model whenever it writes a Go file:
 # Emit context only; stay silent on `decision` so the normal permission
 # prompt still runs for edits/writes.
 
-if [[ "$KLASH_TOOL_INPUT_FILE_PATH" == *.go ]]; then
+if [[ "$GNOSH_TOOL_INPUT_FILE_PATH" == *.go ]]; then
   echo '{"context": "Remember: run gofumpt after editing Go files."}'
 else
   echo '{}'
@@ -1295,7 +1295,7 @@ With no `matcher` this fires for every tool. It exits 0 with no stdout so the
 tool call always proceeds.
 
 ```jsonc
-{ "command": "echo \"$(date -Iseconds) $KLASH_TOOL_NAME\" >> ./tools.log" }
+{ "command": "echo \"$(date -Iseconds) $GNOSH_TOOL_NAME\" >> ./tools.log" }
 ```
 
 ### A real-world Example:
@@ -1344,13 +1344,13 @@ process.stdin.on("end", () => {
 
 ## Claude Code compatibility
 
-Klash hooks are broadly compatible with [Claude Code
+Gnosh hooks are broadly compatible with [Claude Code
 hooks](https://docs.claude.com/en/docs/claude-code/hooks): the config shape,
 stdin payload, output envelope, and exit codes line up so most Claude Code
-hooks run under Klash unchanged. This document covers the Klash-specific API
+hooks run under Gnosh unchanged. This document covers the Gnosh-specific API
 only — anything not documented here isn't guaranteed to work.
 
-Both decision vocabularies are understood. Klash's own top-level `decision`
+Both decision vocabularies are understood. Gnosh's own top-level `decision`
 is `"allow"` or `"deny"`; Claude Code's is `"approve"` or `"block"`, which is
 how a Claude Code `Stop` hook keeps the agent working. Claude Code's
 `hookSpecificOutput.permissionDecision` of `"allow"`, `"deny"` or `"ask"` is
@@ -1358,12 +1358,12 @@ read too. `"ask"` puts the tool call to you, as in Claude Code, even a call
 that would run without asking (yolo, `--allowedTools`, `acceptEdits`, a tool
 that never asks), with the hook's `permissionDecisionReason` in the prompt;
 when you allow it, it runs without another prompt. Where no one can answer,
-in `klash run`, the call is refused and the agent reads the reason, as in a
+in `gnosh run`, the call is refused and the agent reads the reason, as in a
 Claude Code `-p` run. Between hooks, `deny` beats `ask` and `ask` beats
 `allow`.
 
 Claude Code's other envelope fields are read too. `"continue": false` stops
-everything, as a Klash `halt` does, with `stopReason` as the reason.
+everything, as a Gnosh `halt` does, with `stopReason` as the reason.
 `"systemMessage"` is shown to you as a warning and blocks nothing: on a tool's
 hook line, or as a hook warning for the other events. Top-level
 fields count alongside `hookSpecificOutput`, so a `PostToolUse` or `Stop` hook
@@ -1372,11 +1372,11 @@ in `hookSpecificOutput` gets both; where both give a decision,
 `permissionDecision` wins, as in Claude Code.
 
 Decision values are matched exactly. Anything else — `"Deny"`, `"denied"`,
-`"reject"` — is an answer Klash could not read, so the hook could not evaluate:
+`"reject"` — is an answer Gnosh could not read, so the hook could not evaluate:
 it blocks, and its line says **Could Not Evaluate**, rather than being quietly
 treated as no opinion. A hook that wrote `"Deny"` meant to deny.
 
-One intentional divergence: Klash treats `updated_input` as a shallow-merge
+One intentional divergence: Gnosh treats `updated_input` as a shallow-merge
 patch against the original `tool_input` rather than a full replacement. Keys
 you omit are preserved. See [Output](#output) for details.
 
@@ -1402,7 +1402,7 @@ Each entry under a `hooks.<EventName>` array:
   // command when omitted.
   "name": "no-rm-rf",
 
-  // string. Optional. Tested against the tool name (Klash's or Claude
+  // string. Optional. Tested against the tool name (Gnosh's or Claude
   // Code's), or against the PreCompact trigger, or against the SessionStart
   // source, or against the SessionEnd reason, as in Claude Code: exact
   // names separated by | or ,, or else a regular expression. Omit it, or
@@ -1447,7 +1447,7 @@ names the session's permission mode as the hook fires:
 ```jsonc
 {
   // string. "plan" for the plan agent; "bypassPermissions" when every
-  // permission request is granted (yolo, or a `klash run`); "acceptEdits"
+  // permission request is granted (yolo, or a `gnosh run`); "acceptEdits"
   // under --permission-mode acceptEdits; else "default". A sub-agent's
   // hooks get the mode of the agent that started it.
   "permission_mode": "default",
@@ -1487,7 +1487,7 @@ The PreToolUse payload, plus what the tool returned:
   // object. What the tool returned. "output" is the text the model reads;
   // "metadata" is the tool's metadata object, when it has one (for bash it
   // includes "exit_code"). Claude Code's tool_response is shaped per tool;
-  // Klash's is this one shape for every tool.
+  // Gnosh's is this one shape for every tool.
   "tool_response": {
     "output": "ok  	example.com/pkg	0.012s",
     "metadata": { "exit_code": 0 },
@@ -1561,7 +1561,7 @@ Extends the common payload. `tool_name` is empty and `tool_input` is `{}`:
   // ...common fields...
 
   // string. "clear" when the user started a new session, "other" when
-  // they switched to another one or klash run exited with the session
+  // they switched to another one or gnosh run exited with the session
   // open, and "prompt_input_exit" when the TUI exited with it open.
   // A matcher on a SessionEnd hook is tested against this.
   "reason": "clear",
@@ -1715,7 +1715,7 @@ PreToolUse-specific rules:
 
 4. `decision` precedence: `deny` > `allow` > `null`. First deny determines the
    outcome; subsequent allows don't override. If the final aggregated decision
-   is `allow`, Klash pre-approves the tool call and skips the permission
+   is `allow`, Gnosh pre-approves the tool call and skips the permission
    prompt. If it's `null` (no hook allowed), the tool goes through the normal
    permission flow.
 5. `updated_input` patches shallow-merge sequentially against the original
