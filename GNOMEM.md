@@ -316,8 +316,10 @@ mem and out of its history, and `/mem forget` erases a goal, a step, a fact
 or a rule with its history; both write mem's journal again without it, and
 neither can be undone. `/mem show` shows one item in full.
 
-The notice sits in the TUI's status bar as gnosh starts, and `gnosh run`
-prints it on stderr before it starts work. It names only what is due and
+The notice sits in the TUI's status bar as gnosh starts, and comes again with
+the first prompt of each new session you open in it and with the first
+prompt of a new day, so a TUI left open overnight tells you when you are
+back. `gnosh run` prints it on stderr before it starts work. It names only what is due and
 what waits on you, so a mem with neither says nothing. The tests replay the
 block above against every change to Gnosh, the notice and your commands
 included.
