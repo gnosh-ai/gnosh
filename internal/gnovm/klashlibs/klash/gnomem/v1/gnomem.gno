@@ -118,15 +118,15 @@ func (b *Board) add(parent int, title string) int {
 	return len(b.Items) - 1
 }
 
-// Done closes item id with what came of it. It refuses while a step of the
-// item is open.
-func (b *Board) Done(id int, result string) {
+// Done closes item id with what came of it, if anything is given. It
+// refuses while a step of the item is open.
+func (b *Board) Done(id int, result ...string) {
 	it := b.open(id)
 	if open := b.openSteps(id); len(open) > 0 {
 		panic("item " + b.ref(id) + " has open steps " + b.refs(open) + ": finish or drop them first")
 	}
 	it.Status = "done"
-	it.Result = clip(strings.TrimSpace(result), maxText)
+	it.Result = clip(strings.TrimSpace(strings.Join(result, " ")), maxText)
 	println("done " + b.ref(id) + b.whatNext())
 }
 

@@ -110,7 +110,7 @@ type Item struct {
 func New() *Board
 func (b *Board) Add(title string, steps ...string) int // prints the ids it made
 func (b *Board) Step(parent int, title string) int
-func (b *Board) Done(id int, result string) // refuses while a step is open; prints what is next
+func (b *Board) Done(id int, result ...string) // refuses while a step is open; prints what is next
 func (b *Board) Drop(id int, why string)    // drops its open steps too
 func (b *Board) Reopen(id int)              // and the steps dropped with it
 func (b *Board) Note(id int, text string)

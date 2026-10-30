@@ -81,6 +81,8 @@ done 6 "Q: why is login slow?"; next: 3 "update CHANGELOG"
   note 1: auth.go:88 runs one query per user`, run(t, h, MemVM, `mem.Show(6)`).Value)
 	require.Equal(t, "added 7 \"note the breaking changes\", a step of 1 \"release v2\"\n",
 		run(t, h, MemVM, `mem.Step(1, "note the breaking changes")`).Output)
+	// What came of it may go unsaid.
+	require.Equal(t, "done 7 \"note the breaking changes\"; next: 4 \"tag v2.0.0\"\n", run(t, h, MemVM, `mem.Done(7)`).Output)
 
 	// Items and facts are plain data.
 	require.Equal(t, `"tag v2.0.0"`, run(t, h, MemVM, `mem.Items[4].Title`).Value)
