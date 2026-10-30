@@ -166,12 +166,11 @@ test results, the final answer, and what mem holds at the end.
   in a MEMORY.md file of its own instead of mem (the reminder still came
   back). Another is counted as the pass it was, though its check, which
   looks for "rotate", missed an answer that said the key "needs rotating".
-- **checklist-calc** shows the other list: a task meant for one sitting
-  mostly goes to the session's own To-Do list, which is gone in the next
-  session. Its two passes both came with the recipe's per-task look at mem,
-  as did both runs of **todo-list-next-day**, whose list was in mem the next
-  day. A todo list is not always so lucky; see the README's
-  [two lists](README.md#goals-that-outlive-the-session).
+- **checklist-calc** and **todo-list-next-day** ran while Gnosh still had
+  a second list, the session's own To-Do list, which ended with the session:
+  a task meant for one sitting mostly went there. That list is gone now
+  (f6e71b31), and mem is the agent's
+  [one list](README.md#goals-that-outlive-the-session).
 
 Before the built-in prompt, the model never kept a checklist in a machine,
 and it put memory in a MEMORY.md file. The use cases are txtar files in
