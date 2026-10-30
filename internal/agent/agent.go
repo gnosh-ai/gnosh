@@ -1438,6 +1438,13 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			// even if the request is canceled mid-stream
 			return a.messages.Update(ctx, *currentAssistant)
 		},
+		OnToolInputDelta: func(id string, delta string) error {
+			// The input as the model streams it, so the chat shows the
+			// call being written (a gnovm_run call's code, a grep's
+			// pattern); OnToolCall puts the checked whole in its place.
+			currentAssistant.AppendToolCallInput(id, delta)
+			return a.messages.Update(genCtx, *currentAssistant)
+		},
 		OnRetry: func(err *fantasy.ProviderError, delay time.Duration) {
 			slog.Warn("Provider request failed, retrying", providerRetryLogFields(err, delay)...)
 			// Reset streamed content so the retried response doesn't

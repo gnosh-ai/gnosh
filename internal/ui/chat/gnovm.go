@@ -36,14 +36,33 @@ func (g *GnoVMRunToolRenderContext) RenderTool(sty *styles.Styles, width int, op
 	cappedWidth := cappedMessageWidth(width)
 	name := humanizedToolName(opts.ToolCall.Name)
 	if opts.IsPending() {
-		return pendingTool(sty, name, opts.Anim, opts.Compact)
+		// While the call streams, the code so far heads it, as it is
+		// written, with the spinner after it; until the code begins, the
+		// spinner alone.
+		fields := partialJSONFields(opts.ToolCall.Input)
+		code, _ := fields["code"].(string)
+		if strings.TrimSpace(code) == "" {
+			return pendingTool(sty, name, opts.Anim, opts.Compact)
+		}
+		vm, _ := fields["name"].(string)
+		header := gnoVMRunHeader(sty, cappedWidth, opts, name, gnovmtools.RunParams{Code: code, Name: vm})
+		if opts.Anim != nil {
+			header += " " + opts.Anim.Render()
+		}
+		return header
 	}
 
 	var params gnovmtools.RunParams
 	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil || strings.TrimSpace(params.Code) == "" {
 		return (&GenericToolRenderContext{}).RenderTool(sty, width, opts)
 	}
+	header := gnoVMRunHeader(sty, cappedWidth, opts, name, params)
+	return toolWithResult(sty, cappedWidth, opts, header)
+}
 
+// gnoVMRunHeader is the header of a gnovm_run call that runs params: the
+// code, highlighted, after the tool's name.
+func gnoVMRunHeader(sty *styles.Styles, cappedWidth int, opts *ToolRenderOpts, name string, params gnovmtools.RunParams) string {
 	code := strings.ReplaceAll(strings.TrimSpace(params.Code), "\t", "    ")
 	if highlighted, err := common.SyntaxHighlightMuted(sty, code, "go", sty.Tool.ParamMain.GetForeground()); err == nil {
 		code = highlighted
@@ -66,6 +85,5 @@ func (g *GnoVMRunToolRenderContext) RenderTool(sty *styles.Styles, width int, op
 	// controls the output under it.
 	headerOpts := *opts
 	headerOpts.ExpandedContent = true
-	header := toolHeader(sty, opts.Status, name, cappedWidth, &headerOpts, toolParams...)
-	return toolWithResult(sty, cappedWidth, opts, header)
+	return toolHeader(sty, opts.Status, name, cappedWidth, &headerOpts, toolParams...)
 }

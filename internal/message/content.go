@@ -485,6 +485,21 @@ func (m *Message) AddToolCall(tc ToolCall) {
 	m.Parts = append(m.Parts, tc)
 }
 
+// AppendToolCallInput adds delta, the next piece of the input the model is
+// streaming, to the unfinished tool call toolCallID; AddToolCall then puts
+// the whole, checked input in its place.
+func (m *Message) AppendToolCallInput(toolCallID, delta string) {
+	for i, part := range m.Parts {
+		if c, ok := part.(ToolCall); ok && c.ID == toolCallID {
+			if !c.Finished {
+				c.Input += delta
+				m.Parts[i] = c
+			}
+			return
+		}
+	}
+}
+
 func (m *Message) SetToolCalls(tc []ToolCall) {
 	// remove any existing tool call part it could have multiple
 	parts := make([]ContentPart, 0)

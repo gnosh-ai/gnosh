@@ -44,3 +44,24 @@ func TestGnoVMRunToolIsHeadedByItsCode(t *testing.T) {
 	// Input that does not parse is shown as any tool's is.
 	require.Contains(t, ansi.Strip(render(`{"code":`)), "Invalid parameters")
 }
+
+// While a gnovm_run call streams, its code so far heads it, as it is
+// written; before the code begins, the spinner alone.
+func TestGnoVMRunToolShowsItsCodeWhileItStreams(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.GnoshCosmos()
+	render := func(input string) string {
+		return ansi.Strip((&GnoVMRunToolRenderContext{}).RenderTool(&sty, 120, &ToolRenderOpts{
+			ToolCall: message.ToolCall{ID: "g1", Name: "gnovm_run", Input: input},
+			Status:   ToolStatusRunning,
+		}))
+	}
+
+	out := render(`{"code":"x := 17 * 23\nprintln(`)
+	require.Contains(t, out, "Gnovm Run x := 17 * 23")
+	require.Contains(t, out, "println(")
+
+	require.Equal(t, ansi.Strip(pendingTool(&sty, "Gnovm Run", nil, false)), render(`{"co`))
+	require.Equal(t, ansi.Strip(pendingTool(&sty, "Gnovm Run", nil, false)), render(``))
+}
