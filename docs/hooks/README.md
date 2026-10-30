@@ -945,6 +945,7 @@ The available environment variables are:
 | `GNOSH_CWD`                  | Working directory.                             |
 | `GNOSH_PROJECT_DIR`          | Project root directory.                        |
 | `CLAUDE_PROJECT_DIR`         | The same, under Claude Code's name, so its hook commands (`"${CLAUDE_PROJECT_DIR}/.claude/hooks/check.sh"`) work unchanged. |
+| `GNOSH_MEM_STATUS`           | While Gnosh's GnoVM machines are on: the project's mem `status.json`, what mem holds as it last wrote it. Set before mem is first used, so `test -f` it; reading it starts nothing. See [What mem holds](#what-mem-holds). |
 | `GNOSH_TOOL_INPUT_COMMAND`   | For `bash` calls: the shell command being run. |
 | `GNOSH_TOOL_INPUT_FILE_PATH` | For file tools: the target file path.          |
 | `GNOSH_TOOL_USE_ID`          | `PreToolUse` and `PostToolUse`: the tool call's ID, the same for both. |
@@ -1178,6 +1179,29 @@ and are then abandoned (the agent moves on regardless). Long-running work
 should honor context cancellation or run out-of-process via a shebang.
 
 ## Examples
+
+### What mem holds
+
+`GNOSH_MEM_STATUS` names a JSON file with what the project's
+[mem](../../GNOMEM.md) holds, rewritten after every change to it. Its fields
+are a hook interface, which a test keeps stable: `generation` and `seq`
+(mem's journal and how far into it), `day` (the local day it was computed
+on), `at` (when mem last changed, in Unix seconds), and `mem`, which holds
+`counts` (`open`, `done`, `dropped`, `forgotten`, `waits`, `for_user`,
+`facts`, `rules`), the `rules`, `days` (what waits for a day, soonest first),
+`words` (what waits for something said), `asks` (questions for you), `goals`
+(the newest 20 open) and `facts` (the newest).
+
+A `SessionStart` hook that lists the questions waiting on you, which the
+agent then reads with the first prompt:
+
+```bash
+hook add SessionStart --name mem-asks \
+  --command '[ -f "$GNOSH_MEM_STATUS" ] && jq -r ".mem.asks[].title" "$GNOSH_MEM_STATUS"'
+```
+
+On a project whose mem held a question for its user, it printed
+`which day suits you for the release?`.
 
 ### Block destructive commands
 
