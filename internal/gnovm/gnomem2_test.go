@@ -42,15 +42,24 @@ func newMemStory(t *testing.T) *memStory {
 	return s
 }
 
-func (s *memStory) run(who, code string) {
-	call, err := s.r.call(code, memContext{caller: who, holding: s.holding})
+func (s *memStory) run(who, code string, imports ...string) {
+	call, err := s.r.call(code, memContext{caller: who, holding: s.holding}, imports...)
 	s.out.WriteString("> " + who + ": " + code + "\n" + call.Output)
 	if err != nil {
 		s.out.WriteString("error: " + err.Error() + "\n")
 	} else if len(call.Ops) > 0 {
 		s.calls = append(s.calls, call)
 	}
+	s.check(s.r, code)
 	s.now = s.now.Add(time.Minute)
+}
+
+// check fails the test if mem r disagrees with what apply keeps.
+func (s *memStory) check(r *memRealm, after string) {
+	s.t.Helper()
+	check, err := r.run(`print(mem.Check())`, "klash")
+	require.NoError(s.t, err)
+	require.Empty(s.t, check.Output, "after %s", after)
 }
 
 // TestMemStory runs a story through every call of gnomem v2, and checks
@@ -95,6 +104,14 @@ func TestMemStory(t *testing.T) {
 	s.run("s1", `mem.Drop("make-tea", "no kettle")`)
 	s.run("s1", `mem.Goal("make tea")`)
 	s.run("s1", `mem.Forget("make-tea-2")`)
+	// A long task: a refusal and a drop name a few steps and count the
+	// rest, and an outline folds a long run of closed steps.
+	s.run("s1", `mem.Goal("port the tests to gno").Steps("arith", "bytes", "crypto", "errors", "fmt", "io", "math", "sort", "strings", "time")`)
+	s.run("s1", `mem.Done("port-tests-gno", "all ported")`)
+	s.run("s1", `for i := 1; i <= 7; i++ { mem.Done("port-tests-gno/"+strconv.Itoa(i), "ported") }`, `"strconv"`)
+	s.run("s1", `println(mem.Show("port-tests-gno"))`)
+	s.run("s1", `mem.Goal("tidy the docs").Steps("a", "b", "c", "d", "e", "f", "g")`)
+	s.run("s1", `mem.Drop("tidy-docs", "moved to the docs session")`)
 	s.holding = func(text string) ([]string, []string, bool) {
 		if text == "sk-live-4f9c2b" {
 			return []string{"bump-gno-pin"}, []string{"item"}, false
@@ -125,6 +142,7 @@ func TestMemStory(t *testing.T) {
 	for _, c := range s.calls {
 		require.NoError(t, rebuilt.apply(c.Ops, c.At))
 	}
+	s.check(rebuilt, "the rebuild")
 	for _, code := range []string{`println(mem.Show())`, `println(mem.JSON())`, `println(mem.Show("bump-gno-pin"))`} {
 		live, err := s.r.run(code, "s1")
 		require.NoError(t, err, live.Output)

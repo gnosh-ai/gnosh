@@ -20,6 +20,8 @@ const (
 	maxShowClosed = 5    // closed goals Show lists
 	maxShowFacts  = 10   // facts Show lists
 	maxLine       = 160  // bytes of a result, wait or fact a line shows
+	maxList       = 5    // names a receipt lists before "and N more"
+	maxRun        = 5    // closed steps in a row an outline lists before folding them
 )
 
 // Show returns mem as an outline: the rules, the questions for the user,
@@ -126,27 +128,63 @@ func (m *Mem) showHeader(sb *strings.Builder) {
 func (m *Mem) outline(sb *strings.Builder, name string) {
 	it := m.get(name)
 	sb.WriteString("  " + mark(it) + " " + ref(name, it.Title) + arrow(it.Result) + m.aside(name, it, true) + "\n")
-	next := m.nextFor(name, it, caller())
-	m.eachStep(name, it, func(step string, s *Todo) {
-		m.outlineStep(sb, step, s, 2, next)
+	m.outlineSteps(sb, name, 2, m.nextFor(name, it, caller()))
+}
+
+// outlineSteps writes the steps of item name at depth, until Show has
+// written enough. More than maxRun closed steps in a row fold into one line,
+// all but the last two, so that a long task's outline shows where it is.
+func (m *Mem) outlineSteps(sb *strings.Builder, name string, depth int, next string) {
+	var run []string
+	var runIts []*Todo
+	fold := func() {
+		if len(run) > maxRun {
+			n := len(run) - 2
+			done := 0
+			for _, it := range runIts[:n] {
+				if it.Status == "done" {
+					done++
+				}
+			}
+			box, counts := "[x]", []string{strconv.Itoa(done) + " done"}
+			if dropped := n - done; dropped > 0 {
+				counts = append(counts, strconv.Itoa(dropped)+" dropped")
+			}
+			if done == 0 {
+				box, counts = "[-]", counts[1:]
+			}
+			sb.WriteString(strings.Repeat("  ", depth) + box + " `" + run[0] + "` … `" + run[n-1] + "`: " + strings.Join(counts, ", ") + "\n")
+			run, runIts = run[n:], runIts[n:]
+		}
+		for i, step := range run {
+			m.outlineStep(sb, step, runIts[i], depth, next)
+		}
+		run, runIts = nil, nil
+	}
+	m.eachStep(name, func(step string, s *Todo) bool {
+		switch s.Status {
+		case "forgotten":
+		case "":
+			fold()
+			m.outlineStep(sb, step, s, depth, next)
+		default:
+			run = append(run, step)
+			runIts = append(runIts, s)
+		}
+		return sb.Len() > maxShow
 	})
+	fold()
 }
 
 func (m *Mem) outlineStep(sb *strings.Builder, name string, it *Todo, depth int, next string) {
-	if it.Status == "forgotten" {
-		return
-	}
 	sb.WriteString(strings.Repeat("  ", depth) + mark(it) + " " + ref(name, it.Title) + arrow(it.Result) + m.aside(name, it, false))
 	if name == next {
 		sb.WriteString("  ← next")
 	}
 	sb.WriteString("\n")
-	if it.Status != "" {
-		return
+	if it.Status == "" && it.Last > 0 {
+		m.outlineSteps(sb, name, depth+1, next)
 	}
-	m.eachStep(name, it, func(step string, s *Todo) {
-		m.outlineStep(sb, step, s, depth+1, next)
-	})
 }
 
 // aside is what a line says in parentheses: progress, who and when for a
@@ -155,7 +193,7 @@ func (m *Mem) aside(name string, it *Todo, top bool) string {
 	var parts []string
 	if top {
 		if it.Last > 0 {
-			parts = append(parts, m.progress(name, it))
+			parts = append(parts, progress(it))
 		}
 		parts = append(parts, who(it.By), ago(it.Changed))
 	}
@@ -165,7 +203,7 @@ func (m *Mem) aside(name string, it *Todo, top bool) string {
 			parts = append(parts, "due since "+it.Wait)
 		case it.Wait != "":
 			parts = append(parts, strings.TrimSpace(waitText(it.Wait)))
-		case len(m.openForUser(name, it)) > 0:
+		case m.asksUnder(name):
 			parts = append(parts, "waits on the user")
 		}
 		if it.Doing != "" {
@@ -178,29 +216,22 @@ func (m *Mem) aside(name string, it *Todo, top bool) string {
 	return " (" + strings.Join(parts, " · ") + ")"
 }
 
-func (m *Mem) openForUser(name string, it *Todo) []string {
-	var out []string
-	m.eachStep(name, it, func(step string, s *Todo) {
-		if s.Status == "" && s.For != "" {
-			out = append(out, step)
-		}
+// asksUnder reports whether an open step of item name is for the user.
+func (m *Mem) asksUnder(name string) bool {
+	if m.counts.ForUser == 0 {
+		return false
+	}
+	found := false
+	m.asks.Iterate(name+"/", name+"/\xff", func(n string, _ any) bool {
+		found = strings.IndexByte(n[len(name)+1:], '/') < 0
+		return found
 	})
-	return out
+	return found
 }
 
 // progress is "1/3 done": the steps done of those not dropped.
-func (m *Mem) progress(name string, it *Todo) string {
-	done, all := 0, 0
-	m.eachStep(name, it, func(_ string, s *Todo) {
-		switch s.Status {
-		case "done":
-			done++
-			all++
-		case "":
-			all++
-		}
-	})
-	return strconv.Itoa(done) + "/" + strconv.Itoa(all) + " done"
+func progress(it *Todo) string {
+	return strconv.Itoa(it.DoneSteps) + "/" + strconv.Itoa(it.DoneSteps+it.OpenSteps) + " done"
 }
 
 func (m *Mem) showName(sb *strings.Builder, name string) {
@@ -243,6 +274,9 @@ func (m *Mem) showItem(sb *strings.Builder, name string, it *Todo) {
 	if p := parentOf(name); p != "" {
 		sb.WriteString(" (a step of " + ref(p, m.get(p).Title) + ")")
 	}
+	if it.Last > 0 {
+		sb.WriteString(" (" + progress(it) + ")")
+	}
 	sb.WriteString("\n")
 	if it.Status != "" {
 		sb.WriteString("  " + it.Status + arrow(it.Result) + "\n")
@@ -260,10 +294,7 @@ func (m *Mem) showItem(sb *strings.Builder, name string, it *Todo) {
 	for i, n := range it.Notes {
 		sb.WriteString("  note " + strconv.Itoa(i+1) + ": " + n + "\n")
 	}
-	next := m.nextFor(goalOf(name), m.get(goalOf(name)), caller())
-	m.eachStep(name, it, func(step string, s *Todo) {
-		m.outlineStep(sb, step, s, 1, next)
-	})
+	m.outlineSteps(sb, name, 1, m.nextFor(goalOf(name), m.get(goalOf(name)), caller()))
 }
 
 // Find lists items, closed ones too, facts and rules that match words, by
@@ -299,7 +330,7 @@ func (m *Mem) Find(words string) string {
 
 // ref names an item by its name and title: `release-v2` "release v2".
 func ref(name, title string) string {
-	return "`" + name + "` " + strconv.Quote(line(title, 80))
+	return "`" + name + "` " + quote(line(title, 80))
 }
 
 // refs names items by name and title.
@@ -320,12 +351,16 @@ func names(ns []string) string {
 	return joinList(parts)
 }
 
+// joinList joins parts as a sentence does: "a, b and c". Past maxList parts
+// it names the first few and says how many more.
 func joinList(parts []string) string {
-	switch len(parts) {
-	case 0:
+	switch {
+	case len(parts) == 0:
 		return ""
-	case 1:
+	case len(parts) == 1:
 		return parts[0]
+	case len(parts) > maxList:
+		return strings.Join(parts[:maxList-1], ", ") + " and " + strconv.Itoa(len(parts)-maxList+1) + " more"
 	}
 	return strings.Join(parts[:len(parts)-1], ", ") + " and " + parts[len(parts)-1]
 }

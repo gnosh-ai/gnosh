@@ -42,19 +42,6 @@ func (m *Mem) parseWait(until string) string {
 	return until
 }
 
-// isDay reports whether s is shaped as a day: 2026-12-01.
-func isDay(s string) bool {
-	if len(s) != 10 || s[4] != '-' || s[7] != '-' {
-		return false
-	}
-	for i, r := range s {
-		if i != 4 && i != 7 && (r < '0' || r > '9') {
-			return false
-		}
-	}
-	return true
-}
-
 // onCalendar reports whether day s exists.
 func onCalendar(s string) bool {
 	y, _ := strconv.Atoi(s[:4])

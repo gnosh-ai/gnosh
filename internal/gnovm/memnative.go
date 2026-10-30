@@ -10,7 +10,11 @@
 package gnovm
 
 import (
+	"bytes"
+	"encoding/json"
 	"reflect"
+	"strconv"
+	"strings"
 	"time"
 
 	gno "github.com/gnolang/gno/gnovm/pkg/gnolang"
@@ -44,7 +48,7 @@ type memOp struct {
 var memNativeGas = gno.NativeGasInfo{Base: 1000, SlopeIdx: -1, SlopeKind: gno.SizeFlat}
 
 func init() {
-	for _, name := range []gno.Name{"caller", "today", "record", "pending", "find", "holding"} {
+	for _, name := range []gno.Name{"caller", "today", "record", "pending", "find", "holding", "quote", "jsonString"} {
 		info := memNativeGas
 		gno.RegisterNativeGas(memLibPath, name, &info)
 	}
@@ -52,7 +56,8 @@ func init() {
 
 // memNative resolves gnomem's natives. Each answers only in a mem call,
 // inside mem's realm: a Mem the model's code made or copied for itself lives
-// outside the realm, and its Ops must never reach the journal.
+// outside the realm, and its Ops must never reach the journal. The two that
+// only format, quote and jsonString, answer anywhere.
 func memNative(name gno.Name) func(*gno.Machine) {
 	switch name {
 	case "caller":
@@ -116,6 +121,19 @@ func memNative(name gno.Name) func(*gno.Machine) {
 				memPush(m, fields[i])
 			}
 			memPush(m, ctx.at)
+		}
+	// The two that only format answer anywhere.
+	case "quote":
+		return func(m *gno.Machine) {
+			memPush(m, strconv.Quote(memArg(m, 0)))
+		}
+	case "jsonString":
+		return func(m *gno.Machine) {
+			var b bytes.Buffer
+			enc := json.NewEncoder(&b)
+			enc.SetEscapeHTML(false)
+			_ = enc.Encode(memArg(m, 0))
+			memPush(m, strings.TrimSuffix(b.String(), "\n"))
 		}
 	}
 	return nil

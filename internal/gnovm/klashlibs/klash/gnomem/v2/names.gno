@@ -40,27 +40,6 @@ var filler = map[string]bool{
 	"this": true, "to": true, "with": true, "your": true,
 }
 
-// key is name with each step number padded to 4 digits, so the B+tree keeps
-// an outline's order: release-v2/0002/0001.
-func key(name string) string {
-	segs := strings.Split(name, "/")
-	for i := 1; i < len(segs); i++ {
-		for len(segs[i]) < 4 {
-			segs[i] = "0" + segs[i]
-		}
-	}
-	return strings.Join(segs, "/")
-}
-
-// unkey undoes key.
-func unkey(k string) string {
-	segs := strings.Split(k, "/")
-	for i := 1; i < len(segs); i++ {
-		segs[i] = strings.TrimLeft(segs[i], "0")
-	}
-	return strings.Join(segs, "/")
-}
-
 // validName reports whether s follows the name grammar.
 func validName(s string) bool {
 	if s == "" {
@@ -239,7 +218,7 @@ func (m *Mem) refuseOpenTitle(title string) {
 		if sameTitle(it.Title) != want {
 			return false
 		}
-		panic(ref(n, it.Title) + " (" + who(it.By) + ", " + ago(it.Changed) + ", " + m.progress(n, it) + ") is already open: add to it with mem.Steps(\"" + n + "\", \"…\"), or give other work a title that tells them apart")
+		panic(ref(n, it.Title) + " (" + who(it.By) + ", " + ago(it.Changed) + ", " + progress(it) + ") is already open: add to it with mem.Steps(\"" + n + "\", \"…\"), or give other work a title that tells them apart")
 	})
 }
 

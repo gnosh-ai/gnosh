@@ -47,59 +47,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	bptree "klash/bptree/v0"
 )
-
-// Mem is an agent's memory. Only its methods change it, and they all have
-// pointer receivers: a value receiver would copy the Mem out of its realm.
-type Mem struct {
-	items bptree.BPTree // key(name) → *Todo; step numbers padded in keys
-	facts bptree.BPTree // name → *Fact
-	rules bptree.BPTree // name → *Rule
-	// The rest is kept by apply, from the three above:
-	open   bptree.BPTree // goal name → true: each open top-level item
-	asks   bptree.BPTree // name → true: each open item for the user
-	days   bptree.BPTree // day + "|" + name → name: each open item waiting for a day
-	closed bptree.BPTree // stamp(changed) + "|" + name → name: each closed goal
-	recent bptree.BPTree // stamp(changed) + "|" + name → name: each fact
-	taken  bptree.BPTree // goal name → true: every top-level name ever given
-	counts Counts
-}
-
-// Counts are a Mem's items by status, and the open ones that wait or are
-// for the user.
-type Counts struct{ Open, Done, Dropped, Forgotten, Waits, ForUser int }
-
-// Todo is a piece of work: a goal, a step of one, or a question or request
-// for the user. Its name is its key.
-type Todo struct {
-	Title   string   // what to get done, or what is asked
-	Status  string   // "" while open; "done", "dropped" or "forgotten"
-	Result  string   // what came of it: the outcome, the user's answer, or why it was dropped
-	Wait    string   // a day ("2026-12-01") or words ("PR #6399 merged"); "" none
-	For     string   // "" the agent's; "user": a question or request for the user
-	Doing   string   // the session that started it (Start); "" none
-	Notes   []string // findings and attempts, oldest first; never edited
-	Last    int      // the highest step number given under it; never lowered
-	Changed int64    // the latest change to it or to an item under it, Unix seconds
-	By      string   // who made it: a session's id, or "user"
-}
-
-// Fact is something true, kept under a name: "cmd/test",
-// "models/qwen3-27b", "decision/mem-persistence".
-type Fact struct {
-	Text    string
-	Changed int64
-}
-
-// Rule is a standing instruction from the user. Every session is given
-// every rule in full, with who set it.
-type Rule struct {
-	Text    string
-	Changed int64
-	By      string // who set it last: a session's id, or "user"
-}
 
 // Goal is a goal just made, so its steps and wait can follow in the same
 // statement.
@@ -108,14 +56,11 @@ type Goal struct {
 	m    *Mem
 }
 
-// New returns an empty Mem.
-func New() *Mem { return &Mem{} }
-
 // Caps on what a Mem keeps; longer text is cut at a character, with "…".
+// (maxSteps, in apply.gno, caps the steps under one item.)
 const (
 	maxTitle = 200  // bytes of a title
 	maxText  = 1000 // bytes of a result, note, wait, fact or rule
-	maxSteps = 9999 // steps under one item: keys pad numbers to 4 digits
 )
 
 // Goal adds a goal, and returns it so its steps and wait can follow. Its
@@ -167,10 +112,11 @@ func (m *Mem) Steps(name string, titles ...string) {
 		panic("no steps given: mem.Steps(\"" + name + "\", \"a step\", \"another\")")
 	}
 	seen := map[string]bool{}
-	m.eachStep(name, parent, func(step string, it *Todo) {
+	m.eachStep(name, func(_ string, it *Todo) bool {
 		if it.Status == "" {
 			seen[sameTitle(it.Title)] = true
 		}
+		return false
 	})
 	var refs []string
 	for i, title := range titles {
@@ -261,8 +207,8 @@ func (m *Mem) Done(name string, result ...string) {
 	case "dropped":
 		panic(ref(name, it.Title) + " was dropped: " + it.Result + "; mem.Reopen(\"" + name + "\") to take it up again")
 	}
-	if open := m.openSteps(name, it); len(open) > 0 {
-		panic(ref(name, it.Title) + " has open steps " + m.refs(open) + ": Done or Drop them first")
+	if it.OpenSteps > 0 {
+		panic(ref(name, it.Title) + " has open steps " + m.refs(m.openSteps(name)) + ": Done or Drop them first")
 	}
 	r := clip(text("the result", strings.Join(result, " ")), maxText)
 	if it.Wait != "" {

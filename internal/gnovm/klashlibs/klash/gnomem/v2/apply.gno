@@ -14,41 +14,17 @@ import (
 	"strings"
 )
 
-// Op is one change to a Mem, as the journal records it.
-type Op struct {
-	Kind  string // see below
-	Name  string // the item, fact or rule; an add carries the full name
-	Field string // set: "status", "result", "wait", "for" or "doing"; redact: "item", "fact", "rule" or "statements"
-	Old   string // set, fact, rule: before; unadd: the title; unnote, redact: the text taken out
-	New   string // add: the title; set, fact, rule: after; note: the text
-	By    string // add, unadd: who made the item; rule: who set it
-}
-
-// The kinds of Op, and the inverse undo applies:
-//
-//	add     a new open item Name, titled New, made by By       ↔ unadd
-//	unadd   item Name, untouched since added, is removed (undo only;
-//	        its step number is not given again)              ↔ add
-//	set     item Name's Field goes from Old to New            ↔ set, Old and New swapped
-//	note    New is appended to item Name's notes              ↔ unnote
-//	unnote  the last of item Name's notes, Old, is taken off  ↔ note
-//	fact    fact Name goes from Old to New; "" is none        ↔ fact, swapped
-//	rule    rule Name goes from Old to New; "" is none        ↔ rule, swapped
-//	forget  item Name is emptied and closed as forgotten      final
-//	redact  Old becomes "(redacted)" in the item, fact or rule
-//	        Name (Field says which)                           final
-//
-// An Op stamps what it names, and the items above it, as changed at its
-// call's time, whether or not a value changed, so a rebuild gives the same
-// Changed. Text that is removed or replaced goes into a fresh array, so no
-// old string stays reachable on disk.
+// maxSteps caps the steps under one item: keys pad step numbers to 4
+// digits, so that keys sort as the outline does.
+const maxSteps = 9999
 
 // apply is the only code that changes a Mem. It reads only the Mem, op and
 // at, and panics, so nothing is kept, when op does not fit:
 //   - set, fact, rule, unnote: Old is not the current value (unnote: the
 //     last note);
-//   - add: the name exists, or its parent is missing or closed; unadd: the
-//     item is closed, or has steps, notes, a result or a wait;
+//   - add: the name exists, its parent is missing or closed, or its step
+//     number is not 1 to maxSteps; unadd: the item is closed, or has steps,
+//     notes, a result or a wait;
 //   - a set would open an item under a closed one, or close one with an
 //     open step;
 //   - a forget names an open item.
@@ -115,12 +91,13 @@ func (m *Mem) applyAdd(op Op) {
 			panic("apply: `" + p + "` is missing or closed")
 		}
 		n := stepNumber(op.Name)
-		if n < 1 {
-			panic("apply: `" + op.Name + "` has no step number")
+		if n < 1 || n > maxSteps {
+			panic("apply: `" + op.Name + "` has no step number from 1 to " + strconv.Itoa(maxSteps))
 		}
 		if n > parent.Last {
 			parent.Last = n
 		}
+		parent.OpenSteps++
 	} else {
 		m.taken.Set(op.Name, true)
 		m.open.Set(stampKey(0, op.Name), op.Name)
@@ -135,8 +112,10 @@ func (m *Mem) applyUnadd(op Op) {
 		panic("apply: `" + op.Name + "` has changed since it was added")
 	}
 	m.items.Remove(key(op.Name))
-	if parentOf(op.Name) == "" {
+	if p := parentOf(op.Name); p == "" {
 		m.open.Remove(stampKey(it.Changed, op.Name))
+	} else {
+		m.get(p).OpenSteps--
 	}
 	m.counts.Open--
 }
@@ -190,14 +169,22 @@ func (m *Mem) setStatus(name string, it *Todo, status string, at int64) {
 	if status == it.Status {
 		return
 	}
+	var parent *Todo
+	if p := parentOf(name); p != "" {
+		parent = m.get(p)
+	}
 	if status == "" {
-		if p := parentOf(name); p != "" && m.get(p).Status != "" {
-			panic("apply: cannot open `" + name + "` under closed `" + p + "`")
+		if parent != nil && parent.Status != "" {
+			panic("apply: cannot open `" + name + "` under closed `" + parentOf(name) + "`")
 		}
-	} else if it.Status == "" && len(m.openSteps(name, it)) > 0 {
+	} else if it.Status == "" && it.OpenSteps > 0 {
 		panic("apply: cannot close `" + name + "` while a step of it is open")
 	}
-	top := parentOf(name) == ""
+	if parent != nil {
+		parent.countStep(it.Status, -1)
+		parent.countStep(status, 1)
+	}
+	top := parent == nil
 	if it.Status == "" {
 		// Leaving open.
 		m.counts.Open--
@@ -215,7 +202,7 @@ func (m *Mem) setStatus(name string, it *Todo, status string, at int64) {
 			}
 		}
 	} else {
-		m.countStatus(it.Status, -1)
+		m.counts.countStatus(it.Status, -1)
 		if top {
 			m.closed.Remove(stampKey(it.Changed, name))
 		}
@@ -237,7 +224,7 @@ func (m *Mem) setStatus(name string, it *Todo, status string, at int64) {
 			}
 		}
 	} else {
-		m.countStatus(status, 1)
+		m.counts.countStatus(status, 1)
 		if top && status != "forgotten" {
 			// stamp re-keys it to at, after this Op.
 			m.closed.Set(stampKey(it.Changed, name), name)
@@ -245,14 +232,25 @@ func (m *Mem) setStatus(name string, it *Todo, status string, at int64) {
 	}
 }
 
-func (m *Mem) countStatus(status string, d int) {
+// countStep counts a step of it in or out of its open and done steps.
+func (it *Todo) countStep(status string, d int) {
+	switch status {
+	case "":
+		it.OpenSteps += d
+	case "done":
+		it.DoneSteps += d
+	}
+}
+
+// countStatus counts an item in or out of the closed status it has.
+func (c *Counts) countStatus(status string, d int) {
 	switch status {
 	case "done":
-		m.counts.Done += d
+		c.Done += d
 	case "dropped":
-		m.counts.Dropped += d
+		c.Dropped += d
 	case "forgotten":
-		m.counts.Forgotten += d
+		c.Forgotten += d
 	}
 }
 
@@ -437,44 +435,6 @@ func (m *Mem) getRule(name string) *Rule {
 	return v.(*Rule)
 }
 
-// eachStep calls fn on each step of item name, in order.
-func (m *Mem) eachStep(name string, it *Todo, fn func(step string, s *Todo)) {
-	for i := 1; i <= it.Last; i++ {
-		step := name + "/" + strconv.Itoa(i)
-		if s := m.get(step); s != nil {
-			fn(step, s)
-		}
-	}
-}
-
-// eachBelow calls fn on every item under name: in outline order, or, with
-// bottomUp, each item after everything under it.
-func (m *Mem) eachBelow(name string, bottomUp bool, fn func(n string, it *Todo)) {
-	var ks []string
-	m.items.Iterate(key(name)+"/", key(name)+"/\xff", func(k string, v any) bool {
-		ks = append(ks, k)
-		return false
-	})
-	for i := range ks {
-		k := ks[i]
-		if bottomUp {
-			k = ks[len(ks)-1-i]
-		}
-		fn(unkey(k), m.items.Get(k).(*Todo))
-	}
-}
-
-// openSteps lists item name's open steps.
-func (m *Mem) openSteps(name string, it *Todo) []string {
-	var open []string
-	m.eachStep(name, it, func(step string, s *Todo) {
-		if s.Status == "" {
-			open = append(open, step)
-		}
-	})
-	return open
-}
-
 func (m *Mem) hasSteps(name string) bool {
 	found := false
 	m.items.Iterate(key(name)+"/", key(name)+"/\xff", func(string, any) bool {
@@ -484,20 +444,47 @@ func (m *Mem) hasSteps(name string) bool {
 	return found
 }
 
+// key is name with each step number padded to 4 digits, so the B+tree keeps
+// an outline's order: release-v2/0002/0001.
+func key(name string) string {
+	segs := strings.Split(name, "/")
+	for i := 1; i < len(segs); i++ {
+		for len(segs[i]) < 4 {
+			segs[i] = "0" + segs[i]
+		}
+	}
+	return strings.Join(segs, "/")
+}
+
+// unkey undoes key.
+func unkey(k string) string {
+	segs := strings.Split(k, "/")
+	for i := 1; i < len(segs); i++ {
+		segs[i] = strings.TrimLeft(segs[i], "0")
+	}
+	return strings.Join(segs, "/")
+}
+
+// isDay reports whether a wait is a day, 2026-12-01, which the days index
+// holds, rather than words.
+func isDay(s string) bool {
+	if len(s) != 10 || s[4] != '-' || s[7] != '-' {
+		return false
+	}
+	for i, r := range s {
+		if i != 4 && i != 7 && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
+}
+
 // parentOf is the name of the item name is a step of; "" for a goal.
 func parentOf(name string) string {
 	if i := strings.LastIndex(name, "/"); i >= 0 {
 		return name[:i]
 	}
 	return ""
-}
-
-// goalOf is the goal name is in: its first segment.
-func goalOf(name string) string {
-	if i := strings.Index(name, "/"); i >= 0 {
-		return name[:i]
-	}
-	return name
 }
 
 // stepNumber is name's last segment as a step number, or 0.

@@ -9,9 +9,10 @@
 
 package gnomem
 
-// Natives that klash provides. Each one panics unless it runs in a mem
-// call, inside the realm klash.local/r/mem, with klash's own context, so a
-// Mem the model's code makes or copies for itself can do nothing.
+// Natives that klash provides. Each one that reads or changes mem panics
+// unless it runs in a mem call, inside the realm klash.local/r/mem, with
+// klash's own context, so a Mem the model's code makes or copies for itself
+// can do nothing.
 
 // caller is who runs this input: a session's id, "user" or "klash".
 func caller() string
@@ -34,3 +35,12 @@ func find(words string, max int) (names, kinds []string)
 // name form: names with their kinds, and whether statements of past inputs
 // did.
 func holding(text string) (names, kinds []string, statements bool)
+
+// Two that only format, in Go, since a character at a time is slow in Gno;
+// they answer anywhere.
+
+// quote is strconv.Quote.
+func quote(s string) string
+
+// jsonString is s as a JSON string, with U+2028 and U+2029 escaped.
+func jsonString(s string) string

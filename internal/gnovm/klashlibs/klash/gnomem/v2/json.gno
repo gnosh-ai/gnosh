@@ -14,16 +14,17 @@ import (
 	"strings"
 )
 
-// maxJSONGoals is how many open goals JSON() lists, newest first.
-const maxJSONGoals = 50
+// maxJSONGoals is how many open goals JSON() lists, newest first: more than
+// the <mem> block shows, and few enough to compute after every change.
+const maxJSONGoals = 20
 
 // JSON returns, for klash and hooks, the goals with names, or with no names:
 // the counts, the rules, what is due today, the questions for the user, the
-// newest 50 open goals and the newest facts. A goal comes with its status,
-// wait, who made it and when it changed; every item under it with its depth,
-// status, wait, for and doing; its next for caller(); and, when its next is
+// newest 20 open goals and the newest facts. A goal comes with its status,
+// result, wait, for and doing, who made it and when it changed, how many of
+// its steps are open and done, its next for caller(), and, when its next is
 // "", what holds back the open items Next passed over: "day", "user",
-// "words" or "session".
+// "words" or "session". Its steps are not listed: Show(name) shows them.
 func (m *Mem) JSON(names ...string) string {
 	var j jsonWriter
 	j.open("{")
@@ -124,25 +125,20 @@ func (m *Mem) goalJSON(j *jsonWriter, name string) {
 	}
 	session := caller()
 	j.open("{")
-	m.itemFields(j, name, g)
-	j.field("by", g.By)
+	for _, kv := range [][2]string{{"name", name}, {"title", g.Title}, {"status", g.Status}, {"result", g.Result}, {"wait", g.Wait}, {"for", g.For}, {"doing", g.Doing}, {"by", g.By}} {
+		j.field(kv[0], kv[1])
+	}
 	j.key("changed")
 	j.num(g.Changed)
+	j.key("steps_open")
+	j.num(int64(g.OpenSteps))
+	j.key("steps_done")
+	j.num(int64(g.DoneSteps))
 	next := ""
 	if g.Status != "forgotten" {
 		next = m.nextFor(name, g, session)
 	}
 	j.field("next", next)
-	j.key("items")
-	j.open("[")
-	m.eachBelow(name, false, func(n string, it *Todo) {
-		j.open("{")
-		m.itemFields(j, n, it)
-		j.key("depth")
-		j.num(int64(strings.Count(n, "/")))
-		j.close("}")
-	})
-	j.close("]")
 	j.key("held")
 	j.open("[")
 	if next == "" && g.Status == "" {
@@ -156,16 +152,6 @@ func (m *Mem) goalJSON(j *jsonWriter, name string) {
 	}
 	j.close("]")
 	j.close("}")
-}
-
-func (m *Mem) itemFields(j *jsonWriter, name string, it *Todo) {
-	j.field("name", name)
-	j.field("title", it.Title)
-	j.field("status", it.Status)
-	j.field("result", it.Result)
-	j.field("wait", it.Wait)
-	j.field("for", it.For)
-	j.field("doing", it.Doing)
 }
 
 // jsonWriter writes JSON by hand: Gno has no encoding/json.
@@ -219,33 +205,3 @@ func (j *jsonWriter) num(n int64) {
 }
 
 func (j *jsonWriter) String() string { return j.sb.String() }
-
-// jsonString quotes s as a JSON string.
-func jsonString(s string) string {
-	var sb strings.Builder
-	sb.WriteByte('"')
-	for _, r := range s {
-		switch {
-		case r == '"':
-			sb.WriteString(`\"`)
-		case r == '\\':
-			sb.WriteString(`\\`)
-		case r == '\n':
-			sb.WriteString(`\n`)
-		case r == '\r':
-			sb.WriteString(`\r`)
-		case r == '\t':
-			sb.WriteString(`\t`)
-		case r < 0x20 || r == 0x2028 || r == 0x2029:
-			h := strconv.FormatInt(int64(r), 16)
-			for len(h) < 4 {
-				h = "0" + h
-			}
-			sb.WriteString(`\u` + h)
-		default:
-			sb.WriteRune(r)
-		}
-	}
-	sb.WriteByte('"')
-	return sb.String()
-}

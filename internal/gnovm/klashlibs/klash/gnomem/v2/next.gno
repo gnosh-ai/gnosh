@@ -23,10 +23,10 @@ func (m *Mem) nextFor(name string, g *Todo, session string) string {
 	if g.Status != "" || m.waiting(g) || g.For != "" {
 		return ""
 	}
-	if n := m.next(name, g, session); n != "" {
+	if n := m.next(name, session); n != "" {
 		return n
 	}
-	if len(m.openSteps(name, g)) == 0 {
+	if g.OpenSteps == 0 {
 		return name
 	}
 	return ""
@@ -34,19 +34,18 @@ func (m *Mem) nextFor(name string, g *Todo, session string) string {
 
 // next is the first open item under name, in outline order, that this
 // session can do now; "" if there is none.
-func (m *Mem) next(name string, it *Todo, session string) string {
+func (m *Mem) next(name string, session string) string {
 	found := ""
-	m.eachStep(name, it, func(step string, s *Todo) {
-		if found != "" || !m.free(s, session) {
-			return
+	m.eachStep(name, func(step string, s *Todo) bool {
+		if !m.free(s, session) {
+			return false
 		}
-		if n := m.next(step, s, session); n != "" {
-			found = n
-			return
-		}
-		if len(m.openSteps(step, s)) == 0 {
+		if s.OpenSteps == 0 {
 			found = step
+		} else {
+			found = m.next(step, session)
 		}
+		return found != ""
 	})
 	return found
 }
@@ -90,15 +89,16 @@ func (m *Mem) held(name string, g *Todo, session string) (names, why []string) {
 		case it.Doing != "" && it.Doing != session:
 			reason = "session"
 		}
-		if len(m.openSteps(n, it)) == 0 {
+		if it.OpenSteps == 0 {
 			if reason != "" {
 				names = append(names, n)
 				why = append(why, reason)
 			}
 			return
 		}
-		m.eachStep(n, it, func(step string, s *Todo) {
+		m.eachStep(n, func(step string, s *Todo) bool {
 			walk(step, s, reason)
+			return false
 		})
 	}
 	walk(name, g, "")

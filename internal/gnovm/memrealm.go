@@ -41,6 +41,20 @@ var M = gnomem.New()
 // (memnative.go) answer only inside a mem call.
 const memLibPath = "klash/gnomem/v2"
 
+// memLayout is the layout of a mem's store. gnomem v2's types.gno and
+// apply.gno, bptree v0 and the realm's source fix how a Mem is stored, and
+// TestMemLayoutPinned pins their hash to this number: changing them means a
+// new number, and a store of an older one is rebuilt from its journal.
+const memLayout = 1
+
+// memLayoutFiles are the library sources memLayout covers.
+var memLayoutFiles = []string{
+	"klashlibs/klash/gnomem/v2/types.gno",
+	"klashlibs/klash/gnomem/v2/apply.gno",
+	"klashlibs/klash/bptree/v0/node.gno",
+	"klashlibs/klash/bptree/v0/tree.gno",
+}
+
 // memRunAddr is the address mem inputs run as. gno gives a realm only to a
 // script at the address's run path, as it does for a chain's MsgRun.
 var memRunAddr = crypto.AddressFromPreimage([]byte("klash mem"))

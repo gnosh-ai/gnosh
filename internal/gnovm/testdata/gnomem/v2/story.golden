@@ -81,7 +81,7 @@ facts, newest first:
   `cmd/build` = make build
 
 > s1: println(mem.Show("release-v2"))
-[x] `release-v2` "release v2"
+[x] `release-v2` "release v2" (3/3 done)
   done → shipped
   made by this session, changed 2m ago
   [x] `release-v2/1` "bump the version" → now 2.0.0
@@ -102,6 +102,34 @@ dropped `make-tea` "make tea", with its open steps `make-tea/1` and `make-tea/2`
 added goal `make-tea-2` "make tea"
 > s1: mem.Forget("make-tea-2")
 error: `make-tea-2` is open: mem.Drop("make-tea-2", "why") first, then forget it
+> s1: mem.Goal("port the tests to gno").Steps("arith", "bytes", "crypto", "errors", "fmt", "io", "math", "sort", "strings", "time")
+added goal `port-tests-gno` "port the tests to gno"
+added `port-tests-gno/1` "arith", `port-tests-gno/2` "bytes", `port-tests-gno/3` "crypto", `port-tests-gno/4` "errors", `port-tests-gno/5` "fmt", `port-tests-gno/6` "io", `port-tests-gno/7` "math", `port-tests-gno/8` "sort", `port-tests-gno/9` "strings", `port-tests-gno/10` "time"; next: `port-tests-gno/1` "arith"
+> s1: mem.Done("port-tests-gno", "all ported")
+error: `port-tests-gno` "port the tests to gno" has open steps `port-tests-gno/1` "arith", `port-tests-gno/2` "bytes", `port-tests-gno/3` "crypto", `port-tests-gno/4` "errors" and 6 more: Done or Drop them first
+> s1: for i := 1; i <= 7; i++ { mem.Done("port-tests-gno/"+strconv.Itoa(i), "ported") }
+done `port-tests-gno/1` "arith" → ported; next: `port-tests-gno/2` "bytes"
+done `port-tests-gno/2` "bytes" → ported; next: `port-tests-gno/3` "crypto"
+done `port-tests-gno/3` "crypto" → ported; next: `port-tests-gno/4` "errors"
+done `port-tests-gno/4` "errors" → ported; next: `port-tests-gno/5` "fmt"
+done `port-tests-gno/5` "fmt" → ported; next: `port-tests-gno/6` "io"
+done `port-tests-gno/6` "io" → ported; next: `port-tests-gno/7` "math"
+done `port-tests-gno/7` "math" → ported; next: `port-tests-gno/8` "sort"
+> s1: println(mem.Show("port-tests-gno"))
+[ ] `port-tests-gno` "port the tests to gno" (7/10 done)
+  made by this session, changed 1m ago
+  [x] `port-tests-gno/1` … `port-tests-gno/5`: 5 done
+  [x] `port-tests-gno/6` "io" → ported
+  [x] `port-tests-gno/7` "math" → ported
+  [ ] `port-tests-gno/8` "sort"  ← next
+  [ ] `port-tests-gno/9` "strings"
+  [ ] `port-tests-gno/10` "time"
+
+> s1: mem.Goal("tidy the docs").Steps("a", "b", "c", "d", "e", "f", "g")
+added goal `tidy-docs` "tidy the docs"
+added `tidy-docs/1` "a", `tidy-docs/2` "b", `tidy-docs/3` "c", `tidy-docs/4` "d", `tidy-docs/5` "e", `tidy-docs/6` "f", `tidy-docs/7` "g"; next: `tidy-docs/1` "a"
+> s1: mem.Drop("tidy-docs", "moved to the docs session")
+dropped `tidy-docs` "tidy the docs", with its open steps `tidy-docs/1`, `tidy-docs/2`, `tidy-docs/3`, `tidy-docs/4` and 3 more
 > s1: mem.Note("bump-gno-pin", "the token is sk-live-4f9c2b")
 noted on `bump-gno-pin` "bump the gno pin"
 > s1: mem.Redact("sk-live-4f9c2b")
@@ -109,16 +137,24 @@ redacted it in 1 place; klash rewrites mem's files
 > s1: mem.Redact("nothing")
 error: mem holds no such text; Redact takes a secret's exact text
 > s1: println(mem.Show())
-mem: 3 goals open · 1 closed · 1 rule · 3 facts
+mem: 4 goals open · 2 closed · 1 rule · 3 facts
 rules:
   `push-after-landing` = push klash main to GitHub only after land-branch.sh prints landed:
 due:
   [ ] `renew-cert` "renew the gno.shop TLS cert" (since 2026-12-01)
 goals:
   [ ] `bump-gno-pin` "bump the gno pin" (this session · 33d ago · waits for: PR #6399 merged)
+  [ ] `port-tests-gno` "port the tests to gno" (7/10 done · this session · 33d ago)
+    [x] `port-tests-gno/1` … `port-tests-gno/5`: 5 done
+    [x] `port-tests-gno/6` "io" → ported
+    [x] `port-tests-gno/7` "math" → ported
+    [ ] `port-tests-gno/8` "sort"  ← next
+    [ ] `port-tests-gno/9` "strings"
+    [ ] `port-tests-gno/10` "time"
   [ ] `make-tea-2` "make tea" (this session · 33d ago)
   [ ] `renew-cert` "renew the gno.shop TLS cert" (this session · 33d ago · due since 2026-12-01)
 closed lately:
+  [-] `tidy-docs` "tidy the docs" → moved to the docs session (2026-10-29)
   [-] `make-tea` "make tea" → no kettle (2026-10-29)
 facts, newest first:
   `cmd/tests` = go test ./internal/...
@@ -126,4 +162,4 @@ facts, newest first:
   `cmd/build` = make build
 
 > s1: println(mem.JSON("bump-gno-pin"))
-{"goals":[{"name":"bump-gno-pin","title":"bump the gno pin","status":"","result":"","wait":"PR #6399 merged","for":"","doing":"","by":"s1","changed":1793270160,"next":"","items":[],"held":[{"name":"bump-gno-pin","why":"words"}]}]}
+{"goals":[{"name":"bump-gno-pin","title":"bump the gno pin","status":"","result":"","wait":"PR #6399 merged","for":"","doing":"","by":"s1","changed":1793270520,"steps_open":0,"steps_done":0,"next":"","held":[{"name":"bump-gno-pin","why":"words"}]}]}

@@ -10,6 +10,8 @@
 package gnovm
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,6 +20,30 @@ import (
 // TestMemRealmPersists runs a mem input against the realm in a store on
 // disk, then opens the store again from a new base, as a new klash process
 // would, and finds what the first input made.
+// TestMemLayoutPinned fails when the sources that fix how a Mem is stored
+// change while memLayout stays the same. Bump memLayout, which rebuilds every
+// mem from its journal, and pin the new hash here.
+func TestMemLayoutPinned(t *testing.T) {
+	h := sha256.New()
+	for _, f := range memLayoutFiles {
+		b, err := klashlibFS.ReadFile(f)
+		require.NoError(t, err)
+		h.Write([]byte(f + "\n"))
+		h.Write(b)
+	}
+	h.Write([]byte(memRealmSource))
+	got := hex.EncodeToString(h.Sum(nil))[:16]
+	pins := map[int]string{
+		1: "40f2ee6d42a9774f",
+	}
+	want, ok := pins[memLayout]
+	if !ok {
+		t.Fatalf("pin memLayout %d here: %d: %q", memLayout, memLayout, got)
+	}
+	require.Equal(t, want, got,
+		"how a Mem is stored changed: make memLayout %d, and pin %d: %q here", memLayout+1, memLayout+1, got)
+}
+
 func TestMemRealmPersists(t *testing.T) {
 	dir := t.TempDir()
 	r, err := openMemRealm(newBase(), dir)
