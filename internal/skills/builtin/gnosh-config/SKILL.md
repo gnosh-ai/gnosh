@@ -187,9 +187,16 @@ option reset <list-key>    # clear a list option back to empty
 - **Boolean keys** (value optional, defaults `true`): `debug`, `debug-lsp`,
   `auto-lsp`, `progress`.
 - **Boolean keys phrased positively** (stored as the negated field): `metrics`,
-  `auto-summarize`, `provider-auto-update`,
-  `default-providers`. Example: `option metrics false` disables metrics.
-- **String keys**: `data-directory`, `initialize-as`, `notifications`.
+  `auto-summarize`, `provider-auto-update`, `default-providers`,
+  `idle-compaction`. Example: `option metrics false` disables metrics.
+- **String keys**: `data-directory`, `initialize-as`, `notifications`,
+  `metrics-url`, `metrics-key`, `update-repo`, `artifact-server` (an address,
+  or `off`), and `mem-embeddings-url`: an OpenAI-compatible embeddings server
+  (`llama-server --embedding`) that mem finds by meaning with and that recalls
+  what bears on each prompt typed. mem's text and the prompts go to it; unset,
+  nothing does.
+- **Integer keys**: `request-timeout`, `max-background-jobs`, `loop-max-turns`,
+  `auto-compact-window`.
 - **Attribution keys**: `attribution-trailer-style` (`none`, `co-authored-by`,
   `assisted-by`) and `attribution-generated-with` (boolean).
 - **UI settings**: `option ui compact BOOL`, `option ui diff unified|split`,

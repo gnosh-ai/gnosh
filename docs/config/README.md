@@ -490,6 +490,8 @@ Boolean Keys:
   auto-summarize                 automatically summarize long conversations
   provider-auto-update           update the provider catalog automatically
   default-providers              include built-in providers
+  idle-compaction                summarize a long conversation left idle for
+                                 54 minutes
   attribution-generated-with     add the Generated with Gnosh line
 
 String Keys:
@@ -499,6 +501,12 @@ String Keys:
                                    or disabled
   attribution-trailer-style string attribution trailer: none, co-authored-by,
                                    or assisted-by
+  artifact-server string           where recorded artifacts are served: an
+                                   address, or off
+  mem-embeddings-url string        an OpenAI-compatible embeddings server
+                                   (llama-server --embedding) mem finds by
+                                   meaning with; mem's text and your prompts
+                                   are sent to it, and unset nothing is
 
 Integer Keys:
   request-timeout int              seconds before an LLM request is aborted;
@@ -508,6 +516,9 @@ Integer Keys:
   max-background-jobs int          background shell jobs allowed to run at
                                    once; finished jobs never count against it
                                    (default 50)
+  auto-compact-window int          tokens of context before a conversation is
+                                   summarized, 100000 to 1000000 and never
+                                   past the model's window; unset for auto
 
 List Keys:
   context-path string             append a project context path
