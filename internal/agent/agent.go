@@ -187,6 +187,12 @@ type SessionAgentCall struct {
 	// checkpoint (see goalContinuation).
 	goalChecks     int
 	goalReflecting bool
+	// goalsSince is when the turn began: every goal the session closes in
+	// the turn is judged as it ends (see closedGoalContinuation).
+	// judgedGoal is the goal a continuation sends the agent back to, the
+	// judge having found it not met. Both ride along on continuations.
+	goalsSince time.Time
+	judgedGoal string
 	// OnAuthRefresh, when non-nil, is called by fantasy when a stream
 	// fails with an authentication error (HTTP 401). The callback should
 	// refresh credentials and return nil on success, in which case
@@ -369,6 +375,11 @@ type sessionAgent struct {
 	// still goes: see compacts.
 	justSummarized *csync.Map[string, bool]
 	compactLevels  *csync.Map[string, int]
+	// judgedGoals is, for each session, the goals the judge was asked
+	// about, each with the journal entry that closed it then: a closing is
+	// judged once, though a turn queued behind the one that made it began
+	// before it (see closedGoalContinuation).
+	judgedGoals *csync.Map[string, map[string]int64]
 	// dispatchMuCreate guards lazy creation of per-session entries in
 	// dispatchMu so two goroutines can't race to lock different mutex
 	// instances for the same session.
@@ -487,6 +498,7 @@ func NewSessionAgent(
 		cancelMark:            csync.NewMap[string, uint64](),
 		justSummarized:        csync.NewMap[string, bool](),
 		compactLevels:         csync.NewMap[string, int](),
+		judgedGoals:           csync.NewMap[string, map[string]int64](),
 		sessionStarts:         sessionStarts,
 		instructionsLoaded:    instructionsLoaded,
 		goals:                 opts.Goals,
@@ -842,6 +854,11 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	call.Prompt = strings.TrimSpace(call.Prompt)
 	if err := ValidateCall(call); err != nil {
 		return nil, err
+	}
+	// A turn begins: the goals the session closes from now on are judged as
+	// it ends. A continuation keeps its turn's.
+	if call.goalsSince.IsZero() {
+		call.goalsSince = time.Now()
 	}
 	// The turn's hooks are told the session's permission mode, as Claude
 	// Code tells them; a sub-agent's turn keeps its parent's.

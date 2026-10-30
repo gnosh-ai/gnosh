@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,9 +51,9 @@ type goalRun struct {
 	t     *testing.T
 }
 
-// newGoalRun makes a session whose goal is condition, bound in mem, and
-// an agent whose model is main and whose goal check is judge. Run with
-// run.
+// newGoalRun makes a session whose goal is condition, bound in mem (none
+// for ""), and an agent whose model is main and whose goal check is
+// judge. Run with run.
 func newGoalRun(t *testing.T, condition string, main fantasy.LanguageModel, turns *atomic.Int64, judge fantasy.LanguageModel, opts ...func(*SessionAgentOptions)) goalRun {
 	t.Helper()
 	env := testEnv(t)
@@ -88,10 +89,12 @@ func newGoalRun(t *testing.T, condition string, main fantasy.LanguageModel, turn
 		Parts: []message.ContentPart{message.TextContent{Text: "earlier prompt"}},
 	})
 	require.NoError(t, err)
-	change, err := goals.set(t.Context(), sess.ID, condition)
-	require.NoError(t, err)
-	require.True(t, change.Had)
-	require.Contains(t, change.Directive, "Goal `"+change.Goal.Name+"`")
+	if condition != "" {
+		change, err := goals.set(t.Context(), sess.ID, condition)
+		require.NoError(t, err)
+		require.True(t, change.Had)
+		require.Contains(t, change.Directive, "Goal `"+change.Goal.Name+"`")
+	}
 	return goalRun{stopHookRun{agent: a, sessionID: sess.ID, notifier: notifier, turns: turns}, goals, t}
 }
 
@@ -184,6 +187,120 @@ func TestGoalDrivesTheTurnFromMem(t *testing.T) {
 	require.Contains(t, prompts[0], "Its next step is `tests-pass/1` \"fix the parser\"")
 	require.Contains(t, prompts[1], "The check found the goal `tests-pass` not met: the tests still fail")
 	require.Contains(t, r.mem(`mem.Show("tests-pass")`), "the check found it not met: the tests still fail")
+}
+
+// Every goal is judged before it counts as done, not only /goal's: a goal
+// the agent set itself and closed is checked as the turn ends; not met, it
+// is reopened and the agent sent back to it; met, the user is told.
+func TestEveryGoalClosedIsJudged(t *testing.T) {
+	var turns atomic.Int64
+	var r goalRun
+	main := &promptAwareModel{turns: &turns, answer: func(string) string {
+		switch turns.Load() {
+		case 1:
+			r.mem(`mem.Goal("fix the login loop", "fix-login").Steps("set SameSite on the cookie")`)
+			r.mem(`mem.Done("fix-login/1", "SameSite=Lax"); mem.Done("fix-login", "fixed in auth.go")`)
+			return "Fixed."
+		case 2:
+			r.mem(`mem.Done("fix-login", "go test ./auth → ok")`)
+			return "Fixed, and the test passes."
+		default:
+			return "You're welcome."
+		}
+	}}
+	judge := &judgeModel{verdicts: []string{
+		`{"ok": false, "reason": "no test was run"}`,
+		`{"ok": true, "reason": "the auth tests pass"}`,
+	}}
+	r = newGoalRun(t, "", main, &turns, judge)
+	r.run("users get bounced back to the login page")
+
+	require.Equal(t, int64(2), turns.Load(), "the turn, then one back to the goal the check found not met")
+	require.Equal(t, int64(2), judge.checks.Load(), "a check each time the agent closed the goal, none for its step")
+	requireQueueEmpty(t, r.stopHookRun)
+	prompts := r.hiddenPrompts()
+	require.Len(t, prompts, 1)
+	require.Contains(t, prompts[0], "The check found the goal `fix-login` not met: no test was run")
+	require.Contains(t, prompts[0], "The goal: fix the login loop")
+	require.Contains(t, r.mem(`mem.Show("fix-login")`), "the check found it not met: no test was run")
+	require.Equal(t, []string{"Goal met: fix the login loop (the auth tests pass)"}, r.notices(notify.TypeGoalMet))
+	require.Empty(t, r.notifier.warnings())
+
+	// The next turn closes nothing: the goal closed before it is not
+	// judged again.
+	r.run("thanks")
+	require.Equal(t, int64(2), judge.checks.Load())
+}
+
+// A goal the check keeps finding not met: every stopHookReflectEvery
+// continuations the agent is also asked whether there is a real reason to
+// stop, with no cap; when it says so, the turn ends, the goal open in mem.
+func TestAJudgedGoalReflectsEveryTenContinuations(t *testing.T) {
+	var turns atomic.Int64
+	var r goalRun
+	main := &promptAwareModel{turns: &turns, answer: func(last string) string {
+		if strings.Contains(last, "Step back") {
+			return "It cannot pass: the staging server is down.\n" + StopMarker
+		}
+		if turns.Load() == 1 {
+			r.mem(`mem.Goal("deploy to staging", "deploy")`)
+		}
+		r.mem(`mem.Done("deploy", "deployed")`)
+		return "Deployed."
+	}}
+	judge := &judgeModel{verdicts: []string{`{"ok": false, "reason": "the deploy failed"}`}}
+	r = newGoalRun(t, "", main, &turns, judge)
+	r.run("deploy to staging")
+
+	require.Equal(t, int64(stopHookReflectEvery+1), turns.Load(), "the turn, then one each time the check found the goal not met")
+	require.Equal(t, int64(stopHookReflectEvery), judge.checks.Load())
+	require.Len(t, r.notifier.warnings(), 1)
+	require.Equal(t, "The agent judged it should stop working on the goal `deploy`: It cannot pass: the staging server is down. It stays open in mem", r.notifier.warnings()[0].Message)
+	var j struct {
+		Goals []struct {
+			Status string `json:"status"`
+		} `json:"goals"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(r.mem(`print(mem.JSON("deploy"))`))), &j))
+	require.Len(t, j.Goals, 1)
+	require.Empty(t, j.Goals[0].Status, "reopened, and left open")
+}
+
+// A check that cannot be made leaves the goal closed, and says why.
+func TestAJudgedGoalWithNoVerdictStaysClosed(t *testing.T) {
+	var turns atomic.Int64
+	var r goalRun
+	main := &promptAwareModel{turns: &turns, answer: func(string) string {
+		r.mem(`mem.Goal("tidy the README", "tidy"); mem.Done("tidy", "tidied")`)
+		return "Tidied."
+	}}
+	r = newGoalRun(t, "", main, &turns, &judgeModel{verdicts: []string{"maybe"}})
+	r.run("tidy the README")
+
+	require.Equal(t, int64(1), turns.Load())
+	require.Len(t, r.notifier.warnings(), 1)
+	require.Equal(t, "The goal `tidy` could not be checked, so it stays closed unchecked: its answer was not a verdict: maybe", r.notifier.warnings()[0].Message)
+}
+
+// With a /goal set, a goal of the agent's own closed in the same turn is
+// judged too, and the bound goal only once, against the user's condition.
+func TestAJudgedGoalBesideTheBoundOne(t *testing.T) {
+	var turns atomic.Int64
+	var r goalRun
+	main := &promptAwareModel{turns: &turns, answer: func(string) string {
+		r.mem(`mem.Goal("update the changelog", "changelog"); mem.Done("changelog", "CHANGELOG.md has 2.0")`)
+		r.mem(`mem.Done("tests-pass", "go test ./... → ok")`)
+		return "Done."
+	}}
+	judge := &judgeModel{verdicts: []string{`{"ok": true, "reason": "it shows so"}`}}
+	r = newGoalRun(t, "the tests pass", main, &turns, judge)
+	r.run("make the tests pass, and update the changelog")
+
+	require.Equal(t, int64(1), turns.Load())
+	require.Equal(t, int64(2), judge.checks.Load(), "the agent's goal, then the bound one")
+	require.Equal(t, []string{"Goal met: update the changelog (it shows so)", "Goal met: the tests pass (it shows so)"}, r.notices(notify.TypeGoalMet))
+	_, set := r.goal()
+	require.False(t, set)
 }
 
 // fullContextModel answers each call in turn with replies, the first one

@@ -166,10 +166,12 @@ func (g *goalBindings) boundName(ctx context.Context, sessionID string) string {
 	return b.Name
 }
 
-// goalContinuation reads a main agent's session goal in mem when its turn
-// would otherwise end, and reports the follow-up call to queue while the
-// goal is open: this same call, keeping the turn's RunID, with what comes
-// next as a hidden prompt (gnovm.GoalTurn). Every stopHookReflectEvery
+// goalContinuation reads a main agent's goals in mem when its turn would
+// otherwise end, and reports the follow-up call to queue while one needs
+// more work: this same call, keeping the turn's RunID, with what comes
+// next as a hidden prompt. First, every goal the session closed in the
+// turn is judged (closedGoalContinuation). Then the session's /goal: mem
+// says what comes next (gnovm.GoalTurn). Every stopHookReflectEvery
 // continuations in a row the agent is asked instead whether there is a
 // real reason to stop, with no cap; a reply that says so with StopMarker
 // ends the turn with the goal still set. Once the agent closes the goal,
@@ -182,17 +184,28 @@ func (a *sessionAgent) goalContinuation(ctx context.Context, call SessionAgentCa
 		return SessionAgentCall{}, false
 	}
 	b, stored, ok := a.goals.binding(ctx, call.SessionID)
-	if !ok {
-		return SessionAgentCall{}, false
-	}
 	if call.goalReflecting && stopMarkerPresent(lastAssistantMessage) {
-		a.notifyGoal(call.SessionID, notify.TypeWarning, fmt.Sprintf(
-			"The agent judged it should stop working toward the goal: %s. The goal stays set (/goal clear clears it)",
-			cmp.Or(strings.TrimSuffix(compactReason(StripStopMarker(lastAssistantMessage)), "."), "it gave no reason")))
+		why := cmp.Or(strings.TrimSuffix(compactReason(StripStopMarker(lastAssistantMessage)), "."), "it gave no reason")
+		switch {
+		case call.judgedGoal != "":
+			a.notifyGoal(call.SessionID, notify.TypeWarning, fmt.Sprintf(
+				"The agent judged it should stop working on the goal `%s`: %s. It stays open in mem", call.judgedGoal, why))
+		case ok:
+			a.notifyGoal(call.SessionID, notify.TypeWarning, fmt.Sprintf(
+				"The agent judged it should stop working toward the goal: %s. The goal stays set (/goal clear clears it)", why))
+		}
 		return SessionAgentCall{}, false
 	}
 	if a.permissionMode(call.SessionID) == config.PermissionModePlan {
-		a.notifyGoal(call.SessionID, notify.TypeWarning, "The goal stays set; plan mode does not go on toward it")
+		if ok {
+			a.notifyGoal(call.SessionID, notify.TypeWarning, "The goal stays set; plan mode does not go on toward it")
+		}
+		return SessionAgentCall{}, false
+	}
+	if cont, open := a.closedGoalContinuation(ctx, call, b.Name); open {
+		return cont, true
+	}
+	if !ok {
 		return SessionAgentCall{}, false
 	}
 	client, err := a.goals.client()
@@ -209,6 +222,7 @@ func (a *sessionAgent) goalContinuation(ctx context.Context, call SessionAgentCa
 	cont := call
 	cont.goalChecks = call.goalChecks + 1
 	cont.goalReflecting = false
+	cont.judgedGoal = ""
 	switch turn.Do {
 	case "continue":
 		cont.Prompt = turn.Prompt
@@ -267,6 +281,67 @@ func (a *sessionAgent) goalContinuation(ctx context.Context, call SessionAgentCa
 	cont.Attachments = nil
 	slog.Info("The goal is open; continuing", "session_id", call.SessionID, "goal", next.Name, "do", turn.Do, "continuation", cont.goalChecks)
 	return cont, true
+}
+
+// closedGoalContinuation judges each goal the session closed as done in the
+// turn, as a main agent's turn would end: every goal is judged before it
+// counts as done (Jae, 2026-10-30), from its title, what mem shows of it
+// and the end of the conversation. except, the goal the session's /goal
+// binds, is judged against the user's condition instead. Met, the user is
+// told; the first found not met is reopened in mem, and the agent is sent
+// back to it, asked every stopHookReflectEvery continuations whether there
+// is a real reason to stop. A goal that cannot be checked or reopened stays
+// closed, and the user is told why. ok is false when every goal closed in
+// the turn holds.
+func (a *sessionAgent) closedGoalContinuation(ctx context.Context, call SessionAgentCall, except string) (SessionAgentCall, bool) {
+	client, err := a.goals.client()
+	if err != nil {
+		return SessionAgentCall{}, false
+	}
+	closed, err := client.ClosedGoals(ctx, a.goals.project, call.SessionID, call.goalsSince, except)
+	if err != nil {
+		slog.Warn("The goals the turn closed could not be read in mem", "session_id", call.SessionID, "error", err)
+		return SessionAgentCall{}, false
+	}
+	judged, _ := a.judgedGoals.Get(call.SessionID)
+	if judged == nil {
+		judged = map[string]int64{}
+		a.judgedGoals.Set(call.SessionID, judged)
+	}
+	for _, g := range closed {
+		if judged[g.Name] == g.Seq {
+			continue
+		}
+		judged[g.Name] = g.Seq
+		met, reason, err := a.checkGoal(ctx, call.SessionID, g.Title, g.Show)
+		if err != nil {
+			a.notifyGoal(call.SessionID, notify.TypeWarning, fmt.Sprintf("The goal `%s` could not be checked, so it stays closed unchecked: %s", g.Name, err))
+			continue
+		}
+		if met {
+			a.notifyGoal(call.SessionID, notify.TypeGoalMet, fmt.Sprintf("Goal met: %s (%s)", g.Title, compactReason(reason)))
+			continue
+		}
+		b := gnovm.GoalBinding{Condition: g.Title, Name: g.Name, Title: g.Title}
+		if err := client.GoalReopen(ctx, a.goals.project, b, reason); err != nil {
+			a.notifyGoal(call.SessionID, notify.TypeWarning, fmt.Sprintf("The goal `%s` was found not met, but could not be reopened in mem, so it stays closed: %s", g.Name, err))
+			continue
+		}
+		cont := call
+		cont.goalChecks = call.goalChecks + 1
+		cont.goalReflecting = cont.goalChecks%stopHookReflectEvery == 0
+		cont.judgedGoal = g.Name
+		cont.Prompt = goalNotMetPrompt(b, reason)
+		if cont.goalReflecting {
+			cont.Prompt += "\n\n" + gnovm.GoalCheckpoint(b, cont.goalChecks, StopMarker)
+		}
+		// Generated, not typed, and the attachments went with the prompt.
+		cont.HiddenUserMessage = true
+		cont.Attachments = nil
+		slog.Info("A goal the turn closed was found not met; continuing", "session_id", call.SessionID, "goal", g.Name, "continuation", cont.goalChecks)
+		return cont, true
+	}
+	return SessionAgentCall{}, false
 }
 
 // notifyGoal tells the user, in session sessionID, how the goal stands.
