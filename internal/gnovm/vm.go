@@ -431,21 +431,8 @@ func execContext(seq int64, t time.Time) stdlibs.ExecContext {
 }
 
 // renderValues renders evaluated values by their structure only: no user
-// String or Error method runs. A string is quoted, so "1" and 1 differ;
-// but a lone string of several lines is shown as it is, since quoted it is
-// one long line of \n (mem.Show()).
+// String or Error method runs. A string is quoted, so "1" and 1 differ.
 func renderValues(tvs []gno.TypedValue) string {
-	if len(tvs) == 1 {
-		tv := tvs[0]
-		if hiv, ok := tv.V.(*gno.HeapItemValue); ok {
-			tv = hiv.Value
-		}
-		if tv.T != nil && tv.T.Kind() == gno.StringKind {
-			if s := tv.GetString(); strings.Contains(s, "\n") && len(s) <= maxValue {
-				return strings.TrimRight(s, "\n")
-			}
-		}
-	}
 	parts := make([]string, 0, len(tvs))
 	for _, tv := range tvs {
 		parts = append(parts, renderValue(tv))

@@ -10,6 +10,7 @@
 package gnovm
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -90,4 +91,31 @@ sink = fmt.Sprint(0)`) // the first use of fmt imports it
 	one := run(t, h, "", `sink = fmt.Sprint(1)`).Gas
 	many := run(t, h, "", `sink = fmt.Sprint(xs)`).Gas
 	require.GreaterOrEqual(t, many-one, int64(100*fmtElemGas))
+}
+
+// Go's fmt uses a String or Error method only for %v, %s, %q, %x and %X;
+// %p would print an address, which differs on every rebuild.
+func TestFmtMethodsAndAddresses(t *testing.T) {
+	t.Parallel()
+	h := newTestHost(t, t.TempDir())
+	require.Equal(t, `"3 March March time.Month"`, run(t, h, "", `fmt.Sprintf("%d %v %s %T", time.March, time.March, time.March, time.March)`).Value)
+	require.Contains(t, runErr(t, h, "", `fmt.Sprintf("%p", []int{1})`).Err.Error(), "%p prints an address")
+}
+
+// A print through a VM's own fmt is a call like any other: kept.
+func TestFmtOfTheVMIsNotTrusted(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h1 := newTestHost(t, dir)
+	persist := true
+	_, _, err := h1.New(context.Background(), NewRequest{Project: "/proj", Name: "log", Persist: &persist})
+	require.NoError(t, err)
+	run(t, h1, "log", `var lines []string
+type L struct{}
+func (L) Println(a ...any) { lines = append(lines, "x") }
+var fmt L`)
+	require.True(t, run(t, h1, "log", `fmt.Println("hi")`).Journaled)
+	require.NoError(t, h1.Close())
+	h2 := newTestHost(t, dir)
+	require.Equal(t, "1", run(t, h2, "log", `len(lines)`).Value)
 }

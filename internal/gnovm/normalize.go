@@ -121,6 +121,12 @@ type program struct {
 	// board (vm.isBoard), and that no builtin is redeclared.
 	readOnly []bool
 	reads    []string
+	// boardEval is set if the trailing eval reads a board: its value, the
+	// outline, is shown as it is rather than quoted.
+	boardEval bool
+	// usesFmt is set if a read-only op prints with fmt, which counts as a
+	// read only if the VM's fmt is the real package.
+	usesFmt bool
 	// assigned lists the names an assignment declared (see normalize).
 	assigned []string
 	// lhs holds every name a top-level = or := assigns.
@@ -626,6 +632,7 @@ func (p *program) readOnlyEval(expr string) bool {
 	}
 	if recv, ok := boardRead(x); ok {
 		p.reads = append(p.reads, recv)
+		p.boardEval = true
 		return true
 	}
 	return false
@@ -644,6 +651,9 @@ func (p *program) printsOnly(stmts string) bool {
 		es, ok := st.(*ast.ExprStmt)
 		if !ok || !printCall(es.X) {
 			return false
+		}
+		if _, isSel := es.X.(*ast.CallExpr).Fun.(*ast.SelectorExpr); isSel {
+			p.usesFmt = true
 		}
 		for _, a := range es.X.(*ast.CallExpr).Args {
 			switch a := a.(type) {

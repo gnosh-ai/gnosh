@@ -12,27 +12,33 @@
 // gives each project a persistent Gno machine named mem, whose variable mem
 // is a Board, so that the agent's work outlives its session:
 //
-//	mem.Add("release v2; done when CI is green", "bump the version", "update CHANGELOG", "tag v2.0.0")
+//	mem.Add("release v2", "bump the version", "tag v2.0.0", "CI is green")
 //	mem.Done(2, "now 2.0.0")
-//	mem.Note(3, "generating it from git log was too noisy")
+//	mem.Note(3, "the tag needs the release key")
 //	mem.Facts["deploy cmd"] = "make ship ENV=prod"
 //	mem.Show()
 //
 // An item is a goal, a step of one, or a question: a question's notes are
-// its findings, and its result is its answer. A condition is a step, since
-// an item cannot be done while a step of it is open. Items are plain data:
-// mem.Items[3].Title reads one, and other packages may build on them.
+// its findings, and its result is its answer. A condition is a step: an item
+// cannot be done while a step of it is open. Each change prints a line
+// saying what it did, with the ids it made and what is next.
 //
-// This is version 1, and it only ever grows. A persistent machine is
-// rebuilt by running its calls again against whatever version klash ships,
-// so a change to what a call does, or a new refusal, belongs in version 2.
+// A Board is plain data. Items[0] is the root, so ids are indexes and loops
+// run over Items[1:]. An item's Status is "" while it is open; anything else
+// closes it ("done" and "dropped" are this package's). Ids are never reused
+// or reordered. Other packages may build on these types, or replace them.
+//
+// This is version 1. A persistent machine is rebuilt by running its calls
+// again against the version klash ships, so a call here never changes what it
+// stores or the ids it returns, and never refuses what it once accepted; it
+// may store new fields, refuse less, and print and show things differently.
+// Anything else is version 2.
 package gnomem
 
 import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // A Board is an agent's working memory.
@@ -42,18 +48,17 @@ type Board struct {
 	Items []Item
 	// Facts are things to remember, by name.
 	Facts map[string]string
-	// Changed is when an item last changed.
-	Changed time.Time
 }
 
 // An Item is a goal, a step of one, or a question.
 type Item struct {
 	Title  string
 	Parent int
-	// Status is "" while the item is open, then "done" or "dropped".
+	// Status is "" while the item is open; "done", "dropped" or another
+	// word closes it.
 	Status string
 	// Result is what came of it: a summary, an answer, or why it was
-	// dropped.
+	// dropped. Steps dropped with their parent keep none.
 	Result string
 	// Notes are findings and attempts, oldest first.
 	Notes []string
@@ -64,6 +69,7 @@ const (
 	maxText   = 1000 // bytes kept of a result or a note
 	maxShow   = 3000 // about the most Show writes
 	maxClosed = 10   // closed top-level items Show lists
+	maxClosedSteps = 5 // closed steps Show lists under an open item
 	maxFacts  = 20   // facts Show lists
 	shownNote = 3    // notes Show gives the next item
 )
@@ -74,19 +80,30 @@ func New() *Board {
 }
 
 // Add adds a top-level item, and its steps if any are given, and returns
-// its id.
+// its id; the steps take the ids after it.
 func (b *Board) Add(title string, steps ...string) int {
 	id := b.add(0, title)
 	for _, s := range steps {
 		b.add(id, s)
 	}
+	receipt := "added " + b.ref(id)
+	if len(steps) > 0 {
+		var ids []int
+		for i := range steps {
+			ids = append(ids, id+1+i)
+		}
+		receipt += ": steps " + b.refs(ids)
+	}
+	println(receipt)
 	return id
 }
 
 // Step adds a step to item parent, which must be open, and returns its id.
 func (b *Board) Step(parent int, title string) int {
 	b.open(parent)
-	return b.add(parent, title)
+	id := b.add(parent, title)
+	println("added " + b.ref(id) + ", a step of " + b.ref(parent))
+	return id
 }
 
 func (b *Board) add(parent int, title string) int {
@@ -98,32 +115,34 @@ func (b *Board) add(parent int, title string) int {
 		b.Items = []Item{{Title: "(root)"}}
 	}
 	b.Items = append(b.Items, Item{Title: title, Parent: parent})
-	b.Changed = time.Now()
 	return len(b.Items) - 1
 }
 
-// Done closes item id with what came of it, and says what is next. It
-// refuses while a step of the item is open.
-func (b *Board) Done(id int, result string) string {
+// Done closes item id with what came of it. It refuses while a step of the
+// item is open.
+func (b *Board) Done(id int, result string) {
 	it := b.open(id)
 	if open := b.openSteps(id); len(open) > 0 {
 		panic("item " + b.ref(id) + " has open steps " + b.refs(open) + ": finish or drop them first")
 	}
 	it.Status = "done"
 	it.Result = clip(strings.TrimSpace(result), maxText)
-	b.Changed = time.Now()
-	return "done " + b.ref(id) + b.whatNext()
+	println("done " + b.ref(id) + b.whatNext())
 }
 
-// Drop closes item id, and its open steps, as not to be done, with why, and
-// says what is next.
-func (b *Board) Drop(id int, why string) string {
+// Drop closes item id as not to be done, with why. Its open steps are
+// dropped with it, keeping no reason of their own, and come back if it is
+// reopened.
+func (b *Board) Drop(id int, why string) {
 	it := b.open(id)
+	why = clip(strings.TrimSpace(why), maxText)
+	if why == "" {
+		panic("say why: Drop(" + strconv.Itoa(id) + ", \"why\")")
+	}
 	b.dropSteps(id)
 	it.Status = "dropped"
-	it.Result = clip(strings.TrimSpace(why), maxText)
-	b.Changed = time.Now()
-	return "dropped " + b.ref(id) + b.whatNext()
+	it.Result = why
+	println("dropped " + b.ref(id) + b.whatNext())
 }
 
 func (b *Board) dropSteps(id int) {
@@ -135,22 +154,38 @@ func (b *Board) dropSteps(id int) {
 	}
 }
 
-// Reopen opens a closed item again, with the items it belongs to. What came
-// of each when it closed becomes a note.
-func (b *Board) Reopen(id int) string {
+// Reopen opens a closed item again, with the items it belongs to, and the
+// steps dropped along with any of them. What came of each when it closed
+// becomes a note.
+func (b *Board) Reopen(id int) {
 	b.item(id)
 	for i := id; i != 0; i = b.Items[i].Parent {
-		it := &b.Items[i]
-		if it.Status != "" {
-			it.Notes = append(it.Notes, "was "+it.Status+": "+it.Result)
-			it.Status, it.Result = "", ""
-		}
+		b.reopen(i)
 	}
-	b.Changed = time.Now()
-	return "reopened " + b.ref(id)
+	println("reopened " + b.ref(id) + b.whatNext())
 }
 
-// Note records a finding or an attempt on item id.
+func (b *Board) reopen(i int) {
+	it := &b.Items[i]
+	if it.Status == "" {
+		return
+	}
+	dropped := it.Status == "dropped"
+	if it.Result != "" {
+		it.Notes = append(it.Notes, "was "+it.Status+": "+it.Result)
+	}
+	it.Status, it.Result = "", ""
+	if !dropped {
+		return
+	}
+	for k := 1; k < len(b.Items); k++ {
+		if s := b.Items[k]; s.Parent == i && s.Status == "dropped" && s.Result == "" {
+			b.reopen(k)
+		}
+	}
+}
+
+// Note records a finding or an attempt on item id, open or closed.
 func (b *Board) Note(id int, text string) {
 	it := b.item(id)
 	text = clip(strings.TrimSpace(text), maxText)
@@ -158,7 +193,6 @@ func (b *Board) Note(id int, text string) {
 		panic("a note needs text")
 	}
 	it.Notes = append(it.Notes, text)
-	b.Changed = time.Now()
 }
 
 func (b *Board) item(id int) *Item {
@@ -255,45 +289,61 @@ func (b *Board) refs(ids []int) string {
 func (b *Board) String() string { return b.Show() }
 
 // Show returns the board as an outline, or, given ids, those items in full.
-// The outline gives each open item and its steps; each closed item on one
-// line (the newest few at the top level); the next item to work on, marked,
-// with its latest notes; and the facts. It stays short: about 3000 bytes at
-// most.
+// The outline starts with a line of counts and the next item to work on,
+// then the facts, then each open item with its steps and each closed item
+// on one line (the newest few at the top level); the next item is marked,
+// with its latest notes. It stays short: about 3000 bytes at most.
 func (b *Board) Show(ids ...int) string {
 	var sb strings.Builder
 	if len(ids) > 0 {
 		for _, id := range ids {
 			b.showItem(&sb, id)
 		}
-		return sb.String()
-	}
-	kids := b.children()
-	next := b.next(kids)
-	open, done, dropped := 0, 0, 0
-	for i := 1; i < len(b.Items); i++ {
-		switch b.Items[i].Status {
-		case "":
-			open++
-		case "done":
-			done++
-		default:
-			dropped++
-		}
+		return cut(sb.String())
 	}
 	if len(b.Items) <= 1 && len(b.Facts) == 0 {
 		return "the board is empty: Add(title, steps...) starts a checklist, and Facts[name] = value keeps a fact\n"
 	}
-	sb.WriteString("board: " + strconv.Itoa(open) + " open, " + strconv.Itoa(done) + " done")
-	if dropped > 0 {
-		sb.WriteString(", " + strconv.Itoa(dropped) + " dropped")
+	kids := b.children()
+	next := b.next(kids)
+	counts := map[string]int{}
+	var words []string
+	for i := 1; i < len(b.Items); i++ {
+		w := b.Items[i].Status
+		if w == "" {
+			w = "open"
+		}
+		if counts[w] == 0 && w != "open" && w != "done" && w != "dropped" {
+			words = append(words, w)
+		}
+		counts[w]++
+	}
+	sb.WriteString("board: " + strconv.Itoa(counts["open"]) + " open, " + strconv.Itoa(counts["done"]) + " done")
+	for _, w := range append([]string{"dropped"}, words...) {
+		if counts[w] > 0 {
+			sb.WriteString(", " + strconv.Itoa(counts[w]) + " " + w)
+		}
 	}
 	if next != 0 {
 		sb.WriteString(" · next: " + b.ref(next))
 	}
-	if !b.Changed.IsZero() {
-		sb.WriteString(" · changed " + b.Changed.UTC().Format("2006-01-02 15:04") + " UTC")
-	}
 	sb.WriteString("\n")
+
+	if len(b.Facts) > 0 {
+		keys := make([]string, 0, len(b.Facts))
+		for k := range b.Facts {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		sb.WriteString("facts:\n")
+		for i, k := range keys {
+			if i == maxFacts {
+				sb.WriteString("  … " + strconv.Itoa(len(keys)-maxFacts) + " more\n")
+				break
+			}
+			sb.WriteString("  " + line(k) + " = " + line(b.Facts[k]) + "\n")
+		}
+	}
 
 	// The newest closed top-level items are listed; older ones counted.
 	var closed []int
@@ -314,22 +364,6 @@ func (b *Board) Show(ids ...int) string {
 			b.outline(&sb, k, 0, next, kids)
 		}
 	}
-
-	if len(b.Facts) > 0 {
-		keys := make([]string, 0, len(b.Facts))
-		for k := range b.Facts {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		sb.WriteString("facts:\n")
-		for i, k := range keys {
-			if i == maxFacts {
-				sb.WriteString("  … " + strconv.Itoa(len(keys)-maxFacts) + " more\n")
-				break
-			}
-			sb.WriteString("  " + line(k) + " = " + line(b.Facts[k]) + "\n")
-		}
-	}
 	return cut(sb.String())
 }
 
@@ -338,18 +372,19 @@ func (b *Board) outline(sb *strings.Builder, id, depth, next int, kids map[int][
 	indent := strings.Repeat("  ", depth)
 	sb.WriteString(indent + mark(it.Status) + " " + strconv.Itoa(id) + " " + line(it.Title))
 	switch it.Status {
+	case "":
 	case "done":
 		if it.Result != "" {
 			sb.WriteString(" → " + line(it.Result))
 		}
-	case "dropped":
-		sb.WriteString(" · dropped")
+	default:
+		sb.WriteString(" · " + it.Status)
 		if it.Result != "" {
 			sb.WriteString(": " + line(it.Result))
 		}
 	}
 	var counts []string
-	if n := len(it.Notes); n > 0 && (it.Status != "" || id != next) {
+	if n := len(it.Notes); n > 0 && id != next {
 		counts = append(counts, plural(n, "note"))
 	}
 	if it.Status != "" && len(kids[id]) > 0 {
@@ -375,8 +410,23 @@ func (b *Board) outline(sb *strings.Builder, id, depth, next int, kids map[int][
 	if it.Status != "" {
 		return // a closed item's steps are in Show(id)
 	}
+	var closed []int
 	for _, k := range kids[id] {
-		b.outline(sb, k, depth+1, next, kids)
+		if b.Items[k].Status != "" {
+			closed = append(closed, k)
+		}
+	}
+	hidden := map[int]bool{}
+	if len(closed) > maxClosedSteps {
+		for _, k := range closed[:len(closed)-maxClosedSteps] {
+			hidden[k] = true
+		}
+		sb.WriteString(indent + "  … " + plural(len(closed)-maxClosedSteps, "earlier closed step") + "\n")
+	}
+	for _, k := range kids[id] {
+		if !hidden[k] {
+			b.outline(sb, k, depth+1, next, kids)
+		}
 	}
 }
 
@@ -391,8 +441,11 @@ func (b *Board) showItem(sb *strings.Builder, id int) {
 		sb.WriteString(" (a step of " + b.ref(it.Parent) + ")")
 	}
 	sb.WriteString("\n")
-	if it.Status != "" {
+	switch {
+	case it.Status != "" && it.Result != "":
 		sb.WriteString("  " + it.Status + ": " + line(it.Result) + "\n")
+	case it.Status != "":
+		sb.WriteString("  " + it.Status + "\n")
 	}
 	for i, n := range it.Notes {
 		sb.WriteString("  note " + strconv.Itoa(i+1) + ": " + line(n) + "\n")
@@ -404,12 +457,12 @@ func (b *Board) showItem(sb *strings.Builder, id int) {
 
 func mark(status string) string {
 	switch status {
+	case "":
+		return "[ ]"
 	case "done":
 		return "[x]"
-	case "dropped":
-		return "[-]"
 	}
-	return "[ ]"
+	return "[-]"
 }
 
 func plural(n int, what string) string {

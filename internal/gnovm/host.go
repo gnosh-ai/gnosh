@@ -15,7 +15,6 @@ package gnovm
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -23,6 +22,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/token"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -739,12 +740,8 @@ func (h *Host) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	}
 	var notes []string
 	if name == MemVM {
-		made, err := h.ensureMem(ctx, project)
-		if err != nil {
+		if err := h.ensureMem(project); err != nil {
 			return nil, err
-		}
-		if made {
-			notes = append(notes, "made VM mem, your board (persistent): mem.Show() shows it")
 		}
 	}
 
@@ -777,49 +774,24 @@ func (h *Host) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	return h.runIn(ctx, s, req, notes)
 }
 
-// ensureMem makes a project's mem VM if it has none, and reports whether it
-// did. Its first entry declares the board, so it replays like any other.
-// Two klash processes may race to make it: the loser uses the winner's, and
-// its own copy of the first entry is refused as a redeclaration.
-func (h *Host) ensureMem(ctx context.Context, project string) (bool, error) {
+// ensureMem makes a project's mem VM if it has none. Its first use declares
+// the board (see runIn), under the VM's lock, so two klash processes racing
+// to make it end with one board.
+func (h *Host) ensureMem(project string) error {
 	s, err := h.lookup(project, MemVM)
-	if err != nil {
-		return false, err
+	if err != nil || s != nil {
+		return err
 	}
-	made := false
-	if s == nil {
-		opts := h.defaultOptions()
-		opts.Persist = true
-		opts.Description = "your board: goals, steps, findings and facts (" + boardPkg + ")"
-		if s, err = h.create(project, MemVM, opts); err != nil {
-			var ref *refusal
-			if !errors.As(err, &ref) {
-				return false, err
-			}
-			if s, err = h.lookup(project, MemVM); err != nil || s == nil {
-				return false, cmp.Or(err, error(ref))
-			}
-		} else {
-			made = true
+	opts := h.defaultOptions()
+	opts.Persist = true
+	opts.Description = "your board: goals, steps, findings and facts (" + boardPkg + ")"
+	if _, err = h.create(project, MemVM, opts); err != nil {
+		var ref *refusal
+		if errors.As(err, &ref) {
+			return nil // another klash made it just now
 		}
 	}
-	if s.j != nil && s.j.seq > 0 {
-		return made, nil
-	}
-	res, err := h.runIn(ctx, s, RunRequest{Name: MemVM, Code: memPrelude, Req: memPreludeReq}, nil)
-	if err != nil && strings.Contains(err.Error(), "already declared") {
-		return made, nil
-	}
-	if err == nil && res.Err != nil {
-		err = res.Err
-	}
-	if err != nil {
-		if made {
-			_ = h.deleteVM(s)
-		}
-		return false, fmt.Errorf("making VM mem: %w", err)
-	}
-	return made, nil
+	return err
 }
 
 // runIn runs a call in an existing VM, under its lock.
@@ -850,6 +822,28 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 		return nil, err
 	}
 	h.touch(s)
+	if s.name == MemVM {
+		if s.j.seq == 0 {
+			// The board's first use declares it, in an entry of its own.
+			pre, err := h.runResident(ctx, s, v, RunRequest{Name: MemVM, Code: memPrelude, Req: memPreludeReq}, nil, gas, wall)
+			if err == nil && pre.Err != nil {
+				err = pre.Err
+			}
+			if err != nil {
+				return nil, fmt.Errorf("making the board in VM mem: %w", err)
+			}
+			notes = append(notes, "made VM mem, your board (persistent): mem.Show() shows it")
+		}
+		if !v.isBoard(MemVM) {
+			return nil, &refusal{"VM mem predates the board: its mem is not a " + boardPkg + " Board. Copy what you need from it into another VM, then delete it with gnovm_drop; the board is made again on its next use"}
+		}
+	}
+	return h.runResident(ctx, s, v, req, notes, gas, wall)
+}
+
+// runResident runs a call in a resident VM, under its lock: normalised,
+// run, and, unless it only read, journaled.
+func (h *Host) runResident(ctx context.Context, s *vmState, v *vm, req RunRequest, notes []string, gas int64, wall time.Duration) (*RunResult, error) {
 	prog, err := normalize(req.Code, s.j.seq+1, v.names(), nil)
 	if err != nil {
 		return nil, err
@@ -858,6 +852,11 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 		if prog, err = normalize(req.Code, s.j.seq+1, v.names(), elsewhere); err != nil {
 			return nil, err
 		}
+	}
+	// A board on its own shows as its outline, not as a dump of its fields.
+	if n := len(prog.ops); n > 0 && token.IsIdentifier(prog.ops[n-1].Eval) && v.isBoard(prog.ops[n-1].Eval) {
+		prog.ops[n-1].Eval += ".Show()"
+		prog.boardEval = true
 	}
 	ops, imported, err := h.importOps(v, prog)
 	if err != nil {
@@ -880,6 +879,23 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 	res.Wall = time.Since(start)
 	res.Gas, res.Value, res.Output = used, value, v.out.String()
 	res.MemUsed, res.MemCap = v.memory()
+	if prog.boardEval && readOnly != nil {
+		// A board's outline is shown as it is, not as a quoted string.
+		if raw, err := strconv.Unquote(value); err == nil {
+			res.Value = strings.TrimRight(raw, "\n")
+		}
+	}
+	if runErr == nil && s.name == MemVM && req.Req != memPreludeReq && len(journaledOps(ops, readOnly)) > 0 {
+		check := &entry{Seq: e.Seq, Time: e.Time, Ops: []op{{Eval: MemVM + " == nil"}}}
+		isNil, _, err := v.apply(ctx, check, 50_000_000, time.Now().Add(5*time.Second), true)
+		if err != nil {
+			slog.Debug("gnovm: checking the board", "err", err)
+		}
+		if isNil == "true" {
+			s.res = nil
+			runErr = errors.New("mem is your board, and this call set it to nil, so nothing from it was kept")
+		}
+	}
 	if runErr != nil {
 		// Nothing is journaled, and a VM that ran code is rebuilt.
 		if v.unusable {
@@ -1048,6 +1064,11 @@ func readOnlyOps(v *vm, prog *program, n int) []bool {
 	if v.shadowsBuiltin() {
 		return nil
 	}
+	// fmt is an ordinary name: a VM's own fmt, with a Println that changes
+	// state, is not the package.
+	if prog.usesFmt && v.imports["fmt"] != "fmt" {
+		return nil
+	}
 	for _, name := range prog.reads {
 		if !v.isBoard(name) {
 			return nil
@@ -1165,7 +1186,10 @@ func (h *Host) New(ctx context.Context, req NewRequest) (VMInfo, bool, error) {
 	}
 	project := projectKey(req.Project)
 	if req.Name == MemVM {
-		if _, err := h.ensureMem(ctx, project); err != nil {
+		if req.Persist != nil && !*req.Persist {
+			return VMInfo{}, false, &refusal{"VM mem, your board, is always persistent"}
+		}
+		if err := h.ensureMem(project); err != nil {
 			return VMInfo{}, false, err
 		}
 	}

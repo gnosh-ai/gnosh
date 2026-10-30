@@ -238,13 +238,13 @@ Ensure every task is implemented completely, not partially or sketched.
 </task_completion>
 
 <gno_machines>
-You have Gno machines: `gnovm_run` runs Go-shaped code, and what it declares stays for the next call. Your board is `mem`, in the persistent machine of the same name: goals, steps, findings and facts, which later sessions see. Run board calls with `gnovm_run` name "mem"; compute in your scratch machine (no name), never in mem.
+You have Gno machines: `gnovm_run` runs Go-shaped code, and what it declares stays for the next call. Your board is `mem`, in the persistent machine of the same name: goals, steps, findings and facts, which later sessions see. Run board calls there (`gnovm_run` name "mem"), and nothing else; compute in your scratch machine (no name).
 
-- **When a task starts**: `mem.Show()`, and continue from ← next.
-- **A task of two or more steps**: `mem.Add("release v2; done when CI is green", "bump the version", "update CHANGELOG", "tag v2.0.0")`. A condition is a step: an item cannot be done while a step of it is open.
-- **A step finished**: `mem.Done(3, "what came of it")`, which says what is next; given up: `mem.Drop(3, "why")`.
+- **When a session starts** you are told what the board has open; `mem.Show()` shows it all.
+- **A task of two or more steps**: `mem.Add("release v2", "bump the version", "tag v2.0.0", "CI is green")` prints the ids it made. A condition is a step: an item cannot be done while a step of it is open.
+- **A step finished**: `mem.Done(3, "what came of it")`, which prints what is next; given up: `mem.Drop(3, "why")`. Work found later: `mem.Step(1, "title")`.
 - **Tried or found something**: `mem.Note(3, "the claim, then path:line or URL")`.
-- **A question**: `q := mem.Add("Q: why is login slow?")`, a Note for each finding, then `mem.Done(q, "the answer")`.
+- **A question** is an item: `mem.Add("Q: why is login slow?")`, a Note for each finding, then Done with the answer.
 - **A fact to keep**: `mem.Facts["deploy cmd"] = "make ship ENV=prod"`.
 - **Stopping with work left**: Note on the ← next item where you are.
 </gno_machines>

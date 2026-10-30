@@ -11,15 +11,16 @@ Each project gets a persistent machine named `mem`, whose variable `mem` is
 the agent's board ([klash/gnomem/v1](internal/gnovm/klashlibs/klash/gnomem/v1/gnomem.gno)):
 
 ```
-gnovm_run {"name": "mem", "code": "mem.Add(\"release v2; done when CI is green\", \"bump the version\", \"update CHANGELOG\", \"tag v2.0.0\")"}
+gnovm_run {"name": "mem", "code": "mem.Add(\"release v2\", \"bump the version\", \"tag v2.0.0\", \"CI is green\")"}
+  added 1 "release v2": steps 2 "bump the version", 3 "tag v2.0.0", 4 "CI is green"
 gnovm_run {"name": "mem", "code": "mem.Done(2, \"now 2.0.0\")"}
-  done 2 "bump the version"; next: 3 "update CHANGELOG"
+  done 2 "bump the version"; next: 3 "tag v2.0.0"
 gnovm_run {"name": "mem", "code": "mem.Show()"}
-  board: 3 open, 1 done · next: 3 "update CHANGELOG" · changed 2026-10-30 01:12 UTC
-  [ ] 1 release v2; done when CI is green
+  board: 3 open, 1 done · next: 3 "tag v2.0.0"
+  [ ] 1 release v2
     [x] 2 bump the version → now 2.0.0
-    [ ] 3 update CHANGELOG  ← next
-    [ ] 4 tag v2.0.0
+    [ ] 3 tag v2.0.0  ← next
+    [ ] 4 CI is green
 ```
 
 ## Why this matters
@@ -27,7 +28,7 @@ gnovm_run {"name": "mem", "code": "mem.Show()"}
 - **Models forget.** Each session starts empty, and a compaction throws away
   most of what came before. Notes in a Markdown file are prose that the next
   session has to find, read and interpret. A machine answers questions:
-  `Show()`, `Recall("staging db")`.
+  `mem.Show()`.
 - **Exact, not estimated.** The model runs a computation instead of guessing
   at its result. The sum of the first 1000 primes takes 45 ms in a machine.
 - **Safe by construction.** A machine has no files, no network and no
@@ -89,47 +90,49 @@ Klash's system prompt carries a short recipe, so the model needs no setup:
 ## The board, as a foundation
 
 `klash/gnomem/v1` is deliberately small: two plain-data types and seven
-calls. Three independent reviews (minimalism, how a 27B model would use it,
-durability) shaped it.
+calls. Two rounds of independent review (minimalism, how a 27B model would use
+it, durability; then simplicity and an adversarial bug hunt) shaped it.
 
 ```go
 type Board struct {
-	Items   []Item            // by id; Items[0] is the root
-	Facts   map[string]string
-	Changed time.Time
+	Items []Item            // by id; Items[0] is the root, so loop over Items[1:]
+	Facts map[string]string
 }
 
 type Item struct {
 	Title  string
 	Parent int
-	Status string   // "" open, "done", "dropped"
+	Status string   // "" while open; "done", "dropped" or another word closes it
 	Result string   // a summary, an answer, or why it was dropped
 	Notes  []string // findings and attempts, oldest first
 }
 
 func New() *Board
-func (b *Board) Add(title string, steps ...string) int
+func (b *Board) Add(title string, steps ...string) int // prints the ids it made
 func (b *Board) Step(parent int, title string) int
-func (b *Board) Done(id int, result string) string // refuses while a step is open
-func (b *Board) Drop(id int, why string) string    // drops its open steps too
-func (b *Board) Reopen(id int) string
+func (b *Board) Done(id int, result string) // refuses while a step is open; prints what is next
+func (b *Board) Drop(id int, why string)    // drops its open steps too
+func (b *Board) Reopen(id int)              // and the steps dropped with it
 func (b *Board) Note(id int, text string)
-func (b *Board) Show(ids ...int) string            // the outline, or items in full
+func (b *Board) Show(ids ...int) string     // the outline, or items in full
 ```
 
 - **Plain data.** `mem.Items[3].Title` and `mem.Facts["k"]` read directly.
   Another package can build on the same items, or replace them: the board is
   only the starting point.
-- **It only ever grows.** A persistent machine is rebuilt by running its calls
-  again, so what a call does may never change; a frozen test replays a fixed
-  board against golden files, and a change that breaks it belongs in
-  `klash/gnomem/v2`.
-- **Reading costs nothing to keep.** `mem.Show()` and `println(mem)` are
-  recognised as reads, once the machine confirms `mem` is a board, and are
-  not journaled: reading the board never wears out its journal.
-- **Short by construction.** Show's outline stays under about 3000 bytes:
-  closed items take one line each, older ones are counted, and the next item
-  is named in the header line.
+- **What a call stores never changes.** A persistent machine is rebuilt by
+  running its calls again, so a call never changes what it stores or the ids
+  it returns, and never refuses what it once accepted; it may store new
+  fields, refuse less, and print or show things differently. A frozen test
+  replays a fixed board against a field-by-field dump that is never
+  rewritten; anything that breaks it is `klash/gnomem/v2`.
+- **Reading costs nothing to keep.** `mem.Show()`, `mem` on its own and
+  `println(mem)` are recognised as reads, once the machine confirms `mem` is a
+  board, and are not journaled: reading the board never wears out its
+  journal.
+- **Short by construction.** Show's outline stays under about 3000 bytes: the
+  header names the next item, facts come next, closed items take one line
+  each, and older ones, top-level or steps, are counted.
 - **The harness's goals stay separate.** Planned harness-tracked goals keep
   their own machine and their own checks, evaluated in Go, so nothing the
   model writes on its board is taken as proof that a goal is met.

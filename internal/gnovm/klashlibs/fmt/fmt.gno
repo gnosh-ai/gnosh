@@ -29,21 +29,30 @@ type Stringer interface {
 }
 
 // operands applies the Error and String methods that Go's fmt calls: the
-// native formatter cannot call methods written in Gno. A method that panics
-// formats as <nil>, as Go's does for a nil receiver.
+// native formatter cannot call methods written in Gno. Each such operand
+// goes as a byMethod, its method's text with the value itself, since Go
+// uses the text only for %v, %s, %q, %x and %X (%d of a time.Month is 3).
+// A method that panics gives <nil>, as Go's does for a nil receiver.
 func operands(a []any) []any {
 	out := make([]any, len(a))
 	for i, x := range a {
 		switch v := x.(type) {
 		case error:
-			out[i] = method(v.Error)
+			out[i] = byMethod{S: method(v.Error), V: x}
 		case Stringer:
-			out[i] = method(v.String)
+			out[i] = byMethod{S: method(v.String), V: x}
 		default:
 			out[i] = x
 		}
 	}
 	return out
+}
+
+// byMethod is an operand with an Error or String method: S is the text it
+// gave, V the operand.
+type byMethod struct {
+	S string
+	V any
 }
 
 func method(f func() string) (s string) {

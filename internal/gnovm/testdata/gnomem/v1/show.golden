@@ -1,12 +1,11 @@
-board: 4 open, 2 done, 1 dropped · next: 3 "parse" · changed 2027-01-15 08:00 UTC
-[ ] 1 goal: ship the parser; done when go test passes
-  [x] 2 lex → a hand-written lexer
-  [ ] 3 parse  ← next
-      · Pratt parsing for expressions
-      · line one ⏎ line two
-  [ ] 4 go test ./... passes
-  [ ] 5 error messages
-[x] 6 Q: which license? → MIT (1 note)
-[-] 7 long title long title long title long title long title long title long title long title long title long title long title long title long title long title long title long title long title long title lo… · dropped: really not needed (1 note)
+board: 2 open, 5 done, 1 blocked · next: 1 "goal: ship the parser"
 facts:
+  a = 1
   go version = 1.22
+[ ] 1 goal: ship the parser  ← next
+    · was dropped: not this release
+  [x] 2 lex → a hand-written lexer
+  [x] 3 parse → parser done (2 notes, 2 steps)
+  [-] 4 go test ./... passes · blocked
+[x] 7 Q: which license? → MIT (2 notes)
+[ ] 8 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx… (1 note)

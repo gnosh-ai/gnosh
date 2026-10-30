@@ -10,6 +10,7 @@
 package gnovm
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -158,6 +159,9 @@ func goOperand(store gno.Store, tv gno.TypedValue, budget *fmtBudget) any {
 	if tv.T == nil {
 		return nil
 	}
+	if text, value, ok := byMethod(tv); ok {
+		return &methodArg{text: text, value: goOperand(store, value, budget)}
+	}
 	switch tv.T.Kind() {
 	case gno.BoolKind:
 		return tv.GetBool()
@@ -199,6 +203,37 @@ func goOperand(store gno.Store, tv gno.TypedValue, budget *fmtBudget) any {
 		}
 	}
 	return &gnoValue{store: store, tv: tv, budget: budget}
+}
+
+// byMethod unwraps klashlibs/fmt's byMethod: the text a String or Error
+// method gave, and the operand.
+func byMethod(tv gno.TypedValue) (string, gno.TypedValue, bool) {
+	dt, ok := tv.T.(*gno.DeclaredType)
+	if !ok || dt.PkgPath != "fmt" || dt.Name != "byMethod" {
+		return "", gno.TypedValue{}, false
+	}
+	sv, ok := tv.V.(*gno.StructValue)
+	if !ok || len(sv.Fields) != 2 {
+		return "", gno.TypedValue{}, false
+	}
+	return sv.Fields[0].GetString(), sv.Fields[1], true
+}
+
+// methodArg formats as Go's fmt formats a value with a String or Error
+// method: the method's text for %v, %s, %q, %x and %X, and the value
+// itself for any other verb.
+type methodArg struct {
+	text  string
+	value any
+}
+
+func (a *methodArg) Format(st fmt.State, verb rune) {
+	switch verb {
+	case 'v', 's', 'q', 'x', 'X':
+		fmt.Fprintf(st, directive(st, verb), a.text)
+	default:
+		fmt.Fprintf(st, directive(st, verb), a.value)
+	}
 }
 
 func elemType(t gno.Type) gno.Type {
@@ -461,11 +496,18 @@ directives:
 			case c == '%':
 				continue directives
 			case c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z':
-				if c == 'T' && arg >= 0 && arg < len(args) {
+				switch {
+				case c == 'p':
+					return "", errors.New("fmt: %p prints an address, which is different each time a VM is rebuilt; use %v")
+				case c == 'T' && arg >= 0 && arg < len(args):
 					f[i] = 's'
 					args[arg] = "<nil>"
-					if t := tvs[arg].T; t != nil {
-						args[arg] = t.String()
+					tv := tvs[arg]
+					if _, value, ok := byMethod(tv); ok {
+						tv = value
+					}
+					if tv.T != nil {
+						args[arg] = tv.T.String()
 					}
 				}
 				arg++
