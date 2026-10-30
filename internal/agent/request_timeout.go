@@ -90,25 +90,36 @@ func (m requestTimeoutModel) firstTokenTimeout() time.Duration {
 	return m.timeout * firstTokenTimeoutFactor
 }
 
-// wrapTimedOut replaces err with the requestTimeoutError that fired this
-// model's own timer. Other errors — user cancellation, outer deadlines,
-// provider failures — pass through unchanged. Cancellation errors caused by
-// our own timer report as [context.DeadlineExceeded] so callers never
-// mistake a timeout for a user cancellation.
+// wrapTimedOut replaces err with a [requestTimeoutError] reporting the timer
+// that fired on this model's context. Other errors — user cancellation,
+// outer deadlines, provider failures — pass through unchanged. Cancellation
+// errors caused by our own timer report as [context.DeadlineExceeded] so
+// callers never mistake a timeout for a user cancellation.
+//
+// Every call returns a new error instead of filling in the cause of the one
+// held by the context. A stream runs every part it yields through here, so
+// that single held error came back in as err on the next part and was
+// recorded as its own cause; errors.Is then followed Unwrap round that loop
+// forever, which wedged a session for two hours at 100% of a core. A fresh
+// error per call cannot close a loop, and an error already reporting this
+// timeout is passed through rather than wrapped a second time.
 func wrapTimedOut(ctx context.Context, err error) error {
 	if err == nil {
 		return err
 	}
-	var timeoutErr *requestTimeoutError
-	if !errors.As(context.Cause(ctx), &timeoutErr) {
+	var fired *requestTimeoutError
+	if !errors.As(context.Cause(ctx), &fired) {
 		return err
 	}
-	if errors.Is(err, context.Canceled) {
-		timeoutErr.cause = context.DeadlineExceeded
-	} else {
-		timeoutErr.cause = err
+	var already *requestTimeoutError
+	if errors.As(err, &already) {
+		return err
 	}
-	return timeoutErr
+	cause := err
+	if errors.Is(err, context.Canceled) {
+		cause = context.DeadlineExceeded
+	}
+	return &requestTimeoutError{timeout: fired.timeout, idle: fired.idle, cause: cause}
 }
 
 // Generate implements [fantasy.LanguageModel]. The request gets a hard

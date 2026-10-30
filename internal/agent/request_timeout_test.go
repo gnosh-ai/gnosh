@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"testing"
 	"time"
@@ -340,4 +341,127 @@ func TestRequestTimeoutModel_FirstTokenTimeoutReportsItsBudget(t *testing.T) {
 	require.ErrorIs(t, got, context.DeadlineExceeded)
 	require.Equal(t, 10*time.Millisecond*firstTokenTimeoutFactor, timeoutErr.timeout,
 		"a timeout before the first part must report the time-to-first-token budget, not the idle timeout")
+}
+
+// unwrapDepth walks err to the end of its Unwrap chain, giving up after cap
+// links. It reports the number of links walked, so a chain that loops is a
+// number the caller can fail on instead of a test that never returns.
+func unwrapDepth(err error, cap int) int {
+	n := 0
+	for err != nil && n < cap {
+		u, ok := err.(interface{ Unwrap() error })
+		if !ok {
+			break
+		}
+		err = u.Unwrap()
+		n++
+	}
+	return n
+}
+
+// TestWrapTimedOutCannotPointAtItself pins the bug that wedged a live
+// session for two hours at 100% of a core on 2026-10-30. wrapTimedOut used
+// to fill in the cause of the single *requestTimeoutError held as the
+// context cause and hand that same error back. Anything that ran an
+// already-wrapped error through it a second time — a stream yielding another
+// error part, a retry re-reporting the one it got — then recorded that error
+// as its own cause, and errors.Is followed Unwrap round the loop forever.
+func TestWrapTimedOutCannotPointAtItself(t *testing.T) {
+	t.Parallel()
+
+	fired := &requestTimeoutError{timeout: time.Second, idle: true}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(fired)
+	defer cancel(nil)
+
+	first := wrapTimedOut(ctx, errors.New("connection reset by peer"))
+	second := wrapTimedOut(ctx, first)
+
+	require.Less(t, unwrapDepth(second, 100), 100,
+		"the error chain does not terminate: it points back at itself")
+
+	// The symptom the lane actually died of: a routine question about the
+	// error never came back. Asked on another goroutine so a regression
+	// fails the test instead of hanging the suite.
+	answered := make(chan bool, 1)
+	go func() { answered <- errors.Is(second, context.Canceled) }()
+	select {
+	case got := <-answered:
+		require.False(t, got, "a timeout must not report as a user cancellation")
+	case <-time.After(10 * time.Second):
+		t.Fatal("errors.Is never returned: the Unwrap chain loops")
+	}
+}
+
+// TestWrapTimedOutNeverReturnsTheHeldError states the invariant that keeps
+// the loop above impossible: the error handed back is never the one the
+// context holds, so nothing a caller does with it can reach that object and
+// make it its own ancestor.
+func TestWrapTimedOutNeverReturnsTheHeldError(t *testing.T) {
+	t.Parallel()
+
+	fired := &requestTimeoutError{timeout: time.Second, idle: true}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(fired)
+	defer cancel(nil)
+
+	got := wrapTimedOut(ctx, errors.New("boom"))
+	require.NotSame(t, fired, got, "wrapTimedOut must not hand back the error the context holds")
+	require.Nil(t, fired.cause, "wrapTimedOut must not write to the error the context holds")
+}
+
+// TestWrapTimedOutReportsTheBudgetThatFired checks the fresh error still
+// describes the timer that actually fired, since it is now a copy rather
+// than the held error itself.
+func TestWrapTimedOutReportsTheBudgetThatFired(t *testing.T) {
+	t.Parallel()
+
+	for _, fired := range []*requestTimeoutError{
+		{timeout: 90 * time.Second, idle: true},
+		{timeout: 30 * time.Second, idle: false},
+	} {
+		ctx, cancel := context.WithCancelCause(context.Background())
+		cancel(fired)
+
+		var got *requestTimeoutError
+		require.ErrorAs(t, wrapTimedOut(ctx, errors.New("boom")), &got)
+		require.Equal(t, fired.timeout, got.timeout)
+		require.Equal(t, fired.idle, got.idle)
+		require.Equal(t, fired.Error(), got.Error()[:len(fired.Error())])
+		cancel(nil)
+	}
+}
+
+// TestWrapTimedOutDoesNotStackTimeouts checks an error that already reports
+// this timeout is passed through, so a stream yielding many parts cannot
+// grow an ever-longer chain of identical timeout errors.
+func TestWrapTimedOutDoesNotStackTimeouts(t *testing.T) {
+	t.Parallel()
+
+	fired := &requestTimeoutError{timeout: time.Second, idle: true}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(fired)
+	defer cancel(nil)
+
+	err := wrapTimedOut(ctx, errors.New("connection reset by peer"))
+	depth := unwrapDepth(err, 100)
+
+	// Re-wrapped on another goroutine: wrapTimedOut asks errors.Is about the
+	// error it was handed, so a version that loops hangs here rather than
+	// returning. The watchdog turns that into a failure in seconds instead
+	// of a test binary that spins until the suite timeout.
+	rewrapped := make(chan error, 1)
+	go func() {
+		e := err
+		for range 20 {
+			e = wrapTimedOut(ctx, e)
+		}
+		rewrapped <- e
+	}()
+	select {
+	case e := <-rewrapped:
+		require.Equal(t, depth, unwrapDepth(e, 100), "re-wrapping must not lengthen the chain")
+	case <-time.After(10 * time.Second):
+		t.Fatal("wrapTimedOut never returned: it looped on the error it was given")
+	}
 }
