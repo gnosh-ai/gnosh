@@ -107,7 +107,7 @@ func TestMemRulesNotice(t *testing.T) {
 	for range 3 {
 		e := <-ch
 		require.Equal(t, "s1", e.Payload.SessionID)
-		require.Equal(t, notify.TypeHookWarning, e.Payload.Type)
+		require.Equal(t, notify.TypeWarning, e.Payload.Type)
 		got = append(got, e.Payload.Message)
 	}
 	require.Equal(t, []string{

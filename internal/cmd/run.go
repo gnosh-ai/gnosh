@@ -332,7 +332,7 @@ func subSessionCheck(ctx context.Context, c *client.Client, workspaceID, rootID 
 //     must match our run exactly, otherwise it belongs to a different
 //     request.
 //   - if the event carries no RunID (an older server, or a notification
-//     about the session such as a hook warning), it must carry our
+//     about the session such as a warning), it must carry our
 //     SessionID.
 func (s *runStream) ours(ev proto.AgentEvent) bool {
 	if ev.RunID != "" {
@@ -570,7 +570,7 @@ type runStream struct {
 	sessionID string
 	runID     string
 	out       io.Writer
-	// errOut receives hook warnings; nil drops them.
+	// errOut receives warnings; nil drops them.
 	errOut io.Writer
 	// trace prints the --verbose tool trace; nil when not tracing.
 	trace *format.ToolTrace
@@ -686,9 +686,9 @@ func (s *runStream) handle(ev any, stopSpinner func()) (done bool, err error) {
 		if e.Payload.Error == nil || !s.ours(e.Payload) {
 			return false, nil
 		}
-		// A hook warning carries its text in Error too, but the turn goes
+		// A warning carries its text in Error too, but the turn goes
 		// on or ends normally: print it rather than fail the run.
-		if e.Payload.Type == proto.AgentEventTypeHookWarning {
+		if e.Payload.Type == proto.AgentEventTypeWarning {
 			if s.errOut != nil {
 				stop()
 				_, _ = fmt.Fprintf(s.errOut, "warning: %s\n", e.Payload.Error)

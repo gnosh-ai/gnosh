@@ -179,6 +179,6 @@ func holdsAny(msg message.Message, texts []string) bool {
 // agent's mem call erased is still shown (see memErased).
 func (a *App) memErasedNotice(ctx context.Context, sessionID string, e gnovm.MemErasure) {
 	if text := a.memErased(ctx, e); text != "" {
-		a.agentNotifications.Publish(pubsub.CreatedEvent, notify.Notification{SessionID: sessionID, Type: notify.TypeHookWarning, Message: "mem erased it, but " + text})
+		a.agentNotifications.Publish(pubsub.CreatedEvent, notify.Notification{SessionID: sessionID, Type: notify.TypeWarning, Message: "mem erased it, but " + text})
 	}
 }

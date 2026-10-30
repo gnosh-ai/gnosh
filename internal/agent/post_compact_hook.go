@@ -58,7 +58,7 @@ func (a *sessionAgent) runPostCompactHooks(ctx context.Context, sessionID string
 		}
 		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 			SessionID: sessionID,
-			Type:      notify.TypeHookWarning,
+			Type:      notify.TypeWarning,
 			Message:   fmt.Sprintf("PostCompact hook %q could not evaluate: %s", h.Name, h.Error),
 		})
 	}

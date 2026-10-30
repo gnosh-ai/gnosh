@@ -186,13 +186,13 @@ func (a *sessionAgent) goalContinuation(ctx context.Context, call SessionAgentCa
 		return SessionAgentCall{}, false
 	}
 	if call.goalReflecting && stopMarkerPresent(lastAssistantMessage) {
-		a.notifyGoal(call.SessionID, notify.TypeHookWarning, fmt.Sprintf(
+		a.notifyGoal(call.SessionID, notify.TypeWarning, fmt.Sprintf(
 			"The agent judged it should stop working toward the goal: %s. The goal stays set (/goal clear clears it)",
 			cmp.Or(strings.TrimSuffix(compactReason(StripStopMarker(lastAssistantMessage)), "."), "it gave no reason")))
 		return SessionAgentCall{}, false
 	}
 	if a.permissionMode(call.SessionID) == config.PermissionModePlan {
-		a.notifyGoal(call.SessionID, notify.TypeHookWarning, "The goal stays set; plan mode does not go on toward it")
+		a.notifyGoal(call.SessionID, notify.TypeWarning, "The goal stays set; plan mode does not go on toward it")
 		return SessionAgentCall{}, false
 	}
 	client, err := a.goals.client()
@@ -203,7 +203,7 @@ func (a *sessionAgent) goalContinuation(ctx context.Context, call SessionAgentCa
 	}
 	if err != nil {
 		slog.Warn("The goal could not be read in mem; letting the turn end", "session_id", call.SessionID, "error", err)
-		a.notifyGoal(call.SessionID, notify.TypeHookWarning, "The goal could not be read in mem, so the turn ended with the goal still set: "+err.Error())
+		a.notifyGoal(call.SessionID, notify.TypeWarning, "The goal could not be read in mem, so the turn ended with the goal still set: "+err.Error())
 		return SessionAgentCall{}, false
 	}
 	cont := call
@@ -223,7 +223,7 @@ func (a *sessionAgent) goalContinuation(ctx context.Context, call SessionAgentCa
 		met, reason, err := a.checkGoal(ctx, call.SessionID, b.Condition, turn.Show)
 		if err != nil {
 			slog.Warn("The goal check could not be made; letting the turn end", "session_id", call.SessionID, "error", err)
-			a.notifyGoal(call.SessionID, notify.TypeHookWarning, "The goal check could not be made, so the turn ended with the goal still set: "+err.Error())
+			a.notifyGoal(call.SessionID, notify.TypeWarning, "The goal check could not be made, so the turn ended with the goal still set: "+err.Error())
 			return SessionAgentCall{}, false
 		}
 		next.Checks++
@@ -235,26 +235,26 @@ func (a *sessionAgent) goalContinuation(ctx context.Context, call SessionAgentCa
 			return SessionAgentCall{}, false
 		}
 		if err := client.GoalReopen(ctx, a.goals.project, next, reason); err != nil {
-			a.notifyGoal(call.SessionID, notify.TypeHookWarning, "The goal was found not met, but could not be reopened in mem, so the turn ended with it still set: "+err.Error())
+			a.notifyGoal(call.SessionID, notify.TypeWarning, "The goal was found not met, but could not be reopened in mem, so the turn ended with it still set: "+err.Error())
 			return SessionAgentCall{}, false
 		}
 		cont.Prompt = goalNotMetPrompt(next, reason)
 	case "rebind":
 		rebound, directive, err := client.BindGoal(ctx, a.goals.project, call.SessionID, b.Condition, nil)
 		if err != nil {
-			a.notifyGoal(call.SessionID, notify.TypeHookWarning, "mem was made anew, and the goal could not be set in it again: "+err.Error())
+			a.notifyGoal(call.SessionID, notify.TypeWarning, "mem was made anew, and the goal could not be set in it again: "+err.Error())
 			return SessionAgentCall{}, false
 		}
 		next = rebound
 		cont.Prompt = directive
 	case "clear":
 		if ok, _ := a.goals.swap(ctx, call.SessionID, stored, nil); ok {
-			a.notifyGoal(call.SessionID, notify.TypeHookWarning, turn.Notice)
+			a.notifyGoal(call.SessionID, notify.TypeWarning, turn.Notice)
 		}
 		return SessionAgentCall{}, false
 	default: // "end"
 		_, _ = a.goals.swap(ctx, call.SessionID, stored, &next)
-		a.notifyGoal(call.SessionID, notify.TypeHookWarning, turn.Notice)
+		a.notifyGoal(call.SessionID, notify.TypeWarning, turn.Notice)
 		return SessionAgentCall{}, false
 	}
 	// A goal set anew or cleared while this turn's end read it is left as

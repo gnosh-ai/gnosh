@@ -22,7 +22,7 @@ func (a *sessionAgent) warnHookMessages(sessionID, event string, ran []hooks.Hoo
 		}
 		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 			SessionID: sessionID,
-			Type:      notify.TypeHookWarning,
+			Type:      notify.TypeWarning,
 			Message:   fmt.Sprintf("%s hook %q: %s", event, h.Name, h.Message),
 		})
 	}

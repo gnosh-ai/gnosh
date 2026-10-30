@@ -640,14 +640,15 @@ func (app *App) RunNonInteractive(ctx context.Context, output io.Writer, prompt,
 	}
 	done := make(chan response, 1)
 
-	// Hook warnings (a Stop hook that failed to run, an agent that
-	// stopped over a Stop hook's objection) are notifications only the TUI
+	// Warnings (a Stop hook that failed to run, an agent that stopped
+	// over a Stop hook's objection, a goal that could not be checked, a
+	// rule a session's mem call set) are notifications only the TUI
 	// shows. A run prints them on stderr instead of losing them.
 	notifications := app.agentNotifications.Subscribe(ctx)
 	met := false
 	warn := func(n notify.Notification) {
 		met = met || n.Type == notify.TypeGoalMet && n.SessionID == sess.ID
-		if line, ok := hookWarningLine(n, sess.ID); ok {
+		if line, ok := warningLine(n, sess.ID); ok {
 			stopSpinner()
 			_, _ = fmt.Fprint(os.Stderr, line)
 		}
@@ -872,10 +873,10 @@ func (app *App) descendsFrom(ctx context.Context, id, ancestorID string) bool {
 	return false
 }
 
-// hookWarningLine is the stderr line a non-interactive run prints for a
-// notification, when it is a hook warning for the run's own session.
-func hookWarningLine(n notify.Notification, sessionID string) (string, bool) {
-	if n.Type != notify.TypeHookWarning || n.SessionID != sessionID || n.Message == "" {
+// warningLine is the stderr line a non-interactive run prints for a
+// notification, when it is a warning for the run's own session.
+func warningLine(n notify.Notification, sessionID string) (string, bool) {
+	if n.Type != notify.TypeWarning || n.SessionID != sessionID || n.Message == "" {
 		return "", false
 	}
 	return "warning: " + n.Message + "\n", true

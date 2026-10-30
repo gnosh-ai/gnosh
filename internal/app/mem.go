@@ -61,7 +61,7 @@ func (a *App) memRulesNotice(_ context.Context, sessionID string, rules []gnovm.
 		default:
 			msg += "changed the rule `" + r.Name + "`, which every session follows as yours, to " + quote(r.Text) + " (it was " + quote(r.Was) + "). If you did not ask for it, /mem log shows the change and /mem undo reverses it"
 		}
-		a.agentNotifications.Publish(pubsub.CreatedEvent, notify.Notification{SessionID: sessionID, Type: notify.TypeHookWarning, Message: msg})
+		a.agentNotifications.Publish(pubsub.CreatedEvent, notify.Notification{SessionID: sessionID, Type: notify.TypeWarning, Message: msg})
 	}
 }
 

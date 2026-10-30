@@ -9,13 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A failed-hook warning is shown to the user as a status-bar warning.
-func TestHookWarningShowsAsWarning(t *testing.T) {
+// A warning, here a failed hook's, is shown to the user in the status
+// bar.
+func TestWarningShowsInStatusBar(t *testing.T) {
 	pinTTLs(t)
 
 	m := newBusyUI(&countingWorkspace{ready: true})
 	cmd := m.handleAgentNotification(notify.Notification{
-		Type:      notify.TypeHookWarning,
+		Type:      notify.TypeWarning,
 		SessionID: "s1",
 		Message:   `Stop hook "tests-must-pass" failed: exit 1; the turn ended without its check`,
 	})
@@ -29,11 +30,11 @@ func TestHookWarningShowsAsWarning(t *testing.T) {
 
 // The property that matters most. TypeAgentFinished and TypeAgentError
 // are the busy→idle edge and trigger a busy and queue refresh (see
-// TestAgentTerminalNotificationsRefreshBusy). A hook warning is published
+// TestAgentTerminalNotificationsRefreshBusy). A warning is published
 // while the turn is still ending, so if it were read the same way the UI
 // would re-probe early and could flip to idle while the agent is busy —
 // the family of status-line bugs this TUI has already had.
-func TestHookWarningIsNotATurnEnding(t *testing.T) {
+func TestWarningIsNotATurnEnding(t *testing.T) {
 	pinTTLs(t)
 
 	ws := &countingWorkspace{ready: true}
@@ -45,7 +46,7 @@ func TestHookWarningIsNotATurnEnding(t *testing.T) {
 
 	m.Update(pubsub.Event[notify.Notification]{
 		Type:    pubsub.CreatedEvent,
-		Payload: notify.Notification{Type: notify.TypeHookWarning, SessionID: "s1", Message: "x"},
+		Payload: notify.Notification{Type: notify.TypeWarning, SessionID: "s1", Message: "x"},
 	})
 
 	require.False(t, m.busyFetchInFlight, "a warning must not schedule a busy refresh")

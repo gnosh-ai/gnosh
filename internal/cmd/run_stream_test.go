@@ -534,10 +534,10 @@ func TestRunOutputFlags(t *testing.T) {
 	}
 }
 
-// A hook warning arrives with its text in Error, like a failure, but the
-// turn goes on or ends normally: gnosh run prints it on stderr and keeps
+// A warning arrives with its text in Error, like a failure, but the turn
+// goes on or ends normally: gnosh run prints it on stderr and keeps
 // going. It used to end the run as "agent error".
-func TestRunStream_HookWarningIsNotAFailure(t *testing.T) {
+func TestRunStream_WarningIsNotAFailure(t *testing.T) {
 	t.Parallel()
 
 	var errOut bytes.Buffer
@@ -545,7 +545,7 @@ func TestRunStream_HookWarningIsNotAFailure(t *testing.T) {
 
 	done, err := s.handle(pubsub.Event[proto.AgentEvent]{Payload: proto.AgentEvent{
 		SessionID: "S",
-		Type:      proto.AgentEventTypeHookWarning,
+		Type:      proto.AgentEventTypeWarning,
 		Error:     errors.New(`Stop hook "tests" failed: exit 1`),
 	}}, nil)
 	require.NoError(t, err)
@@ -556,7 +556,7 @@ func TestRunStream_HookWarningIsNotAFailure(t *testing.T) {
 	errOut.Reset()
 	_, err = s.handle(pubsub.Event[proto.AgentEvent]{Payload: proto.AgentEvent{
 		SessionID: "other",
-		Type:      proto.AgentEventTypeHookWarning,
+		Type:      proto.AgentEventTypeWarning,
 		Error:     errors.New("not ours"),
 	}}, nil)
 	require.NoError(t, err)

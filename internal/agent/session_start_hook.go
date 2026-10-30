@@ -233,7 +233,7 @@ func (a *sessionAgent) runSessionStartHooks(ctx context.Context, call *SessionAg
 		if a.notify != nil {
 			a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 				SessionID: call.SessionID,
-				Type:      notify.TypeHookWarning,
+				Type:      notify.TypeWarning,
 				Message:   fmt.Sprintf("SessionStart hook objected to the prompt: %s; the prompt went ahead", reason),
 			})
 		}
@@ -301,7 +301,7 @@ func (a *sessionAgent) warnFailedSessionStartHooks(sessionID string, ran []hooks
 		}
 		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 			SessionID: sessionID,
-			Type:      notify.TypeHookWarning,
+			Type:      notify.TypeWarning,
 			Message: fmt.Sprintf(
 				"SessionStart hook %q could not evaluate: %s; the prompt went ahead without it",
 				h.Name, h.Error,

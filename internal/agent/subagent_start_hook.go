@@ -49,7 +49,7 @@ func (c *coordinator) runSubagentStartHooks(ctx context.Context, sessionID, agen
 			}
 			c.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 				SessionID: sessionID,
-				Type:      notify.TypeHookWarning,
+				Type:      notify.TypeWarning,
 				Message:   fmt.Sprintf("SubagentStart hook %q could not evaluate: %s; the sub-agent started without it", h.Name, h.Error),
 			})
 		}

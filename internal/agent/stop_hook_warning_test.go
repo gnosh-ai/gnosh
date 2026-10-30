@@ -35,7 +35,7 @@ func (r *recordingNotifier) warnings() []notify.Notification {
 	defer r.mu.Unlock()
 	var out []notify.Notification
 	for _, n := range r.sent {
-		if n.Type == notify.TypeHookWarning {
+		if n.Type == notify.TypeWarning {
 			out = append(out, n)
 		}
 	}

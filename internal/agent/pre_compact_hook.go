@@ -79,7 +79,7 @@ func (a *sessionAgent) runPreCompactHooks(ctx context.Context, sessionID string,
 		if a.notify != nil {
 			a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 				SessionID: sessionID,
-				Type:      notify.TypeHookWarning,
+				Type:      notify.TypeWarning,
 				Message:   fmt.Sprintf("PreCompact hook objected to the %s summary: %s; the summary went ahead", trigger, reason),
 			})
 		}
@@ -99,7 +99,7 @@ func (a *sessionAgent) warnFailedPreCompactHooks(sessionID string, ran []hooks.H
 		}
 		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 			SessionID: sessionID,
-			Type:      notify.TypeHookWarning,
+			Type:      notify.TypeWarning,
 			Message:   fmt.Sprintf("PreCompact hook %q could not evaluate: %s; the summary went ahead without it", h.Name, h.Error),
 		})
 	}

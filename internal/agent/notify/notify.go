@@ -25,15 +25,18 @@ const (
 	// finished. Message carries the error text when it failed, empty on
 	// success.
 	TypeAWSSSOAuthResult Type = "aws_sso_auth_result"
-	// TypeHookWarning reports a hook that failed to run to a verdict —
-	// its script is missing, not executable, crashed, or timed out — in
-	// a place that has no other way to show it. Message carries the
-	// text. It is informational: it does not mark the end of a turn, so
-	// observers must not treat it as a busy→idle edge.
-	TypeHookWarning Type = "hook_warning"
+	// TypeWarning is a warning for the user that does not end a turn,
+	// its text in Message: a hook that failed to run to a verdict (its
+	// script missing, not executable, crashed or timed out) in a place
+	// that has no other way to show it, a goal that could not be checked
+	// or kept, and what a session's mem call erased or did to a rule.
+	// Observers must not treat it as a busy→idle edge. The value is still
+	// "hook_warning", its first name: servers of earlier builds send that,
+	// and the server passes the value on as proto.AgentEventTypeWarning.
+	TypeWarning Type = "hook_warning"
 	// TypeGoalMet reports that a session's goal was found met, and
 	// cleared (see agent.Goal); Message says so. Informational, like
-	// TypeHookWarning: it does not mark the end of a turn.
+	// TypeWarning: it does not mark the end of a turn.
 	TypeGoalMet Type = "goal_met"
 )
 

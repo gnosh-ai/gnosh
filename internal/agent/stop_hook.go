@@ -260,7 +260,7 @@ func (a *sessionAgent) warnFailedStopHooks(sessionID, event string, ran []hooks.
 		}
 		a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 			SessionID: sessionID,
-			Type:      notify.TypeHookWarning,
+			Type:      notify.TypeWarning,
 			Message:   fmt.Sprintf("%s hook %q could not evaluate: %s; %s", event, h.Name, h.Error, stopHookOutcome(ended)),
 		})
 	}
@@ -298,7 +298,7 @@ func (a *sessionAgent) warnAgentChoseToStop(call SessionAgentCall, sessionID, ev
 	}
 	a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 		SessionID: sessionID,
-		Type:      notify.TypeHookWarning,
+		Type:      notify.TypeWarning,
 		Message:   msg,
 	})
 }
