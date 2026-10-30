@@ -191,6 +191,7 @@ func newRunner(cwd string, env []string, stdin io.Reader, stdout, stderr io.Writ
 		interp.Interactive(false),
 		interp.Env(expand.ListEnviron(env...)),
 		interp.Dir(cwd),
+		interp.CallHandler(lookupHandler(stderr)),
 		execHandlerOption(blockFuncs),
 	)
 }
@@ -381,24 +382,75 @@ func toolNameHandler() execMiddleware {
 
 // missingCommandHandler returns middleware that says what to do when the
 // shell cannot find a command by name. Told only "executable file not
-// found", or nothing by `command -v`, agents searched the whole disk for
-// it with `find /`, a prompt line against it notwithstanding: a note under
-// the failure is read before the next call (QA, 2026-10-30).
+// found", agents searched the whole disk for it with `find /`, a prompt
+// line against it notwithstanding: a note under the failure is read
+// before the next call (QA, 2026-10-30).
 func missingCommandHandler() execMiddleware {
 	return func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 		return func(ctx context.Context, args []string) error {
 			err := next(ctx, args)
-			if len(args) == 0 || ExitCode(err) != 127 || strings.Contains(args[0], "/") || tooldefs.IsKnown(args[0]) {
+			if len(args) == 0 || ExitCode(err) != 127 {
 				return err
 			}
-			hc := interp.HandlerCtx(ctx)
-			if _, lookErr := interp.LookPathDir(hc.Dir, hc.Env, args[0]); lookErr == nil {
-				return err
+			if hc := interp.HandlerCtx(ctx); notInstalled(hc, args[0]) {
+				fmt.Fprintln(hc.Stderr, MissingCommandNote(args[0]))
 			}
-			fmt.Fprintln(hc.Stderr, MissingCommandNote(args[0]))
 			return err
 		}
 	}
+}
+
+// lookupHandler returns a call handler that gives the same note to a
+// lookup of a program that is not installed: `command -v`, `type` and
+// `which` say nothing of it, or "not found", and an agent whose empty
+// `command -v` sat in a longer command searched the disk next (QA,
+// 2026-10-30). The note goes to stderr, the whole command's, since a
+// lookup's own output is most often thrown away (`>/dev/null 2>&1`).
+// Only the command's own lookups get it: a script it runs probes for
+// optional tools as it likes.
+func lookupHandler(stderr io.Writer) interp.CallHandlerFunc {
+	if stderr == nil {
+		stderr = io.Discard
+	}
+	return func(ctx context.Context, args []string) ([]string, error) {
+		hc := interp.HandlerCtx(ctx)
+		for _, name := range lookedUp(args) {
+			if notInstalled(hc, name) {
+				fmt.Fprintln(stderr, MissingCommandNote(name))
+			}
+		}
+		return args, nil
+	}
+}
+
+// lookedUp returns the names args look up, when they are a lookup:
+// `command -v`, `type` or `which`, after any flags.
+func lookedUp(args []string) []string {
+	if args[0] != "command" && args[0] != "type" && args[0] != "which" {
+		return nil
+	}
+	names, lookup := args[1:], args[0] != "command"
+	for len(names) > 0 && strings.HasPrefix(names[0], "-") {
+		lookup = lookup || names[0] == "-v"
+		names = names[1:]
+	}
+	if !lookup {
+		return nil // `command name` runs it
+	}
+	return names
+}
+
+// notInstalled reports whether nothing answers to name in hc's shell: no
+// keyword, no builtin of the shell's or Gnosh's own, and no program on
+// the PATH. A path, and a Gnosh tool's name, have notes of their own or
+// none; a function the command defined is not seen.
+func notInstalled(hc interp.HandlerContext, name string) bool {
+	if name == "" || strings.Contains(name, "/") || tooldefs.IsKnown(name) ||
+		syntax.IsKeyword(name) || interp.IsBuiltin(name) || IsBuiltin(name) {
+		return false
+	}
+	_, err := interp.LookPathDir(hc.Dir, hc.Env, name)
+	return err != nil
 }
 
 // MissingCommandNote is what an agent is told of a command that is not

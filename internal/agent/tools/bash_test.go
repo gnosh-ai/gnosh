@@ -139,15 +139,21 @@ func TestBashTool_ToolNameAsCommand(t *testing.T) {
 	require.Contains(t, resp.Content, "job_kill is a Gnosh tool, not a shell command: call the job_kill tool instead.")
 }
 
-// A command that is not installed, or a lookup that finds nothing, is told
-// what to do: agents searched the whole disk for a missing tool with
-// `find /` (QA's replan scenario, 2026-10-30).
+// A command that is not installed, or a lookup that finds nothing, even
+// one inside a longer command, is told what to do: agents searched the
+// whole disk for a missing tool with `find /` (QA's replan scenario,
+// 2026-10-30).
 func TestBashTool_MissingCommand(t *testing.T) {
 	workingDir := t.TempDir()
 	tool := newBashToolForTest(workingDir)
 	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
 	note := shell.MissingCommandNote("no-such-lint")
-	for _, command := range []string{"no-such-lint app.sh", "command -v no-such-lint", "which no-such-lint"} {
+	for _, command := range []string{
+		"no-such-lint app.sh",
+		"command -v no-such-lint",
+		"which no-such-lint",
+		"true && command -v no-such-lint >/dev/null 2>&1 && no-such-lint --help",
+	} {
 		resp := runBashTool(t, tool, ctx, BashParams{Description: "check the linter", Command: command})
 		require.Contains(t, resp.Content, note, command)
 	}

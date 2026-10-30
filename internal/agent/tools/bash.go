@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -426,7 +425,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 						return fantasy.ToolResponse{}, fmt.Errorf("[Job %s] error executing command: %w", bgShell.ID, execErr)
 					}
 
-					stdout = formatOutput(stdout, stderr, execErr, spillDir) + lookupNote(command, exitCode)
+					stdout = formatOutput(stdout, stderr, execErr, spillDir)
 
 					metadata := BashResponseMetadata{
 						StartTime:        startTime.UnixMilli(),
@@ -515,7 +514,7 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 					return fantasy.ToolResponse{}, fmt.Errorf("[Job %s] error executing command: %w", bgShell.ID, execErr)
 				}
 
-				stdout = formatOutput(stdout, stderr, execErr, spillDir) + lookupNote(command, exitCode)
+				stdout = formatOutput(stdout, stderr, execErr, spillDir)
 
 				metadata := BashResponseMetadata{
 					StartTime:        startTime.UnixMilli(),
@@ -583,23 +582,6 @@ func sessionEnvSetup(ctx context.Context) string {
 		return ""
 	}
 	return ". '" + strings.ReplaceAll(path, "'", `'\''`) + "'"
-}
-
-// lookupRe matches a command that only looks a program up, command -v,
-// which or type, with the program's name.
-var lookupRe = regexp.MustCompile(`^\s*(?:command\s+-v|which|type(?:\s+-p)?)\s+([\w.+-]+)\s*$`)
-
-// lookupNote is what a lookup that found nothing is told: one prints
-// nothing, so the shell's note for a missing command never comes, and an
-// agent searched the whole disk next (QA's replan scenario, 2026-10-30).
-func lookupNote(command string, exitCode int) string {
-	if exitCode == 0 {
-		return ""
-	}
-	if m := lookupRe.FindStringSubmatch(command); m != nil {
-		return "\n" + shell.MissingCommandNote(m[1])
-	}
-	return ""
 }
 
 // formatOutput formats the output of a completed command with error handling

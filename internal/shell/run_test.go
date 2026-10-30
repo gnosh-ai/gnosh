@@ -307,6 +307,48 @@ func TestRun_ToolNameAsCommand(t *testing.T) {
 	}
 }
 
+// A lookup of a program that is not installed gets the missing command's
+// note, inside a longer command and with its output thrown away too: an
+// agent whose empty `command -v acme-lint` sat after `&&` got no note and
+// searched the disk (QA, 2026-10-30). A lookup that finds a program, a
+// builtin or Gnosh's jq gets none, and so does a command that only runs.
+func TestRun_LookupOfAMissingProgram(t *testing.T) {
+	run := func(command string) (stderr string) {
+		var out, errOut bytes.Buffer
+		_ = Run(t.Context(), RunOptions{
+			Command: command,
+			Cwd:     t.TempDir(),
+			Env:     os.Environ(),
+			Stdout:  &out,
+			Stderr:  &errOut,
+		})
+		return errOut.String()
+	}
+
+	note := MissingCommandNote("no_such_lint")
+	for _, command := range []string{
+		"command -v no_such_lint",
+		"true && command -v no_such_lint >/dev/null 2>&1 || echo missing",
+		`p=$(which no_such_lint); echo "[$p]"`,
+		"type -p no_such_lint | cat",
+	} {
+		if stderr := run(command); strings.Count(stderr, note) != 1 {
+			t.Errorf("%s: stderr %q, want the note once", command, stderr)
+		}
+	}
+	for _, command := range []string{
+		"command -v sh",
+		"type cd",
+		"command -v jq",
+		"command -v ./no_such_lint",
+		"command true no_such_lint",
+	} {
+		if stderr := run(command); strings.Contains(stderr, "is not installed here") {
+			t.Errorf("%s: stderr %q, want no note", command, stderr)
+		}
+	}
+}
+
 func TestRun_RequiresCwd(t *testing.T) {
 	err := Run(t.Context(), RunOptions{
 		Command: "echo hi",
