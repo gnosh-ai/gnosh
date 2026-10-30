@@ -393,11 +393,11 @@ html,body{width:1280px;height:640px;overflow:hidden;background:$void}
 </style></head><body>
 <div class="bg">$svg</div>
 <div class="wrap">
-  <div class="tag">A <b>security-first</b> harness for coding agents, in your terminal.</div>
+  <div class="tag">A coding agent that <b>remembers</b>, in Gno.</div>
   <div class="pts">
-    <span><i style="background:$purple"></i>nothing phones home</span>
+    <span><i style="background:$purple"></i>the Gno VM in the AI harness</span>
     <span><i style="background:$pink"></i>any model, hosted or local</span>
-    <span><i style="background:$gold"></i>speaks Claude Code</span>
+    <span><i style="background:$gold"></i>nothing phones home</span>
   </div>
 </div>
 </body></html>
