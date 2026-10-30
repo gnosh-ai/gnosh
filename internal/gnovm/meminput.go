@@ -31,9 +31,9 @@ type memSource struct {
 // statements, a whole program (its package clause dropped, its main called
 // last), imports or none (a package used without one is imported; mem's
 // own, import "mem", is dropped), and declarations. A declaration of a func stands at the top level; others run
-// where they are, in order with the statements. A trailing read of mem
-// (mem.Show(), mem.Find(…), mem.Next(…), mem.JSON(…), or mem alone) prints
-// what it says.
+// where they are, in order with the statements. A read of mem standing as
+// a statement of its own (mem.Show(), mem.Find(…), mem.Next(…),
+// mem.JSON(…), or mem alone, trailing) prints what it says.
 func shapeMemInput(code string) (memSource, error) {
 	prog, err := normalize(code, 1, nil, nil)
 	if err != nil {
@@ -44,7 +44,7 @@ func shapeMemInput(code string) (memSource, error) {
 	for _, o := range prog.ops {
 		switch {
 		case o.Stmts != "":
-			main.WriteString(o.Stmts + "\n")
+			main.WriteString(memShowReads(o.Stmts) + "\n")
 		case o.File != "" && declaresFunc(o.File):
 			src.decls = append(src.decls, o.File)
 		case o.File != "":
@@ -122,6 +122,42 @@ func memShowExpr(expr string) string {
 		return expr
 	}
 	return "println(" + expr + ")"
+}
+
+// memShowReads makes each read of mem standing as a statement of its own in
+// stmts print what it says, as a trailing one does (memShowExpr). A model
+// that asked for three goals in one call was shown only the last, the
+// others dropped without a word, and asked again (QA, 2026-10-30).
+func memShowReads(stmts string) string {
+	const head = "package p\nfunc _() {\n"
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "", head+stmts+"\n}\n", parser.SkipObjectResolution)
+	if err != nil || len(f.Decls) != 1 {
+		return stmts
+	}
+	fn, ok := f.Decls[0].(*ast.FuncDecl)
+	if !ok {
+		return stmts
+	}
+	var b strings.Builder
+	last := 0
+	for _, s := range fn.Body.List {
+		e, ok := s.(*ast.ExprStmt)
+		if !ok {
+			continue
+		}
+		start, end := fset.Position(e.Pos()).Offset-len(head), fset.Position(e.End()).Offset-len(head)
+		shown := memShowExpr(stmts[start:end])
+		if !strings.HasPrefix(shown, "showMem_(") {
+			continue
+		}
+		b.WriteString(stmts[last:start] + shown)
+		last = end
+	}
+	if last == 0 {
+		return stmts
+	}
+	return b.String() + stmts[last:]
 }
 
 // memHint is what to tell the model about a mem input that failed with

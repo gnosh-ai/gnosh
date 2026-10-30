@@ -515,6 +515,13 @@ func TestHostRunsMem(t *testing.T) {
 	require.NoError(t, res.Err)
 	require.False(t, res.Journaled)
 	require.Contains(t, res.Output, "[ ] `ship/1` \"build\"  ← next")
+	// Every read standing as a statement of its own is shown, not only the
+	// last: a call with three showed only the third.
+	res = call("mem.Show(\"ship\")\nx := 1\n_ = x\nmem.Find(\"test\"); mem.Find(\"build\")")
+	require.NoError(t, res.Err)
+	require.Contains(t, res.Output, "← next", "the first read is shown too")
+	require.Contains(t, res.Output, "`ship/2` \"test\" (")
+	require.Contains(t, res.Output, "`ship/1` \"build\" (")
 
 	res = call(`mem.Add("x", "y")`)
 	require.ErrorContains(t, res.Err, "missing field Add in *klash/gnomem/v2.Mem")
