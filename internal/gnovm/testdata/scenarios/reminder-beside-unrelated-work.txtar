@@ -1,0 +1,17 @@
+A reminder said the way a person says it, then a new session that starts on
+unrelated work: the agent does that work, mentions the reminder beside it
+unasked, and leaves the reminder open. GNOMEM's "A reminder for next time"
+claims this; mem-stays-out-of-the-way is the other side, an ordinary open
+goal that stays out of unrelated work.
+
+-- project/greet.sh --
+#!/bin/sh
+echo "Helo, world"
+-- prompt --
+Before we wrap up: remind me next time we talk to rotate the staging API key. It expires this week.
+-- prompt-new --
+Fix the typo in greet.sh.
+-- check --
+file greet.sh contains Hello, world
+answer last matches (?i)rotat
+mem-count open >= 1
