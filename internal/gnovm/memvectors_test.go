@@ -523,3 +523,28 @@ func TestMemRecallKeepsNothingStale(t *testing.T) {
 	l.show("s3", []string{"-"})
 	require.NotContains(t, l.MemRecall(ctx, "/proj", "s3", "run the testing suite"), "testing-check")
 }
+
+// Recall's kept read is read again after any write to the vectors, even
+// one that leaves as many as there were: a fill that adds a changed fact's
+// vector and prunes the old text's (the cleanup session's case).
+func TestMemRecallSeesAFillThatKeepsTheCount(t *testing.T) {
+	t.Parallel()
+	f := newFakeEmbedder(t)
+	_, l, mem := newRecallHost(t, f)
+	ctx := context.Background()
+	dir := memDir(l.opts.Dir, "/proj")
+	e := newMemEmbedder(f.URL + "/v1")
+	mem(`mem.Fact("cmd/test", "go test -race ./...")`)
+	require.NoError(t, fillMemVectorsNow(ctx, dir, e))
+	mem(`mem.Fact("cmd/test", "make testing-check")`)
+	// A recall before the fill: the new text has no vector yet, and the
+	// read is kept. It starts a fill, which is let finish.
+	l.show("s1", []string{"-"})
+	require.Empty(t, l.MemRecall(ctx, "/proj", "s1", "run the testing suite"))
+	waitMemFills(t, dir)
+	require.NoError(t, fillMemVectorsNow(ctx, dir, e))
+	n, _ := memVectorCount(t, dir)
+	require.Equal(t, 1, n, "as many vectors as before: the new text's in, the old one's out")
+	l.show("s2", []string{"-"})
+	require.Contains(t, l.MemRecall(ctx, "/proj", "s2", "run the testing suite"), "make testing-check")
+}

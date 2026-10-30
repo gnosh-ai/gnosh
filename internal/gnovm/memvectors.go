@@ -264,9 +264,13 @@ type memVectors struct {
 	db *sql.DB
 }
 
+// version counts the writes to the vectors, each in its own write's
+// transaction: what a reader keeps is stale when it has moved.
 const memVectorsSchema = `
 CREATE TABLE IF NOT EXISTS model(id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS vecs(hash BLOB PRIMARY KEY, vec BLOB NOT NULL) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS version(id INTEGER PRIMARY KEY CHECK (id = 1), n INTEGER NOT NULL);
+INSERT OR IGNORE INTO version(id, n) VALUES(1, 0);
 `
 
 func memVectorsPath(dir, gen string) string {
@@ -348,6 +352,9 @@ func (v *memVectors) put(model string, hashes []string, vecs [][]int8) error {
 			return err
 		}
 	}
+	if _, err := tx.Exec(`UPDATE version SET n = n + 1 WHERE id = 1`); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -379,7 +386,7 @@ func (v *memVectors) hashes() (map[string]bool, error) {
 	return out, rows.Err()
 }
 
-// keepOnly deletes the vectors of texts no row has now.
+// keepOnly deletes the vectors of texts no row has now, in one write.
 func (v *memVectors) keepOnly(rows []memRow) error {
 	have, err := v.hashes()
 	if err != nil {
@@ -388,12 +395,23 @@ func (v *memVectors) keepOnly(rows []memRow) error {
 	for _, r := range rows {
 		delete(have, r.hash())
 	}
+	if len(have) == 0 {
+		return nil
+	}
+	tx, err := v.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	for h := range have {
-		if _, err := v.db.Exec(`DELETE FROM vecs WHERE hash = ?`, []byte(h)); err != nil {
+		if _, err := tx.Exec(`DELETE FROM vecs WHERE hash = ?`, []byte(h)); err != nil {
 			return err
 		}
 	}
-	return nil
+	if _, err := tx.Exec(`UPDATE version SET n = n + 1 WHERE id = 1`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // atMem runs f on the index and the vectors of mem in dir, under its lock,
@@ -477,25 +495,28 @@ func (s memSnapshot) lacksVectors() bool {
 	return false
 }
 
-// count is how many vectors there are, and the model that made them.
-func (v *memVectors) count() (int, string, error) {
+// version is how many writes the vectors have had, and the model that
+// made them.
+func (v *memVectors) version() (int64, string, error) {
 	model, err := v.model()
 	if err != nil {
 		return 0, "", err
 	}
-	var n int
-	err = v.db.QueryRow(`SELECT COUNT(*) FROM vecs`).Scan(&n)
+	var n int64
+	err = v.db.QueryRow(`SELECT n FROM version WHERE id = 1`).Scan(&n)
 	return n, model, err
 }
 
 // memSnapshotKey is what a snapshot of mem was read at: the journal's
-// generation, the entry the index holds, and the vectors' count and model.
-// Any change to mem, or to its vectors, changes it.
+// generation, the entry the index holds, and the vectors' version and
+// model. Any change to mem, or any write to its vectors, changes it: a
+// count of the vectors would not, when a fill adds the new text's vector
+// and then prunes the old text's (found by the cleanup session's review).
 type memSnapshotKey struct {
 	gen   string
 	seq   int64
 	end   int64
-	vecs  int
+	vecs  int64
 	model string
 }
 
@@ -509,7 +530,7 @@ func (l *Lazy) snapshot(ctx context.Context, dir string) (s memSnapshot, ok bool
 		if err != nil {
 			return err
 		}
-		n, model, err := v.count()
+		n, model, err := v.version()
 		if err != nil {
 			return err
 		}
