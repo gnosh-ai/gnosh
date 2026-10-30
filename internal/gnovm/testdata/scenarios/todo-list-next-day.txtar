@@ -1,0 +1,13 @@
+A todo list in the user's own words, asked about again in a new session.
+It must still be there the next day. Before MEMPLAN phase 4 (one task list,
+kept in mem) the model put it in the session-only todos tool, and the next
+session said the list was empty.
+
+-- prompt --
+Make me a todo list for setting up CI here: add a GitHub Actions workflow, cache Go modules, and run the tests on pull requests. Don't do them yet, just the list.
+-- prompt-new --
+What's left on my todo list?
+-- check --
+answer last contains workflow
+answer last contains cache
+answer last contains pull request
