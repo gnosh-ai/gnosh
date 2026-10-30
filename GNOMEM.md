@@ -149,9 +149,9 @@ itself tells you in one line what is due and what waits on you, whether or
 not the model brings it up.
 
 Say the agent, in a session titled "Release v2", planned a release with a
-question for you, kept the staging database, then changed it to the wrong
-one, and kept a deploy key you had pasted. Its calls come first; the notice
-is what the next session starts with; the rest is you:
+question for you, kept the staging database and a deploy key you had
+pasted, then changed the database to the wrong one. Its calls come first;
+the notice is what the next session starts with; the rest is you:
 
 ```
 gnovm_run {"name": "mem", "code": "mem.Goal(\"release v2\").Steps(\"bump the version\", \"tag v2.0.0\").Ask(\"which day suits you for the release?\")"}
@@ -160,10 +160,10 @@ gnovm_run {"name": "mem", "code": "mem.Goal(\"release v2\").Steps(\"bump the ver
   asked `release-v2/3` "which day suits you for the release?" (for the user); `release-v2` waits on it; next: `release-v2/1` "bump the version"
 gnovm_run {"name": "mem", "code": "mem.Fact(\"staging-db\", \"The staging database is db-stg-7.\")"}
   fact `staging-db` is new
-gnovm_run {"name": "mem", "code": "mem.Fact(\"staging-db\", \"The staging database is db-stg-8.\")"}
-  fact `staging-db` changed (was "The staging database is db-stg-7.")
 gnovm_run {"name": "mem", "code": "mem.Fact(\"deploy\", \"Deploy with the key sk-live-4f9a2c, then run make deploy.\")"}
   fact `deploy` is new
+gnovm_run {"name": "mem", "code": "mem.Fact(\"staging-db\", \"The staging database is db-stg-8.\")"}
+  fact `staging-db` changed (was "The staging database is db-stg-7.")
 mem waiting on you: "which day suits you for the release?" (release-v2/3)
 /mem
   mem: 1 goal open, 1 question for the user · 2 facts
@@ -180,23 +180,25 @@ mem waiting on you: "which day suits you for the release?" (release-v2/3)
 /mem find staging
   fact `staging-db` = The staging database is db-stg-8.
 /mem log 2
-  #3 2026-10-30 10:12, the agent in "Release v2": mem.Fact("staging-db", "The staging database is db-stg-8.")
-      fact `staging-db`: "The staging database is db-stg-8."
-  #4 2026-10-30 10:12, the agent in "Release v2": mem.Fact("deploy", "Deploy with the key sk-live-4f9a2c, then run make deploy.")
+  #3 2026-10-30 10:12, the agent in "Release v2": mem.Fact("deploy", "Deploy with the key sk-live-4f9a2c, then run make deploy.")
       fact `deploy`: "Deploy with the key sk-live-4f9a2c, then run make deploy."
-/mem undo 3
-  undid #3 as #5:
-  #5 2026-10-30 10:14, you: /mem undo 3
+  #4 2026-10-30 10:12, the agent in "Release v2": mem.Fact("staging-db", "The staging database is db-stg-8.")
+      fact `staging-db`: "The staging database is db-stg-8."
+/mem undo 4
+  undid #4 as #5:
+  #5 2026-10-30 10:14, you: /mem undo 4
       fact `staging-db`: "The staging database is db-stg-7."
 /mem redact sk-live-4f9a2c
   redacted it in 1 place; gnosh rewrites mem's files
   (mem's journal was written again without what was erased; its store and index are built afresh from it)
 /mem find sk-live
   nothing in mem matches "sk-live": Find matches the words as they were stored; /mem lists 1 goal, 0 rules and 2 facts
-/mem log 3
-  #4 2026-10-30 10:12, the agent in "Release v2": (redacted)
+/mem log 4
+  #3 2026-10-30 10:12, the agent in "Release v2": (redacted)
       fact `deploy`: "Deploy with the key (redacted), then run make deploy."
-  #5 2026-10-30 10:14, you: /mem undo 3
+  #4 2026-10-30 10:12, the agent in "Release v2": mem.Fact("staging-db", "The staging database is db-stg-8.")
+      fact `staging-db`: "The staging database is db-stg-8."
+  #5 2026-10-30 10:14, you: /mem undo 4
       fact `staging-db`: "The staging database is db-stg-7."
   #6 2026-10-30 10:15, you: (redacted)
       redact fact `deploy`
