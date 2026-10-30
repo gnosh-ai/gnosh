@@ -20,7 +20,7 @@ import (
 // GnoVM's own words did not say, and Jae's lane spent minutes on a backoff
 // sum written in Go (2026-10-30). Each input runs in a scratch VM of its
 // own; the shift's are written as the model wrote them, and the hint's two
-// fixes run.
+// fixes run. The hint comes first of the notes, right under the error.
 func TestGoHints(t *testing.T) {
 	t.Parallel()
 	h := newTestHost(t, t.TempDir())
@@ -43,6 +43,7 @@ func TestGoHints(t *testing.T) {
 			continue
 		}
 		require.Error(t, res.Err, c.code)
-		require.Contains(t, res.Notes, c.hint, c.code)
+		require.NotEmpty(t, res.Notes, c.code)
+		require.Equal(t, c.hint, res.Notes[0], "the hint first, right under the error: %q", res.Notes)
 	}
 }
