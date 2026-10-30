@@ -1,0 +1,11 @@
+A standing rule from the user: kept as a rule, which every later session is
+given in full as the user's words, and gnosh tells the user it was set.
+
+-- prompt --
+From now on, always run gofumpt -l . before you commit anything in this project. Keep that as a rule for every session.
+-- prompt-new --
+What rules do you follow in this project?
+-- check --
+turn 1 tool gnovm_run >= 1
+mem-count rules == 1
+answer last contains gofumpt
