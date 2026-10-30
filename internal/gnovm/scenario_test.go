@@ -118,11 +118,14 @@ func TestScenarios(t *testing.T) {
 
 // scenario is a parsed testdata/scenarios file (txtar): a description, then
 // sections. "prompt" continues the session, "prompt-new" starts a new one,
-// "project/<path>" is a file in the project, "check" holds the checks.
+// "project/<path>" is a file in the project, "mem" is Gno run in the
+// project's mem as the user before the first turn, and "check" holds the
+// checks.
 type scenario struct {
 	about  string
 	turns  []turnSpec
 	files  map[string]string
+	mem    string
 	checks []string
 }
 
@@ -167,7 +170,44 @@ func TestScenarioFilesParse(t *testing.T) {
 				}
 			}
 		}
+		if sc.mem != "" {
+			if err := seedMem(t.TempDir(), "/proj", sc.mem); err != nil {
+				t.Errorf("%s: %v", file, err)
+			}
+		}
 	}
+}
+
+// TestScenarioMemSection checks that a scenario's mem section is in mem
+// before its first turn, kept as the user's, as the agent will find it.
+func TestScenarioMemSection(t *testing.T) {
+	t.Parallel()
+	file := filepath.Join(t.TempDir(), "seeded.txtar")
+	require.NoError(t, os.WriteFile(file, []byte(`A secret in mem before the session.
+-- mem --
+mem.Fact("api/staging-key", "sk-staging-0000")
+-- mem --
+mem.Goal("rotate the staging key", "rotate-key")
+-- prompt --
+What's the staging API key?
+-- check --
+mem-count facts == 1
+`), 0o600))
+	sc, err := parseScenario(file)
+	require.NoError(t, err)
+	dir := t.TempDir()
+	require.NoError(t, seedMem(dir, "/proj", sc.mem))
+	n, err := memCount(dir, "/proj", "facts")
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+	n, err = memCount(dir, "/proj", "open")
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+	_, entries, _, err := readMemJournal(filepath.Join(memDir(dir, "/proj"), "journal.jsonl"))
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "one call, one entry")
+	require.Equal(t, "user", entries[0].Who, "kept as the user's")
+	require.Error(t, seedMem(dir, "/proj", `mem.Fact("BAD NAME", "x")`), "a section that fails stops the run")
 }
 
 var sectionRe = regexp.MustCompile(`(?m)^-- (.+?) --$`)
@@ -206,6 +246,8 @@ func parseScenario(path string) (*scenario, error) {
 			}
 		case strings.HasPrefix(name, "project/"):
 			sc.files[strings.TrimPrefix(name, "project/")] = body
+		case name == "mem":
+			sc.mem = strings.TrimSpace(sc.mem + "\n" + body)
 		default:
 			return nil, fmt.Errorf("unknown section %q", name)
 		}
@@ -265,6 +307,11 @@ func (r *scenarioRun) run(t *testing.T, sc *scenario, gnosh, home, reasoning str
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if sc.mem != "" {
+		if err := seedMem(filepath.Join(data, "crush", "gnovm"), project, sc.mem); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -492,6 +539,24 @@ func dumpPersistentVMs(t *testing.T, gnovmDir, project string) map[string]string
 		dumps[vm.Name] = fmt.Sprintf("%d entries\n%s", vm.Entries, dumpGlobals(t, s.res))
 	}
 	return dumps
+}
+
+// seedMem runs a scenario's mem section in project's mem as the user, typed
+// in no session: what mem held before the scenario's first turn, a secret
+// the user means to have erased, say.
+func seedMem(gnovmDir, project, code string) error {
+	h, err := NewHost(Options{Dir: gnovmDir, Client: NewClientID()})
+	if err != nil {
+		return err
+	}
+	defer h.Close()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.ensureBase()
+	if _, err := h.mem(project).call(context.Background(), memRequest{Code: code, User: true}); err != nil {
+		return fmt.Errorf("the mem section: %w", err)
+	}
+	return nil
 }
 
 // evalInVM rebuilds a run's VM from its journal and returns an expression's
