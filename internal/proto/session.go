@@ -1,5 +1,7 @@
 package proto
 
+import "github.com/charmbracelet/crush/internal/session"
+
 // Session represents a session in the proto layer.
 //
 // IsBusy is computed on read (it is not persisted with the session) and
@@ -35,4 +37,39 @@ type Todo struct {
 	Content    string `json:"content"`
 	Status     string `json:"status"`
 	ActiveForm string `json:"active_form"`
+}
+
+// SessionFromDomain is s as the proto layer carries it, apart from what is
+// computed on read (IsBusy, AttachedClients).
+func SessionFromDomain(s session.Session) Session {
+	return Session{
+		ID:               s.ID,
+		ParentSessionID:  s.ParentSessionID,
+		Title:            s.Title,
+		SummaryMessageID: s.SummaryMessageID,
+		MessageCount:     s.MessageCount,
+		PromptTokens:     s.PromptTokens,
+		CompletionTokens: s.CompletionTokens,
+		Cost:             s.Cost,
+		Todos:            TodosFromDomain(s.Todos),
+		Channel:          s.Channel,
+		CreatedAt:        s.CreatedAt,
+		UpdatedAt:        s.UpdatedAt,
+	}
+}
+
+// TodosFromDomain is todos as the proto layer carries them; nil for none.
+func TodosFromDomain(todos []session.Todo) []Todo {
+	if len(todos) == 0 {
+		return nil
+	}
+	out := make([]Todo, len(todos))
+	for i, t := range todos {
+		out[i] = Todo{
+			Content:    t.Content,
+			Status:     string(t.Status),
+			ActiveForm: t.ActiveForm,
+		}
+	}
+	return out
 }

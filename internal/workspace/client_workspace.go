@@ -214,7 +214,7 @@ func (w *ClientWorkspace) ListSessions(ctx context.Context) ([]session.Session, 
 }
 
 func (w *ClientWorkspace) SaveSession(ctx context.Context, sess session.Session) (session.Session, error) {
-	saved, err := w.client.SaveSession(ctx, w.workspaceID(), sessionToProto(sess))
+	saved, err := w.client.SaveSession(ctx, w.workspaceID(), proto.SessionFromDomain(sess))
 	if err != nil {
 		return session.Session{}, err
 	}
@@ -1547,23 +1547,6 @@ func protoToFiles(files []proto.File) []history.File {
 	return out
 }
 
-func sessionToProto(s session.Session) proto.Session {
-	return proto.Session{
-		ID:               s.ID,
-		ParentSessionID:  s.ParentSessionID,
-		Title:            s.Title,
-		SummaryMessageID: s.SummaryMessageID,
-		MessageCount:     s.MessageCount,
-		PromptTokens:     s.PromptTokens,
-		CompletionTokens: s.CompletionTokens,
-		Cost:             s.Cost,
-		Todos:            todosToProto(s.Todos),
-		Channel:          s.Channel,
-		CreatedAt:        s.CreatedAt,
-		UpdatedAt:        s.UpdatedAt,
-	}
-}
-
 // protoToSkillStates reconstructs internal skill state slices from
 // their wire representation. Non-empty Error strings are turned into
 // synthetic error values; the TUI never type-asserts on Err.
@@ -1582,21 +1565,6 @@ func protoToSkillStates(in []proto.SkillState) []*skills.SkillState {
 			state.Err = errors.New(s.Error)
 		}
 		out[i] = state
-	}
-	return out
-}
-
-func todosToProto(todos []session.Todo) []proto.Todo {
-	if len(todos) == 0 {
-		return nil
-	}
-	out := make([]proto.Todo, len(todos))
-	for i, t := range todos {
-		out[i] = proto.Todo{
-			Content:    t.Content,
-			Status:     string(t.Status),
-			ActiveForm: t.ActiveForm,
-		}
 	}
 	return out
 }

@@ -282,7 +282,7 @@ func (c *controllerV1) handleGetWorkspaceSessions(w http.ResponseWriter, r *http
 	ws, _ := c.backend.GetWorkspace(id)
 	result := make([]proto.Session, len(sessions))
 	for i, s := range sessions {
-		result[i] = sessionToProto(s)
+		result[i] = proto.SessionFromDomain(s)
 		result[i].IsBusy = isSessionBusy(ws, s.ID)
 		result[i].AttachedClients = attachedClients(ws, s.ID)
 	}
@@ -306,7 +306,7 @@ func (c *controllerV1) handlePostWorkspaceSessions(w http.ResponseWriter, r *htt
 		return
 	}
 	ws, _ := c.backend.GetWorkspace(id)
-	out := sessionToProto(sess)
+	out := proto.SessionFromDomain(sess)
 	out.IsBusy = isSessionBusy(ws, sess.ID)
 	out.AttachedClients = attachedClients(ws, sess.ID)
 	jsonEncode(w, out)
@@ -322,7 +322,7 @@ func (c *controllerV1) handleGetWorkspaceSession(w http.ResponseWriter, r *http.
 		return
 	}
 	ws, _ := c.backend.GetWorkspace(id)
-	out := sessionToProto(sess)
+	out := proto.SessionFromDomain(sess)
 	out.IsBusy = isSessionBusy(ws, sess.ID)
 	out.AttachedClients = attachedClients(ws, sess.ID)
 	jsonEncode(w, out)
@@ -369,7 +369,7 @@ func (c *controllerV1) handlePutWorkspaceSession(w http.ResponseWriter, r *http.
 		return
 	}
 	ws, _ := c.backend.GetWorkspace(id)
-	out := sessionToProto(saved)
+	out := proto.SessionFromDomain(saved)
 	out.IsBusy = isSessionBusy(ws, saved.ID)
 	out.AttachedClients = attachedClients(ws, saved.ID)
 	jsonEncode(w, out)
@@ -393,7 +393,7 @@ func (c *controllerV1) handlePostWorkspaceSessionBranch(w http.ResponseWriter, r
 		return
 	}
 	ws, _ := c.backend.GetWorkspace(id)
-	out := sessionToProto(branch)
+	out := proto.SessionFromDomain(branch)
 	out.IsBusy = isSessionBusy(ws, branch.ID)
 	out.AttachedClients = attachedClients(ws, branch.ID)
 	jsonEncode(w, out)
@@ -453,7 +453,7 @@ func (c *controllerV1) handlePostWorkspaceSessionRewind(w http.ResponseWriter, r
 	}
 	out := proto.RewindResult{Files: result.Files, Additions: result.Additions, Removals: result.Removals, Skipped: result.Skipped}
 	if result.Kept.ID != "" {
-		kept := sessionToProto(result.Kept)
+		kept := proto.SessionFromDomain(result.Kept)
 		out.Kept = &kept
 	}
 	jsonEncode(w, out)

@@ -112,7 +112,7 @@ func wrapEvent(ev any) *pubsub.Payload {
 	case pubsub.Event[session.Session]:
 		return envelope(pubsub.PayloadTypeSession, pubsub.Event[proto.Session]{
 			Type:    e.Type,
-			Payload: sessionToProto(e.Payload),
+			Payload: proto.SessionFromDomain(e.Payload),
 		})
 	case pubsub.Event[history.File]:
 		return envelope(pubsub.PayloadTypeFile, pubsub.Event[proto.File]{
@@ -272,23 +272,6 @@ func mcpEventTypeToProto(t mcp.EventType) proto.MCPEventType {
 	}
 }
 
-func sessionToProto(s session.Session) proto.Session {
-	return proto.Session{
-		ID:               s.ID,
-		ParentSessionID:  s.ParentSessionID,
-		Title:            s.Title,
-		SummaryMessageID: s.SummaryMessageID,
-		MessageCount:     s.MessageCount,
-		PromptTokens:     s.PromptTokens,
-		CompletionTokens: s.CompletionTokens,
-		Cost:             s.Cost,
-		Todos:            todosToProto(s.Todos),
-		Channel:          s.Channel,
-		CreatedAt:        s.CreatedAt,
-		UpdatedAt:        s.UpdatedAt,
-	}
-}
-
 // isSessionBusy reports whether the given workspace has an in-flight
 // agent run for sessionID. It tolerates a nil workspace (treating it as
 // "not busy") so REST handlers can pass GetWorkspace's result through
@@ -310,21 +293,6 @@ func attachedClients(ws *backend.Workspace, sessionID string) int {
 		return 0
 	}
 	return ws.AttachedClientsForSession(sessionID)
-}
-
-func todosToProto(todos []session.Todo) []proto.Todo {
-	if len(todos) == 0 {
-		return nil
-	}
-	out := make([]proto.Todo, len(todos))
-	for i, t := range todos {
-		out[i] = proto.Todo{
-			Content:    t.Content,
-			Status:     string(t.Status),
-			ActiveForm: t.ActiveForm,
-		}
-	}
-	return out
 }
 
 func fileToProto(f history.File) proto.File {
