@@ -578,6 +578,15 @@ func (m *Mem) Redact(secret string) {
 	case places > 3 && caller() != "user":
 		panic("that text is in " + strconv.Itoa(places) + " places: Redact is for a secret's exact text, and the user can erase wider with /mem redact")
 	}
+	// A rule is the user's words, followed by every session: redacting a
+	// phrase of one changes what it says, for good. The user may.
+	if caller() != "user" {
+		for i, k := range kinds {
+			if k == "rule" {
+				panic("that text is in the rule `" + names[i] + "`, and rules are the user's: they redact it with /mem redact")
+			}
+		}
+	}
 	for i, n := range names {
 		m.do(Op{Kind: "redact", Name: n, Field: kinds[i], Old: secret})
 	}

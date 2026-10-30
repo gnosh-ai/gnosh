@@ -736,3 +736,21 @@ func TestHostSaysWhichRulesChanged(t *testing.T) {
 	require.Nil(t, run(`print(mem.Show())`))
 	require.Equal(t, []MemRule{{Name: "setup", Was: "run make setup first"}}, run(`mem.Rule("setup", "")`))
 }
+
+// A session may not redact a rule's text: a phrase taken out of "never
+// push without asking" changes what every session follows, for good. The
+// user may, with /mem redact.
+func TestMemRedactLeavesRulesToTheUser(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	res, err := h.call(context.Background(), memRequest{Code: `mem.Rule("push", "never push without asking first")`, User: true})
+	require.NoError(t, err, res.Output)
+	_, err = h.call(context.Background(), memRequest{Code: `mem.Redact("without asking")`, Session: "s1"})
+	require.EqualError(t, err, "that text is in the rule `push`, and rules are the user's: they redact it with /mem redact")
+	out := memOK(t, h, `println(mem.Show("push"))`).Output
+	require.Contains(t, out, "never push without asking first")
+	res, err = h.call(context.Background(), memRequest{Code: `mem.Redact("without asking")`, User: true})
+	require.NoError(t, err, res.Output)
+	require.Contains(t, memOK(t, h, `println(mem.Show("push"))`).Output, "never push (redacted) first")
+}
