@@ -40,8 +40,10 @@ type base struct {
 	names map[string]string
 	// heap is the heap growth measured across loads, charged to the budget.
 	heap int64
-	// memRealmReady is set once mem's realm is preprocessed into the base.
-	memRealmReady bool
+	// memRealmReady is set once mem's realm is preprocessed into the base,
+	// and memLibsCached once the libraries' bytes are in gno's byte cache,
+	// which every transaction shares.
+	memRealmReady, memLibsCached bool
 }
 
 func newBase() *base {

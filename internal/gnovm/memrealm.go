@@ -86,8 +86,13 @@ func openMemRealm(b *base, dir string) (*memRealm, error) {
 		return nil, err
 	}
 	// A mem call's transaction reads the libraries' objects and types from
-	// gno's shared byte cache, not from the store it writes to.
-	b.store.PopulateStdlibCache(libraryPaths())
+	// gno's shared byte cache, not from the store it writes to. Filling it
+	// copies every library's bytes (about 100 ms), so it is done once: what
+	// mem runs on is loaded by now, and never changes.
+	if !b.memLibsCached {
+		b.store.PopulateStdlibCache(libraryPaths())
+		b.memLibsCached = true
+	}
 	db, err := goleveldb.NewGoLevelDB("mem", dir)
 	if err != nil {
 		return nil, err
