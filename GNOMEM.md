@@ -208,12 +208,16 @@ rotate the staging API key before Friday."
 
 It is a reminder for the next session, not an alarm: nothing fires at a time
 of day. In real runs on 30 October 2026 with mem v2, the agent brought the
-reminder back on every check-in (3 of 3). Beside an unrelated task it raised
-it in 4 runs of 4 that morning, and in 5 of 9 on later builds: kept as a
-question for you, or as a fact, the reminder was raised every time; kept as a
-goal for later, the next session took it for ordinary open work and said
-nothing. With the earlier mem, whose recipe told the model to use mem only
-where the task at hand was part of it, it had never done that (0 of 7).
+reminder back on every check-in (3 of 3), and beside an unrelated task it
+raised it in 4 runs of 4 that morning and in 8 of 13 on later builds. How it
+was kept decided it. Kept as a question for you, Gnosh's own line shows it as
+the session starts (`mem waiting on you: …`), every time, and the agent
+raised it too in 6 runs of 8. Kept as a goal that waits for "our next
+conversation", it went unsaid every time (3 of 3), so such a wait now points
+the agent to a question instead, which it took in 2 runs of 2. With the
+earlier mem, whose recipe told the model to use mem only where the task at
+hand was part of it, it had never raised a reminder unasked beside other work
+(0 of 7).
 
 A reminder can be for a day:
 
@@ -385,7 +389,7 @@ included.
 
 These are real runs of Gnosh with the open-weight Qwen3.8-27B on a local
 llama.cpp server, one of each use case below, on Gnosh's main branch as it
-stood between 12:04 and 20:00 UTC on 30 October 2026, with Qwen thinking as it
+stood between 12:04 and 21:00 UTC on 30 October 2026, with Qwen thinking as it
 does by default, and finding by meaning off except in recall-by-meaning, which
 measures it. Each runs in a fresh project and a fresh config, with only
 Gnosh's built-in prompt, and the user talks the way the second column says,
@@ -415,6 +419,7 @@ test results, the final answer, and what mem holds at the end.
 | remind-next-time | "remind me next time we talk to …", then a morning check-in | 2 | all 2 |
 | wait-on-a-merge | a reminder that waits on a merge, then "What's on?" | 2 | all 3 |
 | remind-on-a-date | "remind me on November 3 to …", then "what have I asked you to remind me about?" | 2 | all 4 |
+| reminder-beside-unrelated-work | "remind me next time we talk to rotate …", then "Fix the typo in greet.sh." | 2 | 2 of 3 |
 | mem-stays-out-of-the-way | a small unrelated request while a release is planned | 2 | all 2 |
 | user-can-see-mem | a fact kept, then "how can I see everything you're keeping … without asking you?" | 2 | all 2 |
 | memory-across-sessions | two facts to remember for a future session, asked for there | 2 | all 4 |
@@ -437,6 +442,9 @@ test results, the final answer, and what mem holds at the end.
   unasked, and the next session read it from there and answered with it. The
   built-in prompt keeps secrets out of mem; in this run it did not keep one
   out of a file.
+- **reminder-beside-unrelated-work** kept the reminder as a question for the
+  user, and Gnosh's own line showed it as the next session started, but the
+  agent's answer only fixed the typo.
 - **forget-a-secret** failed a check on its first run, when its first session
   still asked for the key to be kept: mem kept nothing of the key, but the
   third session went looking past the project, into the test harness's own
