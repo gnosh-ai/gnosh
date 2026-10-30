@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/crush/internal/ui/logo"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/x/term"
@@ -19,12 +20,13 @@ func main() {
 	}
 
 	s := styles.GnoshCosmos()
+	gno, from, to := s.Wordmark(colorprofile.Detect(os.Stdout, os.Environ()) == colorprofile.TrueColor, s.Logo.TitleColorA, s.Logo.TitleColorB)
 	opts := logo.Opts{
 		FieldColor:   s.Logo.FieldColor,
 		FieldColorB:  s.Logo.FieldColorB,
-		TitleColorA:  s.Logo.TitleColorA,
-		TitleColorB:  s.Logo.TitleColorB,
-		GnoColor:     s.Logo.GnoColor,
+		TitleColorA:  from,
+		TitleColorB:  to,
+		GnoColor:     gno,
 		CharmColor:   s.Logo.CharmColor,
 		VersionColor: s.Logo.VersionColor,
 		Width:        w,

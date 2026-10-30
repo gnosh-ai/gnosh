@@ -68,8 +68,12 @@ func (m *UI) updateSidebarScrollState() {
 	cwd := common.PrettyPathWithBranch(t, m.com.Workspace.WorkingDir(), m.gitBranch, contentWidth)
 	sidebarLogo := m.sidebarLogo
 	if height < logoHeightBreakpoint {
+		gno, from, to := t.Wordmark(m.com.TrueColor, t.Logo.SmallGradFromColor, t.Logo.SmallGradToColor)
 		sidebarLogo = lipgloss.JoinVertical(lipgloss.Left, logo.SmallRender(m.com.Styles, contentWidth, logo.Opts{
-			Hyper: m.com.IsHyper(),
+			Hyper:       m.com.IsHyper(),
+			GnoColor:    gno,
+			TitleColorA: from,
+			TitleColorB: to,
 		}), "")
 	}
 

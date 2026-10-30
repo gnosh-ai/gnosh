@@ -1122,6 +1122,13 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sendProgressBar = slices.Contains(msg, "WT_SESSION")
 		}
 		cmds = append(cmds, common.QueryCmd(uv.Environ(msg)))
+	case tea.ColorProfileMsg:
+		// The wordmarks fade over the whole name only where the terminal
+		// shows 24-bit color (styles.Styles.Wordmark).
+		if trueColor := m.caps.SupportsTrueColor(); trueColor != m.com.TrueColor {
+			m.com.TrueColor = trueColor
+			m.refreshStyles()
+		}
 	case tea.ModeReportMsg:
 		m.updateNotificationBackend()
 	case uv.UnknownOscEvent:
@@ -5613,7 +5620,7 @@ func (m *UI) renderEditorView(width int) string {
 
 // cacheSidebarLogo renders and caches the sidebar logo at the specified width.
 func (m *UI) cacheSidebarLogo(width int) {
-	m.sidebarLogo = renderLogo(m.com.Styles, true, m.com.IsHyper(), width)
+	m.sidebarLogo = renderLogo(m.com.Styles, true, m.com.IsHyper(), m.com.TrueColor, width)
 }
 
 // applyThemeForProvider swaps the active theme to the one associated with
@@ -7334,14 +7341,16 @@ func (m *UI) disableDockerMCP() tea.Msg {
 	return util.NewInfoMsg("Docker MCP disabled successfully")
 }
 
-// renderLogo renders the Crush logo with the given styles and dimensions.
-func renderLogo(t *styles.Styles, compact, hyper bool, width int) string {
+// renderLogo renders the Crush logo with the given styles and dimensions;
+// trueColor says whether the terminal shows 24-bit color (Styles.Wordmark).
+func renderLogo(t *styles.Styles, compact, hyper, trueColor bool, width int) string {
+	gno, from, to := t.Wordmark(trueColor, t.Logo.TitleColorA, t.Logo.TitleColorB)
 	return logo.Render(t.Logo.GradCanvas, version.Version, compact, logo.Opts{
 		FieldColor:   t.Logo.FieldColor,
 		FieldColorB:  t.Logo.FieldColorB,
-		TitleColorA:  t.Logo.TitleColorA,
-		TitleColorB:  t.Logo.TitleColorB,
-		GnoColor:     t.Logo.GnoColor,
+		TitleColorA:  from,
+		TitleColorB:  to,
+		GnoColor:     gno,
 		CharmColor:   t.Logo.CharmColor,
 		VersionColor: t.Logo.VersionColor,
 		Width:        width,

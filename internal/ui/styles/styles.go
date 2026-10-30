@@ -234,9 +234,13 @@ type Styles struct {
 		SmallGradFromColor color.Color    // Small "Crush" wordmark gradient start
 		SmallGradToColor   color.Color    // Small "Crush" wordmark gradient end
 		// GnoColor, when set, is the one color of Gno, the name's first three
-		// letters, in every wordmark; the rest of the name fades from
-		// TitleColorA to TitleColorB.
-		GnoColor color.Color
+		// letters, in every wordmark on a terminal without 24-bit color, where
+		// a fade over the whole name bands into stripes; the rest of the name
+		// then fades from GnoRestColorA to GnoRestColorB. With 24-bit color
+		// the whole name fades (see Wordmark).
+		GnoColor      color.Color
+		GnoRestColorA color.Color
+		GnoRestColorB color.Color
 	}
 
 	// Working indicator gradient (spinners/shimmers on assistant "thinking",

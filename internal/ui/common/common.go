@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/crush/internal/clipboard"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -127,6 +128,10 @@ func IsImagePath(path string) bool {
 type Common struct {
 	Workspace workspace.Workspace
 	Styles    *styles.Styles
+	// TrueColor says whether the terminal shows 24-bit color, as its color
+	// profile says: the wordmarks fade over the whole name only then
+	// (styles.Styles.Wordmark).
+	TrueColor bool
 }
 
 // Config returns the pure-data configuration associated with this [Common] instance.
@@ -143,9 +148,12 @@ func DefaultCommon(ws workspace.Workspace) *Common {
 	} else {
 		s = LoadThemeStyles("")
 	}
+	// The program sends the profile it detects once it starts; reading it
+	// here as well spares the first frames the other wordmark.
 	return &Common{
 		Workspace: ws,
 		Styles:    &s,
+		TrueColor: colorprofile.Detect(os.Stdout, os.Environ()) == colorprofile.TrueColor,
 	}
 }
 

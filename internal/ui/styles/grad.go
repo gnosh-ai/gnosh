@@ -66,6 +66,18 @@ func ApplyBoldWordmark(base lipgloss.Style, name string, gno, color1, color2 col
 	return base.Bold(true).Foreground(gno).Render(name[:3]) + ApplyBoldForegroundGrad(base, name[3:], color1, color2)
 }
 
+// Wordmark returns how a wordmark that fades from color1 to color2 is drawn
+// on a terminal that shows 24-bit color (trueColor) or does not. With
+// 24-bit color, or a theme without Logo.GnoColor, the fade runs over the
+// whole name and gno is nil; without, Gno is gno and the rest of the name
+// fades from Logo.GnoRestColorA to Logo.GnoRestColorB.
+func (s *Styles) Wordmark(trueColor bool, color1, color2 color.Color) (gno, from, to color.Color) {
+	if trueColor || s.Logo.GnoColor == nil {
+		return nil, color1, color2
+	}
+	return s.Logo.GnoColor, s.Logo.GnoRestColorA, s.Logo.GnoRestColorB
+}
+
 // ApplyBoldForegroundGrad renders a given string with a horizontal gradient
 // foreground.
 func ApplyBoldForegroundGrad(base lipgloss.Style, input string, color1, color2 color.Color) string {

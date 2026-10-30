@@ -185,8 +185,8 @@ func SmallRender(t *styles.Styles, width int, o Opts) string {
 		name = "HYPERCRUSH"
 	}
 	title := styles.ApplyBoldForegroundGrad(t.Logo.GradCanvas, name, t.Logo.SmallGradFromColor, t.Logo.SmallGradToColor)
-	if t.Logo.GnoColor != nil && !o.Hyper {
-		title = styles.ApplyBoldWordmark(t.Logo.GradCanvas, name, t.Logo.GnoColor, t.Logo.TitleColorA, t.Logo.TitleColorB)
+	if o.GnoColor != nil && !o.Hyper {
+		title = styles.ApplyBoldWordmark(t.Logo.GradCanvas, name, o.GnoColor, o.TitleColorA, o.TitleColorB)
 	}
 	remainingWidth := width - lipgloss.Width(title) - 1 // 1 for the space after the name
 	if remainingWidth > 0 {

@@ -49,6 +49,7 @@ func TestGnoshCosmos_FadesRunThroughTheNebula(t *testing.T) {
 	want := []string{*hex(GnoshGreen), *hex(GnoshPurple), *hex(GnoshPink), *hex(GnoshGold)}
 	s := GnoshCosmos()
 	for name, ends := range map[string][2]color.Color{
+		"wordmark":       {s.Logo.TitleColorA, s.Logo.TitleColorB},
 		"small wordmark": {s.Logo.SmallGradFromColor, s.Logo.SmallGradToColor},
 		"header":         {s.Header.LogoGradFromColor, s.Header.LogoGradToColor},
 		"dialog title":   {s.Dialog.TitleGradFromColor, s.Dialog.TitleGradToColor},
@@ -65,20 +66,34 @@ func TestGnoshCosmos_FadesRunThroughTheNebula(t *testing.T) {
 	}
 }
 
-func TestGnoshCosmos_WordmarkGnoIsGreen(t *testing.T) {
-	// Gno, the first three letters of every wordmark, is one green; the rest
-	// of the name fades from Crush's purple to hot pink.
+func TestGnoshCosmos_WordmarkGnoIsGreenWithoutTrueColor(t *testing.T) {
+	// With 24-bit color a wordmark fades through the nebula over the whole
+	// name; without, Gno, its first three letters, is one green and the
+	// rest fades from Crush's purple to hot pink.
 	s := GnoshCosmos()
-	if got, want := *hex(s.Logo.GnoColor), *hex(GnoshGreen); got != want {
-		t.Errorf("Gno is %s, want %s", got, want)
+	stopsOf := func(from, to color.Color) string {
+		stops := fade.Stops(from, to)
+		got := make([]string, len(stops))
+		for i, c := range stops {
+			got[i] = *hex(c)
+		}
+		return fmt.Sprint(got)
 	}
-	stops := fade.Stops(s.Logo.TitleColorA, s.Logo.TitleColorB)
-	got := make([]string, len(stops))
-	for i, c := range stops {
-		got[i] = *hex(c)
+
+	gno, from, to := s.Wordmark(true, s.Logo.TitleColorA, s.Logo.TitleColorB)
+	if gno != nil {
+		t.Errorf("with 24-bit color Gno is %s, want the whole name in one fade", *hex(gno))
 	}
-	if want := []string{*hex(GnoshPurple), *hex(GnoshPink)}; fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Errorf("the rest of the wordmark fades through %v, want %v", got, want)
+	if got, want := stopsOf(from, to), stopsOf(s.Logo.TitleColorA, s.Logo.TitleColorB); got != want {
+		t.Errorf("with 24-bit color the wordmark fades through %v, want %v", got, want)
+	}
+
+	gno, from, to = s.Wordmark(false, s.Logo.TitleColorA, s.Logo.TitleColorB)
+	if gno == nil || *hex(gno) != *hex(GnoshGreen) {
+		t.Fatalf("without 24-bit color Gno is %v, want %s", gno, *hex(GnoshGreen))
+	}
+	if got, want := stopsOf(from, to), fmt.Sprint([]string{*hex(GnoshPurple), *hex(GnoshPink)}); got != want {
+		t.Errorf("without 24-bit color the rest of the wordmark fades through %v, want %v", got, want)
 	}
 }
 

@@ -51,8 +51,8 @@ func (h *header) refresh() {
 		name = "HYPERCRUSH"
 	}
 	wordmark := styles.ApplyBoldForegroundGrad(t.Header.LogoGradCanvas, name, t.Header.LogoGradFromColor, t.Header.LogoGradToColor)
-	if t.Logo.GnoColor != nil && !h.com.IsHyper() {
-		wordmark = styles.ApplyBoldWordmark(t.Header.LogoGradCanvas, name, t.Logo.GnoColor, t.Logo.TitleColorA, t.Logo.TitleColorB)
+	if gno, from, to := t.Wordmark(h.com.TrueColor, t.Header.LogoGradFromColor, t.Header.LogoGradToColor); gno != nil && !h.com.IsHyper() {
+		wordmark = styles.ApplyBoldWordmark(t.Header.LogoGradCanvas, name, gno, from, to)
 	}
 	h.compactLogo = " " + wordmark + " "
 	// Force drawHeader to re-render the wide logo on the next frame.
@@ -76,7 +76,7 @@ func (h *header) drawHeader(
 ) {
 	t := h.com.Styles
 	if width != h.width || compact != h.compact {
-		h.logo = renderLogo(h.com.Styles, compact, h.com.IsHyper(), width)
+		h.logo = renderLogo(h.com.Styles, compact, h.com.IsHyper(), h.com.TrueColor, width)
 	}
 
 	h.width = width

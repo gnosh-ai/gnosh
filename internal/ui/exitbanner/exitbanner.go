@@ -3,9 +3,11 @@ package exitbanner
 
 import (
 	"math/rand/v2"
+	"os"
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/logo"
@@ -53,12 +55,16 @@ func Render(banner config.ExitBanner, sess *session.Session, width int) string {
 // logoSection returns the ASCII art logo followed by the parting message.
 func logoSection(contentWidth int) string {
 	t := styles.ThemeForProvider("")
+	// The banner goes out through a colorprofile.Writer on stderr
+	// (cmd/root.go), so it fades over the whole name only where that
+	// terminal shows 24-bit color.
+	gno, from, to := t.Wordmark(colorprofile.Detect(os.Stderr, os.Environ()) == colorprofile.TrueColor, t.Logo.TitleColorA, t.Logo.TitleColorB)
 	crushLogo := logo.Render(t.Logo.GradCanvas, version.Version, true, logo.Opts{
 		FieldColor:   t.Logo.FieldColor,
 		FieldColorB:  t.Logo.FieldColorB,
-		TitleColorA:  t.Logo.TitleColorA,
-		TitleColorB:  t.Logo.TitleColorB,
-		GnoColor:     t.Logo.GnoColor,
+		TitleColorA:  from,
+		TitleColorB:  to,
+		GnoColor:     gno,
 		CharmColor:   t.Logo.CharmColor,
 		VersionColor: t.Logo.VersionColor,
 		Hyper:        false,
