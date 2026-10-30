@@ -11,6 +11,7 @@ package gnovmtools
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -33,6 +34,12 @@ import (
 // change to what the board prints names the example that no longer says what
 // Gnosh does. Every call in a block is checked, so one run lists every
 // example that has drifted, not only the first.
+//
+// A block can also show what the user does: a line `/mem <args>` is the
+// user's /mem, with what it shows indented under it, and a line that starts
+// `mem due: ` or `mem waiting on you: ` is the notice gnosh shows the user
+// as a session starts, after the calls above it. They run against the same
+// mem as the block's gnovm_run calls.
 
 // repoRoot is the repository root, from this package's directory.
 var repoRoot = filepath.Join("..", "..", "..")
@@ -45,10 +52,12 @@ var checkedDocs = map[string]int{
 	"README.md": 10,
 }
 
-// docCall is one gnovm_run call in a document and what the document says it
-// shows.
+// docCall is one call in a document and what the document says it shows:
+// gnovm_run as the agent makes it, /mem as the user types it, or the notice
+// gnosh shows as a session starts.
 type docCall struct {
-	line  int // 1-based, in the document
+	line  int    // 1-based, in the document
+	kind  string // "gnovm_run", "/mem" or "notice"
 	input string
 	want  string
 }
@@ -81,8 +90,15 @@ func docBlocks(t *testing.T, root, doc string) [][]docCall {
 		case !inFence:
 		case strings.HasPrefix(line, "gnovm_run "):
 			flush()
-			block = append(block, docCall{line: i + 1, input: strings.TrimPrefix(line, "gnovm_run ")})
+			block = append(block, docCall{line: i + 1, kind: "gnovm_run", input: strings.TrimPrefix(line, "gnovm_run ")})
 			collecting = true
+		case line == "/mem" || strings.HasPrefix(line, "/mem "):
+			flush()
+			block = append(block, docCall{line: i + 1, kind: "/mem", input: strings.TrimSpace(strings.TrimPrefix(line, "/mem"))})
+			collecting = true
+		case strings.HasPrefix(line, "mem due: ") || strings.HasPrefix(line, "mem waiting on you: "):
+			flush()
+			block = append(block, docCall{line: i + 1, kind: "notice", want: line})
 		case collecting && strings.HasPrefix(line, "  "):
 			want = append(want, strings.TrimPrefix(line, "  "))
 		default:
@@ -117,16 +133,53 @@ func TestDocExamplesRun(t *testing.T) {
 
 		for _, block := range blocks {
 			t.Run(fmt.Sprintf("%s:%d", doc, block[0].line), func(t *testing.T) {
-				run := NewRunTool(newLazy(t), "/proj")
+				l := newLazy(t)
+				run := NewRunTool(l, "/proj")
+				titles := docTitles(block)
 				for _, c := range block {
-					resp := call(t, run, c.input)
-					assert.Equal(t, c.want, shown(resp.Content),
-						"%s line %d: gnovm_run %s no longer shows what the document says. Update the example, or the code if the document is right.\nThe full result was:\n%s",
-						doc, c.line, c.input, resp.Content)
+					switch c.kind {
+					case "/mem":
+						client, err := l.Get()
+						require.NoError(t, err)
+						got, err := client.MemCommand(context.Background(), "/proj", "session-1", c.input, titles)
+						require.NoError(t, err, "%s line %d: /mem %s", doc, c.line, c.input)
+						assert.Equal(t, docWhen(c.want), docWhen(strings.TrimRight(got, "\n")),
+							"%s line %d: /mem %s no longer shows what the document says. Update the example, or the code if the document is right.\nIt showed:\n%s",
+							doc, c.line, c.input, got)
+					case "notice":
+						assert.Equal(t, c.want, l.MemNotice("/proj"),
+							"%s line %d: gnosh's notice as a session starts is no longer what the document says", doc, c.line)
+					default:
+						resp := call(t, run, c.input)
+						assert.Equal(t, c.want, shown(resp.Content),
+							"%s line %d: gnovm_run %s no longer shows what the document says. Update the example, or the code if the document is right.\nThe full result was:\n%s",
+							doc, c.line, c.input, resp.Content)
+					}
 				}
 			})
 		}
 	}
+}
+
+// logWhen is when a /mem log entry was made, which no two runs share.
+var logWhen = regexp.MustCompile(`(?m)^(#\d+) \d{4}-\d{2}-\d{2} \d{2}:\d{2},`)
+
+// docWhen blanks the times in /mem's text, so a document can show real ones.
+func docWhen(s string) string { return logWhen.ReplaceAllString(s, "$1 <when>,") }
+
+// agentIn is how /mem log names the agent: by its session's title.
+var agentIn = regexp.MustCompile(`the agent in "([^"]+)"`)
+
+// docTitles titles the block's session as the document does: a session's
+// title comes from its first prompt, not from mem, so a document may show
+// any.
+func docTitles(block []docCall) map[string]string {
+	for _, c := range block {
+		if m := agentIn.FindStringSubmatch(c.want); m != nil {
+			return map[string]string{"session-1": m[1]}
+		}
+	}
+	return nil
 }
 
 // TestDocBlocksParse pins the parser, so a document's examples cannot drop
@@ -150,18 +203,38 @@ func TestDocBlocksParse(t *testing.T) {
 		`gnovm_run {"code": "x := 1"}`,
 		"",
 		"```",
+		"```",
+		`gnovm_run {"name": "mem", "code": "mem.Fact(\"a\", \"b\")"}`,
+		"  fact `a` is new",
+		"/mem log",
+		`  #1 2026-10-30 10:12, the agent in "Facts": mem.Fact("a", "b")`,
+		"      fact `a`: \"b\"",
+		"/mem",
+		"  mem: 1 fact",
+		`mem waiting on you: "which day?" (q-which-day)`,
+		"```",
 	}, "\n")), 0o644))
 
 	blocks := docBlocks(t, dir, "DOC.md")
 	require.Equal(t, [][]docCall{
 		{
-			{line: 3, input: `{"name": "mem", "code": "mem.Show()"}`, want: "line one\n  indented two"},
-			{line: 6, input: `{"code": "1+1"}`, want: "2"},
+			{line: 3, kind: "gnovm_run", input: `{"name": "mem", "code": "mem.Show()"}`, want: "line one\n  indented two"},
+			{line: 6, kind: "gnovm_run", input: `{"code": "1+1"}`, want: "2"},
 		},
 		{
-			{line: 14, input: `{"code": "x := 1"}`, want: ""},
+			{line: 14, kind: "gnovm_run", input: `{"code": "x := 1"}`, want: ""},
+		},
+		{
+			{line: 18, kind: "gnovm_run", input: `{"name": "mem", "code": "mem.Fact(\"a\", \"b\")"}`, want: "fact `a` is new"},
+			{line: 20, kind: "/mem", input: "log", want: "#1 2026-10-30 10:12, the agent in \"Facts\": mem.Fact(\"a\", \"b\")\n    fact `a`: \"b\""},
+			{line: 23, kind: "/mem", input: "", want: "mem: 1 fact"},
+			{line: 25, kind: "notice", want: `mem waiting on you: "which day?" (q-which-day)`},
 		},
 	}, blocks)
+	require.Equal(t, map[string]string{"session-1": "Facts"}, docTitles(blocks[2]))
+	require.Nil(t, docTitles(blocks[0]))
+	require.Equal(t, "#3 <when>, you: mem.Forget(\"a\")\n    remove fact `a`\n#12 <when>, gnosh: x",
+		docWhen("#3 2026-10-30 10:12, you: mem.Forget(\"a\")\n    remove fact `a`\n#12 2026-01-02 03:04, gnosh: x"))
 
 	require.Equal(t, "40", shown("40\nok · VM s · gas 12 · kept as entry 1\nnote: new scratch VM\n"))
 	require.Equal(t, "", shown("ok · VM s · nothing to keep\n"))
