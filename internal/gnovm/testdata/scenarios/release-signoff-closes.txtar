@@ -1,0 +1,13 @@
+A release that waits on a person's sign-off is closed when the sign-off comes
+in a later session: the agent records it, closes the release, and the judge
+takes the user's word for it. Nothing of the release is left open.
+
+-- mem --
+mem.Goal("release 1.3.0", "release-1-3-0").Steps("tag v1.3.0", "publish the release notes", "Lin signs off")
+mem.Done("release-1-3-0/1", "tagged v1.3.0")
+mem.Done("release-1-3-0/2", "release notes published")
+-- prompt --
+Lin signed off on 1.3.0 this morning, so we're done with that release.
+-- check --
+mem-count open == 0
+answer last matches (?i)(done|closed|complete|shipped|released|finished)
