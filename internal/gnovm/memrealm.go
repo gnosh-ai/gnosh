@@ -217,6 +217,11 @@ func (r *memRealm) commit(call memCall, st memStamp) error {
 // which records nothing: they are the journal's already. It may take as
 // long as a batch of a rebuild needs.
 func (r *memRealm) apply(ops []memOp, ats []int64) (memCall, error) {
+	if ops == nil {
+		// Entries an erasure emptied: none of their Ops is left, but the
+		// store's stamp moves past them, so the call must still be a write.
+		ops = []memOp{}
+	}
 	return r.call("mem.Apply()", memContext{caller: "klash", pending: ops, pendingAt: ats, limit: memLimit{gas: maxGas, wall: 10 * time.Minute}})
 }
 

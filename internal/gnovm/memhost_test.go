@@ -325,6 +325,24 @@ func TestMemHostForgets(t *testing.T) {
 	require.Contains(t, memOK(t, h, `mem.Goal("plan the surprise party")`).Output, "added goal `plan-surprise-party`")
 }
 
+// A fact forgotten right after it was set leaves entries with no Ops,
+// which a store built afresh steps past: it used to have nothing to commit
+// its stamp with, and the worker panicked.
+func TestMemHostForgetsAFactAlone(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	h := newTestMemHost(t, dir)
+	memOK(t, h, `mem.Fact("phone/alice", "555-0142")`)
+	res, err := h.call(context.Background(), memRequest{Code: `mem.Forget("phone/alice")`, User: true})
+	require.NoError(t, err, res.Output)
+	require.Contains(t, res.Output, "forgot fact `phone/alice`")
+	requireNowhere(t, dir, "555-0142")
+	require.Contains(t, memOK(t, h, `mem.Show()`).Output, "mem is empty")
+	_, err = h.repair(context.Background())
+	require.NoError(t, err)
+	require.Contains(t, memOK(t, h, `print(mem.Check()); println(mem.Show())`).Output, "mem is empty")
+}
+
 // Two gnosh processes take turns through mem's lock, and every input is
 // kept once, in one order.
 func TestMemHostTwoProcessesTakeTurns(t *testing.T) {
