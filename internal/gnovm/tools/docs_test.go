@@ -21,6 +21,8 @@ import (
 	"testing"
 	"unicode"
 
+	"charm.land/fantasy"
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,7 +41,25 @@ import (
 // user's /mem, with what it shows indented under it, and a line that starts
 // `mem due: ` or `mem waiting on you: ` is the notice gnosh shows the user
 // as a session starts, after the calls above it. They run against the same
-// mem as the block's gnovm_run calls.
+// mem as the block's gnovm_run calls, the /mem lines in a later session than
+// theirs: the user reads what an earlier session of the agent left.
+
+// The sessions a block's calls run in: the agent's, then the user's. mem
+// names a session by its id's first 8 characters, so these differ there, as
+// two sessions' random ids do.
+const (
+	docAgentSession = "6f1c2a9e-0b7d-4c55-9a3e-2f8d1b7c4e10"
+	docUserSession  = "b3e9d0c4-5a61-4f2e-8c17-9d4a2e6f3b85"
+)
+
+// docRun runs a block's gnovm_run call as the agent, in its session.
+func docRun(t *testing.T, tool fantasy.AgentTool, input string) fantasy.ToolResponse {
+	t.Helper()
+	ctx := context.WithValue(context.Background(), tools.SessionIDContextKey, docAgentSession)
+	resp, err := tool.Run(ctx, fantasy.ToolCall{ID: "call-" + t.Name(), Name: tool.Info().Name, Input: input})
+	require.NoError(t, err)
+	return resp
+}
 
 // repoRoot is the repository root, from this package's directory.
 var repoRoot = filepath.Join("..", "..", "..")
@@ -141,7 +161,7 @@ func TestDocExamplesRun(t *testing.T) {
 					case "/mem":
 						client, err := l.Get()
 						require.NoError(t, err)
-						got, err := client.MemCommand(context.Background(), "/proj", "session-1", c.input, titles)
+						got, err := client.MemCommand(context.Background(), "/proj", docUserSession, c.input, titles)
 						require.NoError(t, err, "%s line %d: /mem %s", doc, c.line, c.input)
 						assert.Equal(t, docWhen(c.want), docWhen(strings.TrimRight(got, "\n")),
 							"%s line %d: /mem %s no longer shows what the document says. Update the example, or the code if the document is right.\nIt showed:\n%s",
@@ -150,7 +170,7 @@ func TestDocExamplesRun(t *testing.T) {
 						assert.Equal(t, c.want, l.MemNotice("/proj"),
 							"%s line %d: gnosh's notice as a session starts is no longer what the document says", doc, c.line)
 					default:
-						resp := call(t, run, c.input)
+						resp := docRun(t, run, c.input)
 						assert.Equal(t, c.want, shown(resp.Content),
 							"%s line %d: gnovm_run %s no longer shows what the document says. Update the example, or the code if the document is right.\nThe full result was:\n%s",
 							doc, c.line, c.input, resp.Content)
@@ -176,7 +196,7 @@ var agentIn = regexp.MustCompile(`the agent in "([^"]+)"`)
 func docTitles(block []docCall) map[string]string {
 	for _, c := range block {
 		if m := agentIn.FindStringSubmatch(c.want); m != nil {
-			return map[string]string{"session-1": m[1]}
+			return map[string]string{docAgentSession: m[1]}
 		}
 	}
 	return nil
@@ -231,7 +251,7 @@ func TestDocBlocksParse(t *testing.T) {
 			{line: 25, kind: "notice", want: `mem waiting on you: "which day?" (q-which-day)`},
 		},
 	}, blocks)
-	require.Equal(t, map[string]string{"session-1": "Facts"}, docTitles(blocks[2]))
+	require.Equal(t, map[string]string{docAgentSession: "Facts"}, docTitles(blocks[2]))
 	require.Nil(t, docTitles(blocks[0]))
 	require.Equal(t, "#3 <when>, you: mem.Forget(\"a\")\n    remove fact `a`\n#12 <when>, gnosh: x",
 		docWhen("#3 2026-10-30 10:12, you: mem.Forget(\"a\")\n    remove fact `a`\n#12 2026-01-02 03:04, gnosh: x"))

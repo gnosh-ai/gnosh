@@ -165,6 +165,18 @@ gnovm_run {"name": "mem", "code": "mem.Fact(\"staging-db\", \"The staging databa
 gnovm_run {"name": "mem", "code": "mem.Fact(\"deploy\", \"Deploy with the key sk-live-4f9a2c, then run make deploy.\")"}
   fact `deploy` is new
 mem waiting on you: "which day suits you for the release?" (release-v2/3)
+/mem
+  mem: 1 goal open, 1 question for the user · 2 facts
+  questions for the user:
+    [?] `release-v2/3` "which day suits you for the release?"
+  goals:
+    [ ] `release-v2` "release v2" (0/3 done · session "Release v2" · just now · waits on the user)
+      [ ] `release-v2/1` "bump the version"  ← next
+      [ ] `release-v2/2` "tag v2.0.0"
+      [?] `release-v2/3` "which day suits you for the release?"
+  facts, newest first:
+    `staging-db` = The staging database is db-stg-8.
+    `deploy` = Deploy with the key sk-live-4f9a2c, then run make deploy.
 /mem find staging
   fact `staging-db` = The staging database is db-stg-8.
 /mem log 2
@@ -192,6 +204,8 @@ mem waiting on you: "which day suits you for the release?" (release-v2/3)
   change #6 cannot be undone: it redacts, which is final
 ```
 
+`/mem` alone shows the outline the agent reads: what waits on you, each open
+goal with its next step and the session that made it, and the newest facts.
 `/mem log` lists every change: when, who made it (you, or the agent by its
 session's title), the call, and what it changed. `/mem undo` takes a change
 back, as a change of yours. `/mem redact` takes a secret's exact text out of
