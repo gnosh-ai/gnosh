@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/crush/internal/lock"
+	"golang.org/x/mod/semver"
 )
 
 // memHost is a project's mem on disk. Its directory holds:
@@ -351,6 +352,13 @@ func lockMemDir(ctx context.Context, dir string) (func(), error) {
 	}
 }
 
+// newerGno reports whether gno version v, a store's, is newer than this
+// build's; versions that are not semver are taken as older.
+func newerGno(v string) bool {
+	mine := stdlibVersion()
+	return semver.IsValid(v) && semver.IsValid(mine) && semver.Compare(v, mine) > 0
+}
+
 func (h *memHost) stamp(j *journal) memStamp {
 	return memStamp{Layout: memLayout, Gno: stdlibVersion(), Generation: j.generation, Seq: j.seq, End: j.size, Hash: j.lastHash}
 }
@@ -384,6 +392,13 @@ func (h *memHost) open() (r *memRealm, j *journal, notes []string, err error) {
 		if st.Layout > memLayout {
 			r.close()
 			return nil, nil, nil, &refusal{"a newer gnosh wrote mem (layout " + strconv.Itoa(st.Layout) + "); restart gnosh to use it"}
+		}
+		// Two builds on one mem: the newer gno rebuilds an older one's
+		// store; the older refuses the newer's, as for a layout, rather
+		// than each rebuilding the store over the other's, call after call.
+		if newerGno(st.Gno) {
+			r.close()
+			return nil, nil, nil, &refusal{"a newer gnosh wrote mem (gno " + st.Gno + "); restart gnosh to use it"}
 		}
 		same := st.Layout == memLayout && st.Gno == stdlibVersion() && st.Generation == hdr.Generation
 		if same {
@@ -618,6 +633,10 @@ func (h *memHost) openIndex(j *journal) (*memIndex, error) {
 		return nil, err
 	}
 	st, ok, err := x.stamp()
+	if err == nil && ok && st.Layout > memIndexLayout {
+		x.close()
+		return nil, &refusal{"a newer gnosh wrote mem's index (layout " + strconv.Itoa(st.Layout) + "); restart gnosh to use it"}
+	}
 	if err == nil && ok {
 		same := st.Layout == memIndexLayout && st.Generation == j.generation
 		if same {

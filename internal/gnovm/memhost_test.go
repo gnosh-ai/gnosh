@@ -165,6 +165,26 @@ func TestMemHostRebuildsAnOlderStore(t *testing.T) {
 	var ref *refusal
 	require.ErrorAs(t, err, &ref)
 	require.Contains(t, err.Error(), "a newer gnosh wrote mem")
+
+	// A newer gno's store, or a newer layout's index, is refused too: two
+	// builds on one mem would otherwise rebuild it over each other.
+	setStamp(func(st *memStamp) { st.Layout, st.Gno = memLayout, "v99.0.0" })
+	_, err = h.call(context.Background(), memRequest{Code: `println(mem.Show())`})
+	require.ErrorAs(t, err, &ref)
+	require.EqualError(t, err, "a newer gnosh wrote mem (gno v99.0.0); restart gnosh to use it")
+	setStamp(func(st *memStamp) { st.Gno = stdlibVersion() })
+	idx, err := filepath.Glob(filepath.Join(dir, "index-*.db"))
+	require.NoError(t, err)
+	x, err := openMemIndex(idx[0])
+	require.NoError(t, err)
+	xst, _, err := x.stamp()
+	require.NoError(t, err)
+	xst.Layout = memIndexLayout + 1
+	require.NoError(t, x.apply(nil, xst))
+	require.NoError(t, x.close())
+	_, err = h.call(context.Background(), memRequest{Code: `println(mem.Show())`})
+	require.ErrorAs(t, err, &ref)
+	require.Contains(t, err.Error(), "a newer gnosh wrote mem's index")
 }
 
 // A catch-up cut short keeps every batch it applied, so a rebuild of a
