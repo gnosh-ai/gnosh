@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://gnosh.ai"><img src="docs/brand/banner.svg" width="100%" alt="Gnosh: a coding agent that thinks, plans, and remembers in Gno"></a>
+  <a href="https://gnosh.ai"><img src="docs/brand/banner.svg" width="100%" alt="Gnosh: an AI harness that thinks in Gno"></a>
 </p>
 
 <p align="center">
@@ -1557,5 +1557,5 @@ Gnosh is a fork of [Crush](https://github.com/charmbracelet/crush) by
 fork is not affiliated with or endorsed by them.
 
 <p align="center">
-  <a href="https://gnosh.ai"><img src="docs/brand/signoff.svg" width="100%" alt="Gnosh, gnosh.ai"></a>
+  <a href="https://gnosh.ai"><img src="docs/brand/signoff.svg" width="100%" alt="Gnosh, gnosh.ai: an AI harness that thinks in Gno"></a>
 </p>

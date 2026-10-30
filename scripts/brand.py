@@ -55,6 +55,9 @@ INK_MAGENTA = "#B02DCB"
 
 MONO = "SFMono-Regular,Menlo,Consolas,'Liberation Mono','DejaVu Sans Mono',monospace"
 
+# The line beside gnosh.ai on the banner and the sign-off.
+LINE = "an AI harness that thinks in Gno"
+
 # ── Letterforms ──────────────────────────────────────────────────────────
 # Three rows of half-block text per letter, as in letterforms.go. A
 # stretchable letter repeats its middle column.
@@ -274,7 +277,7 @@ def banner(W=1280, H=520, p=24):
     left = diagonals(lx0, x0 - cw, y0, 4, cw, ch)
     right = diagonals(x0 + word_w + cw, W + cw, y0, 4, cw, ch)
 
-    o = [svg_open(W, H, "Gnosh, a coding agent that thinks, plans, and remembers in Gno")]
+    o = [svg_open(W, H, f"Gnosh, {LINE}")]
     o.append(anim())
     o.append("<defs>")
     o.append(sky_defs())
@@ -287,8 +290,7 @@ def banner(W=1280, H=520, p=24):
     o.append(f'<path d="{left}{right}" stroke="url(#field)" stroke-width="2" fill="none"/>')
     ty = meta_y + ch * 0.66
     o.append(f'<text x="{x0}" y="{fmt(ty)}" font-family="{MONO}" font-size="21" fill="{GOLD}">gnosh.ai</text>')
-    # The tagline is longer than the room beside gnosh.ai: it gets a row of its own.
-    o.append(f'<text x="{x0 + word_w}" y="{fmt(ty + 34)}" text-anchor="end" font-family="{MONO}" font-size="21" fill="{HAZE}">a coding agent that thinks, plans, and remembers in Gno</text>')
+    o.append(f'<text x="{x0 + word_w}" y="{fmt(ty)}" text-anchor="end" font-family="{MONO}" font-size="21" fill="{HAZE}">{LINE}</text>')
     o.append(layers)
     o.append("</g>")
     o.append(f'<rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="22" fill="none" stroke="{RIM}"/>')
@@ -307,7 +309,7 @@ def divider(light=False, W=1280, H=24):
     return "".join(o)
 
 
-def signoff(W=1280, H=260, p=10):
+def signoff(W=1280, H=260, p=12):
     """The sidebar's compact logo, as a closing mark: fields above and below,
     without stars, as the TUI draws it."""
     rng = random.Random(11)
@@ -323,7 +325,7 @@ def signoff(W=1280, H=260, p=10):
     keep = (x0 - 30, top - 10, x0 + word_w + 30, meta_y + 2 * ch + 10)
     fields = diagonals(x0, x0 + word_w, top, 2, cw, ch) + diagonals(x0, x0 + word_w, meta_y + ch, 1, cw, ch)
 
-    o = [svg_open(W, H, "Gnosh")]
+    o = [svg_open(W, H, f"Gnosh, {LINE}")]
     o.append(anim())
     o.append("<defs>")
     o.append(sky_defs())
@@ -335,6 +337,7 @@ def signoff(W=1280, H=260, p=10):
     o.append(sky(rng, W, H, keep, 90, twinkle=True))
     o.append(f'<path d="{fields}" stroke="url(#field)" stroke-width="1.4" fill="none"/>')
     o.append(f'<text x="{x0}" y="{fmt(meta_y + ch * 0.72)}" font-family="{MONO}" font-size="13" fill="{GOLD}">gnosh.ai</text>')
+    o.append(f'<text x="{x0 + word_w}" y="{fmt(meta_y + ch * 0.72)}" text-anchor="end" font-family="{MONO}" font-size="13" fill="{HAZE}">{LINE}</text>')
     o.append(word_layers(on, x0, y0, p))
     o.append("</g>")
     o.append(f'<rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="22" fill="none" stroke="{RIM}"/>')
