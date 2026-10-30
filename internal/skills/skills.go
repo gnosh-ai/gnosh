@@ -14,7 +14,6 @@ import (
 	"sync"
 
 	"github.com/charlievieth/fastwalk"
-	"github.com/charmbracelet/crush/internal/pubsub"
 	"gopkg.in/yaml.v3"
 )
 
@@ -69,13 +68,6 @@ type SkillState struct {
 // Event is published when skill discovery completes.
 type Event struct {
 	States []*SkillState
-}
-
-var broker = pubsub.NewBroker[Event]()
-
-// PublishStates publishes a skill discovery event with the given states.
-func PublishStates(states []*SkillState) {
-	broker.Publish(pubsub.UpdatedEvent, Event{States: cloneStates(states)})
 }
 
 // cloneStates returns a deep copy of the given state slice so callers cannot

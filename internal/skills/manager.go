@@ -15,12 +15,12 @@ import (
 // coordinator, and a pubsub broker for change events. There is exactly
 // one Manager per workspace.
 //
-// Package-level helpers (GetLatestStates, SetLatestStates,
-// PublishStates) are preserved for callers that share a
-// process with the TUI. To bridge a Manager to those globals, construct
-// it with WithGlobalMirror. Only do this when the process hosts a single
-// workspace (local mode or a client process); the backend server hosts
-// multiple workspaces concurrently and must not enable mirroring.
+// Package-level helpers (GetLatestStates, SetLatestStates) are
+// preserved for callers that share a process with the TUI. To bridge a
+// Manager to those globals, construct it with WithGlobalMirror. Only do
+// this when the process hosts a single workspace (local mode or a client
+// process); the backend server hosts multiple workspaces concurrently
+// and must not enable mirroring.
 type Manager struct {
 	mu           sync.RWMutex
 	allSkills    []*Skill
@@ -40,8 +40,8 @@ type Manager struct {
 // ManagerOption configures a Manager at construction time.
 type ManagerOption func(*Manager)
 
-// WithGlobalMirror causes the manager to forward SetLatestStates and
-// PublishStates calls to the package-level cache and broker. Only safe
+// WithGlobalMirror causes the manager to copy every snapshot it takes
+// (SetLatestStates and PublishStates) to the package-level cache. Only safe
 // when the process hosts at most one Manager (e.g. local mode or the
 // client process).
 func WithGlobalMirror() ManagerOption {
@@ -144,9 +144,6 @@ func (m *Manager) PublishStates(states []*SkillState) {
 		SetLatestStates(states)
 	}
 	m.broker.Publish(pubsub.UpdatedEvent, Event{States: cloneStates(states)})
-	if m.globalMirror {
-		PublishStates(states)
-	}
 }
 
 // SubscribeEvents returns a channel of discovery events for the
