@@ -1286,7 +1286,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				added = append(added, userMessage.ToAIMessage()...)
 			}
 
-			reminder, err := a.remindOfTodos(callContext, call.SessionID, prepared.Tools)
+			reminder, err := a.remindOfMem(callContext, call.SessionID, prepared.Tools)
 			if err != nil {
 				return callContext, prepared, err
 			}
@@ -2448,16 +2448,6 @@ func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentC
 
 func (a *sessionAgent) preparePrompt(msgs []message.Message, supportsImages bool, attachments ...message.Attachment) ([]fantasy.Message, []fantasy.FilePart) {
 	var history []fantasy.Message
-	if !a.isSubAgent {
-		history = append(history, fantasy.NewUserMessage(
-			fmt.Sprintf(
-				"<system_reminder>%s</system_reminder>",
-				`This is a reminder that your todo list is currently empty. DO NOT mention this to the user explicitly because they are already aware.
-If you are working on tasks that would benefit from a todo list please use the "todos" tool to create one.
-If not, please feel free to ignore. Again do not mention this message to the user.`,
-			),
-		))
-	}
 	// The environment comes after the system prompt and the tools, which
 	// stay the same from one session to the next, so a local model server
 	// reuses them (prompt.SplitEnv).
@@ -3582,18 +3572,19 @@ func (a *sessionAgent) workaroundProviderMediaLimitations(messages []fantasy.Mes
 // buildSummaryPrompt is the summary request's last user message: Claude
 // Code's summary instructions (summary.md), with their nine sections, among
 // them all of the user's messages and the next step in the conversation's
-// own words; the session's todos; and, as Claude Code adds them, the text
-// given after /compact.
+// own words; where the session's goal in mem stands (its todos, which only
+// mem writes); and, as Claude Code adds them, the text given after
+// /compact.
 func buildSummaryPrompt(todos []session.Todo, instructions string) string {
 	var sb strings.Builder
 	sb.WriteString(strings.TrimSpace(string(summaryPrompt)))
 	if len(todos) > 0 {
-		sb.WriteString("\n\n## Current Todo List\n\n")
+		sb.WriteString("\n\n## Current Goal in mem\n\n")
 		for _, t := range todos {
 			fmt.Fprintf(&sb, "- [%s] %s\n", t.Status, t.Content)
 		}
-		sb.WriteString("\nInclude these tasks and their statuses in your summary. ")
-		sb.WriteString("Instruct the resuming assistant to use the `todos` tool to continue tracking progress on these tasks.")
+		sb.WriteString("\nInclude these steps and their statuses in your summary. ")
+		sb.WriteString("Instruct the resuming assistant to continue them on mem (gnovm_run name \"mem\"): `mem.Show()`, then carry on from its next step.")
 	}
 	if instructions = strings.TrimSpace(instructions); instructions != "" {
 		sb.WriteString("\n\nAdditional Instructions:\n")

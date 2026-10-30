@@ -243,10 +243,12 @@ Claude Code's names Klash knows, today's and older ones: `Agent` and `Task`
 (agent), `AskUserQuestion` (question), `Bash`, `BashOutput` and `TaskOutput`
 (job_output), `Edit`, `Glob`, `Grep`, `KillShell` and `TaskStop` (job_kill),
 `ListMcpResourcesTool` (list_mcp_resources), `LS`, `MultiEdit`, `Read` (view),
-`ReadMcpResourceTool` (read_mcp_resource), `TodoWrite` (todos), `WebFetch`
-(fetch, and agentic_fetch and its sub-agent's web_fetch), `WebSearch`
-(agentic_fetch and its sub-agent's web_search) and `Write`. The payload's
-`tool_name` is Klash's name, `bash` not `Bash`.
+`ReadMcpResourceTool` (read_mcp_resource), `WebFetch` (fetch, and
+agentic_fetch and its sub-agent's web_fetch), `WebSearch` (agentic_fetch and
+its sub-agent's web_search) and `Write`. The payload's `tool_name` is Klash's
+name, `bash` not `Bash`. Klash has no todos tool: its task list is mem, which
+the agent reaches through gnovm_run, so a matcher on `TodoWrite` matches
+nothing.
 
 **Tools Claude Code has nothing like** match the name of the Claude Code tool
 whose job they do, so a guard written for Claude Code cannot be walked around

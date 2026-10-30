@@ -1,16 +1,10 @@
 package tools
 
-import (
-	"context"
-	_ "embed"
-	"fmt"
+import "github.com/charmbracelet/crush/internal/session"
 
-	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/session"
-)
-
-//go:embed todos.md
-var todosDescription string
+// The todos tool is retired: mem is the one task list, and a session's todos
+// show the goal a call to mem changed (internal/gnovm/tools). What stays
+// here lets the chat show the todos calls older sessions made.
 
 const TodosToolName = "todos"
 
@@ -31,104 +25,4 @@ type TodosResponseMetadata struct {
 	JustStarted   string         `json:"just_started,omitempty"`
 	Completed     int            `json:"completed"`
 	Total         int            `json:"total"`
-}
-
-func NewTodosTool(sessions session.Service) fantasy.AgentTool {
-	return fantasy.NewAgentTool(
-		TodosToolName,
-		todosDescription,
-		func(ctx context.Context, params TodosParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-			sessionID := GetSessionFromContext(ctx)
-			if sessionID == "" {
-				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for managing todos")
-			}
-
-			currentSession, err := sessions.Get(ctx, sessionID)
-			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to get session: %w", err)
-			}
-
-			isNew := len(currentSession.Todos) == 0
-			oldStatusByContent := make(map[string]session.TodoStatus)
-			for _, todo := range currentSession.Todos {
-				oldStatusByContent[todo.Content] = todo.Status
-			}
-
-			for _, item := range params.Todos {
-				switch item.Status {
-				case "pending", "in_progress", "completed":
-				default:
-					return fantasy.ToolResponse{}, fmt.Errorf("invalid status %q for todo %q", item.Status, item.Content)
-				}
-			}
-
-			todos := make([]session.Todo, len(params.Todos))
-			var justCompleted []string
-			var justStarted string
-			completedCount := 0
-
-			for i, item := range params.Todos {
-				todos[i] = session.Todo{
-					Content:    item.Content,
-					Status:     session.TodoStatus(item.Status),
-					ActiveForm: item.ActiveForm,
-				}
-
-				newStatus := session.TodoStatus(item.Status)
-				oldStatus, existed := oldStatusByContent[item.Content]
-
-				if newStatus == session.TodoStatusCompleted {
-					completedCount++
-					if existed && oldStatus != session.TodoStatusCompleted {
-						justCompleted = append(justCompleted, item.Content)
-					}
-				}
-
-				if newStatus == session.TodoStatusInProgress {
-					if !existed || oldStatus != session.TodoStatusInProgress {
-						if item.ActiveForm != "" {
-							justStarted = item.ActiveForm
-						} else {
-							justStarted = item.Content
-						}
-					}
-				}
-			}
-
-			_, err = sessions.SetTodos(ctx, sessionID, todos)
-			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to save todos: %w", err)
-			}
-
-			response := "Todo list updated successfully.\n\n"
-
-			pendingCount := 0
-			inProgressCount := 0
-
-			for _, todo := range todos {
-				switch todo.Status {
-				case session.TodoStatusPending:
-					pendingCount++
-				case session.TodoStatusInProgress:
-					inProgressCount++
-				}
-			}
-
-			response += fmt.Sprintf("Status: %d pending, %d in progress, %d completed\n",
-				pendingCount, inProgressCount, completedCount)
-
-			response += "Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable."
-
-			metadata := TodosResponseMetadata{
-				IsNew:         isNew,
-				Todos:         todos,
-				JustCompleted: justCompleted,
-				JustStarted:   justStarted,
-				Completed:     completedCount,
-				Total:         len(todos),
-			}
-
-			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(response), metadata), nil
-		},
-	)
 }

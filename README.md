@@ -86,15 +86,11 @@ first message, the agent is told what mem has open and what is next in each
 goal (see [what the agent runs](#what-the-agent-runs)), and it picks up there
 and finishes.
 
-Work that is meant to outlast the session is where mem earns its keep. Klash
-has a second list, the session's own To-Do list, which ends with the session,
-and the agent picks between the two by what you say. In real runs it put every
-goal and every checklist in mem when the user said the work would carry on
-later. A "todo list" can go either way: in two runs the list was in mem the
-next day, and in another, asked for "over the next few days", it went to the
-To-Do list and was gone. A task it expects to finish in one sitting usually
-goes to the To-Do list too. So for anything that should outlast the session,
-ask for a plan or a checklist, and say you will carry on later.
+Work that is meant to outlast the session is where mem earns its keep, and
+mem is the agent's one list: a plan, a checklist and a "todo list" all go
+there, so what you asked for today is still there tomorrow. The task list under
+your prompt shows the goal the agent is working on, as mem has it: its next
+step in progress, the steps done checked off.
 
 ### Facts, kept current
 

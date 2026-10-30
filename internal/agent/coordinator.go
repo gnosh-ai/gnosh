@@ -1207,7 +1207,6 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 		wrap(tools.NewGrepTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Tools.Grep)),
 		wrap(tools.NewLsTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Tools.Ls)),
 		wrap(tools.NewSourcegraphTool(nil)),
-		wrap(tools.NewTodosTool(c.sessions)),
 		wrap(tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, c.skillTracker, c.subdirectoryContext, c.viewedFiles(), c.cfg.WorkingDir(), c.cfg.Config().Options.SkillsPaths...)),
 		wrap(tools.NewWriteTool(c.lspManager, c.permissions, c.history, c.filetracker, c.subdirectoryContext, c.cfg.WorkingDir())),
 	)
@@ -1224,10 +1223,12 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 		)
 	}
 
-	// The GnoVM machines' tools (internal/gnovm/tools).
+	// The GnoVM machines' tools (internal/gnovm/tools). mem, reached through
+	// gnovm_run, is the one task list: the goal a call to it changes is
+	// what the session's todos show.
 	if c.gnovms != nil {
 		allTools = append(allTools,
-			wrap(gnovmtools.NewRunTool(c.gnovms, c.cfg.WorkingDir())),
+			wrap(gnovmtools.NewRunTool(c.gnovms, c.cfg.WorkingDir(), gnovmtools.OnMemGoals(gnovmtools.SessionTodos(c.sessions)))),
 			wrap(gnovmtools.NewNewTool(c.gnovms, c.cfg.WorkingDir())),
 			wrap(gnovmtools.NewListTool(c.gnovms, c.cfg.WorkingDir())),
 			wrap(gnovmtools.NewDropTool(c.gnovms, c.cfg.WorkingDir(), c.permissions)),

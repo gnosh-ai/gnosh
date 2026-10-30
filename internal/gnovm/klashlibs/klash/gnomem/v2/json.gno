@@ -20,6 +20,7 @@ import (
 const (
 	maxJSONGoals = 20
 	maxJSONDays  = 50
+	maxJSONSteps = 100
 )
 
 // JSON returns, for klash and hooks, the goals with names, or with no names:
@@ -29,8 +30,8 @@ const (
 // with its status, result, wait, for and doing, who made it and when it
 // changed, how many of its steps are open and done, its next for caller()
 // and that item's title, and, when its next is "", what holds back the open
-// items Next passed over: "day", "user", "words" or "session". Its steps
-// are not listed: Show(name) shows them.
+// items Next passed over: "day", "user", "words" or "session". A goal asked
+// for by name also comes with its steps, at most 100.
 func (m *Mem) JSON(names ...string) string {
 	var j jsonWriter
 	j.open("{")
@@ -38,7 +39,7 @@ func (m *Mem) JSON(names ...string) string {
 		j.key("goals")
 		j.open("[")
 		for _, n := range names {
-			m.goalJSON(&j, n)
+			m.goalJSON(&j, n, true)
 		}
 		j.close("]")
 		j.close("}")
@@ -97,7 +98,7 @@ func (m *Mem) JSON(names ...string) string {
 	j.open("[")
 	i = 0
 	m.open.ReverseIterate("", "", func(_ string, v any) bool {
-		m.goalJSON(&j, v.(string))
+		m.goalJSON(&j, v.(string), false)
 		i++
 		return i == maxJSONGoals
 	})
@@ -122,7 +123,10 @@ func (m *Mem) JSON(names ...string) string {
 	return j.String()
 }
 
-func (m *Mem) goalJSON(j *jsonWriter, name string) {
+// goalJSON writes goal name's summary, and, withSteps, its steps: each
+// with its name, title and status, whether it is for the user, and who
+// started it.
+func (m *Mem) goalJSON(j *jsonWriter, name string, withSteps bool) {
 	g := m.get(name)
 	if g == nil {
 		j.open("{")
@@ -151,6 +155,21 @@ func (m *Mem) goalJSON(j *jsonWriter, name string) {
 	}
 	j.field("next", next)
 	j.field("next_title", nextTitle)
+	if withSteps {
+		j.key("steps")
+		j.open("[")
+		n := 0
+		m.eachStep(name, func(step string, s *Todo) bool {
+			j.open("{")
+			for _, kv := range [][2]string{{"name", step}, {"title", s.Title}, {"status", s.Status}, {"for", s.For}, {"doing", s.Doing}} {
+				j.field(kv[0], kv[1])
+			}
+			j.close("}")
+			n++
+			return n == maxJSONSteps
+		})
+		j.close("]")
+	}
 	j.key("held")
 	j.open("[")
 	if next == "" && g.Status == "" {

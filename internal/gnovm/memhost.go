@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -72,6 +73,29 @@ type memResult struct {
 	Notes []string
 	// Renamed is the goals an erasure renamed, old name to new.
 	Renamed map[string]string
+	// Goals are the goals the input changed, as its session sees them.
+	Goals []MemGoal
+}
+
+// MemGoal is a goal a mem call changed, as a session's task list shows it:
+// its steps, and what is next.
+type MemGoal struct {
+	Name   string    `json:"name"`
+	Title  string    `json:"title"`
+	Status string    `json:"status"`
+	Next   string    `json:"next"`
+	Steps  []MemStep `json:"steps"`
+}
+
+// MemStep is a step of a MemGoal.
+type MemStep struct {
+	Name   string `json:"name"`
+	Title  string `json:"title"`
+	Status string `json:"status"`
+	// For is "user" for a question or a request for the user; Doing is the
+	// session that started the step.
+	For   string `json:"for"`
+	Doing string `json:"doing"`
 }
 
 // call runs one input against mem, under mem's lock, and keeps what it
@@ -126,7 +150,38 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 		return res, err
 	}
 	h.writeStatus(r, j)
+	res.Goals = h.touched(r, caller, call.Ops)
 	return res, nil
+}
+
+// touched is the goals ops changed, as caller sees them, read from the
+// store r now holds them; nil when there are none, or they cannot be read.
+func (h *memHost) touched(r *memRealm, caller string, ops []memOp) []MemGoal {
+	var names []string
+	for _, op := range ops {
+		if g := goalPart(op.Name); opTarget(op) == "item" && op.Kind != "forget" && g != "" && !slices.Contains(names, g) {
+			names = append(names, g)
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	args := make([]string, len(names))
+	for i, n := range names {
+		args[i] = strconv.Quote(n)
+	}
+	call, err := r.call("print(mem.JSON("+strings.Join(args, ", ")+"))", memContext{caller: caller})
+	var out struct {
+		Goals []MemGoal `json:"goals"`
+	}
+	if err == nil {
+		err = json.Unmarshal([]byte(call.Output), &out)
+	}
+	if err != nil {
+		slog.Warn("mem's changed goals could not be read", "error", err)
+		return nil
+	}
+	return out.Goals
 }
 
 // memStatus is status.json: mem.JSON() as klash computed it for no session
@@ -554,7 +609,7 @@ func (h *memHost) openIndex(j *journal) (*memIndex, error) {
 func (h *Host) runMem(ctx context.Context, req RunRequest) (*RunResult, error) {
 	start := time.Now()
 	res, err := h.mem(req.Project).call(ctx, memRequest{Code: req.Code, Session: req.Session, Req: req.Req})
-	out := &RunResult{VM: MemVM, Output: res.Output, Journaled: res.Seq > 0, Seq: res.Seq, Notes: res.Notes, Wall: time.Since(start)}
+	out := &RunResult{VM: MemVM, Output: res.Output, Journaled: res.Seq > 0, Seq: res.Seq, Notes: res.Notes, Wall: time.Since(start), MemGoals: res.Goals}
 	if err != nil {
 		var busy *busyError
 		var ref *refusal

@@ -134,23 +134,6 @@ func TestRestoreFiles(t *testing.T) {
 	require.Equal(t, path("same.go"), target)
 }
 
-// The todos before a prompt are what the last todos call before it set,
-// one that failed set nothing, and with no call there are none.
-func TestTodosBefore(t *testing.T) {
-	t.Parallel()
-
-	todos := func(id, list string, isError bool) []message.Message {
-		return toolUse(id, tools.TodosToolName, `{"todos":`+list+`}`, nil, isError)
-	}
-	var msgs []message.Message
-	msgs = append(msgs, todos("1", `[{"content":"a","status":"pending","active_form":"doing a"}]`, false)...)
-	msgs = append(msgs, todos("2", `[{"content":"b","status":"completed"}]`, false)...)
-	msgs = append(msgs, todos("3", `[{"content":"refused","status":"pending"}]`, true)...)
-	require.Nil(t, todosBefore(nil))
-	require.Equal(t, []session.Todo{{Content: "a", Status: session.TodoStatusPending, ActiveForm: "doing a"}}, todosBefore(msgs[:2]))
-	require.Equal(t, []session.Todo{{Content: "b", Status: session.TodoStatusCompleted}}, todosBefore(msgs))
-}
-
 // busyCoordinator is an agent that is always busy.
 type busyCoordinator struct{ agenttest.NopCoordinator }
 
@@ -178,7 +161,7 @@ func (c *rewoundCoordinator) Branched(sessionID string) {
 // the agent changed since and leaves the conversation as it was;
 // restoring the conversation keeps the whole of it in a session of its
 // own, then cuts it back to before the prompt, forgetting the reads made
-// since and putting back the todos it had then, with the context's size
+// since and leaving the todos, which show mem, with the context's size
 // unknown until the next answer, and the agent is told what was cut. Only
 // a prompt the model still reads can be gone back to, and not while the
 // agent works.
@@ -276,7 +259,7 @@ func TestRewind(t *testing.T) {
 	require.Empty(t, coordinator.branched, "the copy kept is no fork: the rewind goes on in the session")
 	rewound, err := sessions.Get(ctx, src.ID)
 	require.NoError(t, err)
-	require.Equal(t, []session.Todo{{Content: "change a", Status: session.TodoStatusPending}}, rewound.Todos)
+	require.Equal(t, src.Todos, rewound.Todos, "the todos show mem, which a rewind leaves as it is")
 	require.Zero(t, rewound.PromptTokens)
 	require.Zero(t, rewound.CompletionTokens)
 	require.False(t, a.FileTracker.LastReadTime(ctx, src.ID, before).IsZero(), "a read before the prompt stays")

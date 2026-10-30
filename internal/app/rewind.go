@@ -55,8 +55,8 @@ type RewindResult struct {
 // downloads or the user changed is left as it is.
 //
 // The conversation is cut back to before the prompt, with the reads of
-// files made since and the todos set since, once the whole of it is kept
-// in a session of its own.
+// files made since, once the whole of it is kept in a session of its own.
+// mem, and the todos that show it, stay as they are.
 func (a *App) Rewind(ctx context.Context, sessionID, messageID string, opts RewindOptions) (RewindResult, error) {
 	if a.AgentCoordinator != nil && a.AgentCoordinator.IsSessionBusy(sessionID) {
 		return RewindResult{}, errors.New("the agent is busy in this session")
@@ -100,9 +100,9 @@ func (a *App) Rewind(ctx context.Context, sessionID, messageID string, opts Rewi
 // rewindConversation keeps the whole of source's conversation, messages,
 // in a session of its own, then cuts source's back to before the message
 // at index at: the messages from there go, and with them the reads of
-// files made since and the subdirectories' context given since; the todos
-// are what they were then. It returns the session the whole conversation
-// is kept in.
+// files made since and the subdirectories' context given since. The todos
+// stay: they show mem, which a rewind leaves as it is. It returns the
+// session the whole conversation is kept in.
 func (a *App) rewindConversation(ctx context.Context, source session.Session, messages []message.Message, at int) (session.Session, error) {
 	titles, err := a.sessionTitles(ctx)
 	if err != nil {
@@ -129,37 +129,10 @@ func (a *App) rewindConversation(ctx context.Context, source session.Session, me
 	if err != nil {
 		return kept, err
 	}
-	current.Todos = todosBefore(messages[:at])
 	// How full the context is, the next answer says.
 	current.PromptTokens, current.CompletionTokens, current.EstimatedUsage = 0, 0, false
 	_, err = a.Sessions.Save(ctx, current)
 	return kept, err
-}
-
-// todosBefore is the todo list as the last todos call in messages set it,
-// or none.
-func todosBefore(messages []message.Message) []session.Todo {
-	calls := make(map[string]message.ToolCall)
-	var todos []session.Todo
-	for _, msg := range messages {
-		for _, call := range msg.ToolCalls() {
-			calls[call.ID] = call
-		}
-		for _, result := range msg.ToolResults() {
-			if result.IsError || result.Name != tools.TodosToolName {
-				continue
-			}
-			var params tools.TodosParams
-			if json.Unmarshal([]byte(calls[result.ToolCallID].Input), &params) != nil {
-				continue
-			}
-			todos = make([]session.Todo, len(params.Todos))
-			for i, item := range params.Todos {
-				todos[i] = session.Todo{Content: item.Content, Status: session.TodoStatus(item.Status), ActiveForm: item.ActiveForm}
-			}
-		}
-	}
-	return todos
 }
 
 // fileBefore is what a file held before the agent first changed it after

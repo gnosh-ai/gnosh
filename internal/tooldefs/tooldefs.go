@@ -51,7 +51,6 @@ var names = []string{
 	"ls",
 	"question",
 	"sourcegraph",
-	"todos",
 	"view",
 	"write",
 	"list_mcp_resources",
@@ -120,7 +119,6 @@ var claudeCodeNames = map[string]string{
 	"Task":                 "agent",
 	"TaskOutput":           "job_output",
 	"TaskStop":             "job_kill",
-	"TodoWrite":            "todos",
 	"WebFetch":             "fetch",
 	"Write":                "write",
 }

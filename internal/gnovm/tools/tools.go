@@ -88,8 +88,28 @@ type DropParams struct {
 	Action string `json:"action" description:"\"evict\" or \"delete\"." enum:"evict,delete"`
 }
 
+// MemGoalsFunc is told the goals a call to mem changed, as the call's
+// session sees them: what that session's task list should show.
+type MemGoalsFunc func(ctx context.Context, session string, goals []gnovm.MemGoal)
+
+// RunOption sets up gnovm_run.
+type RunOption func(*runOptions)
+
+type runOptions struct {
+	onMem MemGoalsFunc
+}
+
+// OnMemGoals has gnovm_run tell f the goals each call to mem changed.
+func OnMemGoals(f MemGoalsFunc) RunOption {
+	return func(o *runOptions) { o.onMem = f }
+}
+
 // NewRunTool returns gnovm_run, running in project's VMs.
-func NewRunTool(vms *gnovm.Lazy, project string) fantasy.AgentTool {
+func NewRunTool(vms *gnovm.Lazy, project string, opts ...RunOption) fantasy.AgentTool {
+	var o runOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
 	return fantasy.NewAgentTool(RunToolName, runDescription,
 		func(ctx context.Context, p RunParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 			if strings.TrimSpace(p.Code) == "" {
@@ -116,6 +136,9 @@ func NewRunTool(vms *gnovm.Lazy, project string) fantasy.AgentTool {
 			text := renderRun(res)
 			if res.Err != nil {
 				return fantasy.NewTextErrorResponse(text), nil
+			}
+			if o.onMem != nil && len(res.MemGoals) > 0 {
+				o.onMem(ctx, session, res.MemGoals)
 			}
 			return fantasy.NewTextResponse(text), nil
 		})
