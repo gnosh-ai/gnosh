@@ -315,3 +315,40 @@ func TestDocLinkProblems(t *testing.T) {
 		"DOC.md links to #in-a-fence-not-a-heading, and DOC.md has no such heading",
 	}, problems)
 }
+
+// docPrompts binds a user's words quoted in a document to the real-model
+// scenario that shows Klash doing what the document says it does: the
+// scenario's first prompt must appear in the document word for word. Change
+// the example and this fails until the scenario says the same, and is run.
+var docPrompts = []struct{ doc, scenario string }{
+	{"README.md", "readme-goal.txtar"},
+}
+
+// quotedProse is a document's prose with block-quote markers, the **You:**
+// tag and line breaks taken out, so a prompt quoted across several lines
+// reads as one.
+func quotedProse(text string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(prose(text), "\n") {
+		line = strings.TrimPrefix(strings.TrimPrefix(line, ">"), " ")
+		line = strings.ReplaceAll(line, "**You:** ", "")
+		b.WriteString(line)
+		b.WriteByte(' ')
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+func TestDocPromptsAreScenarios(t *testing.T) {
+	for _, p := range docPrompts {
+		text, err := os.ReadFile(filepath.Join(repoRoot, p.doc))
+		require.NoError(t, err)
+		sc, err := os.ReadFile(filepath.Join(repoRoot, "internal", "gnovm", "testdata", "scenarios", p.scenario))
+		require.NoError(t, err)
+		_, rest, ok := strings.Cut(string(sc), "-- prompt --\n")
+		require.True(t, ok, "%s has no prompt", p.scenario)
+		prompt, _, _ := strings.Cut(rest, "\n-- ")
+		prompt = strings.Join(strings.Fields(prompt), " ")
+		assert.Contains(t, quotedProse(string(text)), prompt,
+			"%s no longer quotes %s's prompt word for word: change the scenario to match, and run it", p.doc, p.scenario)
+	}
+}

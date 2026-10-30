@@ -7,8 +7,8 @@ A machine holds typed data, and the code that works on that data, and it is
 saved on disk. A new session, on a new day, asks the machine what is next.
 It does not re-read a page of notes.
 
-Each project gets a persistent machine named `mem`, whose variable `mem` is
-the agent's board ([klash/gnomem/v1](internal/gnovm/klashlibs/klash/gnomem/v1/gnomem.gno)):
+Each project gets a persistent machine named `mem`, whose variable `mem`
+holds the agent's memory ([klash/gnomem/v1](internal/gnovm/klashlibs/klash/gnomem/v1/gnomem.gno)):
 
 ```
 gnovm_run {"name": "mem", "code": "mem.Add(\"release v2\", \"bump the version\", \"tag v2.0.0\", \"CI is green\")"}
@@ -51,10 +51,10 @@ gnovm_run {"name": "mem", "code": "mem.Show()"}
 > `make test` that runs the tests. Do the first step now; we'll carry on
 > tomorrow.
 
-The agent puts the goal on its board with each part as a step, does the
+The agent puts the goal in mem with each part as a step, does the
 first, and marks it done with what came of it. When a step turns out to be
 wrong for this machine (there is no `make` here), it notes why, drops that
-step and adds the one that replaces it, so the board shows the plan as it now
+step and adds the one that replaces it, so mem shows the plan as it now
 stands, and why it changed:
 
 ```
@@ -91,7 +91,7 @@ message, so it knows where the goal stands without being told.
 >
 > *(any later session)* **You:** Where's the staging database?
 
-Each fact has a name, and every new session is told the names the board
+Each fact has a name, and every new session is told the names mem
 holds. So a fact that changes is set again under the name it already has,
 rather than added a second time to disagree with the first, and a question
 about one is answered by looking it up:
@@ -146,11 +146,11 @@ Klash's system prompt carries a short recipe, so the model needs no setup:
 `mem` is made the first time it is used.
 
 - **At the start of a session** the model is told, with its first prompt,
-  what the board has open and the names of its facts (`board: 2 open, 5 done
+  what mem has open and the names of its facts (`board: 2 open, 5 done
   · next: 3 "update CHANGELOG" · facts: deploy cmd`), so it needs no tool call
   to find earlier work; `mem.Show()` gives the whole outline. The line is
-  given whenever the board has an item open or holds a fact, and the model is
-  told to use the board only where the task at hand is part of it. Klash
+  given whenever mem has an item open or holds a fact, and the model is
+  told to use mem only where the task at hand is part of it. Klash
   rewrites that line after every change, and reading it starts nothing.
 - **A task of two or more steps**: `mem.Add(goal, steps...)`, then
   `mem.Done(id, what came of it)` as each finishes; Done answers with what is
@@ -162,7 +162,7 @@ Klash's system prompt carries a short recipe, so the model needs no setup:
   set it again under the same name.
 - **Anything that needs computing** runs in the session's scratch machine.
 
-## The board, as a foundation
+## mem, as a foundation
 
 `klash/gnomem/v1` is deliberately small: two plain-data types and seven
 calls. Two rounds of independent review (minimalism, how a 27B model would use
@@ -193,17 +193,17 @@ func (b *Board) Show(ids ...int) string     // the outline, or items in full
 ```
 
 - **Plain data.** `mem.Items[3].Title` and `mem.Facts["k"]` read directly.
-  Another package can build on the same items, or replace them: the board is
+  Another package can build on the same items, or replace them: this is
   only the starting point.
 - **What a call stores never changes.** A persistent machine is rebuilt by
   running its calls again, so a call never changes what it stores or the ids
   it returns, and never refuses what it once accepted; it may store new
   fields, refuse less, and print or show things differently. A frozen test
-  replays a fixed board against a field-by-field dump that is never
+  replays a fixed set of calls against a field-by-field dump that is never
   rewritten; anything that breaks it is `klash/gnomem/v2`.
 - **Reading costs nothing to keep.** `mem.Show()`, `mem` on its own and
   `println(mem)` are recognised as reads, once the machine confirms `mem` is a
-  board, and are not journaled: reading the board never wears out its
+  v1 `Board`, and are not journaled: reading mem never wears out its
   journal.
 - **Short by construction.** Show's outline stays under about 3000 bytes: the
   header names the next item, facts come next, closed items take one line

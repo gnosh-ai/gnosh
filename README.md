@@ -38,7 +38,7 @@ the same terminal UI, sessions, LSP and MCP support, and any model you like,
 from a hosted API to one running on your own machine. On top of that:
 
 - **Remembers, in Gno.** The agent keeps its goals and their steps, what it
-  tried and found, and the facts you told it on a board in a persistent Gno
+  tried and found, and the facts you told it in `mem`, a persistent Gno
   machine. A new session is told what is open and which facts it holds:
   [memory that runs](#memory-that-runs).
 - **Runs Go in Go.** The GnoVM, gno.land's interpreter, runs inside Klash:
@@ -64,32 +64,33 @@ from a hosted API to one running on your own machine. On top of that:
 ## Memory that runs
 
 A model forgets. Each session starts empty, and a compaction throws away most
-of what came before. Klash gives the agent a board, `mem`, in a persistent Gno
-machine: goals and their steps, what it tried and found, and facts. It is typed
+of what came before. Klash gives the agent `mem`, a persistent Gno machine
+that holds its goals and their steps, what it tried and found, and facts. It is typed
 data on your disk rather than a page of notes, and the agent asks it questions
 instead of re-reading it. [GNOMEM](GNOMEM.md) has the design and real runs.
 
 ### Goals that outlive the session
 
-> **You:** Add a `Median` to the stats package, with tests. It's done when
-> `go test ./...` passes. Keep it on your board; we may not finish today.
+> **You:** Add a `Median` to the stats package, with tests; it's done when
+> `go test ./...` passes. Plan it as steps and do the first one now; we'll
+> carry on in another session.
 
-The agent puts the goal on its board with the condition as a step of its own,
+The agent puts the goal in mem with the condition as a step of its own,
 and checks the steps off as it goes. A goal cannot be marked done while one of
 its steps is open, so "the tests pass" is something it has to reach, not
 something it can claim. When an approach fails, it notes why and re-plans:
 it drops that step and adds another.
 
-Stop halfway and start a new session tomorrow. With your first message, the
-agent is told what is open and what is next (the first line of the outline in
-[what the agent runs](#what-the-agent-runs)), so asked to continue, it picks up
-there.
+Start a new session tomorrow and say "let's carry on with Median". With your
+first message, the agent is told what is open and what is next (the first line
+of the outline in [what the agent runs](#what-the-agent-runs)), and it picks up
+there and finishes.
 
-Work that is meant to outlast the session is where the board earns its keep,
-and where the agent reliably uses it: in real runs it kept every goal on its
-board when the prompt asked for that or said the work would carry on later.
-Left to itself on a task it expects to finish in one sitting, it sometimes
-keeps count in its head instead, so say so when you want the board.
+Work that is meant to outlast the session is where mem earns its keep, and
+where the agent reliably uses it: in real runs it kept every such goal in mem
+when the user said the work would carry on later, or asked for it to be kept.
+Left to itself on a task it expects to finish in one sitting, it keeps count
+in its head instead, so say so when you want the work kept.
 
 ### Facts, kept current
 
@@ -98,13 +99,13 @@ keeps count in its head instead, so say so when you want the board.
 >
 > *(a week later)* **You:** Staging's database moved to `db-stg-9`.
 
-A fact has a name, and every new session is told the names the board holds.
+A fact has a name, and every new session is told the names mem holds.
 So a fact that changes is set again under the same name, not kept twice, and
-"how do we deploy?", asked in any later session, is answered from the board.
+"how do we deploy?", asked in any later session, is answered from mem.
 
 ### What the agent runs
 
-These are the board's own calls as the agent makes them, and what each one
+These are mem's own calls as the agent makes them, and what each one
 shows it. A test runs this block against every change to Klash, so it stays
 true.
 
@@ -128,14 +129,14 @@ gnovm_run {"name": "mem", "code": "mem.Show()"}
     [ ] 4 go test ./... passes
 ```
 
-Setting a fact again replaces it, so the board holds one staging database,
+Setting a fact again replaces it, so mem holds one staging database,
 the current one. Had the agent called `mem.Done(1)` while steps 3 and 4 were
 open, the call would have been refused and nothing from it kept. The outline's
 first line is what a new session is told along with its first prompt.
 
 ### Go in your Go: the machines underneath
 
-The board is one machine among many. Klash carries the GnoVM, gno.land's
+`mem` is one machine among many. Klash carries the GnoVM, gno.land's
 interpreter for its Go dialect, and runs named virtual machines in it for the
 agent:
 
