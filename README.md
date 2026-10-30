@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://gnosh.ai"><img src="docs/brand/banner.svg" width="100%" alt="Gnosh: a coding agent that remembers, in Gno"></a>
+  <a href="https://gnosh.ai"><img src="docs/brand/banner.svg" width="100%" alt="Gnosh: a coding agent that thinks, plans, and remembers in Gno"></a>
 </p>
 
 <p align="center">
@@ -10,7 +10,7 @@
   <a href="./LICENSE.md"><img alt="License: GNO Network GPL v6" src="https://img.shields.io/badge/license-GNO%20Network%20GPL%20v6-605F6B?style=flat-square&labelColor=201F26"></a>
 </p>
 
-<p align="center"><strong>A coding agent that remembers, in Gno.</strong><br>
+<p align="center"><strong>A coding agent that thinks, plans, and remembers in Gno.</strong><br>
 Gnosh runs the Gno VM in the AI harness. The agent keeps its goals, what it found and the facts you gave it in <code>mem</code>, kept in Gno on your disk, and a new session starts with what is still open and the newest facts, so it picks up where the last one stopped.</p>
 
 <p align="center">Security-first underneath: a fork of Charm's <a href="https://github.com/charmbracelet/crush">Crush</a> that closes the doors a coding agent usually leaves open.</p>
