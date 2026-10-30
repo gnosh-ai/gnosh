@@ -44,9 +44,8 @@ from a hosted API to one running on your own machine. On top of that:
 - **Plans in Gno.** The agent plans a task as a goal in `mem`, with its
   steps, and a goal cannot be marked done while a step of it is open, so "the
   tests pass" is something it has to reach. A goal it closes is checked by a
-  separate judge against the conversation, and reopened if it does not
-  hold. `/goal <condition>` keeps it at
-  work until the condition holds:
+  separate judge against the conversation, and reopened if it does not hold.
+  `/goal <condition>` keeps it at work until the condition holds:
   [goals that outlive the session](#goals-that-outlive-the-session).
 - **Remembers in Gno.** What it tried and found, what waits on you and the
   facts you told it stay in `mem`, kept in Gno on your disk. A new session

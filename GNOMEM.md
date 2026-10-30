@@ -81,6 +81,13 @@ gnovm_run {"name": "mem", "code": "mem.Show(\"build-greet\")"}
 Tomorrow's session is told, with your first message, what mem has open and
 what is next, so it knows where the goal stands without being told.
 
+A goal the agent closes is not taken at its word. As the turn ends, a
+separate judge checks it against what mem shows of it and the end of the
+conversation. Met, you are told, as in a real run in the TUI: `Goal met:
+create release notes file (The agent wrote …/notes.md with content 'release
+notes' and verified …)`. Not met, the goal is reopened with the judge's
+reason as a note, and the agent goes back to it.
+
 ### A knowledge base
 
 > **You:** Remember for later: our deploy command is make ship ENV=prod, and
@@ -127,8 +134,9 @@ option mem-embeddings-url "http://127.0.0.1:8091/v1"
 ```
 
 Then `mem.Find` gives the rows holding all the words first, then those close
-in meaning, and each prompt you type goes with up to five items or facts close
-to it, found within half a second or not at all, as a hidden part after it. In
+in meaning, and each prompt you type, or a channel brings, goes with up to
+five items or facts close to it, found within half a second or not at all, as
+a hidden part after it. In
 a real run on a mem of 32 facts, the session opened with the newest ten, and
 "Who signs off on a release?" carried one it did not:
 
@@ -410,7 +418,8 @@ Gnosh's system prompt carries a short recipe, so the model needs no setup:
   `mem.Done(name, what came of it)` as each finishes; Done answers with what
   is next. A goal cannot be done while a step of it is open, so a success
   condition is a step ("go test ./... passes"), done only after its check has
-  run. `.Start()` on the end starts the first step in the same call.
+  run, and a goal it closes is judged before it counts as done. `.Start()` on
+  the end starts the first step in the same call.
 - **Findings**: `mem.Note(name, "the claim, then path:line")`. **A question
   for you**: `mem.Ask(name, "…")`, answered with Done.
 - **Later, or when something happens**: `mem.Goal("…").Wait("2026-12-01")`,
