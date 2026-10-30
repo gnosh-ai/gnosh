@@ -322,6 +322,8 @@ func TestDocLinkProblems(t *testing.T) {
 // the example and this fails until the scenario says the same, and is run.
 var docPrompts = []struct{ doc, scenario string }{
 	{"README.md", "readme-goal.txtar"},
+	{"README.md", "remind-next-time.txtar"},
+	{"GNOMEM.md", "remind-next-time.txtar"},
 }
 
 // quotedProse is a document's prose with block-quote markers, the **You:**

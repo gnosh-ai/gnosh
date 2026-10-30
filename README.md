@@ -106,6 +106,17 @@ A fact has a name, and every new session is told the names mem holds.
 So a fact that changes is set again under the same name, not kept twice, and
 "how do we deploy?", asked in any later session, is answered from mem.
 
+### A reminder for next time
+
+> **You:** Before we wrap up: remind me next time we talk to rotate the
+> staging API key. It expires this week.
+
+The reminder stays in mem as an open item, and the next session is told what
+is open along with your first message, so "Morning! Anything I should know
+before I start?" brings it back. It is a reminder for the next session, not
+an alarm: a session that starts straight on something else gets on with that.
+[GNOMEM](GNOMEM.md#a-reminder-for-next-time) has the numbers.
+
 ### What the agent runs
 
 These are mem's own calls as the agent makes them, and what each one

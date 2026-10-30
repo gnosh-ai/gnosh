@@ -113,6 +113,25 @@ What the agent finds while it works is kept the same way, on the item it was
 working on: a question is an item, its notes are the findings, and its result
 is the answer.
 
+### A reminder for next time
+
+> **You:** Before we wrap up: remind me next time we talk to rotate the
+> staging API key. It expires this week.
+>
+> *(next session)* **You:** Morning! Anything I should know before I start?
+
+The agent keeps the reminder in mem as an open item. A new session is told
+what mem has open along with its first prompt, so a check-in like this one
+brings the reminder back.
+
+It is a reminder for the next session, not an alarm. Nothing fires at a time
+of day, and the model is told to use mem only where the task at hand is part
+of it, so a session that starts straight on something else gets on with that.
+In 14 real runs on 30 October 2026 the agent kept the reminder 13 times,
+brought it back on every check-in (7 of 7), and never raised it unasked when
+the next session began with an unrelated task (0 of 7), although it had said
+it would. Ask what is open, or say good morning, and it is there.
+
 ## See it work
 
 These are real runs of Klash with the open-weight Qwen3.8-27B on a local
