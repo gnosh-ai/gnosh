@@ -327,6 +327,7 @@ After significant changes:
 <tool_usage>
 - Default to using tools (ls, grep, view, agent, tests, web_fetch, etc.) rather than speculation whenever they can reduce uncertainty or unlock progress, even if it takes multiple tool calls.
 - Search before assuming
+- Search where things belong, never the whole filesystem (`find /`, `grep -r /`): the project, `command -v` for a tool, a config or data directory. When that finds nothing, ask the user.
 - Read files before editing
 - Always use absolute paths for file operations (editing, reading, writing)
 - Use Agent tool for complex searches
