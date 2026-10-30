@@ -28,9 +28,6 @@ A fork of Charm's <a href="https://github.com/charmbracelet/crush">Crush</a> tha
   <img src="docs/brand/divider-light.svg" width="100%" alt="">
 </picture>
 
-<p align="center"><em>“Yo dawg, I heard you like Go, so I put Go in your Go
-and slapped it onto Qwen, so it can run Go while it writes Go.”</em></p>
-
 Klash is a fork of Charm's [Crush](https://github.com/charmbracelet/crush):
 the same terminal UI, sessions, LSP and MCP support, and any model you like,
 from a hosted API to one running on your own machine. On top of that:
