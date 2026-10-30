@@ -326,9 +326,14 @@ def signoff(W=1280, H=260, p=14):
     on = pixels(rows)
     word_w, word_h = len(rows[0]) * p, 5 * p
     x0 = round((W - word_w) / 2)
-    # Two field rows, the word (three cells), the meta row, one field row.
-    top = round((H - 7 * ch) / 2) - 18
-    y0 = top + 2 * ch
+    # Two field rows, a gap, the word (three cells), the meta row, one field
+    # row. The meta row's letters stand at base of its cell, so the field
+    # below starts that gap under them; the word stands as far below the
+    # field above it, rather than touching it.
+    base = 0.72
+    gap = round(ch * (1 - base))
+    top = round((H - 7 * ch - gap) / 2) - 18
+    y0 = top + 2 * ch + gap
     meta_y = y0 + 3 * ch
     keep = (x0 - 30, top - 10, x0 + word_w + 30, meta_y + 2 * ch + 10)
     fields = diagonals(x0, x0 + word_w, top, 2, cw, ch) + diagonals(x0, x0 + word_w, meta_y + ch, 1, cw, ch)
@@ -345,8 +350,8 @@ def signoff(W=1280, H=260, p=14):
     o.append(sky(rng, W, H, keep, 90, twinkle=True))
     o.append(f'<path d="{fields}" stroke="url(#field)" stroke-width="1.4" fill="none"/>')
     size = fmt(line_size(word_w))
-    o.append(f'<text x="{x0}" y="{fmt(meta_y + ch * 0.72)}" font-family="{MONO}" font-size="{size}" fill="{GOLD}">gnosh.ai</text>')
-    o.append(f'<text x="{x0 + word_w}" y="{fmt(meta_y + ch * 0.72)}" text-anchor="end" font-family="{MONO}" font-size="{size}" fill="{HAZE}">{LINE}</text>')
+    o.append(f'<text x="{x0}" y="{fmt(meta_y + ch * base)}" font-family="{MONO}" font-size="{size}" fill="{GOLD}">gnosh.ai</text>')
+    o.append(f'<text x="{x0 + word_w}" y="{fmt(meta_y + ch * base)}" text-anchor="end" font-family="{MONO}" font-size="{size}" fill="{HAZE}">{LINE}</text>')
     o.append(word_layers(on, x0, y0, p))
     o.append("</g>")
     o.append(f'<rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="22" fill="none" stroke="{RIM}"/>')
