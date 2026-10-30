@@ -205,6 +205,9 @@ type SessionAgentCall struct {
 	promptHooksRan      bool
 	promptHookContext   string
 	carriesSessionStart bool
+	// recallMem marks a prompt the user typed, which takes what mem holds
+	// close to it in meaning when it goes out, queued or not.
+	recallMem bool
 	// channelMeta holds the attributes of the <channel> element a
 	// channel-originated turn was started with, parsed once at Run
 	// entry. It survives the auto-summarize continuation, whose Prompt
@@ -599,8 +602,9 @@ func (a *sessionAgent) sessionMu(sessionID string) *sync.Mutex {
 func (a *sessionAgent) queueContinuation(call SessionAgentCall) {
 	// A continuation is the agent's own; what the user's hooks added to
 	// the prompt it continues, SessionStart's included, went to the model
-	// with that prompt.
+	// with that prompt, and so did what mem recalled for it.
 	call.promptHookContext = ""
+	call.recallMem = false
 	mu := a.sessionMu(call.SessionID)
 	mu.Lock()
 	defer mu.Unlock()
@@ -927,18 +931,14 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			return nil, err
 		}
 	}
-	// A prompt the user typed brings what the project's mem holds close
-	// to it in meaning, found within half a second or not at all, and it
-	// goes with the prompt as hook output does: hidden after its text, so
-	// a rebuilt conversation matches the server's cache. A queued copy
-	// carries it; a continuation does not ask again. A channel's message
-	// gets none, though the user's own sessions do: its sender may not be
-	// the user, and recall would hand it mem's facts unasked (MEMPLAN §3
-	// row 73 would treat channels as main sessions; that is undecided).
-	if a.memRecall != nil && !call.HiddenUserMessage && !call.promptHooksRan && call.Channel == "" {
-		if recall := a.memRecall(ctx, call.SessionID, call.Prompt); recall != "" {
-			call.promptHookContext = joinHookContext(call.promptHookContext, recall)
-		}
+	// A prompt the user typed asks the project's mem for what bears on it
+	// as it goes out (see recallMem). A channel's message does not, though
+	// the user's own sessions do: its sender may not be the user, and
+	// recall would hand it mem's facts unasked (MEMPLAN §3 row 73 would
+	// treat channels as main sessions; that is undecided). It is marked
+	// once, as the prompt is sent; a queued copy runs again with its mark.
+	if !call.promptHooksRan {
+		call.recallMem = a.memRecall != nil && !call.HiddenUserMessage && call.Channel == ""
 	}
 	// Sent, with or without hooks: a queued copy of this call, or a
 	// continuation made from it, does not run them again, even if some
@@ -1250,7 +1250,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		}
 	}
 
-	// Add the user message to the session.
+	// Add the user message to the session, with what mem recalls for it.
+	a.recall(ctx, &call)
 	_, err = a.createUserMessage(ctx, call)
 	if err != nil {
 		return nil, err
@@ -1326,6 +1327,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			fold, canceledRunIDs := a.drainQueueForStep(call.SessionID)
 			a.publishCanceledQueueDrops(canceledRunIDs)
 			for _, queued := range fold {
+				a.recall(callContext, &queued)
 				userMessage, createErr := a.createUserMessage(callContext, queued)
 				if createErr != nil {
 					return callContext, prepared, createErr
@@ -2481,6 +2483,24 @@ func sessionHeaders(sessionID string) map[string]string {
 	return map[string]string{
 		"x-session-id":       hash,
 		"x-session-affinity": hash,
+	}
+}
+
+// recall adds to a prompt the user typed what the project's mem holds close
+// to it in meaning, found within half a second or not at all. It goes with
+// the prompt as hook output does: hidden after its text, so a rebuilt
+// conversation matches the server's cache. It is read as the prompt goes
+// out, whether it starts a turn or is folded into one from the queue, not
+// when it was sent: a prompt queued behind a turn that erased something
+// from mem is not handed what was erased, and a new session's <mem> block,
+// added before it, is not repeated.
+func (a *sessionAgent) recall(ctx context.Context, call *SessionAgentCall) {
+	if !call.recallMem || a.memRecall == nil {
+		return
+	}
+	call.recallMem = false
+	if text := a.memRecall(ctx, call.SessionID, call.Prompt); text != "" {
+		call.promptHookContext = joinHookContext(call.promptHookContext, text)
 	}
 }
 

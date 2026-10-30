@@ -331,6 +331,50 @@ func TestRun_UserPromptSubmitHookRunsOnceForAQueuedPrompt(t *testing.T) {
 	require.Equal(t, "second\n\n<user-prompt-submit-hook>\nhook context\n</user-prompt-submit-hook>", texts[len(texts)-1])
 }
 
+// What mem recalls for a prompt is read as the prompt goes out: one sent
+// while a turn runs, and queued, is not handed what that turn erased from
+// mem meanwhile.
+func TestRun_QueuedPromptRecallsWhenItGoesOut(t *testing.T) {
+	t.Parallel()
+
+	r := promptHookAgent(t, nil)
+	gated := &gatedModel{entered: make(chan struct{}), release: make(chan struct{})}
+	r.agent.largeModel.Set(Model{Model: gated, CatwalkCfg: catwalk.Model{ContextWindow: 200000, DefaultMaxTokens: 1000}})
+	var mu sync.Mutex
+	recall := "<mem>\n- fact `db/staging` = the password is hunter22\n</mem>"
+	r.agent.memRecall = func(_ context.Context, _, prompt string) string {
+		mu.Lock()
+		defer mu.Unlock()
+		if prompt == "first" {
+			return ""
+		}
+		return recall
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "first"})
+		done <- err
+	}()
+	<-gated.entered
+	_, err := r.agent.Run(t.Context(), SessionAgentCall{SessionID: r.sessionID, Prompt: "and the staging db?"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"and the staging db?"}, r.agent.QueuedPromptsList(r.sessionID))
+	// The turn running redacts the password.
+	mu.Lock()
+	recall = "<mem>\n- fact `db/staging` = the password is (redacted)\n</mem>"
+	mu.Unlock()
+	close(gated.release)
+	require.NoError(t, <-done)
+
+	prompts := gated.recorded()
+	require.Len(t, prompts, 2)
+	texts := userTexts(prompts[1])
+	last := texts[len(texts)-1]
+	require.Contains(t, last, "the password is (redacted)")
+	require.NotContains(t, last, "hunter22")
+}
+
 // An Esc while a prompt is in its UserPromptSubmit hooks stops the hooks,
 // and the prompt is not sent. The session reads as busy meanwhile, which
 // is what sends the TUI's Esc to Cancel at all. Before, a prompt in its
