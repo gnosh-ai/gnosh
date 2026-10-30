@@ -176,7 +176,8 @@ func field(base lipgloss.Style, o Opts, width int, reverse bool) string {
 // SmallRender renders a smaller version of the Crush logo, suitable for
 // smaller windows or sidebar usage.
 func SmallRender(t *styles.Styles, width int, o Opts) string {
-	name := version.Name
+	// In capitals, as the big logo and the compact header spell it.
+	name := strings.ToUpper(version.Name)
 	if o.Hyper {
 		name = "HYPERCRUSH"
 	}

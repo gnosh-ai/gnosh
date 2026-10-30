@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/ui/styles"
+	"github.com/charmbracelet/crush/internal/version"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -84,5 +86,15 @@ func TestWideLogoRightEdgeIsStraight(t *testing.T) {
 		if w := lipgloss.Width(strings.TrimRight(l, " ")); w != lipgloss.Width(strings.TrimRight(lines[0], " ")) {
 			t.Fatalf("row %d ends at column %d, row 0 at %d:\n%s", i, w, lipgloss.Width(lines[0]), strings.Join(lines, "\n"))
 		}
+	}
+}
+
+// The sidebar's small logo spells the name in capitals, as the big logo and
+// the compact header do.
+func TestSmallLogoNameIsCapitals(t *testing.T) {
+	st := styles.CharmtonePantera()
+	want := strings.ToUpper(version.Name) + " "
+	if got := ansi.Strip(SmallRender(&st, 40, Opts{})); !strings.HasPrefix(got, want) {
+		t.Fatalf("the small logo is %q, want it to start with %q", got, want)
 	}
 }
