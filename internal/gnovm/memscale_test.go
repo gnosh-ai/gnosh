@@ -21,8 +21,9 @@ import (
 )
 
 // TestMemRealmScale measures mem at the size GNOMEM_SCALE gives (items), in
-// the shape a long-used mem has: most goals closed, a thousand open, and one
-// goal of a thousand steps. It builds the mem through Apply, opens it again,
+// the shape a long-used mem has: most goals closed, a thousand open, one
+// goal of a thousand steps, and a tenth as many facts as items, in 50
+// groups. It builds the mem through Apply, opens it again,
 // and times the calls a session makes. It is skipped unless GNOMEM_SCALE is
 // set; run it on the devbox.
 func TestMemRealmScale(t *testing.T) {
@@ -68,10 +69,18 @@ func TestMemRealmScale(t *testing.T) {
 		ops = append(ops, memOp{Kind: "add", Name: "big/" + strconv.Itoa(s), New: "step " + strconv.Itoa(s), By: "user"})
 	}
 	flush()
+	facts := n / 10
+	for f := 1; f <= facts; f++ {
+		ops = append(ops, memOp{Kind: "fact", Name: "group-" + strconv.Itoa(f%50) + "/fact-" + strconv.Itoa(f), New: "fact number " + strconv.Itoa(f)})
+		if f%1000 == 0 {
+			flush()
+		}
+	}
+	flush()
 	items := goals*(steps+1) + big + 1
 	build := time.Since(start)
-	t.Logf("built %d items (%d goals open) in %v (%.0f items/s), store %s", items, min(goals, open)+1, build,
-		float64(items)/build.Seconds(), dirSize(t, dir))
+	t.Logf("built %d items (%d goals open) and %d facts in %v (%.0f items/s), store %s", items, min(goals, open)+1, facts, build,
+		float64(items+facts)/build.Seconds(), dirSize(t, dir))
 
 	start = time.Now()
 	require.NoError(t, r.close())
@@ -92,6 +101,8 @@ func TestMemRealmScale(t *testing.T) {
 	timed("a call adding a step", `mem.Steps("`+mid+`", "and one more")`)
 	require.Contains(t, timed("Show(one goal)", `println(mem.Show("`+mid+`"))`), mid+"/12")
 	timed("Show()", `println(mem.Show())`)
+	timed("Goal(a new title), among the open goals", `mem.Goal("a title no open goal has")`)
+	timed("Show(a group of facts)", `println(mem.Show("group-7"))`)
 	timed("JSON()", `println(mem.JSON())`)
 	timed("Show(the goal of a thousand steps)", `println(mem.Show("big"))`)
 	timed("Next(it)", `println(mem.Next("big"))`)

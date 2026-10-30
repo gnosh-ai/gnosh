@@ -102,13 +102,26 @@ func TestWorkerHeartbeatsAndCancel(t *testing.T) {
 	send(clientHello(t.TempDir()))
 	recv()
 
-	start := time.Now()
 	send(&frame{ID: 1, Type: msgRun, Body: mustJSON(RunRequest{Project: "/p", Session: "s", Code: `for {}`, Gas: maxGas})})
-	time.Sleep(1600 * time.Millisecond)
+	// Two heartbeats while the run runs, however long a busy machine takes
+	// to start its VM (a fixed wait of 1.6 s saw one, under a landing's
+	// full suite beside a scenario pass); a run that sends none fails here
+	// rather than hanging.
+	watchdog := time.AfterFunc(30*time.Second, closeReq)
+	for beats := 0; beats < 2; {
+		switch f := recv(); f.Type {
+		case msgHeartbeat:
+			beats++
+		case msgAck:
+		default:
+			t.Fatalf("a %s while the run ran, before two heartbeats", f.Type)
+		}
+	}
+	watchdog.Stop()
+	start := time.Now()
 	send(&frame{ID: 1, Type: msgCancel})
-	f, beats := recvResult(t, recv)
-	require.GreaterOrEqual(t, beats, 2, "heartbeats while the run ran")
-	require.Less(t, time.Since(start), 5*time.Second, "the cancel stopped it")
+	f, _ := recvResult(t, recv)
+	require.Less(t, time.Since(start), 10*time.Second, "the cancel stopped it")
 	var wr wireRun
 	require.NoError(t, json.Unmarshal(f.Body, &wr))
 	var lim *limitError
