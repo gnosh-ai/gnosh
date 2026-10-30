@@ -210,9 +210,10 @@ gnovm_run {"code":"\nd := 200\ntotal := 0\nfor i := 1; i <= 10; i++ {\n    if d 
 ```
 
 and answers "111 s (1 min 51 s)". In real runs with Qwen thinking, as it does
-by default, it used a machine and got 111 s every time (4 of 4). With its
-thinking turned off it once did the sum in its head and said 110.8 s: the
-arithmetic a machine is there for.
+by default, it used a machine and got 111 s every time (5 of 5). With its
+thinking turned off it was right in 4 runs of 7: it skipped the machine three
+times, twice adding the waits up in its head to 110.8 s, and once ran a loop
+one wait short and said 81 s.
 
 `mem` is one machine among many. Gnosh carries the GnoVM, gno.land's
 interpreter for its Go dialect, and runs named virtual machines in it for the
