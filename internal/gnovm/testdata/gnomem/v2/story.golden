@@ -22,7 +22,7 @@ error: `2` is not a name; steps are named under their goal, like `goal/2`: mem.S
 error: `release-v2` "release v2" (this session, 3m ago, 1/3 done) is already open: add to it with mem.Steps("release-v2", "…"), or give other work a title that tells them apart
 > s1: mem.Goal("renew the gno.shop TLS cert", "renew-cert").Wait("Dec 1")
 added goal `renew-cert` "renew the gno.shop TLS cert"
-error: write a day as 2026-12-01 (today is Thu 2026-10-29); nothing was kept
+error: write a day as 2026-12-01 (today is Thu 2026-10-29); nothing was kept, so `renew-cert`, added above, is not in mem
 > s1: mem.Goal("renew the gno.shop TLS cert", "renew-cert").Wait("2026-12-01")
 added goal `renew-cert` "renew the gno.shop TLS cert"
 `renew-cert` "renew the gno.shop TLS cert" waits until 2026-12-01
@@ -130,6 +130,12 @@ added goal `tidy-docs` "tidy the docs"
 added `tidy-docs/1` "a", `tidy-docs/2` "b", `tidy-docs/3` "c", `tidy-docs/4` "d", `tidy-docs/5` "e", `tidy-docs/6` "f", `tidy-docs/7` "g"; next: `tidy-docs/1` "a"
 > s1: mem.Drop("tidy-docs", "moved to the docs session")
 dropped `tidy-docs` "tidy the docs", with its open steps `tidy-docs/1`, `tidy-docs/2`, `tidy-docs/3`, `tidy-docs/4` and 3 more
+> s1: mem.Goal("rotate the staging key").Ask("which day suits you?")
+added goal `rotate-staging-key` "rotate the staging key"
+asked `rotate-staging-key/1` "which day suits you?" (for the user); `rotate-staging-key` waits on it
+> s1: mem.Goal("ping the team"); mem.Ask("ping the team", "who is on call?")
+added goal `ping-team` "ping the team"
+error: "ping the team" is a title, not a name: the goal with that title is `ping-team`; nothing was kept, so `ping-team`, added above, is not in mem
 > s1: mem.Note("bump-gno-pin", "the token is sk-live-4f9c2b")
 noted on `bump-gno-pin` "bump the gno pin"
 > s1: mem.Redact("sk-live-4f9c2b")
@@ -137,13 +143,17 @@ redacted it in 1 place; gnosh rewrites mem's files
 > s1: mem.Redact("nothing")
 error: mem holds no such text; Redact takes a secret's exact text
 > s1: println(mem.Show())
-mem: 4 goals open · 2 closed · 1 rule · 3 facts
+mem: 5 goals open, 1 question for the user · 2 closed · 1 rule · 3 facts
 rules:
   `push-after-landing` = push gnosh main to GitHub only after land-branch.sh prints landed:
+questions for the user:
+  [?] `rotate-staging-key/1` "which day suits you?"
 due:
   [ ] `renew-cert` "renew the gno.shop TLS cert" (since 2026-12-01)
 goals:
   [ ] `bump-gno-pin` "bump the gno pin" (this session · 33d ago · waits for: PR #6399 merged)
+  [ ] `rotate-staging-key` "rotate the staging key" (0/1 done · this session · 33d ago · waits on the user)
+    [?] `rotate-staging-key/1` "which day suits you?"
   [ ] `port-tests-gno` "port the tests to gno" (7/10 done · this session · 33d ago)
     [x] `port-tests-gno/1` … `port-tests-gno/5`: 5 done
     [x] `port-tests-gno/6` "io" → ported
@@ -162,4 +172,4 @@ facts, newest first:
   `cmd/build` = make build
 
 > s1: println(mem.JSON("bump-gno-pin"))
-{"goals":[{"name":"bump-gno-pin","title":"bump the gno pin","status":"","result":"","wait":"PR #6399 merged","for":"","doing":"","by":"s1","changed":1793270520,"steps_open":0,"steps_done":0,"next":"","next_title":"","steps":[],"held":[{"name":"bump-gno-pin","why":"words"}]}]}
+{"goals":[{"name":"bump-gno-pin","title":"bump the gno pin","status":"","result":"","wait":"PR #6399 merged","for":"","doing":"","by":"s1","changed":1793270640,"steps_open":0,"steps_done":0,"next":"","next_title":"","steps":[],"held":[{"name":"bump-gno-pin","why":"words"}]}]}

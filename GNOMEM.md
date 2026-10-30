@@ -226,7 +226,7 @@ type Todo struct {
 	// ...
 }
 
-func (m *Mem) Goal(title string, name ...string) Goal // .Steps(...), .Wait(...)
+func (m *Mem) Goal(title string, name ...string) Goal // .Steps(...), .Wait(...), .Ask(...)
 func (m *Mem) Steps(name string, titles ...string)
 func (m *Mem) Ask(name, question string)
 func (m *Mem) Start(name string)

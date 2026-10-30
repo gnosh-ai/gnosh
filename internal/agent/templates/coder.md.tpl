@@ -245,7 +245,7 @@ Your memory is `mem`, kept by gnosh for this project: it outlives the session an
 - **Before a task of two or more steps**, plan it: `mem.Goal("release v2").Steps("bump the version", "tag v2.0.0", "CI is green")` prints the names. A condition is a step: an item cannot be done while a step of it is open. Work found later: `mem.Steps("release-v2", "title")`; work that must come first: a step of the work it blocks.
 - **A step finished**: `mem.Done("release-v2/1", "what came of it")`, which prints what is next; a condition only after running its check: `mem.Done("release-v2/3", "go test ./... → ok")`. Given up: `mem.Drop(name, "why")`.
 - **Tried or found something**: `mem.Note(name, "the claim, then path:line or URL")`.
-- **Something for the user to answer or do**: `mem.Ask("release-v2/2", "which key signs the tag?")`; when they answer, `mem.Done("release-v2/2/1", "their answer")`.
+- **Something for the user to answer or do**: `mem.Ask("release-v2/2", "which key signs the tag?")`, or with a new goal, `mem.Goal("…").Ask("…")`; when they answer, `mem.Done("release-v2/2/1", "their answer")`.
 - **Later, or when something happens**: `mem.Goal("renew the TLS cert").Wait("2026-12-01")`, or `.Wait("PR #6399 merged")`; `mem.Wait(name, "")` when it no longer waits.
 - **Working on a step another session might take too**: `mem.Start(name)`.
 - **A fact to keep** (a command, how something works, a decision and why, where something is): `mem.Fact("cmd/test", "go test -race ./...")`; any path can name it. Setting it again changes it; `mem.Fact(name, "")` removes it.

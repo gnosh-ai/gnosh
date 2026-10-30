@@ -92,6 +92,12 @@ func (g Goal) Wait(until string) Goal {
 	return g
 }
 
+// Ask asks the user something, as a step of the goal (see Mem.Ask).
+func (g Goal) Ask(question string) Goal {
+	g.m.Ask(g.Name, question)
+	return g
+}
+
 // String is the goal's name and title.
 func (g Goal) String() string {
 	if it := g.m.get(g.Name); it != nil {
@@ -165,7 +171,11 @@ func (m *Mem) Ask(name, question string) {
 	m.do(Op{Kind: "set", Name: asked, Field: "for", New: "user"})
 	msg := "asked " + ref(asked, question) + " (for the user)"
 	if name != "" {
-		msg += "; " + "`" + name + "` waits on it" + m.whatNext(goalOf(name))
+		// "waits on it" says why, when nothing else in the goal is free.
+		msg += "; `" + name + "` waits on it"
+		if g := goalOf(name); m.nextFor(g, m.get(g), caller()) != "" {
+			msg += m.whatNext(g)
+		}
 	}
 	println(msg)
 }

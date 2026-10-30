@@ -271,6 +271,8 @@ func (m *Mem) miss(name string) string {
 		return "`" + name + "` is a fact, not an item; to change it: mem.Fact(\"" + name + "\", \"…\")"
 	case m.getRule(name) != nil:
 		return "`" + name + "` is a rule, not an item; to change it: mem.Rule(\"" + name + "\", \"…\")"
+	case m.titled(name) != "":
+		return strconv.Quote(name) + " is a title, not a name: the goal with that title is `" + m.titled(name) + "`"
 	}
 	if p := parentOf(name); p != "" {
 		if it := m.get(p); it != nil {
@@ -281,6 +283,18 @@ func (m *Mem) miss(name string) string {
 		}
 	}
 	return "no item `" + name + "`; mem.Show() lists them"
+}
+
+// titled is the name of the open goal titled title, or "".
+func (m *Mem) titled(title string) string {
+	want, found := sameTitle(title), ""
+	m.open.Iterate("", "", func(_ string, v any) bool {
+		if n := v.(string); sameTitle(m.get(n).Title) == want {
+			found = n
+		}
+		return found != ""
+	})
+	return found
 }
 
 func isNumber(s string) bool {

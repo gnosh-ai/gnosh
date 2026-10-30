@@ -272,7 +272,7 @@ func (r *memRealm) call(code string, ctx memContext) (call memCall, err error) {
 		// What the input printed before it failed may read as done; say
 		// plainly that none of it was kept.
 		if len(call.Ops) > 0 {
-			msg += "; nothing was kept"
+			msg += "; nothing was kept" + memNotKept(call.Ops)
 		}
 		call.Ops = nil
 		err = errors.New(msg)
@@ -335,6 +335,26 @@ func memPanicText(p any, bodyLine int, oneLine bool) string {
 		msg = place + strings.TrimSuffix(msg[len(m[0]):], ":")
 	}
 	return msg
+}
+
+// memNotKept names what a failed input's receipts said it added, for its
+// refusal: ", so `ship`, added above, is not in mem".
+func memNotKept(ops []memOp) string {
+	var added []string
+	for _, op := range ops {
+		if op.Kind == "add" {
+			added = append(added, "`"+op.Name+"`")
+		}
+	}
+	switch {
+	case len(added) == 0:
+		return ""
+	case len(added) == 1:
+		return ", so " + added[0] + ", added above, is not in mem"
+	case len(added) > 3:
+		added = append(added[:3], "the rest")
+	}
+	return ", so " + strings.Join(added[:len(added)-1], ", ") + " and " + added[len(added)-1] + ", added above, are not in mem"
 }
 
 // memPlaceRe is where gno puts a compile error: main.gno:5:1-8: .

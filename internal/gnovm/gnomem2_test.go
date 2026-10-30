@@ -112,6 +112,10 @@ func TestMemStory(t *testing.T) {
 	s.run("s1", `println(mem.Show("port-tests-gno"))`)
 	s.run("s1", `mem.Goal("tidy the docs").Steps("a", "b", "c", "d", "e", "f", "g")`)
 	s.run("s1", `mem.Drop("tidy-docs", "moved to the docs session")`)
+	// A question goes with its goal; a title is not a name, and a failed
+	// input says which of what it printed is not in mem.
+	s.run("s1", `mem.Goal("rotate the staging key").Ask("which day suits you?")`)
+	s.run("s1", `mem.Goal("ping the team"); mem.Ask("ping the team", "who is on call?")`)
 	s.holding = func(text string, _ []memOp) ([]string, []string, bool) {
 		if text == "sk-live-4f9c2b" {
 			return []string{"bump-gno-pin"}, []string{"item"}, false
