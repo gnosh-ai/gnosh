@@ -217,18 +217,30 @@ what is due, what is open and next, and the newest facts.
 > go out?
 
 The agent works it out in the session's scratch machine instead of adding it
-up in its head:
+up in its head, and prints every wait, not only the total:
 
 ```
-gnovm_run {"code":"\nd := 200\ntotal := 0\nfor i := 1; i <= 10; i++ {\n    if d > 30000 { d = 30000 }\n    total += d\n    d *= 2\n}\nfmt.Println(total, \"ms\")\n"}
-  111000 ms
+gnovm_run {"code":"w := 200\ntotal := 0\nfor i := 1; i <= 10; i++ {\n\tif w > 30000 {\n\t\tw = 30000\n\t}\n\ttotal += w\n\tfmt.Println(\"retry\", i, \"wait\", w, \"ms  cumulative\", total, \"ms\")\n\tw *= 2\n}\nfmt.Println(\"the 10th retry goes out after\", total, \"ms =\", total/1000, \"s\")"}
+  retry 1 wait 200 ms  cumulative 200 ms
+  retry 2 wait 400 ms  cumulative 600 ms
+  retry 3 wait 800 ms  cumulative 1400 ms
+  retry 4 wait 1600 ms  cumulative 3000 ms
+  retry 5 wait 3200 ms  cumulative 6200 ms
+  retry 6 wait 6400 ms  cumulative 12600 ms
+  retry 7 wait 12800 ms  cumulative 25400 ms
+  retry 8 wait 25600 ms  cumulative 51000 ms
+  retry 9 wait 30000 ms  cumulative 81000 ms
+  retry 10 wait 30000 ms  cumulative 111000 ms
+  the 10th retry goes out after 111000 ms = 111 s
 ```
 
-and answers "111 s (1 min 51 s)". In real runs with Qwen thinking, as it does
-by default, it used a machine and got 111 s every time (5 of 5). With its
-thinking turned off it was right in 4 runs of 7: it skipped the machine three
-times, twice adding the waits up in its head to 110.8 s, and once ran a loop
-one wait short and said 81 s.
+and answers from those lines: "111 s. The waits are 200, 400, 800, 1600,
+3200, 6400, 12800, 25600 ms, then the 30 s cap kicks in for retries 9 and 10:
+total = 51 000 + 30 000 + 30 000 = 111 000 ms." In five real runs on 30
+October with Qwen thinking, as it does by default, it printed every wait in a
+machine and got 111 s every time. With its thinking turned off it also used a
+machine every time and was right in 4 runs of 5; the miss ran a loop one wait
+short and said 81 s.
 
 `mem` is one machine among many. Gnosh carries the GnoVM, gno.land's
 interpreter for its Go dialect, and runs named virtual machines in it for the

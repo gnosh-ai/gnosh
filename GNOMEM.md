@@ -498,7 +498,8 @@ Gnosh's system prompt carries a short recipe, so the model needs no setup:
   what it remembers, or to correct or erase something, it points you to
   `/mem`.
 - **Figures**: a sum, a rate or a date it would work out in its head runs in
-  the session's scratch machine instead, and the answer is what that printed.
+  the session's scratch machine instead, printing every term, not only the
+  total, and the terms and the result in the answer are the lines it printed.
 - **Your words come first**, then the context files (CRUSH.md, AGENTS.md,
   CLAUDE.md) and mem's rules, then the rest of mem. What is for the team goes
   in a context file: mem stays on this machine.
