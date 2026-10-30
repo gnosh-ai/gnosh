@@ -108,3 +108,13 @@ error: 2026-10-01 is past (today is Thu 2026-10-29): give a day still to come, o
 error: a wait is a day or words, not an item: to wait for `renew-cert`, make this work a step of it, or say it in words
 > s1: mem.Wait("renew-cert", "ship-it")
 error: a wait is a day or words, not an item: to wait for `ship-it`, make this work a step of it, or say it in words
+> s1: mem.Wait("renew-cert", "next conversation")
+`renew-cert` "renew the cert" waits for nothing: every session is shown what is open, so the next one will see it
+> s1: mem.Wait("renew-cert", "PR #6399 merged")
+`renew-cert` "renew the cert" waits for: PR #6399 merged
+> s1: mem.Wait("renew-cert", "until next time we talk")
+`renew-cert` "renew the cert" no longer waits: every session is shown what is open, so the next one will see it
+> s1: mem.Wait("renew-cert", "next time CI is green")
+`renew-cert` "renew the cert" waits for: next time CI is green
+> s1: mem.Wait("renew-cert", "the next release")
+`renew-cert` "renew the cert" waits for: the next release

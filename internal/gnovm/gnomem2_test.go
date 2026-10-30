@@ -68,7 +68,7 @@ func (s *memStory) check(r *memRealm, after string) {
 // testdata/gnomem/v2/grammar.golden, which GNOMEM_V2_WRITE=1 rewrites. A
 // fact's, a rule's and a goal's given name follow one grammar; a wait is a
 // day written 2026-12-01, or words, and a day written any other way is
-// refused, naming today.
+// refused, naming today; a wait for the next session is none.
 func TestMemGrammars(t *testing.T) {
 	s := newMemStory(t)
 	for _, name := range []string{
@@ -88,6 +88,7 @@ func TestMemGrammars(t *testing.T) {
 		"2026-12-01", "PR #6399 merged", "the user signs off", "",
 		"Dec 1", "December 1st", "tomorrow", "next week", "in 2 days", "+3d", "12/01", "1/12/2026",
 		"until 2026-12-01", "Monday", "eod", "2026-02-30", "2026-13-01", "2026-10-01", "renew-cert", "ship-it",
+		"next conversation", "PR #6399 merged", "until next time we talk", "next time CI is green", "the next release",
 	} {
 		s.run("s1", `mem.Wait("renew-cert", `+strconv.Quote(wait)+`)`)
 	}

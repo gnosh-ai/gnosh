@@ -58,7 +58,36 @@ var (
 	months   = []string{"jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"}
 	weekdays = []string{"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "mon", "tue", "tues", "wed", "thu", "thur", "thurs", "fri", "sat", "sun"}
 	relative = []string{"today", "tonight", "tomorrow", "yesterday", "next", "this", "week", "weekend", "month", "year", "day", "days", "weeks", "months", "years", "hours", "minutes", "noon", "midnight", "morning", "evening", "eod", "eow"}
+	talks    = []string{"conversation", "session", "chat", "talk"}
 )
+
+// namesNextTalk reports whether s waits for the next session: "next
+// conversation", "until the next session", "next time", "next time we
+// talk". "next time CI is green" waits for CI.
+func namesNextTalk(s string) bool {
+	ws := strings.Fields(strings.NewReplacer(",", " ", ".", " ", "!", " ").Replace(strings.ToLower(s)))
+	for i := 0; i+1 < len(ws); i++ {
+		if ws[i] != "next" {
+			continue
+		}
+		if isTalk(ws[i+1]) {
+			return true
+		}
+		if ws[i+1] == "time" && (i+2 == len(ws) || ws[i+2] == "we" || ws[i+2] == "you") {
+			return true
+		}
+	}
+	return false
+}
+
+func isTalk(w string) bool {
+	for _, t := range talks {
+		if w == t {
+			return true
+		}
+	}
+	return false
+}
 
 // looksLikeDay reports whether s, after one leading until, after, on or by,
 // is a day written some other way: a month or weekday name with a number or

@@ -443,6 +443,9 @@ func (m *Mem) Note(name, note string) {
 // Wait sets what open item name waits for: a day, "2026-12-01", until that
 // day; or words, "PR #6399 merged", until Wait(name, "") or Done clears it.
 // A wait holds back only next: every call still works on a waiting item.
+// A wait for the next session ("next time we talk", "next conversation")
+// is none, and the receipt says why: every session is shown what is open,
+// and a wait in words reads there as not yet come.
 // It refuses a day written any other way, alone or after until, after, on
 // or by (Nov 3, 11/03, next Monday, tomorrow, in 2 days); a 2026-11-03 among
 // other words or not on the calendar; a day before yesterday; and an item's
@@ -450,13 +453,21 @@ func (m *Mem) Note(name, note string) {
 // today ("today is Thu 2026-10-29").
 func (m *Mem) Wait(name, until string) {
 	it := m.openItem(name)
-	until = m.parseWait(clip(text("the wait", until), maxText))
-	if until == it.Wait {
+	until, why := clip(text("the wait", until), maxText), ""
+	if namesNextTalk(until) {
+		until, why = "", ": every session is shown what is open, so the next one will see it"
+	}
+	until = m.parseWait(until)
+	switch {
+	case until == it.Wait && until == "":
+		println(ref(name, it.Title) + " waits for nothing" + why)
+		return
+	case until == it.Wait:
 		println(ref(name, it.Title) + waitText(it.Wait) + " already")
 		return
 	}
 	m.do(Op{Kind: "set", Name: name, Field: "wait", Old: it.Wait, New: until})
-	msg := ref(name, it.Title) + waitText(until)
+	msg := ref(name, it.Title) + waitText(until) + why
 	if goalOf(name) != name {
 		msg += m.whatNext(goalOf(name))
 	}
