@@ -39,6 +39,12 @@ const (
 	// GoalsVM is the VM that holds the harness's goals; only the goals
 	// tool writes to it.
 	GoalsVM = "goals"
+	// MemVM is the agent's board: a persistent VM klash makes on first
+	// use, whose first entry declares mem, a klash/gnomem/v1 Board.
+	MemVM = "mem"
+	// memPrelude is MemVM's first entry.
+	memPrelude = `import gnomem "` + boardPkg + `"
+var mem = gnomem.New()`
 
 	scratchPrefix = "scratch-"
 	// maxNamedVMs is how many named VMs a project may have; scratch VMs
@@ -728,12 +734,21 @@ func (h *Host) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	if name == GoalsVM {
 		return nil, &refusal{"the goals VM is written only by the goals tool; use goals and goals_list"}
 	}
+	var notes []string
+	if name == MemVM {
+		made, err := h.ensureMem(ctx, project)
+		if err != nil {
+			return nil, err
+		}
+		if made {
+			notes = append(notes, "made VM mem, your board (persistent): mem.Show() shows it")
+		}
+	}
 
 	s, err := h.lookup(project, name)
 	if err != nil {
 		return nil, err
 	}
-	var notes []string
 	switch {
 	case s == nil && scratch:
 		s, err = h.create(project, name, h.defaultOptions())
@@ -757,6 +772,30 @@ func (h *Host) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		notes = append(notes, "reset VM "+name)
 	}
 	return h.runIn(ctx, s, req, notes)
+}
+
+// ensureMem makes a project's mem VM if it has none, and reports whether it
+// did. Its first entry declares the board, so it replays like any other.
+func (h *Host) ensureMem(ctx context.Context, project string) (bool, error) {
+	s, err := h.lookup(project, MemVM)
+	if err != nil || s != nil {
+		return false, err
+	}
+	opts := h.defaultOptions()
+	opts.Persist = true
+	opts.Description = "your board: goals, steps, findings and facts (" + boardPkg + ")"
+	if s, err = h.create(project, MemVM, opts); err != nil {
+		return false, err
+	}
+	res, err := h.runIn(ctx, s, RunRequest{Name: MemVM, Code: memPrelude, Req: "klash:mem"}, nil)
+	if err == nil && res.Err != nil {
+		err = res.Err
+	}
+	if err != nil {
+		_ = h.deleteVM(s)
+		return false, fmt.Errorf("making VM mem: %w", err)
+	}
+	return true, nil
 }
 
 // runIn runs a call in an existing VM, under its lock.
@@ -803,11 +842,11 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 	if n := importedNote(imported); n != "" {
 		notes = append(notes, n)
 	}
-	// A pure evaluation changes nothing, unless the VM has redeclared
-	// one of the builtins that made it look pure (checked again after the
-	// run, for one this input declares).
-	pure := prog.evalPure && !v.shadowsBuiltin()
-	if err := h.checkLimits(s, ops, pure); err != nil {
+	if s.name == MemVM && prog.lhs[MemVM] {
+		return nil, &refusal{"mem is your board, and assigning to it would replace the board: change it with its methods (mem.Add, mem.Done, mem.Note, ...) or its fields (mem.Facts[\"k\"] = \"v\")"}
+	}
+	readOnly := readOnlyOps(v, prog, len(ops))
+	if err := h.checkLimits(s, ops, readOnly); err != nil {
 		return nil, err
 	}
 	res := &RunResult{VM: s.name, GasLimit: gas, NsPerGas: s.opts.NsPerGas, Notes: notes}
@@ -834,7 +873,10 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 		return res, nil
 	}
 	e.WallNS, e.Gas = int64(res.Wall), used
-	e.Ops = journaledOps(ops, pure && !v.shadowsBuiltin())
+	if v.shadowsBuiltin() {
+		readOnly = nil // this input redeclared a builtin a read relied on
+	}
+	e.Ops = journaledOps(ops, readOnly)
 	if len(e.Ops) == 0 {
 		return res, nil
 	}
@@ -869,8 +911,8 @@ func (h *Host) runIn(ctx context.Context, s *vmState, req RunRequest, notes []st
 // keep: one too big to journal, one that would take the VM past its
 // declaration limits, or any call that changes state once the VM's kept
 // calls have run for maxReplayWall in all.
-func (h *Host) checkLimits(s *vmState, ops []op, pure bool) error {
-	keeps := len(journaledOps(ops, pure)) > 0
+func (h *Host) checkLimits(s *vmState, ops []op, readOnly []bool) error {
+	keeps := len(journaledOps(ops, readOnly)) > 0
 	if keeps && s.j.size >= maxJournal {
 		return &refusal{fmt.Sprintf("VM %s's journal is full (%d MB): it still answers expressions, but keeps nothing more; make a new VM, or delete this one", s.name, maxJournal>>20)}
 	}
@@ -956,13 +998,37 @@ func importedNote(paths []string) string {
 	return "imported " + strings.Join(paths, ", ") + " for you"
 }
 
-// journaledOps drops a trailing eval that cannot change state: replaying it
-// would change nothing.
-func journaledOps(ops []op, evalPure bool) []op {
-	if n := len(ops); n > 0 && ops[n-1].Eval != "" && evalPure {
-		return ops[:n-1]
+// journaledOps drops the ops that only read: replaying them would change
+// nothing. readOnly is aligned with ops, or nil.
+func journaledOps(ops []op, readOnly []bool) []op {
+	if readOnly == nil {
+		return ops
 	}
-	return ops
+	var kept []op
+	for i, o := range ops {
+		if !readOnly[i] {
+			kept = append(kept, o)
+		}
+	}
+	return kept
+}
+
+// readOnlyOps marks the ops of an input, after its n-len(prog.ops) import
+// ops, that only read (see program.readOnly), or returns nil if none may be
+// trusted to: when the VM has redeclared a builtin that made one look pure,
+// or a board read's receiver is not a gnomem board.
+func readOnlyOps(v *vm, prog *program, n int) []bool {
+	if v.shadowsBuiltin() {
+		return nil
+	}
+	for _, name := range prog.reads {
+		if !v.isBoard(name) {
+			return nil
+		}
+	}
+	ro := make([]bool, n)
+	copy(ro[n-len(prog.ops):], prog.readOnly)
+	return ro
 }
 
 // runProgram runs code that has a package clause in a fresh VM that is
@@ -1071,6 +1137,11 @@ func (h *Host) New(ctx context.Context, req NewRequest) (VMInfo, bool, error) {
 		return VMInfo{}, false, &refusal{"ns_per_gas must be between 0.1 and 100"}
 	}
 	project := projectKey(req.Project)
+	if req.Name == MemVM {
+		if _, err := h.ensureMem(ctx, project); err != nil {
+			return VMInfo{}, false, err
+		}
+	}
 	s, err := h.lookup(project, req.Name)
 	if err != nil {
 		return VMInfo{}, false, err

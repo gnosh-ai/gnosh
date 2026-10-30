@@ -128,6 +128,43 @@ type turnSpec struct {
 	fresh  bool
 }
 
+// TestScenarioFilesParse checks every scenario file without a model: it
+// parses, it has a prompt and checks, and each check is of a known form.
+func TestScenarioFilesParse(t *testing.T) {
+	t.Parallel()
+	files, err := filepath.Glob("testdata/scenarios/*.txtar")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no scenarios: %v", err)
+	}
+	forms := regexp.MustCompile(`^(turn [1-9][0-9]* )?(` +
+		`tool \S+ (>=|<=|==|>|<) \d+|` +
+		`answer (last|\d+) (contains|matches) .+|` +
+		`(file|after \d+ file) \S+ (exists|absent|contains .+)|` +
+		`cmd .+|` +
+		`vm-persist (>=|<=|==|>|<) \d+|` +
+		`vm-dump contains .+)$`)
+	for _, file := range files {
+		sc, err := parseScenario(file)
+		if err != nil {
+			t.Errorf("%s: %v", file, err)
+			continue
+		}
+		if len(sc.turns) == 0 || len(sc.checks) == 0 {
+			t.Errorf("%s: needs a prompt and checks", file)
+		}
+		for _, line := range sc.checks {
+			if !forms.MatchString(line) {
+				t.Errorf("%s: unknown check %q", file, line)
+			}
+			if m := regexp.MustCompile(`^(?:turn|answer|after) (\d+)`).FindStringSubmatch(line); m != nil {
+				if n, _ := strconv.Atoi(m[1]); n > len(sc.turns) {
+					t.Errorf("%s: %q names turn %d of %d", file, line, n, len(sc.turns))
+				}
+			}
+		}
+	}
+}
+
 var sectionRe = regexp.MustCompile(`(?m)^-- (.+?) --$`)
 
 func parseScenario(path string) (*scenario, error) {

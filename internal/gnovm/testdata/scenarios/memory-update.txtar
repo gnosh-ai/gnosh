@@ -1,0 +1,15 @@
+Memory that changes: a fact is updated in a later session, and a third
+session, which knows only what the machines kept, must give the new value.
+
+-- prompt --
+Remember these for later sessions: the staging database is db-stg-7, and the on-call engineer is Sam Okafor.
+-- prompt-new --
+An update for what you remember: the staging database moved to db-stg-9.
+-- prompt-new --
+Which staging database should I use, and who is on call?
+-- check --
+vm-persist >= 1
+vm-dump contains db-stg-9
+answer last contains db-stg-9
+answer last contains Sam
+turn 3 tool gnovm_run >= 1

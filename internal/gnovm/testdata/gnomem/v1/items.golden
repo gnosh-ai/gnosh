@@ -1,0 +1,18 @@
+[ ] 1 goal: ship the parser; done when go test passes
+  step [x] 2 lex
+  step [ ] 3 parse
+  step [ ] 4 go test ./... passes
+  step [ ] 5 error messages
+[x] 2 lex (a step of 1 "goal: ship the parser; done when go test passes")
+  done: a hand-written lexer
+[ ] 3 parse (a step of 1 "goal: ship the parser; done when go test passes")
+  note 1: Pratt parsing for expressions
+  note 2: line one ⏎ line two
+[ ] 4 go test ./... passes (a step of 1 "goal: ship the parser; done when go test passes")
+[ ] 5 error messages (a step of 1 "goal: ship the parser; done when go test passes")
+[x] 6 Q: which license?
+  done: MIT
+  note 1: the repo's LICENSE is MIT — LICENSE:1
+[-] 7 long title long title long title long title long title long title long title long title long title long title long title long title long title long title long title long title long title long title lo…
+  dropped: really not needed
+  note 1: was dropped: not needed

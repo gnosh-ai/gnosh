@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -128,11 +129,12 @@ func libraryPaths() []string {
 
 // ImportablePackages lists the packages a VM may import, besides fmt: the
 // standard library less what VMs refuse (see unavailablePackage) and the
-// internal packages, and klash's own (klash/gnomem).
+// internal packages, and klash's own for models (klash/gnomem/v1; the
+// harness's goals library is the goals tool's alone).
 func ImportablePackages() []string {
 	var out []string
 	for _, p := range libraryPaths() {
-		if p == "fmt" || strings.Contains(p, "internal") || unavailablePackage(p) != "" {
+		if p == "fmt" || strings.Contains(p, "internal") || strings.HasPrefix(p, "klash/goals") || unavailablePackage(p) != "" {
 			continue
 		}
 		out = append(out, p)
@@ -177,7 +179,8 @@ var (
 
 // importByName is the package an input means by name when it uses the name
 // without importing it: fmt, or one of ImportablePackages whose package name
-// it is. Where two share a name, the shorter path is meant (math/rand, not
+// it is. Where two share a name, the newest version is meant
+// (klash/gnomem/v2 over v1), and otherwise the shorter path (math/rand, not
 // crypto/chacha20/rand); a name that is also a Go package VMs refuse
 // (unsafe) is never imported.
 func importByName(name string) (string, bool) {
@@ -188,7 +191,7 @@ func importByName(name string) (string, bool) {
 			if n == "" || unavailablePackage(n) != "" {
 				continue
 			}
-			if old, ok := importNames[n]; ok && len(old) <= len(p) {
+			if old, ok := importNames[n]; ok && !preferPath(p, old) {
 				continue
 			}
 			importNames[n] = p
@@ -196,6 +199,31 @@ func importByName(name string) (string, bool) {
 	})
 	p, ok := importNames[name]
 	return p, ok
+}
+
+// preferPath reports whether path p is meant over q, two paths of packages
+// with the same name: a later version of the same package, or else the
+// shorter path.
+func preferPath(p, q string) bool {
+	pb, pv := splitVersion(p)
+	qb, qv := splitVersion(q)
+	if pb == qb {
+		return pv > qv
+	}
+	return len(p) < len(q)
+}
+
+// splitVersion splits a trailing /vN off a package path: N is 1 for none.
+func splitVersion(p string) (string, int) {
+	i := strings.LastIndex(p, "/v")
+	if i < 0 {
+		return p, 1
+	}
+	n, err := strconv.Atoi(p[i+2:])
+	if err != nil || n < 1 {
+		return p, 1
+	}
+	return p[:i], n
 }
 
 // isProdGno reports whether a file belongs in a production stdlib package:

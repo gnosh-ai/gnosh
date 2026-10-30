@@ -1,0 +1,72 @@
+A goal with a stop condition: fix a package until its tests pass, keeping
+the goal, its condition and what was tried in a Gno machine.
+
+-- project/go.mod --
+module stats
+
+go 1.22
+-- project/stats.go --
+package stats
+
+// Mean returns the average of xs.
+func Mean(xs []int) float64 {
+	sum := 0
+	for _, x := range xs {
+		sum += x
+	}
+	return float64(sum / len(xs))
+}
+
+// Max returns the largest of xs.
+func Max(xs []int) int {
+	m := 0
+	for _, x := range xs {
+		if x > m {
+			m = x
+		}
+	}
+	return m
+}
+
+// Median returns the middle value of xs, or the mean of the two middle
+// values for an even count.
+func Median(xs []int) float64 {
+	n := len(xs)
+	if n%2 == 1 {
+		return float64(xs[n/2])
+	}
+	return float64(xs[n/2-1]+xs[n/2]) / 2
+}
+-- project/stats_test.go --
+package stats
+
+import "testing"
+
+func TestMean(t *testing.T) {
+	if got := Mean([]int{1, 2}); got != 1.5 {
+		t.Fatalf("Mean = %v, want 1.5", got)
+	}
+}
+
+func TestMax(t *testing.T) {
+	if got := Max([]int{-5, -2, -9}); got != -2 {
+		t.Fatalf("Max = %v, want -2", got)
+	}
+}
+
+func TestMedian(t *testing.T) {
+	if got := Median([]int{9, 1, 5}); got != 5 {
+		t.Fatalf("Median = %v, want 5", got)
+	}
+	if got := Median([]int{4, 1, 3, 2}); got != 2.5 {
+		t.Fatalf("Median = %v, want 2.5", got)
+	}
+}
+-- prompt --
+The tests in this repo fail. Make `go test ./...` pass by fixing the code, not the tests. Treat it as a goal with that success condition: keep the goal, its condition and what you try in your Gno machines, and stop only when the condition holds.
+-- check --
+cmd go test ./...
+file stats_test.go contains want -2
+tool gnovm_run >= 2
+vm-persist >= 1
+vm-dump contains go test

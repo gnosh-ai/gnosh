@@ -114,11 +114,17 @@ type program struct {
 	pkgClause bool
 	// main is what a declared func main was renamed to, or "".
 	main string
-	// evalPure is set if the trailing eval cannot change any state, so it
-	// need not be journaled.
-	evalPure bool
+	// readOnly marks the ops that only read, aligned with ops: they change
+	// nothing, so they need not be journaled. An eval is read-only if it is
+	// pure, or reads a gnomem board; statements are, if they only print
+	// literals and boards. The VM must confirm that each of reads names a
+	// board (vm.isBoard), and that no builtin is redeclared.
+	readOnly []bool
+	reads    []string
 	// assigned lists the names an assignment declared (see normalize).
 	assigned []string
+	// lhs holds every name a top-level = or := assigns.
+	lhs map[string]bool
 }
 
 // normalize turns Go-shaped input into ops. Models write whole programs
@@ -217,6 +223,7 @@ func normalize(code string, seq int64, existing, elsewhere map[string]bool) (*pr
 		if !ok {
 			continue
 		}
+		p.addLHS(names)
 		var newNames, oldNames []string
 		for _, n := range names {
 			switch {
@@ -252,6 +259,7 @@ func normalize(code string, seq int64, existing, elsewhere map[string]bool) (*pr
 		if !ok {
 			continue
 		}
+		p.addLHS(names)
 		if inputDecls == nil {
 			inputDecls = map[string]bool{}
 			for _, d := range stmts {
@@ -330,14 +338,22 @@ func normalize(code string, seq int64, existing, elsewhere map[string]bool) (*pr
 	// A trailing lone expression is evaluated, its value shown.
 	if n := len(p.ops); n > 0 && p.ops[n-1].Stmts != "" {
 		last := &p.ops[n-1]
-		if before, expr, pure, ok := splitTrailingExpr(last.Stmts); ok {
+		if before, expr, ok := splitTrailingExpr(last.Stmts); ok {
 			if strings.TrimSpace(before) == "" {
 				p.ops = p.ops[:n-1]
 			} else {
 				last.Stmts = before
 			}
 			p.ops = append(p.ops, op{Eval: expr})
-			p.evalPure = pure
+		}
+	}
+	p.readOnly = make([]bool, len(p.ops))
+	for i, o := range p.ops {
+		switch {
+		case o.Eval != "":
+			p.readOnly[i] = p.readOnlyEval(o.Eval)
+		case o.Stmts != "":
+			p.readOnly[i] = p.printsOnly(o.Stmts)
 		}
 	}
 	if len(p.ops) == 0 && len(p.imports) == 0 {
@@ -563,27 +579,118 @@ func parseImports(decl string) ([]importSpec, error) {
 }
 
 // splitTrailingExpr splits statements whose last one is a lone expression
-// into the statements before it and the expression. pure reports that the
-// expression cannot change any state: it calls nothing but pure builtins
-// and conversions to builtin types.
-func splitTrailingExpr(stmts string) (before, expr string, pure, ok bool) {
+// into the statements before it and the expression.
+func splitTrailingExpr(stmts string) (before, expr string, ok bool) {
+	body, base := parseStmts(stmts)
+	if len(body) == 0 {
+		return "", "", false
+	}
+	es, isExpr := body[len(body)-1].(*ast.ExprStmt)
+	if !isExpr || printCall(es.X) {
+		return "", "", false
+	}
+	from, to := int(es.Pos())-base, int(es.End())-base
+	return stmts[:from], stmts[from:to], true
+}
+
+// parseStmts parses statements as a function body, and returns them with
+// the offset to subtract from a position to index stmts.
+func parseStmts(stmts string) ([]ast.Stmt, int) {
 	const prefix = "package p;func _(){"
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "", prefix+stmts+"\n}", parser.SkipObjectResolution)
 	if err != nil || len(f.Decls) != 1 {
-		return "", "", false, false
+		return nil, 0
 	}
-	body := f.Decls[0].(*ast.FuncDecl).Body.List
+	return f.Decls[0].(*ast.FuncDecl).Body.List, fset.File(f.Pos()).Base() + len(prefix)
+}
+
+func (p *program) addLHS(names []string) {
+	if p.lhs == nil {
+		p.lhs = map[string]bool{}
+	}
+	for _, n := range names {
+		p.lhs[n] = true
+	}
+}
+
+// readOnlyEval reports whether an eval only reads: it is pure, or reads a
+// board (boardRead).
+func (p *program) readOnlyEval(expr string) bool {
+	x, err := parser.ParseExpr(expr)
+	if err != nil {
+		return false
+	}
+	if pureExpr(x) {
+		return true
+	}
+	if recv, ok := boardRead(x); ok {
+		p.reads = append(p.reads, recv)
+		return true
+	}
+	return false
+}
+
+// printsOnly reports whether statements only print: each is a call of
+// print, println or fmt.Print*, whose operands are literals or boards
+// (printing a board runs its String method, which reads).
+func (p *program) printsOnly(stmts string) bool {
+	body, _ := parseStmts(stmts)
 	if len(body) == 0 {
-		return "", "", false, false
+		return false
 	}
-	es, isExpr := body[len(body)-1].(*ast.ExprStmt)
-	if !isExpr || printCall(es.X) {
-		return "", "", false, false
+	var reads []string
+	for _, st := range body {
+		es, ok := st.(*ast.ExprStmt)
+		if !ok || !printCall(es.X) {
+			return false
+		}
+		for _, a := range es.X.(*ast.CallExpr).Args {
+			switch a := a.(type) {
+			case *ast.BasicLit:
+			case *ast.Ident:
+				reads = append(reads, a.Name)
+			default:
+				recv, ok := boardRead(a)
+				if !ok {
+					return false
+				}
+				reads = append(reads, recv)
+			}
+		}
 	}
-	base := fset.File(f.Pos()).Base() + len(prefix)
-	from, to := int(es.Pos())-base, int(es.End())-base
-	return stmts[:from], stmts[from:to], pureExpr(es.X), true
+	p.reads = append(p.reads, reads...)
+	return true
+}
+
+// boardRead recognises a read of a gnomem board: R.Show(ids...) with pure
+// arguments, or R.String(). It returns R, which the VM must confirm is a
+// board.
+func boardRead(x ast.Expr) (string, bool) {
+	call, ok := x.(*ast.CallExpr)
+	if !ok {
+		return "", false
+	}
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return "", false
+	}
+	recv, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return "", false
+	}
+	switch sel.Sel.Name {
+	case "String":
+		return recv.Name, len(call.Args) == 0
+	case "Show":
+		for _, a := range call.Args {
+			if !pureExpr(a) {
+				return "", false
+			}
+		}
+		return recv.Name, true
+	}
+	return "", false
 }
 
 // printCall reports whether x calls print, println or fmt.Print*.

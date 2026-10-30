@@ -265,6 +265,28 @@ func (v *vm) names() map[string]bool {
 	return have
 }
 
+// boardPkg is the package whose Board reads (Show, String) change nothing.
+const boardPkg = "klash/gnomem/v1"
+
+// isBoard reports whether the package's variable name is a gnomem Board
+// (or a pointer to one): its Show and String only read.
+func (v *vm) isBoard(name string) (ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	if !v.names()[name] {
+		return false
+	}
+	t := v.pn.GetStaticTypeOf(v.m.Store, gno.Name(name))
+	if pt, isPtr := t.(*gno.PointerType); isPtr {
+		t = pt.Elt
+	}
+	dt, isDecl := t.(*gno.DeclaredType)
+	return isDecl && dt.PkgPath == boardPkg && dt.Name == "Board"
+}
+
 // shadowsBuiltin reports whether the package declares a name that
 // normalize takes for a pure builtin, so an evaluation that calls it may
 // change state after all.
@@ -409,8 +431,21 @@ func execContext(seq int64, t time.Time) stdlibs.ExecContext {
 }
 
 // renderValues renders evaluated values by their structure only: no user
-// String or Error method runs. A string is quoted, so "1" and 1 differ.
+// String or Error method runs. A string is quoted, so "1" and 1 differ;
+// but a lone string of several lines is shown as it is, since quoted it is
+// one long line of \n (mem.Show()).
 func renderValues(tvs []gno.TypedValue) string {
+	if len(tvs) == 1 {
+		tv := tvs[0]
+		if hiv, ok := tv.V.(*gno.HeapItemValue); ok {
+			tv = hiv.Value
+		}
+		if tv.T != nil && tv.T.Kind() == gno.StringKind {
+			if s := tv.GetString(); strings.Contains(s, "\n") && len(s) <= maxValue {
+				return strings.TrimRight(s, "\n")
+			}
+		}
+	}
 	parts := make([]string, 0, len(tvs))
 	for _, tv := range tvs {
 		parts = append(parts, renderValue(tv))

@@ -1,0 +1,28 @@
+A long goal across sessions: a four-step plan, one step per session, each
+new session knowing only what the Gno machines kept.
+
+-- project/README.md --
+# greet
+
+A tiny Go package.
+-- prompt --
+Plan this goal as steps and keep the plan in your Gno machines: build a Go package `greet` in this repo, with (1) a go.mod for module greet, (2) greet.go with func Hello(name string) string returning "Hello, <name>!", (3) greet_test.go testing Hello, and (4) a Makefile whose `test` target runs `go test ./...`. Do only step 1 now; later sessions will do the rest.
+-- prompt-new --
+Continue the plan in your Gno machines: do only the next step.
+-- prompt-new --
+Continue the plan in your Gno machines: do only the next step.
+-- prompt-new --
+Continue the plan in your Gno machines: do the next step, then check that `go test ./...` passes.
+-- check --
+after 1 file go.mod exists
+after 1 file greet.go absent
+after 2 file greet.go exists
+after 2 file greet_test.go absent
+after 3 file greet_test.go exists
+after 3 file Makefile absent
+file Makefile contains go test
+cmd go test ./...
+turn 2 tool gnovm_run >= 1
+turn 3 tool gnovm_run >= 1
+turn 4 tool gnovm_run >= 1
+vm-persist >= 1

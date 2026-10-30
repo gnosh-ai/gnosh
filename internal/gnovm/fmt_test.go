@@ -48,7 +48,7 @@ func (s Shout) String() string { return string(s) + "!" }`)
 		`fmt.Sprintf("%[2]d %[1]d", 1, 2)`:                                    `"2 1"`,
 		`fmt.Sprintf("%*d|%-*d|", 4, 7, 3, 8)`:                                `"   7|8  |"`,
 		`fmt.Sprintf("%d", "x")`:                                              `"%!d(string=x)"`,
-		`fmt.Sprintln("a", 1, 2.5)`:                                           `"a 1 2.5\n"`,
+		`fmt.Sprintln("a", 1, 2.5) == "a 1 2.5\n"`:                            `true`,
 	} {
 		require.Equal(t, want, run(t, h, "", code).Value, code)
 	}

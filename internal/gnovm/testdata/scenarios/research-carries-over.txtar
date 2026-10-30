@@ -1,0 +1,59 @@
+Research that outlives its session: answer a question about the repo,
+keep the question, the findings and the answer in a Gno machine, and give
+the answer again from a new session.
+
+-- project/go.mod --
+module shapes
+
+go 1.22
+-- project/a.go --
+package shapes
+
+func Square(x int) int { return x * x }
+
+func Cube(x int) int { return x * x * x }
+
+func Twice(x int) int { return 2 * x }
+-- project/b.go --
+package shapes
+
+func Add(a, b int) int { return a + b }
+
+func Sub(a, b int) int { return a - b }
+
+func Neg(a int) int { return -a }
+
+func Abs(a int) int {
+	if a < 0 {
+		return -a
+	}
+	return a
+}
+
+func Sign(a int) int {
+	switch {
+	case a < 0:
+		return -1
+	case a > 0:
+		return 1
+	}
+	return 0
+}
+-- project/c.go --
+package shapes
+
+type Point struct{ X, Y int }
+
+func (p Point) Norm1() int { return Abs(p.X) + Abs(p.Y) }
+
+func Origin() Point { return Point{} }
+-- prompt --
+Find out which Go file in this repo declares the most functions (methods count), and how many it declares. Keep the question, what you find and the answer in your Gno machines, so that a later session can use it.
+-- prompt-new --
+Earlier you looked into which Go file here declares the most functions. What was the answer?
+-- check --
+answer 1 contains b.go
+answer last contains b.go
+answer last contains 5
+turn 2 tool gnovm_run >= 1
+vm-dump contains b.go
