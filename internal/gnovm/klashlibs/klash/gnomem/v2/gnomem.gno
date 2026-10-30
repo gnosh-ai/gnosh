@@ -445,7 +445,9 @@ func (m *Mem) Note(name, note string) {
 // A wait holds back only next: every call still works on a waiting item.
 // A wait for the next session ("next time we talk", "next conversation")
 // is none, and the receipt says why: every session is shown what is open,
-// and a wait in words reads there as not yet come.
+// and a wait in words reads there as not yet come. It also says that a
+// reminder the user asked for is an Ask, which every session raises,
+// where an open goal stays quiet beside other work.
 // It refuses a day written any other way, alone or after until, after, on
 // or by (Nov 3, 11/03, next Monday, tomorrow, in 2 days); a 2026-11-03 among
 // other words or not on the calendar; a day before yesterday; and an item's
@@ -455,7 +457,7 @@ func (m *Mem) Wait(name, until string) {
 	it := m.openItem(name)
 	until, why := clip(text("the wait", until), maxText), ""
 	if namesNextTalk(until) {
-		until, why = "", ": every session is shown what is open, so the next one will see it"
+		until, why = "", ": every session is shown what is open; a reminder the user asked for is an Ask, which every session raises: mem.Ask("+strconv.Quote(name)+", \"…\")"
 	}
 	until = m.parseWait(until)
 	switch {
