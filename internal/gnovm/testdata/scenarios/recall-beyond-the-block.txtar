@@ -1,0 +1,15 @@
+Recall when mem holds more than a new session is shown: the first facts are
+pushed out of the block a session starts with by many newer ones, so a later
+session asked for them in other words has to find them in mem itself, by
+searching it or by the groups mem lists its facts in.
+
+-- prompt --
+Remember for later: our deploy command is make ship ENV=prod, and Lin Wei does QA sign-off on every release.
+-- prompt-new --
+Remember these for later too, each one separately: the staging database is db-stg-9; the VPN gateway is vpn2.internal; the on-call rota lives in the ops wiki under Rotations; Grafana is at grafana.internal:3000; the build cache bucket is s3://ci-cache-7; the design review is every Thursday at 3pm; the release branch is cut on Mondays; the support inbox is help@acme.test; the feature-flag service is flagd on port 8013; the docs site deploys from the docs folder; the load balancer is lb-east-2; errors go to the Sentry project acme-web; the CI runner image is ci-base 22.04; staging resets every night at 2am; the public API allows 600 requests a minute; the mobile app ships through TestFlight; the analytics warehouse is wh-prod-1; Dana Ruiz is the legal contact for licences; backups are kept for 35 days; sign-in goes through Okta; the status page is status.acme.test; invoices go out on the 1st; the office wifi is acme-guest; the font licence is renewed in March; the Kubernetes cluster is k8s-east; the mail relay is smtp.internal; feature freezes start two days before a release; the old monolith repo is archived; the test suite needs Postgres 16; the brand colours are in the design repo.
+-- prompt-new --
+How do I push this to production, and who has to check it first?
+-- check --
+turn 1 tool gnovm_run >= 1
+answer last contains make ship
+answer last contains Lin

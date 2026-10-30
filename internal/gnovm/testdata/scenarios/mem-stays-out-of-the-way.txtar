@@ -1,0 +1,14 @@
+An open goal stays out of unrelated work: with a release planned in mem, a
+small unrelated request in a new session is done without the release being
+dragged in, at most a look at mem and no new items. A reminder the user
+asked for is the exception, and remind-next-time covers it.
+
+-- project/notes.md --
+We will recieve the parts on Monday.
+-- prompt --
+Plan the 2.0 release with me: bump the version, update the changelog, tag it, and get CI green. Just the plan for now; we'll do it later this week.
+-- prompt-new --
+Fix the spelling mistake in notes.md.
+-- check --
+file notes.md contains receive
+turn 2 tool gnovm_run <= 1

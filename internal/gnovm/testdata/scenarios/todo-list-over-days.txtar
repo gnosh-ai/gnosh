@@ -1,0 +1,12 @@
+A todo list the user says they will work through over the next few days
+must still be there in a new session, though the user never mentions mem.
+On the first mem it went to the session's own To-Do list, and was gone.
+
+-- prompt --
+Make me a todo list for setting up CI here: add a GitHub Actions workflow, cache Go modules, and run the tests on pull requests. We'll work through it over the next few days, not today.
+-- prompt-new --
+What's left on my todo list?
+-- check --
+answer last contains workflow
+answer last contains cache
+answer last contains pull request
