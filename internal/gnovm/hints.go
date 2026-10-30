@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/scanner"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -31,6 +32,34 @@ var (
 	untypedBigintRe   = regexp.MustCompile(`<untyped> bigint|BigintValue`)
 	constShiftRe      = regexp.MustCompile(`\b\d+\s*<<\s*[A-Za-z_(]`)
 )
+
+// loopNote is the note for a scratch run whose code loops and which showed
+// one line: the loop's terms went unprinted. In QA's 28 backoff runs
+// (2026-10-30), the answer was right 18 times of 18 when the program
+// printed every term, and 2 of 10 when it showed one line, which the
+// model then broke down by hand and bent the breakdown to fit. "" for
+// any other run.
+func loopNote(code, shown string) string {
+	shown = strings.TrimSpace(shown)
+	if shown == "" || strings.Contains(shown, "\n") || !hasLoop(code) {
+		return ""
+	}
+	return "only the loop's result was printed: if your answer gives its terms or a breakdown, print them too, run it again, and give them as printed"
+}
+
+// hasLoop reports whether code has a for statement.
+func hasLoop(code string) bool {
+	var s scanner.Scanner
+	s.Init(token.NewFileSet().AddFile("", -1, len(code)), []byte(code), nil, 0)
+	for {
+		switch _, tok, _ := s.Scan(); tok {
+		case token.EOF:
+			return false
+		case token.FOR:
+			return true
+		}
+	}
+}
 
 // goHint says where a failed input relied on Go's way and Gno differs, in
 // words the GnoVM's own do not give. Jae's lane worked a backoff sum out in

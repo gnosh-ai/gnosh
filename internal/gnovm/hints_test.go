@@ -16,6 +16,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// A scratch run whose loop showed one line is told to print the terms if
+// the answer gives them; one that printed them, one with no loop and a
+// named VM's run are not.
+func TestLoopNote(t *testing.T) {
+	t.Parallel()
+	h := newTestHost(t, t.TempDir())
+	note := "only the loop's result was printed: if your answer gives its terms or a breakdown, print them too, run it again, and give them as printed"
+	res := run(t, h, "", "total := 0\nfor i := 1; i <= 3; i++ {\n\ttotal += i\n}\ntotal")
+	require.Equal(t, note, res.Notes[0])
+	res = run(t, h, "", "for i := 1; i <= 3; i++ {\n\tprintln(\"term\", i)\n}")
+	require.NotContains(t, res.Notes, note)
+	res = run(t, h, "", "1 + 2")
+	require.NotContains(t, res.Notes, note)
+
+	persist := true
+	_, _, err := h.New(context.Background(), NewRequest{Project: "/proj", Name: "sums", Persist: &persist})
+	require.NoError(t, err)
+	res = run(t, h, "sums", "n := 0\nfor i := 0; i < 3; i++ {\n\tn++\n}\nn")
+	require.NotContains(t, res.Notes, note)
+}
+
 // Where Gno differs from Go, a failed input is told how, in one line: the
 // GnoVM's own words did not say, and Jae's lane spent minutes on a backoff
 // sum written in Go (2026-10-30). Each input runs in a scratch VM of its

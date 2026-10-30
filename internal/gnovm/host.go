@@ -863,6 +863,11 @@ func (h *Host) runResident(ctx context.Context, s *vmState, v *vm, req RunReques
 		}
 		return res, nil
 	}
+	if strings.HasPrefix(s.name, scratchPrefix) {
+		if n := loopNote(req.Code, res.Output+"\n"+res.Value); n != "" {
+			res.Notes = append([]string{n}, res.Notes...)
+		}
+	}
 	e.WallNS, e.Gas = int64(res.Wall), used
 	if v.shadowsBuiltin() {
 		readOnly = nil // this input redeclared a builtin a read relied on
