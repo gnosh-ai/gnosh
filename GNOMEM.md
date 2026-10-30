@@ -204,8 +204,10 @@ The next session, asked which rules it follows, answered from the one it was
 given: "One standing rule, from your memory: `gofumpt-before-commit` — Always
 run `gofumpt -l .` before committing anything in this project."
 
-A later session cannot take a rule away either, or blank its text; that is
-yours to do, with `/mem forget` and `/mem redact`:
+A later session cannot erase a rule for good: forgetting one, or redacting
+its text, is yours to do, with `/mem forget` and `/mem redact`. It can remove
+one with `mem.Rule(name, "")`, and you are told, with `/mem undo` to put it
+back:
 
 ```
 gnovm_run {"name": "mem", "code": "mem.Rule(\"gofumpt-before-commit\", \"Always run `gofumpt -l .` before committing anything in this project\")"}
@@ -214,6 +216,8 @@ gnovm_run {"name": "mem", "code": "mem.Forget(\"gofumpt-before-commit\")"}
   ERROR — nothing from this call was kept: rules are the user's: they forget one with /mem forget gofumpt-before-commit
 gnovm_run {"name": "mem", "code": "mem.Redact(\"gofumpt -l .\")"}
   ERROR — nothing from this call was kept: that text is in the rule `gofumpt-before-commit`, and rules are the user's: they redact it with /mem redact
+gnovm_run {"name": "mem", "code": "mem.Rule(\"gofumpt-before-commit\", \"\")"}
+  removed rule `gofumpt-before-commit`
 ```
 
 Only your words are meant to become rules, and a README that says "always
