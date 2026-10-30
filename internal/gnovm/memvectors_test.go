@@ -385,3 +385,29 @@ func TestMemChanged(t *testing.T) {
 	require.Contains(t, l.MemChanged("/proj", "s1", time.Unix(st.At-60, 0)), "`cmd/test` = go test ./...", "changed since")
 	require.Empty(t, l.MemChanged("/proj", "s1", time.Unix(st.At, 0)), "not since")
 }
+
+// /mem says whether mem finds by meaning too, and how much of it the
+// embedding server has read; nothing, when there is no server.
+func TestMemCommandSaysHowItFindsByMeaning(t *testing.T) {
+	t.Parallel()
+	f := newFakeEmbedder(t)
+	h, l, mem := newRecallHost(t, f)
+	ctx := context.Background()
+	mem(`mem.Fact("cmd/test", "go test ./...")`)
+	mem(`mem.Goal("ship the site")`)
+	show := func(args string) string {
+		t.Helper()
+		out, _, err := h.memCommand(ctx, "/proj", "s1", args, nil)
+		require.NoError(t, err)
+		return out
+	}
+	require.Contains(t, show(""), "\nmem will find by meaning too once the embedding server has read it (0 of 2 entries so far)\n")
+	require.NoError(t, fillMemVectorsNow(ctx, memDir(l.opts.Dir, "/proj"), newMemEmbedder(f.URL+"/v1")))
+	require.Contains(t, show(""), "\nmem also finds by meaning, with fake-embed (all 2 entries read)\n")
+	require.NotContains(t, show("cmd/test"), "by meaning", "only the outline says it")
+
+	plain := newTestHost(t, l.opts.Dir)
+	out, _, err := plain.memCommand(ctx, "/proj", "s1", "", nil)
+	require.NoError(t, err)
+	require.NotContains(t, out, "by meaning")
+}

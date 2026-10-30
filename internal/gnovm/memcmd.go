@@ -71,7 +71,11 @@ func (h *Host) memAnswer(ctx context.Context, project, session, args string, tit
 		for _, n := range strings.Fields(rest) {
 			names = append(names, strconv.Quote(n))
 		}
-		return m.user(ctx, session, "mem.Show("+strings.Join(names, ", ")+")", titles, erased)
+		out, err := m.user(ctx, session, "mem.Show("+strings.Join(names, ", ")+")", titles, erased)
+		if line := m.meaningLine(ctx); err == nil && len(names) == 0 && line != "" {
+			out = strings.TrimRight(out, "\n") + "\n" + line + "\n"
+		}
+		return out, err
 	case "find":
 		if rest == "" {
 			return "/mem find takes words: /mem find release key", nil

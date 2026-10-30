@@ -297,6 +297,16 @@ func (v *memVectors) put(model string, hashes []string, vecs [][]int8) error {
 	return tx.Commit()
 }
 
+// model is the model that made the vectors; "" for none yet.
+func (v *memVectors) model() (string, error) {
+	var model string
+	err := v.db.QueryRow(`SELECT name FROM model WHERE id = 1`).Scan(&model)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return model, err
+}
+
 // hashes is the hashes of the texts that have vectors.
 func (v *memVectors) hashes() (map[string]bool, error) {
 	rows, err := v.db.Query(`SELECT hash FROM vecs`)
@@ -494,6 +504,43 @@ func (h *memHost) nearest(ctx context.Context, x *memIndex, j *journal, words st
 	}
 	s := memSnapshot{gen: j.generation, rows: rows, vecs: vecs, model: had}
 	return s.nearest(q, model, memFindScore, "item", "fact", "rule"), true
+}
+
+// meaningLine is what /mem says of finding by meaning: which model, and how
+// much of mem it has read; "" with no embedding server, or an empty mem.
+func (h *memHost) meaningLine(ctx context.Context) string {
+	if h.embed == nil {
+		return ""
+	}
+	var all, read int
+	var model string
+	ok, err := atMem(ctx, h.dir, "", func(_ string, x *memIndex, v *memVectors) error {
+		rows, err := x.rows()
+		if err != nil {
+			return err
+		}
+		have, err := v.hashes()
+		if err != nil {
+			return err
+		}
+		all = len(rows)
+		for _, r := range rows {
+			if have[r.hash()] {
+				read++
+			}
+		}
+		model, err = v.model()
+		return err
+	})
+	switch {
+	case err != nil || !ok || all == 0:
+		return ""
+	case read == 0:
+		return fmt.Sprintf("mem will find by meaning too once the embedding server has read it (0 of %d entries so far)", all)
+	case read < all:
+		return fmt.Sprintf("mem also finds by meaning, with %s: %d of %d entries read, the rest on their way", model, read, all)
+	}
+	return fmt.Sprintf("mem also finds by meaning, with %s (all %d entries read)", model, all)
 }
 
 // memFills keeps one fill of mem's vectors running per mem directory in
