@@ -32,3 +32,9 @@ WHERE r.session_id = sqlc.arg(from_session_id);
 -- forgets those of the conversation it cuts.
 DELETE FROM read_files
 WHERE session_id = ? AND read_at >= ?;
+
+-- name: DeleteSessionReadFile :exec
+-- Forgets a session's read of one file, as the pop of a frame in mem
+-- forgets the reads made inside it (FRAMES.md).
+DELETE FROM read_files
+WHERE session_id = ? AND path = ?;

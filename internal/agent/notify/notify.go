@@ -38,6 +38,11 @@ const (
 	// cleared (see agent.Goal); Message says so. Informational, like
 	// TypeWarning: it does not mark the end of a turn.
 	TypeGoalMet Type = "goal_met"
+	// TypeFramePopped reports the pop of a frame in mem (FRAMES.md), with
+	// about how much it removed from the model's context, in Message.
+	// Informational, like TypeGoalMet: a non-interactive run prints it; the
+	// TUI shows the pop's own tool result instead.
+	TypeFramePopped Type = "frame_popped"
 )
 
 // Notification represents a domain event published by the agent.

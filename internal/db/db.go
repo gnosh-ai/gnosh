@@ -66,6 +66,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.deleteSessionMessagesStmt, err = db.PrepareContext(ctx, deleteSessionMessages); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteSessionMessages: %w", err)
 	}
+	if q.deleteSessionReadFileStmt, err = db.PrepareContext(ctx, deleteSessionReadFile); err != nil {
+		return nil, fmt.Errorf("error preparing query DeleteSessionReadFile: %w", err)
+	}
 	if q.deleteSessionReadFilesSinceStmt, err = db.PrepareContext(ctx, deleteSessionReadFilesSince); err != nil {
 		return nil, fmt.Errorf("error preparing query DeleteSessionReadFilesSince: %w", err)
 	}
@@ -150,6 +153,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.listMessagesBySessionFromSummaryStmt, err = db.PrepareContext(ctx, listMessagesBySessionFromSummary); err != nil {
 		return nil, fmt.Errorf("error preparing query ListMessagesBySessionFromSummary: %w", err)
 	}
+	if q.listModelMessagesBySessionStmt, err = db.PrepareContext(ctx, listModelMessagesBySession); err != nil {
+		return nil, fmt.Errorf("error preparing query ListModelMessagesBySession: %w", err)
+	}
 	if q.listNewFilesStmt, err = db.PrepareContext(ctx, listNewFiles); err != nil {
 		return nil, fmt.Errorf("error preparing query ListNewFiles: %w", err)
 	}
@@ -167,6 +173,9 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	}
 	if q.renameSessionStmt, err = db.PrepareContext(ctx, renameSession); err != nil {
 		return nil, fmt.Errorf("error preparing query RenameSession: %w", err)
+	}
+	if q.setMessagePoppedStmt, err = db.PrepareContext(ctx, setMessagePopped); err != nil {
+		return nil, fmt.Errorf("error preparing query SetMessagePopped: %w", err)
 	}
 	if q.setSessionChannelStmt, err = db.PrepareContext(ctx, setSessionChannel); err != nil {
 		return nil, fmt.Errorf("error preparing query SetSessionChannel: %w", err)
@@ -265,6 +274,11 @@ func (q *Queries) Close() error {
 	if q.deleteSessionMessagesStmt != nil {
 		if cerr := q.deleteSessionMessagesStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing deleteSessionMessagesStmt: %w", cerr)
+		}
+	}
+	if q.deleteSessionReadFileStmt != nil {
+		if cerr := q.deleteSessionReadFileStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing deleteSessionReadFileStmt: %w", cerr)
 		}
 	}
 	if q.deleteSessionReadFilesSinceStmt != nil {
@@ -407,6 +421,11 @@ func (q *Queries) Close() error {
 			err = fmt.Errorf("error closing listMessagesBySessionFromSummaryStmt: %w", cerr)
 		}
 	}
+	if q.listModelMessagesBySessionStmt != nil {
+		if cerr := q.listModelMessagesBySessionStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing listModelMessagesBySessionStmt: %w", cerr)
+		}
+	}
 	if q.listNewFilesStmt != nil {
 		if cerr := q.listNewFilesStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing listNewFilesStmt: %w", cerr)
@@ -435,6 +454,11 @@ func (q *Queries) Close() error {
 	if q.renameSessionStmt != nil {
 		if cerr := q.renameSessionStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing renameSessionStmt: %w", cerr)
+		}
+	}
+	if q.setMessagePoppedStmt != nil {
+		if cerr := q.setMessagePoppedStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing setMessagePoppedStmt: %w", cerr)
 		}
 	}
 	if q.setSessionChannelStmt != nil {
@@ -530,6 +554,7 @@ type Queries struct {
 	deleteSessionStmt                    *sql.Stmt
 	deleteSessionFilesStmt               *sql.Stmt
 	deleteSessionMessagesStmt            *sql.Stmt
+	deleteSessionReadFileStmt            *sql.Stmt
 	deleteSessionReadFilesSinceStmt      *sql.Stmt
 	getAverageResponseTimeStmt           *sql.Stmt
 	getFileStmt                          *sql.Stmt
@@ -558,12 +583,14 @@ type Queries struct {
 	listMCPEnabledServersStmt            *sql.Stmt
 	listMessagesBySessionStmt            *sql.Stmt
 	listMessagesBySessionFromSummaryStmt *sql.Stmt
+	listModelMessagesBySessionStmt       *sql.Stmt
 	listNewFilesStmt                     *sql.Stmt
 	listSessionReadFilesStmt             *sql.Stmt
 	listSessionsStmt                     *sql.Stmt
 	listUserMessagesBySessionStmt        *sql.Stmt
 	recordFileReadStmt                   *sql.Stmt
 	renameSessionStmt                    *sql.Stmt
+	setMessagePoppedStmt                 *sql.Stmt
 	setSessionChannelStmt                *sql.Stmt
 	setSessionTodosStmt                  *sql.Stmt
 	swapSessionGoalStmt                  *sql.Stmt
@@ -592,6 +619,7 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		deleteSessionStmt:                    q.deleteSessionStmt,
 		deleteSessionFilesStmt:               q.deleteSessionFilesStmt,
 		deleteSessionMessagesStmt:            q.deleteSessionMessagesStmt,
+		deleteSessionReadFileStmt:            q.deleteSessionReadFileStmt,
 		deleteSessionReadFilesSinceStmt:      q.deleteSessionReadFilesSinceStmt,
 		getAverageResponseTimeStmt:           q.getAverageResponseTimeStmt,
 		getFileStmt:                          q.getFileStmt,
@@ -620,12 +648,14 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		listMCPEnabledServersStmt:            q.listMCPEnabledServersStmt,
 		listMessagesBySessionStmt:            q.listMessagesBySessionStmt,
 		listMessagesBySessionFromSummaryStmt: q.listMessagesBySessionFromSummaryStmt,
+		listModelMessagesBySessionStmt:       q.listModelMessagesBySessionStmt,
 		listNewFilesStmt:                     q.listNewFilesStmt,
 		listSessionReadFilesStmt:             q.listSessionReadFilesStmt,
 		listSessionsStmt:                     q.listSessionsStmt,
 		listUserMessagesBySessionStmt:        q.listUserMessagesBySessionStmt,
 		recordFileReadStmt:                   q.recordFileReadStmt,
 		renameSessionStmt:                    q.renameSessionStmt,
+		setMessagePoppedStmt:                 q.setMessagePoppedStmt,
 		setSessionChannelStmt:                q.setSessionChannelStmt,
 		setSessionTodosStmt:                  q.setSessionTodosStmt,
 		swapSessionGoalStmt:                  q.swapSessionGoalStmt,

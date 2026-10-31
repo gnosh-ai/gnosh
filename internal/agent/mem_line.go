@@ -18,11 +18,15 @@ import (
 // holds; the system prompt says how mem and the machines work.
 const memLine = "<system_reminder>Use mem and Gno whenever reasonable: work things out in Gno rather than in your head, and answer from what it returns. Keep goals, steps, facts and reminders in mem, and look there before answering from memory. Call nothing done until you've checked it and mem shows it done.</system_reminder>"
 
-// memLineBlock is memLine for a prompt that takes it, "" for one that
-// does not.
+// memLineBlock is memLine for a prompt that takes it, with the frames in
+// mem the session is in after it (SessionAgentCall.frameLine); "" for a
+// prompt that does not take it.
 func memLineBlock(call SessionAgentCall) string {
 	if !call.memLine {
 		return ""
+	}
+	if call.frameLine != "" {
+		return memLine + "\n<system_reminder>" + call.frameLine + "</system_reminder>"
 	}
 	return memLine
 }

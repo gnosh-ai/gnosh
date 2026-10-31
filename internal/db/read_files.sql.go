@@ -28,6 +28,23 @@ func (q *Queries) CopySessionReadFiles(ctx context.Context, arg CopySessionReadF
 	return err
 }
 
+const deleteSessionReadFile = `-- name: DeleteSessionReadFile :exec
+DELETE FROM read_files
+WHERE session_id = ? AND path = ?
+`
+
+type DeleteSessionReadFileParams struct {
+	SessionID string `json:"session_id"`
+	Path      string `json:"path"`
+}
+
+// Forgets a session's read of one file, as the pop of a frame in mem
+// forgets the reads made inside it (FRAMES.md).
+func (q *Queries) DeleteSessionReadFile(ctx context.Context, arg DeleteSessionReadFileParams) error {
+	_, err := q.exec(ctx, q.deleteSessionReadFileStmt, deleteSessionReadFile, arg.SessionID, arg.Path)
+	return err
+}
+
 const deleteSessionReadFilesSince = `-- name: DeleteSessionReadFilesSince :exec
 DELETE FROM read_files
 WHERE session_id = ? AND read_at >= ?

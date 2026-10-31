@@ -70,9 +70,14 @@ func isMemReminder(msg message.Message) bool {
 
 // memReminder is the reminder of mem, in the shape of Claude Code's of its
 // todo list, with todos, where the session's goal in mem stands, when it
-// has one.
-func memReminder(todos []session.Todo) string {
-	text := memReminderOpening + ` If you're working on a task of two or more steps, plan it in mem (gnovm_run name "mem": mem.Goal("…").Steps("…", "…")) and mark each step done as it finishes; if it is planned, carry on from its next step. This is just a gentle reminder - ignore if not applicable.` + "\n"
+// has one, and frame, the frame in mem the session is in (frameReminder),
+// when it is in one.
+func memReminder(todos []session.Todo, frame string) string {
+	text := memReminderOpening + ` If you're working on a task of two or more steps, plan it in mem (gnovm_run name "mem": mem.Goal("…").Steps("…", "…")) and mark each step done as it finishes; if it is planned, carry on from its next step. This is just a gentle reminder - ignore if not applicable.`
+	if frame != "" {
+		text += " " + frame
+	}
+	text += "\n"
 	if len(todos) > 0 {
 		lines := make([]string, len(todos))
 		for i, todo := range todos {
@@ -105,9 +110,13 @@ func (a *sessionAgent) remindOfMem(ctx context.Context, sessionID string, reques
 	if !memReminderDue(msgs) {
 		return nil, nil
 	}
+	var frame string
+	if top, ok := a.frames.top(ctx, sessionID); ok {
+		frame = frameReminder(top)
+	}
 	msg, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
 		Role:  message.User,
-		Parts: []message.ContentPart{message.TextContent{Text: memReminder(sess.Todos), Hidden: true}},
+		Parts: []message.ContentPart{message.TextContent{Text: memReminder(sess.Todos, frame), Hidden: true}},
 	})
 	if err != nil {
 		return nil, err

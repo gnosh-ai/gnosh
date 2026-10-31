@@ -25,11 +25,12 @@ INSERT INTO messages (
     prism_model_id,
     prism_model_name,
     prism_hypercredit_savings,
-    prism_dollar_savings
+    prism_dollar_savings,
+    popped
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
-RETURNING id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings
+RETURNING id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings, popped
 `
 
 type CopyMessageParams struct {
@@ -47,6 +48,7 @@ type CopyMessageParams struct {
 	PrismModelName          sql.NullString  `json:"prism_model_name"`
 	PrismHypercreditSavings sql.NullFloat64 `json:"prism_hypercredit_savings"`
 	PrismDollarSavings      sql.NullFloat64 `json:"prism_dollar_savings"`
+	Popped                  string          `json:"popped"`
 }
 
 // A copy of a message into another session, as /branch makes: its times,
@@ -68,6 +70,7 @@ func (q *Queries) CopyMessage(ctx context.Context, arg CopyMessageParams) (Messa
 		arg.PrismModelName,
 		arg.PrismHypercreditSavings,
 		arg.PrismDollarSavings,
+		arg.Popped,
 	)
 	var i Message
 	err := row.Scan(
@@ -85,6 +88,7 @@ func (q *Queries) CopyMessage(ctx context.Context, arg CopyMessageParams) (Messa
 		&i.PrismModelName,
 		&i.PrismHypercreditSavings,
 		&i.PrismDollarSavings,
+		&i.Popped,
 	)
 	return i, err
 }
@@ -103,7 +107,7 @@ INSERT INTO messages (
 ) VALUES (
     ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now')
 )
-RETURNING id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings
+RETURNING id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings, popped
 `
 
 type CreateMessageParams struct {
@@ -142,6 +146,7 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 		&i.PrismModelName,
 		&i.PrismHypercreditSavings,
 		&i.PrismDollarSavings,
+		&i.Popped,
 	)
 	return i, err
 }
@@ -167,7 +172,7 @@ func (q *Queries) DeleteSessionMessages(ctx context.Context, sessionID string) e
 }
 
 const getLastAssistantMessageBySession = `-- name: GetLastAssistantMessageBySession :one
-SELECT id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings
+SELECT id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings, popped
 FROM messages
 WHERE session_id = ? AND role = 'assistant' AND is_summary_message = 0
 ORDER BY created_at DESC
@@ -192,12 +197,13 @@ func (q *Queries) GetLastAssistantMessageBySession(ctx context.Context, sessionI
 		&i.PrismModelName,
 		&i.PrismHypercreditSavings,
 		&i.PrismDollarSavings,
+		&i.Popped,
 	)
 	return i, err
 }
 
 const getMessage = `-- name: GetMessage :one
-SELECT id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings
+SELECT id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings, popped
 FROM messages
 WHERE id = ? LIMIT 1
 `
@@ -220,12 +226,13 @@ func (q *Queries) GetMessage(ctx context.Context, id string) (Message, error) {
 		&i.PrismModelName,
 		&i.PrismHypercreditSavings,
 		&i.PrismDollarSavings,
+		&i.Popped,
 	)
 	return i, err
 }
 
 const listAllUserMessages = `-- name: ListAllUserMessages :many
-SELECT id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings
+SELECT id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings, popped
 FROM messages
 WHERE role = 'user'
 ORDER BY created_at DESC
@@ -258,6 +265,7 @@ func (q *Queries) ListAllUserMessages(ctx context.Context) ([]Message, error) {
 			&i.PrismModelName,
 			&i.PrismHypercreditSavings,
 			&i.PrismDollarSavings,
+			&i.Popped,
 		); err != nil {
 			return nil, err
 		}
@@ -273,7 +281,7 @@ func (q *Queries) ListAllUserMessages(ctx context.Context) ([]Message, error) {
 }
 
 const listMessagesBySession = `-- name: ListMessagesBySession :many
-SELECT id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings
+SELECT id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings, popped
 FROM messages
 WHERE session_id = ?
 ORDER BY created_at ASC
@@ -303,6 +311,7 @@ func (q *Queries) ListMessagesBySession(ctx context.Context, sessionID string) (
 			&i.PrismModelName,
 			&i.PrismHypercreditSavings,
 			&i.PrismDollarSavings,
+			&i.Popped,
 		); err != nil {
 			return nil, err
 		}
@@ -318,9 +327,10 @@ func (q *Queries) ListMessagesBySession(ctx context.Context, sessionID string) (
 }
 
 const listMessagesBySessionFromSummary = `-- name: ListMessagesBySessionFromSummary :many
-SELECT m.id, m.session_id, m.role, m.parts, m.model, m.created_at, m.updated_at, m.finished_at, m.provider, m.is_summary_message, m.prism_model_id, m.prism_model_name, m.prism_hypercredit_savings, m.prism_dollar_savings
+SELECT m.id, m.session_id, m.role, m.parts, m.model, m.created_at, m.updated_at, m.finished_at, m.provider, m.is_summary_message, m.prism_model_id, m.prism_model_name, m.prism_hypercredit_savings, m.prism_dollar_savings, m.popped
 FROM messages m
 WHERE m.session_id = ?
+  AND m.popped = ''
   AND m.created_at >= (SELECT s.created_at FROM messages s WHERE s.id = ?)
 ORDER BY m.created_at ASC
 `
@@ -330,7 +340,8 @@ type ListMessagesBySessionFromSummaryParams struct {
 	ID        string `json:"id"`
 }
 
-// Messages from the summary onward, which is all a compacted session sends.
+// Messages from the summary onward, which is all a compacted session sends,
+// minus those a frame's pop removed from the model's context (popped).
 // created_at has one-second resolution, so a few messages preceding the
 // summary can come back too; the caller slices from the summary by ID.
 func (q *Queries) ListMessagesBySessionFromSummary(ctx context.Context, arg ListMessagesBySessionFromSummaryParams) ([]Message, error) {
@@ -357,6 +368,56 @@ func (q *Queries) ListMessagesBySessionFromSummary(ctx context.Context, arg List
 			&i.PrismModelName,
 			&i.PrismHypercreditSavings,
 			&i.PrismDollarSavings,
+			&i.Popped,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listModelMessagesBySession = `-- name: ListModelMessagesBySession :many
+SELECT id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings, popped
+FROM messages
+WHERE session_id = ? AND popped = ''
+ORDER BY created_at ASC
+`
+
+// The session's messages as the model reads them: minus those a frame's
+// pop removed from its context (popped). ListMessagesBySession keeps those,
+// for the human.
+func (q *Queries) ListModelMessagesBySession(ctx context.Context, sessionID string) ([]Message, error) {
+	rows, err := q.query(ctx, q.listModelMessagesBySessionStmt, listModelMessagesBySession, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Message{}
+	for rows.Next() {
+		var i Message
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.Role,
+			&i.Parts,
+			&i.Model,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.FinishedAt,
+			&i.Provider,
+			&i.IsSummaryMessage,
+			&i.PrismModelID,
+			&i.PrismModelName,
+			&i.PrismHypercreditSavings,
+			&i.PrismDollarSavings,
+			&i.Popped,
 		); err != nil {
 			return nil, err
 		}
@@ -372,7 +433,7 @@ func (q *Queries) ListMessagesBySessionFromSummary(ctx context.Context, arg List
 }
 
 const listUserMessagesBySession = `-- name: ListUserMessagesBySession :many
-SELECT id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings
+SELECT id, session_id, role, parts, model, created_at, updated_at, finished_at, provider, is_summary_message, prism_model_id, prism_model_name, prism_hypercredit_savings, prism_dollar_savings, popped
 FROM messages
 WHERE session_id = ? AND role = 'user'
 ORDER BY created_at DESC
@@ -404,6 +465,7 @@ func (q *Queries) ListUserMessagesBySession(ctx context.Context, sessionID strin
 			&i.PrismModelName,
 			&i.PrismHypercreditSavings,
 			&i.PrismDollarSavings,
+			&i.Popped,
 		); err != nil {
 			return nil, err
 		}
@@ -416,6 +478,24 @@ func (q *Queries) ListUserMessagesBySession(ctx context.Context, sessionID strin
 		return nil, err
 	}
 	return items, nil
+}
+
+const setMessagePopped = `-- name: SetMessagePopped :exec
+UPDATE messages
+SET popped = ?
+WHERE id = ?
+`
+
+type SetMessagePoppedParams struct {
+	Popped string `json:"popped"`
+	ID     string `json:"id"`
+}
+
+// Marks a message as removed from the model's context by the pop of a
+// frame in mem (FRAMES.md), or, with ”, as in it.
+func (q *Queries) SetMessagePopped(ctx context.Context, arg SetMessagePoppedParams) error {
+	_, err := q.exec(ctx, q.setMessagePoppedStmt, setMessagePopped, arg.Popped, arg.ID)
+	return err
 }
 
 const updateMessage = `-- name: UpdateMessage :exec

@@ -56,9 +56,15 @@ type Service interface {
 	Update(ctx context.Context, message Message) error
 	Get(ctx context.Context, id string) (Message, error)
 	List(ctx context.Context, sessionID string) ([]Message, error)
-	// ListFromSummary returns the messages at or after summaryMessageID,
-	// which is all a compacted session still sends.
+	// ListFromSummary returns the messages the model is sent: those at or
+	// after summaryMessageID, which is all a compacted session still sends,
+	// minus those a frame's pop removed from its context (Message.Popped).
+	// List keeps every message, for the human.
 	ListFromSummary(ctx context.Context, sessionID, summaryMessageID string) ([]Message, error)
+	// SetPopped marks the messages ids as removed from the model's context
+	// by the pop of frame in mem (FRAMES.md), publishing an update for each;
+	// with frame "" it puts them back.
+	SetPopped(ctx context.Context, ids []string, frame string) error
 	ListUserMessages(ctx context.Context, sessionID string) ([]Message, error)
 	ListAllUserMessages(ctx context.Context) ([]Message, error)
 	GetLastAssistantMessage(ctx context.Context, sessionID string) (Message, error)
@@ -259,11 +265,35 @@ func (s *service) Copy(ctx context.Context, sessionID string, msg Message) (Mess
 		PrismModelName:          sql.NullString{String: msg.PrismModelName, Valid: msg.PrismModelName != ""},
 		PrismHypercreditSavings: nullableFloat(msg.PrismHypercreditSavings),
 		PrismDollarSavings:      nullableFloat(msg.PrismDollarSavings),
+		Popped:                  msg.Popped,
 	})
 	if err != nil {
 		return Message{}, err
 	}
 	return s.fromDBItem(item)
+}
+
+// SetPopped implements Service. Each row is set by its own query, on its
+// id, and published as updated; a snapshot of it waiting to be flushed
+// carries the mark too, so a later flush publishes it as it now is (the
+// flush writes the parts, not the mark).
+func (s *service) SetPopped(ctx context.Context, ids []string, frame string) error {
+	for _, id := range ids {
+		if err := s.q.SetMessagePopped(ctx, db.SetMessagePoppedParams{Popped: frame, ID: id}); err != nil {
+			return err
+		}
+		s.mu.Lock()
+		if p, ok := s.pending[id]; ok && p.latest.ID == id {
+			p.latest.Popped = frame
+		}
+		s.mu.Unlock()
+		msg, err := s.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		s.Publish(pubsub.UpdatedEvent, msg)
+	}
+	return nil
 }
 
 func (s *service) DeleteSessionMessages(ctx context.Context, sessionID string) error {
@@ -568,7 +598,7 @@ func (s *service) List(ctx context.Context, sessionID string) ([]Message, error)
 
 func (s *service) ListFromSummary(ctx context.Context, sessionID, summaryMessageID string) ([]Message, error) {
 	if summaryMessageID == "" {
-		return s.List(ctx, sessionID)
+		return s.listForModel(ctx, sessionID)
 	}
 	dbMessages, err := s.q.ListMessagesBySessionFromSummary(ctx, db.ListMessagesBySessionFromSummaryParams{
 		SessionID: sessionID,
@@ -580,7 +610,24 @@ func (s *service) ListFromSummary(ctx context.Context, sessionID, summaryMessage
 	// No rows means the summary message is gone; fall back to the whole
 	// session rather than sending nothing.
 	if len(dbMessages) == 0 {
-		return s.List(ctx, sessionID)
+		return s.listForModel(ctx, sessionID)
+	}
+	messages := make([]Message, len(dbMessages))
+	for i, dbMessage := range dbMessages {
+		messages[i], err = s.fromDBItem(dbMessage)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return messages, nil
+}
+
+// listForModel is List without the messages a frame's pop removed from
+// the model's context: the whole session as the model reads it.
+func (s *service) listForModel(ctx context.Context, sessionID string) ([]Message, error) {
+	dbMessages, err := s.q.ListModelMessagesBySession(ctx, sessionID)
+	if err != nil {
+		return nil, err
 	}
 	messages := make([]Message, len(dbMessages))
 	for i, dbMessage := range dbMessages {
@@ -649,6 +696,7 @@ func (s *service) fromDBItem(item db.Message) (Message, error) {
 		PrismModelName:          item.PrismModelName.String,
 		PrismHypercreditSavings: floatPtr(item.PrismHypercreditSavings),
 		PrismDollarSavings:      floatPtr(item.PrismDollarSavings),
+		Popped:                  item.Popped,
 	}, nil
 }
 

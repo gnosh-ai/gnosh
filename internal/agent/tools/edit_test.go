@@ -44,6 +44,10 @@ func (m *mockEditFileTracker) ForgetReadsSince(ctx context.Context, sessionID st
 	return nil
 }
 
+func (m *mockEditFileTracker) ForgetReads(ctx context.Context, sessionID string, paths []string) error {
+	return nil
+}
+
 func TestReplaceContentPreservesCRLFAndMetadata(t *testing.T) {
 	t.Parallel()
 

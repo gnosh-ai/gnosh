@@ -232,6 +232,10 @@ type Message struct {
 	// figure is the one shown.
 	PrismHypercreditSavings *float64
 	PrismDollarSavings      *float64
+	// Popped is the frame in mem whose pop removed the message from the
+	// model's context (FRAMES.md), "" for none. Every list built for the
+	// model skips it; the chat, /export and /rewind keep it.
+	Popped string
 }
 
 func (m *Message) Content() TextContent {

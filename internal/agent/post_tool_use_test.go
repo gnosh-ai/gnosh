@@ -48,6 +48,8 @@ func (r *readRecorder) CopyReads(context.Context, string, string) error { return
 
 func (r *readRecorder) ForgetReadsSince(context.Context, string, int64) error { return nil }
 
+func (r *readRecorder) ForgetReads(context.Context, string, []string) error { return nil }
+
 // newPostRunner builds a hooks.Runner for one PostToolUse hook, through
 // the config validation a real one passes.
 func newPostRunner(t *testing.T, cmd string) *hooks.Runner {

@@ -3,19 +3,16 @@ package app
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/diff"
 	"github.com/charmbracelet/crush/internal/filepathext"
-	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 )
@@ -178,49 +175,15 @@ func filesBefore(messages []message.Message, workingDir string) []fileBefore {
 }
 
 // changedFiles is what the files a file tool's call changed held before
-// it, from what its result recorded; none for other tools.
+// it, from what its result recorded (tools.ChangedFiles); none for other
+// tools.
 func changedFiles(call message.ToolCall, result message.ToolResult) []fileBefore {
-	var input struct {
-		FilePath string `json:"file_path"`
+	changed := tools.ChangedFiles(result.Name, call.Input, result.Metadata)
+	files := make([]fileBefore, len(changed))
+	for i, f := range changed {
+		files[i] = fileBefore{path: f.Path, content: f.Content, existed: f.Existed, known: f.Known}
 	}
-	var meta struct {
-		FilePath   string              `json:"file_path"`
-		OldContent string              `json:"old_content"`
-		NewContent string              `json:"new_content"`
-		CRLF       *bool               `json:"crlf"`
-		Created    *bool               `json:"created"`
-		Files      []tools.RenamedFile `json:"files"`
-	}
-	_ = json.Unmarshal([]byte(call.Input), &input)
-	_ = json.Unmarshal([]byte(result.Metadata), &meta)
-	switch result.Name {
-	case tools.EditToolName, tools.MultiEditToolName:
-		// An edit that changes a file found what it replaced there: one
-		// that found nothing made the file. What it read had its Windows
-		// line endings made Unix ones, which an edit recorded before the
-		// crlf flag shows in what it wrote.
-		content := meta.OldContent
-		crlf := strings.Contains(meta.NewContent, "\r\n")
-		if meta.CRLF != nil {
-			crlf = *meta.CRLF
-		}
-		if crlf {
-			content, _ = fsext.ToWindowsLineEndings(content)
-		}
-		return []fileBefore{{path: input.FilePath, content: content, existed: meta.OldContent != "", known: true}}
-	case tools.WriteToolName:
-		known := meta.Created != nil
-		return []fileBefore{{path: input.FilePath, content: meta.OldContent, existed: known && !*meta.Created, known: known}}
-	case tools.ReplaceSymbolToolName:
-		return []fileBefore{{path: meta.FilePath, content: meta.OldContent, existed: true, known: true}}
-	case tools.RenameToolName:
-		files := make([]fileBefore, len(meta.Files))
-		for i, f := range meta.Files {
-			files[i] = fileBefore{path: f.Path, content: f.OldContent, existed: true, known: true}
-		}
-		return files
-	}
-	return nil
+	return files
 }
 
 // restoreFiles puts each of files back as it was before, keeping its

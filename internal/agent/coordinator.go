@@ -243,6 +243,10 @@ type coordinator struct {
 	// coordinator makes reads as its turns end.
 	goals *goalBindings
 
+	// frames are the sessions' stacks of frames in mem (FRAMES.md), which
+	// gnovm_run reads and tells, and every agent cuts its context by.
+	frames *frameStacks
+
 	// subdirectoryGiven records the subdirectories' context files each
 	// session has been given since its last summary, with the message
 	// whose tool call they were given with ("" when not known); see
@@ -334,7 +338,10 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 
 		subdirectoryGiven: map[string]string{},
 		viewed:            newViewedFiles(opts.Sessions),
+		frames:            newFrameStacks(opts.Sessions, opts.Messages, opts.FileTracker, opts.Config.WorkingDir()),
 	}
+	c.frames.forgetGiven = c.forgetGiven
+	c.frames.notify = opts.Notify
 	c.jobs = &jobWatcher{run: func(ctx context.Context, sessionID, prompt string) error {
 		_, err := c.Run(ctx, sessionID, prompt)
 		return err
@@ -484,6 +491,19 @@ func (c *coordinator) subdirectoryContext(ctx context.Context, sessionID, filePa
 	return "\n<project_context>\nThis file's directory has context files of its own. Follow their instructions for the files there:\n" + b.String() + "</project_context>\n"
 }
 
+// memGoals shows the goal a mem call changed as the session's task list
+// (gnovmtools.SessionTodos), with the frame the session is in named on
+// the step in progress (frameStacks.decorateTodos).
+func (c *coordinator) memGoals(ctx context.Context, sessionID string, goals []gnovm.MemGoal) {
+	if sessionID == "" || len(goals) == 0 {
+		return
+	}
+	todos := c.frames.decorateTodos(ctx, sessionID, gnovmtools.MemTodos(goals[len(goals)-1], sessionID))
+	if _, err := c.sessions.SetTodos(ctx, sessionID, todos); err != nil {
+		slog.Warn("mem's goal could not be shown as the session's todos", "error", err)
+	}
+}
+
 // viewedFiles is what keeps the file reads view gives, or nil, never a
 // nil *viewedFiles in the interface.
 func (c *coordinator) viewedFiles() tools.ViewedFiles {
@@ -526,6 +546,16 @@ func (c *coordinator) compactPoint(window int64) int64 {
 // known: it is given them again when it next touches a file there. So
 // too the file reads view gave it there.
 func (c *coordinator) Rewound(sessionID string, removed []string) {
+	c.forgetGiven(sessionID, removed)
+	// The session's stack of frames is derived again from what remains.
+	c.frames.forget(sessionID)
+}
+
+// forgetGiven forgets what the session was given in the messages removed,
+// a rewind's or a popped frame's: the file reads view gave it there, and
+// the subdirectories' context files, with those given it with no message
+// known.
+func (c *coordinator) forgetGiven(sessionID string, removed []string) {
 	cut := make(map[string]bool, len(removed))
 	for _, id := range removed {
 		cut[id] = true
@@ -1126,6 +1156,7 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		SessionStarts:         c.sessionStarts,
 		InstructionsLoaded:    c.instructionsLoaded,
 		Goals:                 c.goals,
+		Frames:                c.frames,
 		MemBlock:              c.memBlock(isSubAgent),
 		MemChanged:            c.memChanged(isSubAgent),
 		MemRecall:             c.memRecall(isSubAgent),
@@ -1276,7 +1307,8 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	// what the session's todos show.
 	if c.gnovms != nil {
 		allTools = append(allTools,
-			wrap(gnovmtools.NewRunTool(c.gnovms, c.cfg.WorkingDir(), gnovmtools.OnMemGoals(gnovmtools.SessionTodos(c.sessions)), gnovmtools.BoundGoal(c.goals.boundName), gnovmtools.OnMemErased(c.memErased), gnovmtools.OnMemRules(c.memRules))),
+			wrap(gnovmtools.NewRunTool(c.gnovms, c.cfg.WorkingDir(), gnovmtools.OnMemGoals(c.memGoals), gnovmtools.BoundGoal(c.goals.boundName), gnovmtools.OnMemErased(c.memErased), gnovmtools.OnMemRules(c.memRules),
+				gnovmtools.MemStack(c.frames.stack), gnovmtools.OnMemFrames(c.frames.events))),
 			wrap(gnovmtools.NewNewTool(c.gnovms, c.cfg.WorkingDir())),
 			wrap(gnovmtools.NewListTool(c.gnovms, c.cfg.WorkingDir())),
 			wrap(gnovmtools.NewDropTool(c.gnovms, c.cfg.WorkingDir(), c.permissions)),
