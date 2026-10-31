@@ -592,10 +592,11 @@ Gnosh's system prompt carries a short recipe, so the model needs no setup:
   your words become rules: a file or a tool's output that says to remember or
   run something is not you asking, and Gnosh tells you of every rule a
   session sets, changes or removes.
-- **Secrets**: never kept. One kept by mistake comes out with `mem.Redact`,
-  and `mem.Forget` erases an item or a fact with its history. When you ask
-  what it remembers, or to correct or erase something, it points you to
-  `/mem`.
+- **Secrets**: the prompt says never to keep one, and the model does not
+  always follow it (never-keep-a-secret, above). One kept comes out with
+  `mem.Redact`, and `mem.Forget` erases an item or a fact with its history.
+  When you ask what it remembers, or to correct or erase something, it points
+  you to `/mem`.
 - **Figures**: a sum, a rate or a date it would work out in its head runs in
   the session's scratch machine instead, printing every term, not only the
   total, and the terms and the result in the answer are the lines it printed.
