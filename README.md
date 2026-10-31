@@ -10,8 +10,8 @@
   <a href="./LICENSE.md"><img alt="License: GNO Network GPL v6" src="https://img.shields.io/badge/license-GNO%20Network%20GPL%20v6-605F6B?style=flat-square&labelColor=201F26"></a>
 </p>
 
-<p align="center"><strong>An AI harness that thinks, plans, and remembers in Gno.</strong><br>
-Gnosh runs the <a href="https://github.com/gnolang/gno">Gno</a> VM in the AI harness. The agent keeps its goals, what it found and the facts you gave it in <code>mem</code>, kept in Gno on your disk, and works a long task one step at a time: each step is a frame that leaves the model's context when it is done, its result kept. A new session starts with what is still open and the newest facts, so it picks up where the last one stopped.</p>
+<p align="center"><strong>An AI harness that thinks in Gno.</strong><br>
+Gnosh is functional AI: the agent's context is a call stack. It runs the <a href="https://github.com/gnolang/gno">Gno</a> VM in the AI harness and keeps the agent's plan, what it found and the facts you gave it in <code>mem</code>, in Gno on your disk. Each step of a task is a frame: when it returns, its work leaves the model's context and its result stays, as a function's locals go when it returns. A new session starts with what is still open and the newest facts, so it picks up where the last one stopped.</p>
 
 <p align="center">Security-first underneath: a fork of Charm's <a href="https://github.com/charmbracelet/crush">Crush</a> that closes the doors a coding agent usually leaves open.</p>
 
