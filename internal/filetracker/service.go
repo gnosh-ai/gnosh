@@ -43,6 +43,12 @@ type Service interface {
 	// conversation it cuts: the agent reads those files again before it
 	// changes them.
 	ForgetReadsSince(ctx context.Context, sessionID string, since int64) error
+
+	// ForgetReads forgets the session's reads of paths, as the pop of a
+	// frame in mem forgets the reads made inside it (FRAMES.md): the
+	// agent, which no longer has what it read, reads them again before it
+	// changes them.
+	ForgetReads(ctx context.Context, sessionID string, paths []string) error
 }
 
 type service struct {
@@ -175,6 +181,21 @@ func (s *service) ForgetReadsSince(ctx context.Context, sessionID string, since 
 		ReadAt:    since,
 	}); err != nil {
 		return fmt.Errorf("forgetting file reads: %w", err)
+	}
+	return nil
+}
+
+// ForgetReads forgets a session's reads of paths.
+func (s *service) ForgetReads(ctx context.Context, sessionID string, paths []string) error {
+	for _, path := range paths {
+		key := readKey{sessionID, relpath(path)}
+		s.sums.Del(key)
+		if err := s.q.DeleteSessionReadFile(ctx, db.DeleteSessionReadFileParams{
+			SessionID: sessionID,
+			Path:      key.path,
+		}); err != nil {
+			return fmt.Errorf("forgetting a file read: %w", err)
+		}
 	}
 	return nil
 }

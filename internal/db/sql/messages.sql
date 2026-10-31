@@ -10,14 +10,32 @@ WHERE session_id = ?
 ORDER BY created_at ASC;
 
 -- name: ListMessagesBySessionFromSummary :many
--- Messages from the summary onward, which is all a compacted session sends.
+-- Messages from the summary onward, which is all a compacted session sends,
+-- minus those a frame's pop removed from the model's context (popped).
 -- created_at has one-second resolution, so a few messages preceding the
 -- summary can come back too; the caller slices from the summary by ID.
 SELECT m.*
 FROM messages m
 WHERE m.session_id = ?
+  AND m.popped = ''
   AND m.created_at >= (SELECT s.created_at FROM messages s WHERE s.id = ?)
 ORDER BY m.created_at ASC;
+
+-- name: ListModelMessagesBySession :many
+-- The session's messages as the model reads them: minus those a frame's
+-- pop removed from its context (popped). ListMessagesBySession keeps those,
+-- for the human.
+SELECT *
+FROM messages
+WHERE session_id = ? AND popped = ''
+ORDER BY created_at ASC;
+
+-- name: SetMessagePopped :exec
+-- Marks a message as removed from the model's context by the pop of a
+-- frame in mem (FRAMES.md), or, with '', as in it.
+UPDATE messages
+SET popped = ?
+WHERE id = ?;
 
 -- name: CreateMessage :one
 INSERT INTO messages (
@@ -53,9 +71,10 @@ INSERT INTO messages (
     prism_model_id,
     prism_model_name,
     prism_hypercredit_savings,
-    prism_dollar_savings
+    prism_dollar_savings,
+    popped
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
 RETURNING *;
 

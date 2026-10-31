@@ -36,6 +36,10 @@ func (m mockFileTrackerService) ForgetReadsSince(ctx context.Context, sessionID 
 	return nil
 }
 
+func (m mockFileTrackerService) ForgetReads(ctx context.Context, sessionID string, paths []string) error {
+	return nil
+}
+
 func TestWriteToolWritesEmptyNewFile(t *testing.T) {
 	t.Parallel()
 

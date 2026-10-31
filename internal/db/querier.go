@@ -30,6 +30,9 @@ type Querier interface {
 	DeleteSession(ctx context.Context, id string) error
 	DeleteSessionFiles(ctx context.Context, sessionID string) error
 	DeleteSessionMessages(ctx context.Context, sessionID string) error
+	// Forgets a session's read of one file, as the pop of a frame in mem
+	// forgets the reads made inside it (FRAMES.md).
+	DeleteSessionReadFile(ctx context.Context, arg DeleteSessionReadFileParams) error
 	// Forgets the reads of a session made at or after a time, as /rewind
 	// forgets those of the conversation it cuts.
 	DeleteSessionReadFilesSince(ctx context.Context, arg DeleteSessionReadFilesSinceParams) error
@@ -61,10 +64,15 @@ type Querier interface {
 	ListMCPDisabledServers(ctx context.Context) ([]string, error)
 	ListMCPEnabledServers(ctx context.Context) ([]string, error)
 	ListMessagesBySession(ctx context.Context, sessionID string) ([]Message, error)
-	// Messages from the summary onward, which is all a compacted session sends.
+	// Messages from the summary onward, which is all a compacted session sends,
+	// minus those a frame's pop removed from the model's context (popped).
 	// created_at has one-second resolution, so a few messages preceding the
 	// summary can come back too; the caller slices from the summary by ID.
 	ListMessagesBySessionFromSummary(ctx context.Context, arg ListMessagesBySessionFromSummaryParams) ([]Message, error)
+	// The session's messages as the model reads them: minus those a frame's
+	// pop removed from its context (popped). ListMessagesBySession keeps those,
+	// for the human.
+	ListModelMessagesBySession(ctx context.Context, sessionID string) ([]Message, error)
 	ListNewFiles(ctx context.Context) ([]File, error)
 	ListSessionReadFiles(ctx context.Context, sessionID string) ([]ReadFile, error)
 	ListSessions(ctx context.Context) ([]Session, error)
@@ -72,6 +80,9 @@ type Querier interface {
 	ListUserMessagesBySession(ctx context.Context, sessionID string) ([]Message, error)
 	RecordFileRead(ctx context.Context, arg RecordFileReadParams) error
 	RenameSession(ctx context.Context, arg RenameSessionParams) error
+	// Marks a message as removed from the model's context by the pop of a
+	// frame in mem (FRAMES.md), or, with '', as in it.
+	SetMessagePopped(ctx context.Context, arg SetMessagePoppedParams) error
 	SetSessionChannel(ctx context.Context, arg SetSessionChannelParams) (Session, error)
 	SetSessionTodos(ctx context.Context, arg SetSessionTodosParams) (Session, error)
 	SwapSessionGoal(ctx context.Context, arg SwapSessionGoalParams) (int64, error)
