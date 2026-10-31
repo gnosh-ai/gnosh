@@ -1,0 +1,91 @@
+A rename carried into a second session: the project is called klash and
+must be called gnosh everywhere, in the code, the tests, the README and the
+config example. The user asks for the code now and the rest later. The
+first session must keep the plan in mem and do the code; a new session,
+which has only what was kept, must finish the rest, until nothing mentions
+the old name and the tests pass.
+
+-- project/go.mod --
+module klash
+
+go 1.22
+-- project/main.go --
+// Command klash greets whoever runs it.
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+const name = "klash"
+
+func usage() string {
+	return "usage: " + name + " [--who NAME]"
+}
+
+func greeting(who string) string {
+	return name + " says hello, " + who
+}
+
+func main() {
+	who := "world"
+	switch {
+	case len(os.Args) == 3 && os.Args[1] == "--who":
+		who = os.Args[2]
+	case len(os.Args) > 1:
+		fmt.Fprintln(os.Stderr, usage())
+		os.Exit(2)
+	}
+	fmt.Println(greeting(who))
+}
+-- project/main_test.go --
+package main
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestUsageNamesTheProgram(t *testing.T) {
+	if !strings.HasPrefix(usage(), "usage: klash") {
+		t.Fatalf("usage = %q", usage())
+	}
+}
+
+func TestGreeting(t *testing.T) {
+	if got := greeting("Lin"); got != "klash says hello, Lin" {
+		t.Fatalf("greeting = %q", got)
+	}
+}
+-- project/README.md --
+# klash
+
+klash greets whoever runs it.
+
+    go build -o klash .
+    ./klash --who Lin
+
+klash reads its settings from `klash.toml`; `klash.example.toml` shows them.
+-- project/klash.example.toml --
+# klash reads this file as klash.toml
+who = "world"
+log = "klash.log"
+-- project/Makefile --
+build:
+	go build -o klash .
+
+test:
+	go test ./...
+-- prompt --
+Rename the project from klash to gnosh everywhere: the code, the tests, the README, the Makefile and the config example. Do the code now; we'll carry on with the rest in another session. It's done when nothing in the project mentions klash and `go test ./...` passes.
+-- prompt-new --
+Let's carry on with the rename.
+-- check --
+turn 1 tool gnovm_run >= 1
+after 1 file main.go contains gnosh
+after 1 file README.md contains klash
+cmd ! grep -rqi klash . && ! ls -R | grep -qi klash
+cmd go test ./...
+mem-count items >= 4
+mem-count done >= 3

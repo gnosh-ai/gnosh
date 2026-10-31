@@ -81,11 +81,12 @@ notes, and the agent asks it questions instead of re-reading it. [GNOMEM](GNOMEM
 
 ### A todo that outlives the session
 
-> **You:** Add a `Median` to the stats package, with tests; it's done when
-> `go test ./...` passes. Plan it as steps and do the first one now; we'll
-> carry on in another session.
+> **You:** Rename the project from klash to gnosh everywhere: the code, the
+> tests, the README, the Makefile and the config example. Do the code now;
+> we'll carry on with the rest in another session. It's done when nothing in
+> the project mentions klash and `go test ./...` passes.
 
-The agent puts the task in mem as a todo, with each step a todo under it and
+The agent puts the task in mem as a todo, with each part a todo under it and
 the condition one of its own, and works through them one at a time. Each is
 a frame: the agent enters it, works, and leaves it with a result, and what it
 read, ran and was told in between leaves the model's context with it; the
@@ -94,7 +95,7 @@ one under it is open, so "the tests pass" is something it has to reach, not
 something it can claim. When an approach fails, it notes why and re-plans:
 it drops that todo and adds another.
 
-Start a new session tomorrow and say "Let's carry on with Median." With your
+Start a new session tomorrow and say "Let's carry on with the rename." With your
 first message, the agent is told what mem has open and what is next in each
 todo (see [what the agent runs](#what-the-agent-runs)), and it picks up there
 and finishes.
@@ -170,40 +171,47 @@ stay true. The task:
 ```go mem
 mem.Show()
 // mem is empty: mem.Todo("what to get done") adds a todo, and mem.Fact("cmd/test", "…") keeps a fact
-r := mem.Todo("add Median to stats")
-r.Todo("implement Median")
-r.Todo("write tests")
-r.Todo("go test ./... passes")
-// added `add-median-stats` "add Median to stats"
-// added `add-median-stats/implement-median` "implement Median"
-// added `add-median-stats/write-tests` "write tests"
-// added `add-median-stats/go-test-passes` "go test ./... passes"
-mem.Push("add-median-stats")
+r := mem.Todo("rename the project from klash to gnosh")
+r.Todo("rename it in the code and the Makefile")
+r.Todo("rename it in the tests")
+r.Todo("rename it in the README and the config example")
+r.Todo("verify that nothing says klash and the tests pass")
+// added `rename-project-klash-gnosh` "rename the project from klash to gnosh"
+// added `rename-project-klash-gnosh/rename-code-makefile` "rename it in the code and the Makefile"
+// added `rename-project-klash-gnosh/rename-tests` "rename it in the tests"
+// added `rename-project-klash-gnosh/rename-readme-config-example` "rename it in the README and the config example"
+// added `rename-project-klash-gnosh/verify-nothing-says-klash` "verify that nothing says klash and the tests pass"
+mem.Push("rename-project-klash-gnosh")
 mem.Push()
-// in `add-median-stats` "add Median to stats": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-// in `add-median-stats/implement-median` "implement Median": when it is done, pop it with what came of it and what the next todo needs. …
-mem.Pop("Median in stats.go:17; copies and sorts, no input mutation")
-// done `add-median-stats/implement-median` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation
-// next: `add-median-stats/write-tests` "write tests": mem.Push()
+// in `rename-project-klash-gnosh` "rename the project from klash to gnosh": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `rename-project-klash-gnosh/rename-code-makefile` "rename it in the code and the Makefile": when it is done, pop it with what came of it and what the next todo needs. …
+mem.Pop("go.mod, main.go and the Makefile say gnosh; the tests still expect klash")
+// done `rename-project-klash-gnosh/rename-code-makefile` "rename it in the code and the Makefile" → go.mod, main.go and the Makefile say gnosh; the tests still expect klash
+// next: `rename-project-klash-gnosh/rename-tests` "rename it in the tests": mem.Push()
 mem.Show()
 // mem: 1 todo open
 // todos:
-//   [ ] `add-median-stats` "add Median to stats" (1/3 done · this session · just now · held by this session, just now)
-//     [x] `add-median-stats/implement-median` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation
-//     [ ] `add-median-stats/write-tests` "write tests"  ← next
-//     [ ] `add-median-stats/go-test-passes` "go test ./... passes"
+//   [ ] `rename-project-klash-gnosh` "rename the project from klash to gnosh" (1/4 done · this session · just now · held by this session, just now)
+//     [x] `rename-project-klash-gnosh/rename-code-makefile` "rename it in the code and the Makefile" → go.mod, main.go and the Makefile say gnosh; the tests still expect klash
+//     [ ] `rename-project-klash-gnosh/rename-tests` "rename it in the tests"  ← next
+//     [ ] `rename-project-klash-gnosh/rename-readme-config-example` "rename it in the README and the config example"
+//     [ ] `rename-project-klash-gnosh/verify-nothing-says-klash` "verify that nothing says klash and the tests pass"
 mem.Push()
-// in `add-median-stats/write-tests` "write tests": when it is done, pop it with what came of it and what the next todo needs. …
-mem.Pop("stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates")
+// in `rename-project-klash-gnosh/rename-tests` "rename it in the tests": when it is done, pop it with what came of it and what the next todo needs. …
+mem.Pop("main_test.go expects gnosh in the usage line and the greeting")
 mem.Push()
-// done `add-median-stats/write-tests` "write tests" → stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates
-// in `add-median-stats/go-test-passes` "go test ./... passes": when it is done, pop it with what came of it and what the next todo needs. …
-mem.Pop("go test ./... → ok stats 0.006s")
+// done `rename-project-klash-gnosh/rename-tests` "rename it in the tests" → main_test.go expects gnosh in the usage line and the greeting
+// in `rename-project-klash-gnosh/rename-readme-config-example` "rename it in the README and the config example": when it is done, pop it with what came of it and what the next todo needs. …
+mem.Pop("README says gnosh; klash.example.toml is now gnosh.example.toml")
 mem.Push()
-// done `add-median-stats/go-test-passes` "go test ./... passes" → go test ./... → ok stats 0.006s
-// nothing to push: `add-median-stats` has no open todo: pop it with its result.
-mem.Pop("Median in stats.go:17; tests in stats_test.go; go test ./... → ok")
-// done `add-median-stats` "add Median to stats" → Median in stats.go:17; tests in stats_test.go; go test ./... → ok
+// done `rename-project-klash-gnosh/rename-readme-config-example` "rename it in the README and the config example" → README says gnosh; klash.example.toml is now gnosh.example.toml
+// in `rename-project-klash-gnosh/verify-nothing-says-klash` "verify that nothing says klash and the tests pass": when it is done, pop it with what came of it and what the next todo needs. …
+mem.Pop("grep finds no klash; go test ./... → ok gnosh 0.004s")
+mem.Push()
+// done `rename-project-klash-gnosh/verify-nothing-says-klash` "verify that nothing says klash and the tests pass" → grep finds no klash; go test ./... → ok gnosh 0.004s
+// nothing to push: `rename-project-klash-gnosh` has no open todo: pop it with its result.
+mem.Pop("klash is gnosh everywhere: code, Makefile, tests, README, config; go test ./... → ok")
+// done `rename-project-klash-gnosh` "rename the project from klash to gnosh" → klash is gnosh everywhere: code, Makefile, tests, README, config; go test ./... → ok
 ```
 
 The agent looked at mem, planned the task as a todo with the work under it,
