@@ -76,8 +76,9 @@ var checkedDocs = map[string]int{
 }
 
 // docCall is one call in a document and what the document says it shows:
-// gnovm_run as the agent makes it, /mem as the user types it, or the notice
-// gnosh shows as a session starts.
+// gnovm_run as the agent makes it (or, after ❯, the mem call as the agent
+// writes it), /mem as the user types it, or the notice gnosh shows as a
+// session starts.
 type docCall struct {
 	line  int    // 1-based, in the document
 	kind  string // "gnovm_run", "/mem" or "notice"
@@ -149,6 +150,14 @@ func docBlocks(t *testing.T, root, doc string) [][]docCall {
 		case strings.HasPrefix(line, "gnovm_run "):
 			flush()
 			block = append(block, docCall{line: i + 1, kind: "gnovm_run", input: strings.TrimPrefix(line, "gnovm_run ")})
+			collecting = true
+		case strings.HasPrefix(line, "❯ "):
+			// A call to mem as the agent writes it, in a block that also
+			// holds what the user typed and what gnosh told them.
+			flush()
+			input, err := json.Marshal(map[string]string{"name": "mem", "code": strings.TrimPrefix(line, "❯ ")})
+			require.NoError(t, err)
+			block = append(block, docCall{line: i + 1, kind: "gnovm_run", input: string(input)})
 			collecting = true
 		case line == "/mem" || strings.HasPrefix(line, "/mem "):
 			flush()
@@ -342,6 +351,10 @@ func TestDocBlocksParse(t *testing.T) {
 		"```go",
 		"type illustration struct{ shown, notRun bool }",
 		"```",
+		"```",
+		"❯ mem.Fact(\"c\", \"d\")",
+		"  fact `c` is new",
+		"```",
 	}, "\n")), 0o644))
 
 	blocks := docBlocks(t, dir, "DOC.md")
@@ -365,6 +378,9 @@ func TestDocBlocksParse(t *testing.T) {
 		},
 		{
 			{line: 40, kind: "gnovm_run", input: `{"code":"1 + 1","name":""}`, want: "2"},
+		},
+		{
+			{line: 47, kind: "gnovm_run", input: `{"code":"mem.Fact(\"c\", \"d\")","name":"mem"}`, want: "fact `c` is new"},
 		},
 	}, blocks)
 	require.Equal(t, map[string]string{docAgentSession: "Facts"}, docTitles(blocks[2]))

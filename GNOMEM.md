@@ -372,19 +372,19 @@ not the model brings it up.
 
 Say the agent, in a session titled "Release v2", planned a release with a
 question for you, kept the staging database and a deploy key you had
-pasted, then changed the database to the wrong one. Its calls come first;
-the notice is what the next session starts with; the rest is you:
+pasted, then changed the database to the wrong one. Its calls come first,
+after ❯; the notice is what the next session starts with; the rest is you:
 
 ```
-gnovm_run {"name": "mem", "code": "mem.Goal(\"release v2\").Steps(\"bump the version\", \"tag: tag v2.0.0\").Ask(\"which day suits you for the release?\")"}
+❯ mem.Goal("release v2").Steps("bump the version", "tag: tag v2.0.0").Ask("which day suits you for the release?")
   added goal `release-v2` "release v2"
   added `release-v2/bump-version` "bump the version", `release-v2/tag` "tag v2.0.0"; next: `release-v2/bump-version` "bump the version"
   asked `release-v2/which-day-suits-you` "which day suits you for the release?" (for the user); `release-v2` waits on it; next: `release-v2/bump-version` "bump the version"
-gnovm_run {"name": "mem", "code": "mem.Fact(\"staging-db\", \"The staging database is db-stg-7.\")"}
+❯ mem.Fact("staging-db", "The staging database is db-stg-7.")
   fact `staging-db` is new
-gnovm_run {"name": "mem", "code": "mem.Fact(\"deploy\", \"Deploy with the key sk-live-4f9a2c, then run make deploy.\")"}
+❯ mem.Fact("deploy", "Deploy with the key sk-live-4f9a2c, then run make deploy.")
   fact `deploy` is new
-gnovm_run {"name": "mem", "code": "mem.Fact(\"staging-db\", \"The staging database is db-stg-8.\")"}
+❯ mem.Fact("staging-db", "The staging database is db-stg-8.")
   fact `staging-db` changed (was "The staging database is db-stg-7.")
 mem waiting on you: "which day suits you for the release?" (release-v2/which-day-suits-you)
 /mem
