@@ -33,8 +33,10 @@ mem.Show()
 
 The step the agent is in is a *frame*: when it pops the frame with its
 result, gnosh removes everything since the push from the model's context,
-and the result stays. A long task is done one frame at a time, the context
-never filling with finished work ([Frames](#frames)).
+and the result stays. While it is in a frame, the frame is held by its
+session, as the outline says, and no other session takes it. A long task is
+done one frame at a time, the context never filling with finished work
+([Frames](#frames)).
 
 ## Why this matters
 
