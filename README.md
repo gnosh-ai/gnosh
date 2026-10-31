@@ -146,13 +146,16 @@ reminder for the next session, not an alarm: nothing fires at a time of day.
 `/mem`, typed in the editor or picked as "mem" in the command palette, shows
 you what mem holds. `/mem find` searches it, `/mem log` lists every change
 with who made it, `/mem undo` takes one back, and `/mem redact` takes a
-secret's exact text out of mem and out of its history. As a session starts,
-Gnosh itself tells you in one line what is due and what waits on you, as in
+secret's exact text out of mem and out of its history. From a terminal,
+`gnosh mem` (and `gnosh mem show`, `find` and `log`) prints the same with no
+model, not even a provider set up.
+
+Gnosh also speaks up unasked. As a session starts, it tells you in one line
+what is due and what waits on you, as in
 `mem waiting on you: "which day suits you for the release?" (release-v2/which-day-suits-you)`,
 whether or not the model brings it up. And when a session sets, changes or
 removes a rule, which every later session follows as yours, Gnosh warns you
-and says how to undo it. From a terminal, `gnosh mem` (and `gnosh mem show`,
-`find` and `log`) prints the same with no model, not even a provider set up.
+and says how to undo it.
 [GNOMEM](GNOMEM.md#yours-to-see-and-change) has a whole session of it, which
 the tests replay.
 
