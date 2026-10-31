@@ -563,7 +563,7 @@ func TestHostRunsMem(t *testing.T) {
 	res = call(`mem.Drop("ship")`)
 	require.EqualError(t, res.Err, "mem.Drop takes 2 arguments, not 1: mem.Drop(name, why)")
 	res = call(`mem.Frobnicate("x")`)
-	require.Contains(t, res.Notes, "mem's calls are Frame, NewFrame, PushFrame, PopFrame, Think, Thought, Recall, PushThought, Goal, Steps, Ask, Start, Done, Drop, Reopen, Note, Wait, Fact, Rule, Forget, Redact, JSON, Next, Show and Find")
+	require.Contains(t, res.Notes, "mem's calls are Frame, NewFrame, Push, Pop, Think, Thought, Recall, Goal, Steps, Ask, Start, Done, Drop, Reopen, Note, Wait, Fact, Rule, Forget, Redact, JSON, Next, Show and Find")
 	res = call("import \"mem\"\nmem.Fact(\"cmd/test\", \"go test ./...\")")
 	require.NoError(t, res.Err)
 	require.Equal(t, "fact `cmd/test` is new\n", res.Output)

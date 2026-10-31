@@ -30,7 +30,7 @@ func bound() string
 func frames() []string
 
 // pushed tells gnosh this input entered frame id, titled purpose; with id
-// "", that a push found nothing to enter (PushFrame(nil)).
+// "", that a push found nothing to enter (Push() with nothing to enter).
 func pushed(id, purpose string)
 
 // popped tells gnosh this input left frame id, titled purpose, with

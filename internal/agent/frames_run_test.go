@@ -315,12 +315,12 @@ func (s *framesScenario) notice() (notify.Notification, bool) {
 }
 
 const (
-	pushG      = `mem.PushFrame(mem.Frame("g"))`
-	pushS1     = `mem.PushFrame(mem.Frame("g/s1"))`
-	popS1PushS = "mem.PopFrame(\"found it\")\nmem.PushFrame(mem.Frame().NextTodo())"
-	popS1      = `mem.PopFrame("found it")`
-	popS2      = `mem.PopFrame("20 of 20 passed")`
-	popG       = `mem.PopFrame("fixed")`
+	pushG      = `mem.Push("g")`
+	pushS1     = `mem.Push("g/s1")`
+	popS1PushS = "mem.Pop(\"found it\")\nmem.Push()"
+	popS1      = `mem.Pop("found it")`
+	popS2      = `mem.Pop("20 of 20 passed")`
+	popG       = `mem.Pop("fixed")`
 	inG        = "in `g` \"fix it\": when it is done, pop it with what came of it and what the next step needs."
 	inS1       = "in `g/s1` \"find the cause\": when it is done, pop it with what came of it and what the next step needs."
 	inS2       = "in `g/s2` \"rerun\": when it is done, pop it with what came of it and what the next step needs."

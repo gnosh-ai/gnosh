@@ -15,9 +15,9 @@ import (
 )
 
 // Frames (FRAMES.md): the task tree seen through a stack. A Frame is a
-// piece of work in mem, a goal or a step; entering one (PushFrame) marks
+// piece of work in mem, a goal or a step; entering one (Push) marks
 // where gnosh will cut the model's context, and leaving it with a result
-// (PopFrame) cuts everything since. A thought is a labelled line kept on
+// (Pop) cuts everything since. A thought is a labelled line kept on
 // the frame the model stands in: it costs nothing, cuts nothing, and is
 // how anything worth keeping outlives a pop. The stack itself is gnosh's,
 // derived from the session's own pushes and pops; the realm is told it
@@ -116,7 +116,7 @@ func (f Fact) String() string { return "fact `" + f.name + "` = " + f.Body + "\n
 // Frame is the present frame: the top of this session's stack, or, with
 // the stack empty, the root: the goal the user's /goal bound the session
 // to, or everything open. Given an id, it is that frame:
-// mem.PushFrame(mem.Frame("fix-flaky")) enters a goal by id.
+// mem.Push("fix-flaky") enters a goal by id.
 func (m *Mem) Frame(id ...string) *Frame {
 	switch {
 	case len(id) > 1:
@@ -338,17 +338,35 @@ func (m *Mem) addStep(parent, id, title string) {
 	m.do(Op{Kind: "add", Name: id, New: title, By: caller()})
 }
 
-// PushFrame enters f: it becomes this session's, the top of its stack, and
-// from here the context will be cut when it is popped. With nil, which
-// NextTodo gives when nothing is left to enter, it is a kept no-op that
-// says what to do instead.
-func (m *Mem) PushFrame(f *Frame) {
+// Push enters a frame: it becomes this session's, the top of its stack,
+// and from here the context will be cut when it is popped. With no id it
+// enters the present frame's next step, Frame().NextTodo(), and when there
+// is none it is a kept no-op that says what to do instead; with an id it
+// enters that frame. A Frame and a Thought have Push too: mem.NewFrame("…",
+// "…").Push(), mem.Thought("port").Push().
+func (m *Mem) Push(id ...string) {
+	switch {
+	case len(id) > 1:
+		panic("Push takes one id, or none for the next step")
+	case len(id) == 1:
+		m.push(id[0], "")
+		return
+	}
+	f := m.nextTodo(m.present())
 	if f == nil {
 		pushed("", "")
 		println(m.nothingToPush())
 		return
 	}
 	m.push(f.Id, "")
+}
+
+// Push enters the frame, as mem.Push(f.Id) does.
+func (f *Frame) Push() {
+	if f == nil || f.m == nil {
+		panic("no frame to push: mem.Frame(id) or mem.NewFrame(name, purpose) gives one")
+	}
+	f.m.push(f.Id, "")
 }
 
 // push enters frame id. thought is the text of the thought the frame was
@@ -394,7 +412,7 @@ func pushText(id, title, thought string) string {
 		"what matters after, keep as a thought first. Your result stays, and nothing you did is undone."
 }
 
-// nothingToPush is what PushFrame(nil) says: what there is to do instead,
+// nothingToPush is what Push() with nothing to enter says: what there is to do instead,
 // where the model stands.
 func (m *Mem) nothingToPush() string {
 	p := m.present()
@@ -411,13 +429,13 @@ func (m *Mem) nothingToPush() string {
 				// its free steps are, by id.
 				msg := "nothing to push at the root: " + ref(newest, g.Title) + " is held by " + who(g.Doing)
 				if nt := m.nextTodo(newest); nt != nil {
-					return msg + "; its step " + ref(nt.Id, nt.Purpose) + " is free: mem.PushFrame(mem.Frame(" + quote(nt.Id) + ")) enters it; or make a goal: mem.NewFrame(\"…\", \"…\")."
+					return msg + "; its step " + ref(nt.Id, nt.Purpose) + " is free: mem.Push(" + quote(nt.Id) + ") enters it; or make a goal: mem.NewFrame(\"…\", \"…\").Push()."
 				}
-				return msg + ", and nothing in it can be done now: make a goal, mem.NewFrame(\"…\", \"…\")."
+				return msg + ", and nothing in it can be done now: make a goal, mem.NewFrame(\"…\", \"…\").Push()."
 			}
-			return "nothing to push at the root: " + ref(newest, g.Title) + " is open: mem.PushFrame(mem.Frame(" + quote(newest) + ")) enters it; or make a goal: mem.NewFrame(\"…\", \"…\")."
+			return "nothing to push at the root: " + ref(newest, g.Title) + " is open: mem.Push(" + quote(newest) + ") enters it; or make a goal: mem.NewFrame(\"…\", \"…\").Push()."
 		}
-		return "nothing to push at the root: no goal is open: make one, mem.NewFrame(\"…\", \"…\")."
+		return "nothing to push at the root: no goal is open: make one, mem.NewFrame(\"…\", \"…\").Push()."
 	}
 	it := m.get(p)
 	if it.OpenSteps > 0 {
@@ -453,7 +471,7 @@ func (m *Mem) holdsOf(id string) string {
 func (m *Mem) heldText(id string, it *Todo) string {
 	msg := "`" + id + "` is held by " + who(it.Doing) + ": only it can pop, close or drop it (resume that session if it has ended)"
 	if nt := m.nextTodo(id); nt != nil {
-		msg += "; its step " + ref(nt.Id, nt.Purpose) + " is free: mem.PushFrame(mem.Frame(" + quote(nt.Id) + ")) enters it"
+		msg += "; its step " + ref(nt.Id, nt.Purpose) + " is free: mem.Push(" + quote(nt.Id) + ") enters it"
 	}
 	return msg
 }
@@ -542,11 +560,11 @@ func top(stack []string) string {
 	return stack[len(stack)-1]
 }
 
-// PopFrame leaves the present frame done with its result, and pops it:
-// gnosh then removes everything since the push from the model's context.
-// result is the model's own words, one string, kept whole up to mem's
-// limit; it is what stays.
-func (m *Mem) PopFrame(result string) {
+// Pop leaves the present frame done with its result, and pops it: gnosh
+// then removes everything since the push from the model's context. result
+// is the model's own words, one string, kept whole up to mem's limit; it
+// is what stays.
+func (m *Mem) Pop(result string) {
 	stack := frames()
 	if len(stack) == 0 {
 		panic("nothing to pop: you are at the root")
@@ -618,9 +636,9 @@ func (m *Mem) NextHint(id string) string {
 	present := m.present()
 	if nt := m.nextTodo(parent); nt != nil {
 		if parent == present {
-			return "next: " + ref(nt.Id, nt.Purpose) + ": mem.PushFrame(mem.Frame().NextTodo())"
+			return "next: " + ref(nt.Id, nt.Purpose) + ": mem.Push()"
 		}
-		return "next: " + ref(nt.Id, nt.Purpose) + ": mem.PushFrame(mem.Frame(" + quote(nt.Id) + "))"
+		return "next: " + ref(nt.Id, nt.Purpose) + ": mem.Push(" + quote(nt.Id) + ")"
 	}
 	switch {
 	case p.OpenSteps > 0:
@@ -779,15 +797,22 @@ func (m *Mem) Recall(words string) []Namable {
 	return out
 }
 
-// PushThought dives into a thought: it makes a step named as the thought,
-// if it has none, under the thought's frame when that is the present frame
-// or on the stack, else under the present frame; the step's purpose is why,
-// if given, else empty, since the thought's text is there; then it enters
-// the step as PushFrame would. A thought already dived into enters its step
-// again.
-func (m *Mem) PushThought(t Thought, why ...string) {
+// Push dives into the thought: it makes a step named as the thought, if it
+// has none, under the thought's frame when that is the present frame or on
+// the stack, else under the present frame; the step's purpose is why, if
+// given, else empty, since the thought's text is there; then it enters the
+// step as mem.Push does. A thought already dived into enters its step
+// again. A Thought comes from Think, Thought(name) or Recall.
+func (t Thought) Push(why ...string) {
+	if t.m == nil {
+		panic("no thought to push: mem.Think, mem.Thought(name) or mem.Recall(words) gives one")
+	}
+	t.m.pushThought(t, why...)
+}
+
+func (m *Mem) pushThought(t Thought, why ...string) {
 	if len(why) > 1 {
-		panic("PushThought takes a thought and, after it, one reason for the dive")
+		panic("a thought's Push takes one reason for the dive, or none")
 	}
 	frame := t.frame
 	if frame == "" {

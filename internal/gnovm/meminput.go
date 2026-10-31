@@ -187,7 +187,10 @@ func memHint(code, msg string) string {
 		}
 	}
 	if strings.Contains(msg, "as *klash/gnomem/v2.Frame") && strings.Contains(code, "mem.Goal(") {
-		return "mem.Goal(…) gives a Goal, not a Frame: enter it with mem.Goal(…).Push(), or mem.PushFrame(mem.Frame(name)) by its name"
+		return "mem.Goal(…) gives a Goal, not a Frame: enter it with mem.Goal(…).Push(), or mem.Push(name) by its name"
+	}
+	if strings.Contains(msg, "missing field PushFrame") || strings.Contains(msg, "missing field PopFrame") || strings.Contains(msg, "missing field PushThought") {
+		return "frames are entered with mem.Push() (the next step), mem.Push(id), or .Push() on a Frame or a Thought, and left with mem.Pop(result)"
 	}
 	if strings.Contains(msg, "cannot use klash/gnomem/v2.Goal as string") {
 		return "mem.Goal(…) gives a Goal, not a name: pass its name, g.Name, or the name mem printed in backticks"

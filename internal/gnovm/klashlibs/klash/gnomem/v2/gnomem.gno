@@ -14,10 +14,10 @@
 // binds it to the name mem in every input the model runs there:
 //
 //	mem.Goal("release v2").Steps("bump: bump the version", "tag v2.0.0", "CI is green")
-//	mem.PushFrame(mem.Frame("release-v2"))
-//	mem.PushFrame(mem.Frame().NextTodo())
-//	mem.Think("version", "the version lives in version.go")
-//	mem.PopFrame("now 2.0.0")
+//	mem.Push("release-v2")
+//	mem.Push()
+//	mem.Think("the version lives in version.go")
+//	mem.Pop("now 2.0.0")
 //	mem.Ask("release-v2/tag-v2-0-0", "which key signs the tag?")
 //	mem.Goal("renew the gno.shop TLS cert", "renew-cert").Wait("2026-12-01")
 //	mem.Fact("cmd/test", "go test -race ./...")
@@ -106,9 +106,8 @@ func (g Goal) Start(step ...string) Goal {
 	return g
 }
 
-// Push enters the goal as a frame, as mem.PushFrame(mem.Frame(name)) does,
-// so a plan can be made and entered in one call:
-// mem.Goal("…").Steps("…", "…").Push().
+// Push enters the goal as a frame, as mem.Push(name) does, so a plan can
+// be made and entered in one call: mem.Goal("…").Steps("…", "…").Push().
 func (g Goal) Push() Goal {
 	g.m.push(g.Name, "")
 	return g
@@ -297,7 +296,7 @@ func (m *Mem) Ask(name, question string) {
 }
 
 // Start marks open item name as being worked on by this session, with no
-// cut (PushFrame enters it as a frame), so that other sessions' next skips
+// cut (mem.Push enters it as a frame), so that other sessions' next skips
 // it; Show marks it "(held by …)". Done and Drop clear the mark. An item
 // another session holds is refused: that session pops or closes it. An
 // item that waits, or is under one that waits, is not started: mem would
@@ -325,7 +324,7 @@ func (m *Mem) Start(name string) {
 // and clears its wait. It refuses while a step of it is open, naming those
 // steps and saying to Done or Drop them first. Done of a done item says
 // "already done → <result>" and changes nothing. Done of the present frame,
-// the top of this session's stack, is PopFrame: a result is required, and
+// the top of this session's stack, is Pop: a result is required, and
 // gnosh cuts the context; Done of a frame below the top, or of one with a
 // frame of the stack under it, is refused; and nobody closes a frame
 // another session holds.

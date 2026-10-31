@@ -12,6 +12,7 @@ package gnovmtools
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -95,21 +96,56 @@ func docBlocks(t *testing.T, root, doc string) [][]docCall {
 	var block []docCall
 	var want []string
 	inFence, collecting := false, false
+	// A fence opened as ```go mem or ```go scratch holds Gno as the agent
+	// writes it, which GitHub highlights: each run of code lines is one
+	// call, to mem's VM or the session's scratch machine, and the "// "
+	// lines under it are what the call shows. A bare ```go is an
+	// illustration, not replayed.
+	goFence, goVM := false, ""
+	var code []string
 	flush := func() {
 		if collecting {
 			block[len(block)-1].want = strings.Join(want, "\n")
 		}
 		want, collecting = nil, false
 	}
+	codeLine := 0
+	goCall := func() {
+		if len(code) == 0 {
+			return
+		}
+		input, err := json.Marshal(map[string]string{"name": goVM, "code": strings.Join(code, "\n")})
+		require.NoError(t, err)
+		block = append(block, docCall{line: codeLine, kind: "gnovm_run", input: string(input)})
+		code, collecting = nil, true
+	}
 	for i, line := range strings.Split(string(text), "\n") {
 		switch {
 		case strings.HasPrefix(line, "```"):
+			goCall()
 			flush()
 			if inFence && len(block) > 0 {
 				blocks = append(blocks, block)
 			}
 			block, inFence = nil, !inFence
+			info := strings.Fields(strings.TrimPrefix(line, "```"))
+			goFence = inFence && len(info) == 2 && info[0] == "go" && (info[1] == "mem" || info[1] == "scratch")
+			goVM = ""
+			if goFence && info[1] == "mem" {
+				goVM = "mem"
+			}
 		case !inFence:
+		case goFence && strings.HasPrefix(line, "//"):
+			goCall()
+			if collecting {
+				want = append(want, strings.TrimPrefix(strings.TrimPrefix(line, "//"), " "))
+			}
+		case goFence:
+			flush()
+			if len(code) == 0 {
+				codeLine = i + 1
+			}
+			code = append(code, line)
 		case strings.HasPrefix(line, "gnovm_run "):
 			flush()
 			block = append(block, docCall{line: i + 1, kind: "gnovm_run", input: strings.TrimPrefix(line, "gnovm_run ")})
@@ -249,6 +285,25 @@ func TestDocBlocksParse(t *testing.T) {
 		"  mem: 1 fact",
 		`mem waiting on you: "which day?" (q-which-day)`,
 		"```",
+		"",
+		"```go mem",
+		`mem.Goal("tea").Steps(`,
+		`	"boil: boil water",`,
+		`)`,
+		"// added goal `tea` \"tea\"",
+		"// added `tea/boil` \"boil water\"; next: `tea/boil` \"boil water\"",
+		`mem.Show()`,
+		"// mem: 1 goal open",
+		"//   [ ] `tea` \"tea\"",
+		"//",
+		"```",
+		"```go scratch",
+		"1 + 1",
+		"// 2",
+		"```",
+		"```go",
+		"type illustration struct{ shown, notRun bool }",
+		"```",
 	}, "\n")), 0o644))
 
 	blocks := docBlocks(t, dir, "DOC.md")
@@ -265,6 +320,13 @@ func TestDocBlocksParse(t *testing.T) {
 			{line: 20, kind: "/mem", input: "log", want: "#1 2026-10-30 10:12, the agent in \"Facts\": mem.Fact(\"a\", \"b\")\n    fact `a`: \"b\""},
 			{line: 23, kind: "/mem", input: "", want: "mem: 1 fact"},
 			{line: 25, kind: "notice", want: `mem waiting on you: "which day?" (q-which-day)`},
+		},
+		{
+			{line: 29, kind: "gnovm_run", input: `{"code":"mem.Goal(\"tea\").Steps(\n\t\"boil: boil water\",\n)","name":"mem"}`, want: "added goal `tea` \"tea\"\nadded `tea/boil` \"boil water\"; next: `tea/boil` \"boil water\""},
+			{line: 34, kind: "gnovm_run", input: `{"code":"mem.Show()","name":"mem"}`, want: "mem: 1 goal open\n  [ ] `tea` \"tea\"\n"},
+		},
+		{
+			{line: 40, kind: "gnovm_run", input: `{"code":"1 + 1","name":""}`, want: "2"},
 		},
 	}, blocks)
 	require.Equal(t, map[string]string{docAgentSession: "Facts"}, docTitles(blocks[2]))

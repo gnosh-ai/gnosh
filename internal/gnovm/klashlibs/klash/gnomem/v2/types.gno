@@ -48,7 +48,7 @@ type Todo struct {
 	Result  string   // what came of it: the outcome, the user's answer, or why it was dropped
 	Wait    string   // a day ("2026-12-01") or words ("PR #6399 merged"); "" none
 	For     string   // "" the agent's; "user": a question or request for the user
-	Doing   string   // the session that holds it (PushFrame, Start); "" none
+	Doing   string   // the session that holds it (Push, Start); "" none
 	Steps   []string // its steps' names, in the order they were added; each one's id is this id, "/", the name
 	Notes   []note   // its thoughts, oldest first; never edited
 	Changed int64    // the latest change to it or to an item under it, Unix seconds
@@ -63,7 +63,7 @@ type Todo struct {
 type note struct {
 	Name string
 	Text string
-	Step string // the id of the step made from it (PushThought); "" none
+	Step string // the id of the step made from it (a thought's Push); "" none
 }
 
 // fact is something true, kept under a name: "cmd/test",

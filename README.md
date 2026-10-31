@@ -158,38 +158,43 @@ the tests replay.
 ### What the agent runs
 
 These are calls like the ones the agent made in the real runs above, replayed
-on a fresh project in one session, with what each one shows it. A test
-replays them against every change to Gnosh, so they stay true. The goal:
+on a fresh project in one session; under each call, as comments, what mem
+answered. The agent sends each call as the code of a `gnovm_run` tool call to
+the VM named mem. A test replays them against every change to Gnosh, so they
+stay true. The goal:
 
-```
-gnovm_run {"name": "mem", "code": "mem.Show()"}
-  mem is empty: mem.Goal("what to get done").Steps("…", "…") plans a task, and mem.Fact("cmd/test", "…") keeps a fact
-gnovm_run {"name": "mem", "code": "mem.Goal(\"add Median to stats\").Steps(\"implement Median\", \"write tests\", \"go test ./... passes\")"}
-  added goal `add-median-stats` "add Median to stats"
-  added `add-median-stats/implement-median` "implement Median", `add-median-stats/write-tests` "write tests", `add-median-stats/go-test-passes` "go test ./... passes"; next: `add-median-stats/implement-median` "implement Median"
-gnovm_run {"name": "mem", "code": "mem.PushFrame(mem.Frame(\"add-median-stats\"))\nmem.PushFrame(mem.Frame().NextTodo())"}
-  in `add-median-stats` "add Median to stats": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  in `add-median-stats/implement-median` "implement Median": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-gnovm_run {"name": "mem", "code": "mem.PopFrame(\"Median in stats.go:17; copies and sorts, no input mutation\")"}
-  done `add-median-stats/implement-median` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation
-  next: `add-median-stats/write-tests` "write tests": mem.PushFrame(mem.Frame().NextTodo())
-gnovm_run {"name": "mem", "code": "mem.Show()"}
-  mem: 1 goal open
-  goals:
-    [ ] `add-median-stats` "add Median to stats" (1/3 done · this session · just now · held by this session, just now)
-      [x] `add-median-stats/implement-median` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation
-      [ ] `add-median-stats/write-tests` "write tests"  ← next
-      [ ] `add-median-stats/go-test-passes` "go test ./... passes"
-gnovm_run {"name": "mem", "code": "mem.PushFrame(mem.Frame().NextTodo())"}
-  in `add-median-stats/write-tests` "write tests": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-gnovm_run {"name": "mem", "code": "mem.PopFrame(\"stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates\")\nmem.PushFrame(mem.Frame().NextTodo())"}
-  done `add-median-stats/write-tests` "write tests" → stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates
-  in `add-median-stats/go-test-passes` "go test ./... passes": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-gnovm_run {"name": "mem", "code": "mem.PopFrame(\"go test ./... → ok stats 0.006s\")\nmem.PushFrame(mem.Frame().NextTodo())"}
-  done `add-median-stats/go-test-passes` "go test ./... passes" → go test ./... → ok stats 0.006s
-  nothing to push: `add-median-stats` has no open step: pop it with its result.
-gnovm_run {"name": "mem", "code": "mem.PopFrame(\"Median in stats.go:17; tests in stats_test.go; go test ./... → ok\")"}
-  done `add-median-stats` "add Median to stats" → Median in stats.go:17; tests in stats_test.go; go test ./... → ok
+```go mem
+mem.Show()
+// mem is empty: mem.Goal("what to get done").Steps("…", "…") plans a task, and mem.Fact("cmd/test", "…") keeps a fact
+mem.Goal("add Median to stats").Steps("implement Median", "write tests", "go test ./... passes")
+// added goal `add-median-stats` "add Median to stats"
+// added `add-median-stats/implement-median` "implement Median", `add-median-stats/write-tests` "write tests", `add-median-stats/go-test-passes` "go test ./... passes"; next: `add-median-stats/implement-median` "implement Median"
+mem.Push("add-median-stats")
+mem.Push()
+// in `add-median-stats` "add Median to stats": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `add-median-stats/implement-median` "implement Median": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+mem.Pop("Median in stats.go:17; copies and sorts, no input mutation")
+// done `add-median-stats/implement-median` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation
+// next: `add-median-stats/write-tests` "write tests": mem.Push()
+mem.Show()
+// mem: 1 goal open
+// goals:
+//   [ ] `add-median-stats` "add Median to stats" (1/3 done · this session · just now · held by this session, just now)
+//     [x] `add-median-stats/implement-median` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation
+//     [ ] `add-median-stats/write-tests` "write tests"  ← next
+//     [ ] `add-median-stats/go-test-passes` "go test ./... passes"
+mem.Push()
+// in `add-median-stats/write-tests` "write tests": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+mem.Pop("stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates")
+mem.Push()
+// done `add-median-stats/write-tests` "write tests" → stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates
+// in `add-median-stats/go-test-passes` "go test ./... passes": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+mem.Pop("go test ./... → ok stats 0.006s")
+mem.Push()
+// done `add-median-stats/go-test-passes` "go test ./... passes" → go test ./... → ok stats 0.006s
+// nothing to push: `add-median-stats` has no open step: pop it with its result.
+mem.Pop("Median in stats.go:17; tests in stats_test.go; go test ./... → ok")
+// done `add-median-stats` "add Median to stats" → Median in stats.go:17; tests in stats_test.go; go test ./... → ok
 ```
 
 The agent looked at mem, planned the goal with the condition as a step of its
@@ -207,12 +212,13 @@ every step done and the goal still open, held by the session that began it.
 
 The facts, across their three sessions:
 
-```
-gnovm_run {"name": "mem", "code": "mem.Fact(\"staging-db\", \"The staging database is db-stg-7.\")\nmem.Fact(\"on-call\", \"The on-call engineer is Sam Okafor.\")"}
-  fact `staging-db` is new
-  fact `on-call` is new
-gnovm_run {"name": "mem", "code": "mem.Fact(\"staging-db\", \"The staging database is db-stg-9.\")"}
-  fact `staging-db` changed (was "The staging database is db-stg-7.")
+```go mem
+mem.Fact("staging-db", "The staging database is db-stg-7.")
+mem.Fact("on-call", "The on-call engineer is Sam Okafor.")
+// fact `staging-db` is new
+// fact `on-call` is new
+mem.Fact("staging-db", "The staging database is db-stg-9.")
+// fact `staging-db` changed (was "The staging database is db-stg-7.")
 ```
 
 Setting a fact again replaces it, so mem holds one staging database, the
@@ -232,19 +238,29 @@ what is due, what is open and next, and the newest facts.
 The agent works it out in the session's scratch machine instead of adding it
 up in its head, and prints every wait, not only the total:
 
-```
-gnovm_run {"code":"w := 200\ntotal := 0\nfor i := 1; i <= 10; i++ {\n\tif w > 30000 {\n\t\tw = 30000\n\t}\n\ttotal += w\n\tfmt.Println(\"retry\", i, \"wait\", w, \"ms  cumulative\", total, \"ms\")\n\tw *= 2\n}\nfmt.Println(\"the 10th retry goes out after\", total, \"ms =\", total/1000, \"s\")"}
-  retry 1 wait 200 ms  cumulative 200 ms
-  retry 2 wait 400 ms  cumulative 600 ms
-  retry 3 wait 800 ms  cumulative 1400 ms
-  retry 4 wait 1600 ms  cumulative 3000 ms
-  retry 5 wait 3200 ms  cumulative 6200 ms
-  retry 6 wait 6400 ms  cumulative 12600 ms
-  retry 7 wait 12800 ms  cumulative 25400 ms
-  retry 8 wait 25600 ms  cumulative 51000 ms
-  retry 9 wait 30000 ms  cumulative 81000 ms
-  retry 10 wait 30000 ms  cumulative 111000 ms
-  the 10th retry goes out after 111000 ms = 111 s
+```go scratch
+w := 200
+total := 0
+for i := 1; i <= 10; i++ {
+	if w > 30000 {
+		w = 30000
+	}
+	total += w
+	fmt.Println("retry", i, "wait", w, "ms  cumulative", total, "ms")
+	w *= 2
+}
+fmt.Println("the 10th retry goes out after", total, "ms =", total/1000, "s")
+// retry 1 wait 200 ms  cumulative 200 ms
+// retry 2 wait 400 ms  cumulative 600 ms
+// retry 3 wait 800 ms  cumulative 1400 ms
+// retry 4 wait 1600 ms  cumulative 3000 ms
+// retry 5 wait 3200 ms  cumulative 6200 ms
+// retry 6 wait 6400 ms  cumulative 12600 ms
+// retry 7 wait 12800 ms  cumulative 25400 ms
+// retry 8 wait 25600 ms  cumulative 51000 ms
+// retry 9 wait 30000 ms  cumulative 81000 ms
+// retry 10 wait 30000 ms  cumulative 111000 ms
+// the 10th retry goes out after 111000 ms = 111 s
 ```
 
 and answers from those lines: "111 s. The waits are 200, 400, 800, 1600,

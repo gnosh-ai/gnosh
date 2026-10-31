@@ -42,25 +42,25 @@ func TestHostFrames(t *testing.T) {
 	}
 
 	ok("s1", nil, `mem.Goal("fix the flaky test", "fix-flaky").Steps("find-cause: find why it fails", "rerun: rerun the suite")`)
-	res := ok("s1", nil, `mem.PushFrame(mem.Frame("fix-flaky"))`)
+	res := ok("s1", nil, `mem.Push("fix-flaky")`)
 	require.Equal(t, []MemFrame{{Kind: "push", Id: "fix-flaky", Purpose: "fix the flaky test", Session: "s1"}}, res.Frames)
 	require.Len(t, res.MemGoals, 1, "a push changes the goal, as the task list sees it")
 
 	// The stack is the agent's: with none given, the session is at the root.
-	res = run("s1", nil, `mem.PopFrame("x")`)
+	res = run("s1", nil, `mem.Pop("x")`)
 	require.ErrorContains(t, res.Err, "nothing to pop: you are at the root")
-	res = run("s1", nil, `mem.PushFrame(mem.Frame().NextTodo())`)
+	res = run("s1", nil, `mem.Push()`)
 	require.Contains(t, res.Output, "nothing to push at the root")
 
 	stack := []string{"fix-flaky"}
-	res = ok("s1", stack, `mem.PushFrame(mem.Frame().NextTodo())`)
+	res = ok("s1", stack, `mem.Push()`)
 	require.Equal(t, []MemFrame{{Kind: "push", Id: "fix-flaky/find-cause", Purpose: "find why it fails", Session: "s1"}}, res.Frames)
 	stack = append(stack, "fix-flaky/find-cause")
 	ok("s1", stack, `mem.Think("port", "the shared port is 8080")`)
 
 	// Pop then push in one input: both events, in order; no hint, since a
 	// push followed.
-	res = ok("s1", stack, "mem.PopFrame(\"it races on the shared port\")\nmem.PushFrame(mem.Frame().NextTodo())")
+	res = ok("s1", stack, "mem.Pop(\"it races on the shared port\")\nmem.Push()")
 	require.Equal(t, []MemFrame{
 		{Kind: "pop", Id: "fix-flaky/find-cause", Purpose: "find why it fails", Result: "it races on the shared port", Thoughts: 1, Session: "s1"},
 		{Kind: "push", Id: "fix-flaky/rerun", Purpose: "rerun the suite", Session: "s1"},
@@ -76,7 +76,7 @@ func TestHostFrames(t *testing.T) {
 	require.Equal(t, "thought `fix-flaky/find-cause#port`: the shared port is 8080\n", res.Output)
 	res = ok("s1", stack, `mem.Recall("shared port")`)
 	require.Contains(t, res.Output, "thought `fix-flaky/find-cause#port`: the shared port is 8080\n")
-	res = ok("s1", stack, `mem.PopFrame("20 of 20 passed")`)
+	res = ok("s1", stack, `mem.Pop("20 of 20 passed")`)
 	require.True(t, strings.HasSuffix(res.Output, "next: pop `fix-flaky` with the evidence that it holds\n"), res.Output)
 	seq := res.Seq
 	stack = []string{"fix-flaky"}
@@ -100,7 +100,7 @@ func TestHostFrames(t *testing.T) {
 	require.Contains(t, res.Output, "held by this session")
 
 	// Another session: the step is held.
-	res = run("s2", nil, `mem.PushFrame(mem.Frame("fix-flaky/rerun"))`)
+	res = run("s2", nil, `mem.Push("fix-flaky/rerun")`)
 	require.ErrorContains(t, res.Err, "`fix-flaky/rerun` is held by session s1: only it can pop, close or drop it")
 	require.Empty(t, res.Frames, "a refused input records no event")
 
