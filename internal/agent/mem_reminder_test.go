@@ -28,8 +28,8 @@ func TestMemReminderDue(t *testing.T) {
 	reply := message.Message{Role: message.Assistant, Parts: []message.ContentPart{message.TextContent{Text: "counting"}}}
 	memCall := message.Message{Role: message.Assistant, Parts: []message.ContentPart{message.ToolCall{ID: "c", Name: gnovmtools.RunToolName, Input: `{"name": "mem", "code": "mem.Show()"}`, Finished: true}}}
 	scratch := message.Message{Role: message.Assistant, Parts: []message.ContentPart{message.ToolCall{ID: "s", Name: gnovmtools.RunToolName, Input: `{"code": "1 + 1"}`, Finished: true}}}
-	reminder := message.Message{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: memReminder(nil), Hidden: true}}}
-	quoted := message.Message{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "what is " + memReminder(nil)}}}
+	reminder := message.Message{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: memReminder(nil, ""), Hidden: true}}}
+	quoted := message.Message{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "what is " + memReminder(nil, "")}}}
 	replies := func(n int) []message.Message { return slices.Repeat([]message.Message{reply}, n) }
 	for _, c := range []struct {
 		name string
@@ -56,11 +56,11 @@ func TestMemReminderDue(t *testing.T) {
 func TestMemReminderText(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "<system_reminder>mem hasn't been used recently. If you're working on a task of two or more steps, plan it in mem (gnovm_run name \"mem\": mem.Goal(\"…\").Steps(\"…\", \"…\")) and mark each step done as it finishes; if it is planned, carry on from its next step. This is just a gentle reminder - ignore if not applicable.\n</system_reminder>", memReminder(nil))
+	require.Equal(t, "<system_reminder>mem hasn't been used recently. If you're working on a task of two or more steps, plan it in mem (gnovm_run name \"mem\": mem.Goal(\"…\").Steps(\"…\", \"…\")) and mark each step done as it finishes; if it is planned, carry on from its next step. This is just a gentle reminder - ignore if not applicable.\n</system_reminder>", memReminder(nil, ""))
 	withList := memReminder([]session.Todo{
 		{Content: "Write the test", Status: session.TodoStatusCompleted},
 		{Content: "Land it", Status: session.TodoStatusInProgress},
-	})
+	}, "")
 	require.True(t, strings.HasSuffix(withList, ".\n\n\nHere is where your goal in mem stands:\n\n[1. [completed] Write the test\n2. [in_progress] Land it]</system_reminder>"), withList)
 }
 

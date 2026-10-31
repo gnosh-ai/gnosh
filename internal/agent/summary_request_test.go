@@ -368,7 +368,7 @@ func TestSummaryLeavesATranscript(t *testing.T) {
 			framed = text
 		}
 	}
-	require.Equal(t, continuedSummary+"\n\nthe summary\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: "+path, framed)
+	require.Equal(t, continuedSummary+"\n\nthe summary\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the transcript of that conversation, as you were sent it, at: "+path, framed)
 
 	// With no transcript, as with no data directory, the summary is not
 	// said to have one.

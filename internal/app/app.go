@@ -883,7 +883,7 @@ func warningLine(n notify.Notification, sessionID string) (string, bool) {
 	switch n.Type {
 	case notify.TypeWarning:
 		return "warning: " + n.Message + "\n", true
-	case notify.TypeGoalMet:
+	case notify.TypeGoalMet, notify.TypeFramePopped:
 		return n.Message + "\n", true
 	}
 	return "", false

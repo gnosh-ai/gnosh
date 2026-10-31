@@ -20,6 +20,9 @@ const (
 	// AgentEventTypeGoalMet reports a goal the judge found met, its text in
 	// Error, as notify.TypeGoalMet's value. It is not a failed run either.
 	AgentEventTypeGoalMet AgentEventType = "goal_met"
+	// AgentEventTypeFramePopped reports the pop of a frame in mem, its text
+	// in Error, as notify.TypeFramePopped's value. Informational too.
+	AgentEventTypeFramePopped AgentEventType = "frame_popped"
 )
 
 // MarshalText implements the [encoding.TextMarshaler] interface.

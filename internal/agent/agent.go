@@ -217,6 +217,10 @@ type SessionAgentCall struct {
 	// memLine marks a prompt the user sent a session that offers mem and
 	// Gno, which takes memLine last when it goes out, queued or not.
 	memLine bool
+	// frameLine is what the prompt tells the model of the frames in mem it
+	// is in (frameStacks.stackLine), read as the prompt goes out; "" at the
+	// root. It goes with memLine.
+	frameLine string
 	// channelMeta holds the attributes of the <channel> element a
 	// channel-originated turn was started with, parsed once at Run
 	// entry. It survives the auto-summarize continuation, whose Prompt
@@ -325,6 +329,9 @@ type sessionAgent struct {
 	// goals are the sessions' goals, kept by the coordinator that sets
 	// them; nil, there are none (see goalContinuation).
 	goals *goalBindings
+	// frames are the sessions' stacks of frames in mem (FRAMES.md), kept by
+	// the coordinator; nil, there are none, and nothing is cut.
+	frames *frameStacks
 	// memBlock, memChanged, memRecall and memSummarized are
 	// SessionAgentOptions'.
 	memBlock      func(sessionID string) string
@@ -444,6 +451,9 @@ type SessionAgentOptions struct {
 	// Goals are the sessions' goals (see Goal), shared by a coordinator's
 	// agents, which set them; nil, there are none.
 	Goals *goalBindings
+	// Frames are the sessions' stacks of frames in mem (FRAMES.md), shared
+	// by a coordinator's agents and its gnovm_run; nil, there are none.
+	Frames *frameStacks
 	// MemBlock is what the project's mem holds (gnovm's Lazy.MemBlock),
 	// for a new session's first prompt and again after each summary; nil
 	// or "", nothing.
@@ -505,6 +515,7 @@ func NewSessionAgent(
 		sessionStarts:         sessionStarts,
 		instructionsLoaded:    instructionsLoaded,
 		goals:                 opts.Goals,
+		frames:                opts.Frames,
 		memBlock:              opts.MemBlock,
 		memChanged:            opts.MemChanged,
 		memRecall:             opts.MemRecall,
@@ -1252,7 +1263,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// the summary's alone; the next step's tells whether the summary
 	// brought the conversation under the point (see compacts).
 	if _, summarized := a.justSummarized.Get(call.SessionID); !summarized &&
-		a.compacts(call.SessionID, int64(largeModel.CatwalkCfg.ContextWindow), currentSession.PromptTokens+currentSession.CompletionTokens) {
+		a.compacts(call.SessionID, int64(largeModel.CatwalkCfg.ContextWindow), currentSession.PromptTokens+currentSession.CompletionTokens-a.frames.estimate(call.SessionID)) {
 		if err := a.compactBeforeRequest(ctx, genCtx, &call); err != nil {
 			if persistErr := a.persistCanceledTurn(ctx, call, false); persistErr != nil {
 				return nil, persistErr
@@ -1267,8 +1278,10 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		}
 	}
 
-	// Add the user message to the session, with what mem recalls for it.
+	// Add the user message to the session, with what mem recalls for it
+	// and the frames in mem it is in.
 	a.recall(ctx, &call)
+	a.frameLine(ctx, &call)
 	_, err = a.createUserMessage(ctx, call)
 	if err != nil {
 		return nil, err
@@ -1289,6 +1302,11 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// What this turn's steps put in after their input, and where; see
 	// keepInjected.
 	var injected []injectedMessages
+	// cutSent marks a step whose request went out after a pop removed
+	// part of the conversation, with the estimate of what it removed still
+	// held against the session's counts: that step's usage report counts
+	// the cut list, and spends the estimate (see frameStacks.estimate).
+	var cutSent bool
 	var shouldSummarize bool
 	// The tool calls the agent was caught repeating, when that is what
 	// stopped the run; see loopContinuation.
@@ -1319,12 +1337,17 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		TopK:             call.TopK,
 		FrequencyPenalty: call.FrequencyPenalty,
 		PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
-			prepared.Messages = keepInjected(options.Messages, injected)
+			// What a frame's pop removed from the model's context is cut
+			// from every step's list, the turn's earlier steps' additions
+			// put back first so what fell inside a pop goes with it.
+			prepared.Messages = cutPopped(keepInjected(options.Messages, injected), a.frames.ranges(callContext, call.SessionID))
 			for i := range prepared.Messages {
 				prepared.Messages[i].ProviderOptions = nil
 			}
 			inputLen := len(options.Messages)
 			var added []fantasy.Message
+			popped := a.frames.estimate(call.SessionID)
+			cutSent = popped > 0
 
 			// Use latest tools (updated by SetTools when MCP tools
 			// change).
@@ -1345,6 +1368,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			a.publishCanceledQueueDrops(canceledRunIDs)
 			for _, queued := range fold {
 				a.recall(callContext, &queued)
+				a.frameLine(callContext, &queued)
 				userMessage, createErr := a.createUserMessage(callContext, queued)
 				if createErr != nil {
 					return callContext, prepared, createErr
@@ -1357,6 +1381,11 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 				return callContext, prepared, err
 			}
 			added = append(added, reminder...)
+			large, err := a.remindOfLargeStep(callContext, call.SessionID, currentSession.PromptTokens+currentSession.CompletionTokens-popped, int64(largeModel.CatwalkCfg.ContextWindow))
+			if err != nil {
+				return callContext, prepared, err
+			}
+			added = append(added, large...)
 			if len(added) > 0 {
 				prepared.Messages = append(prepared.Messages, added...)
 				injected = append(injected, injectedMessages{at: inputLen, messages: added})
@@ -1383,7 +1412,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			callContext = context.WithValue(callContext, tools.SupportsImagesContextKey, largeModel.CatwalkCfg.SupportsImages)
 			callContext = context.WithValue(callContext, tools.ModelNameContextKey, largeModel.CatwalkCfg.Name)
 			callContext = tools.WithContextRoom(callContext, tools.NewContextRoom(readRoom(int64(largeModel.CatwalkCfg.ContextWindow),
-				a.autoCompactWindow(), currentSession.PromptTokens+currentSession.CompletionTokens, a.disableAutoSummarize)))
+				a.autoCompactWindow(), currentSession.PromptTokens+currentSession.CompletionTokens-popped, a.disableAutoSummarize)))
 			currentAssistant = &assistantMsg
 			return callContext, prepared, err
 		},
@@ -1553,6 +1582,12 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			usage, estimated := fallbackStepUsage(stepMessages, stepResult)
 			costBefore := updatedSession.Cost
 			a.updateSessionUsage(largeModel, &updatedSession, usage, a.openrouterCost(stepResult.ProviderMetadata), estimated)
+			// A report for a request that went out after a pop counts the
+			// cut list: what the pop removed is no longer held against it.
+			if cutSent && !usageIsZero(usage) {
+				a.frames.counted(call.SessionID)
+				cutSent = false
+			}
 			// Only the usage is written: the title model's title, or a
 			// /rename, written since the Get is kept.
 			updatedSession, sessionErr := a.sessions.UpdateUsage(ctx, call.SessionID, updatedSession.PromptTokens, updatedSession.CompletionTokens, updatedSession.Cost-costBefore, updatedSession.EstimatedUsage)
@@ -1564,7 +1599,9 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		},
 		StopWhen: []fantasy.StopCondition{
 			func(_ []fantasy.StepResult) bool {
-				tokens := currentSession.CompletionTokens + currentSession.PromptTokens
+				// A pop in this step took part of the conversation out of
+				// the next request: the count is read net of it.
+				tokens := currentSession.CompletionTokens + currentSession.PromptTokens - a.frames.estimate(call.SessionID)
 				if a.compacts(call.SessionID, int64(largeModel.CatwalkCfg.ContextWindow), tokens) {
 					shouldSummarize = true
 					return true
@@ -2528,6 +2565,38 @@ func (a *sessionAgent) recall(ctx context.Context, call *SessionAgentCall) {
 	}
 }
 
+// frameLine gives a prompt that takes memLine what it tells the model of
+// the frames in mem the session is in, read as the prompt goes out, so a
+// prompt queued behind a turn that pushed or popped tells of the stack as
+// it then stands; "" at the root.
+func (a *sessionAgent) frameLine(ctx context.Context, call *SessionAgentCall) {
+	if call.memLine {
+		call.frameLine = a.frames.stackLine(ctx, call.SessionID)
+	}
+}
+
+// remindOfLargeStep is the line to put before the model's next reply when
+// the frame it is in has grown large (frameStacks.largeLine): kept as a
+// hidden user message, as the mem reminder is. tokens is the session's
+// running total net of what pops removed; cw the model's context window.
+func (a *sessionAgent) remindOfLargeStep(ctx context.Context, sessionID string, tokens, cw int64) ([]fantasy.Message, error) {
+	if a.disableAutoSummarize {
+		return nil, nil
+	}
+	line := a.frames.largeLine(ctx, sessionID, tokens, compactAt(cw, a.autoCompactWindow(), true))
+	if line == "" {
+		return nil, nil
+	}
+	msg, err := a.messages.Create(ctx, sessionID, message.CreateMessageParams{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: line, Hidden: true}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return msg.ToAIMessage(), nil
+}
+
 func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentCall) (message.Message, error) {
 	parts := []message.ContentPart{message.TextContent{Text: call.Prompt, Hidden: call.HiddenUserMessage, Notice: call.NoticeUserMessage}}
 	var attachmentParts []message.ContentPart
@@ -2745,7 +2814,7 @@ func continuedFrom(summary message.Message, transcript string) message.Message {
 		if text, ok := part.(message.TextContent); ok {
 			text.Text = continuedSummary + "\n\n" + text.Text
 			if _, err := os.Stat(transcript); transcript != "" && err == nil {
-				text.Text += "\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: " + transcript
+				text.Text += "\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the transcript of that conversation, as you were sent it, at: " + transcript
 			}
 			summary.Parts[i] = text
 			break

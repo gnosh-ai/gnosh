@@ -691,11 +691,11 @@ func (s *runStream) handle(ev any, stopSpinner func()) (done bool, err error) {
 		// than fail the run, as a goal met once did ("agent error: Goal
 		// met: …").
 		switch e.Payload.Type {
-		case proto.AgentEventTypeWarning, proto.AgentEventTypeGoalMet:
+		case proto.AgentEventTypeWarning, proto.AgentEventTypeGoalMet, proto.AgentEventTypeFramePopped:
 			if s.errOut != nil {
 				stop()
 				prefix := "warning: "
-				if e.Payload.Type == proto.AgentEventTypeGoalMet {
+				if e.Payload.Type != proto.AgentEventTypeWarning {
 					prefix = ""
 				}
 				_, _ = fmt.Fprintf(s.errOut, "%s%s\n", prefix, e.Payload.Error)
