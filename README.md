@@ -50,8 +50,8 @@ from a hosted API to one running on your own machine. On top of that:
   claimed, and a separate judge checks each closed goal against the
   conversation: [goals that outlive the session](#goals-that-outlive-the-session).
 - **Plans in frames.** A step done is cut from the model's context with its
-  result kept, so a long task never fills the window:
-  [frames](GNOMEM.md#frames).
+  result kept, so finished steps don't fill the window and compaction becomes
+  a backstop: [frames](GNOMEM.md#frames).
 - **Remembers in Gno.** What it found, what waits on you and the facts you
   told it stay in `mem` on your disk, and a new session starts with them:
   [memory that runs](#memory-that-runs).
