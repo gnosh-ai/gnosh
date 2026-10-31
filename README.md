@@ -157,9 +157,9 @@ the tests replay.
 
 ### What the agent runs
 
-These are the calls the agent made in the real runs above, replayed on a fresh
-project, with what each one shows it. A test replays them against every
-change to Gnosh, so they stay true. The goal, across its two sessions:
+These are calls like the ones the agent made in the real runs above, replayed
+on a fresh project in one session, with what each one shows it. A test
+replays them against every change to Gnosh, so they stay true. The goal:
 
 ```
 gnovm_run {"name": "mem", "code": "mem.Show()"}
@@ -192,15 +192,18 @@ gnovm_run {"name": "mem", "code": "mem.PopFrame(\"Median in stats.go:17; tests i
   done `add-median-stats` "add Median to stats" → Median in stats.go:17; tests in stats_test.go; go test ./... → ok
 ```
 
-The first session looked at mem, planned the goal with the condition as a step
-of its own, entered the goal and its first step as frames, and popped the step
-with what came of it. The fifth call is the second session's first look at
-mem; the first line of what it shows is what that session had already been
-given with your first message, and the session stands in the goal where the
-first one left it. Each pop removes the step's work from the model's context
-and keeps its result; the goal is popped last, with the evidence that it
-holds. A goal popped while one of its steps is open is refused, naming the
-step, and nothing from the call is kept.
+The agent looked at mem, planned the goal with the condition as a step of its
+own, entered the goal and its first step as frames, and popped the step with
+what came of it; the fifth call is a look at mem midway. Each pop removes the
+step's work from the model's context and keeps its result; the goal is popped
+last, with the evidence that it holds. A goal popped while one of its steps is
+open is refused, naming the step, and nothing from the call is kept.
+
+A goal belongs to the session that entered it. When the work goes on in
+another session, that session takes up the goal's free steps one frame at a
+time, but only the first session, resumed by its id, can pop or close the
+goal: in real runs on 31 October, a goal carried to a new session ended with
+every step done and the goal still open, held by the session that began it.
 
 The facts, across their three sessions:
 
@@ -215,7 +218,7 @@ gnovm_run {"name": "mem", "code": "mem.Fact(\"staging-db\", \"The staging databa
 Setting a fact again replaces it, so mem holds one staging database, the
 current one. Everything in mem has a name, printed in backticks, which the
 agent types back exactly: a goal's name comes from its title, its steps are
-numbered under it, and a fact's name is any path the agent gives it. A new
+named under it, and a fact's name is any path the agent gives it. A new
 session is told, with its first prompt, what mem holds: the rules you gave,
 what is due, what is open and next, and the newest facts.
 

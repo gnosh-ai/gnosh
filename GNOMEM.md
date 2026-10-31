@@ -159,8 +159,9 @@ frame the agent is in where the sidebar shows its work, `/mem log` lists
 each push and pop, and `gnosh run` prints what a pop took out of the
 context. A frame a session holds is its own: no other session, and not
 `/mem`, closes, drops or takes it; the session pops it, resumed by id if it
-has ended. The design, with its reasons, is FRAMES.md in the gnosh
-repository's notes.
+has ended. So a goal entered in one session stays open, even with every step
+done in later sessions, until that session is resumed: in real runs on 31
+October, readme-goal and long-goal-sessions both ended that way.
 
 ### A knowledge base
 
