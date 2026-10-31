@@ -4,7 +4,10 @@ reopened rather than made again, so nothing of it is left dropped, and the
 answer lists the steps.
 
 -- mem --
-mem.Goal("migrate to postgres 16").Steps("dump the old database", "restore into postgres 16", "switch the app over")
+m := mem.Todo("migrate to postgres 16")
+m.Todo("dump the old database")
+m.Todo("restore into postgres 16")
+m.Todo("switch the app over")
 -- prompt --
 Let's drop the postgres 16 migration, we're not doing it this quarter.
 -- prompt-new --

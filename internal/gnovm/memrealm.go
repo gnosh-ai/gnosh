@@ -389,7 +389,7 @@ func memPanicText(p any, bodyLine int, oneLine bool) string {
 	// mem.Fact(…).Fact(…), and Go's rule that models forget: a call over
 	// several lines ends each line with a comma, the last one too.
 	msg = strings.Replace(msg, "unexpected selector expression type *gnolang.tupleType",
-		"only mem.Goal(…) chains (.Steps, .Wait, .Ask): mem's other calls return nothing, so put each on its own line", 1)
+		"only mem.Todo(…) and mem.Frame(…) chain (.Todo, .Wait, .Ask, .Push): mem's other calls return nothing, so put each on its own line", 1)
 	if strings.Contains(msg, "missing ',' before newline in argument list") {
 		msg += " (a call over several lines needs a comma after its last argument too, as in Go)"
 	}

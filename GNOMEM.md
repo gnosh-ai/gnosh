@@ -1,37 +1,42 @@
 # GNOMEM: the agent's memory, in Gno
 
 Gnosh runs the Gno VM in the AI harness, and keeps the agent's memory there:
-the goals it is working on and their steps, what it tried and found, what it
-waits for, what it must ask you, the facts it was told to keep, and the rules
-you gave it. That memory, `mem`, is a Gno realm kept on disk for the project,
-with no size limit. A new session, on a new day, is told what mem holds and
-asks it what is next. It does not re-read a page of notes.
+the todos it is working on and the todos under them, what it tried and found,
+what it waits for, what it must ask you, the facts it was told to keep, and
+the rules you gave it. That memory, `mem`, is a Gno realm kept on disk for the
+project, with no size limit. A new session, on a new day, is told what mem
+holds and asks it what is next. It does not re-read a page of notes.
 
 Each project has one mem, shared by its worktrees and its sessions
 ([klash/gnomem/v2](internal/gnovm/klashlibs/klash/gnomem/v2/gnomem.gno)):
 
 ```go mem
-mem.Goal("release v2").Steps("bump the version", "tag: tag v2.0.0", "CI is green")
-// added goal `release-v2` "release v2"
-// added `release-v2/bump-version` "bump the version", `release-v2/tag` "tag v2.0.0", `release-v2/ci-green` "CI is green"; next: `release-v2/bump-version` "bump the version"
+r := mem.Todo("release v2")
+r.Todo("bump the version")
+r.Todo("tag the release")
+r.Todo("CI is green")
+// added `release-v2` "release v2"
+// added `release-v2/bump-version` "bump the version"
+// added `release-v2/tag-release` "tag the release"
+// added `release-v2/ci-green` "CI is green"
 mem.Push("release-v2")
 mem.Push()
-// in `release-v2` "release v2": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-// in `release-v2/bump-version` "bump the version": when it is done, pop it with what came of it and what the next step needs. …
+// in `release-v2` "release v2": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `release-v2/bump-version` "bump the version": when it is done, pop it with what came of it and what the next todo needs. …
 mem.Pop("now 2.0.0")
 mem.Push()
 // done `release-v2/bump-version` "bump the version" → now 2.0.0
-// in `release-v2/tag` "tag v2.0.0": when it is done, pop it with what came of it and what the next step needs. …
+// in `release-v2/tag-release` "tag the release": when it is done, pop it with what came of it and what the next todo needs. …
 mem.Show()
-// mem: 1 goal open
-// goals:
+// mem: 1 todo open
+// todos:
 //   [ ] `release-v2` "release v2" (1/3 done · this session · just now · held by this session, just now)
 //     [x] `release-v2/bump-version` "bump the version" → now 2.0.0
-//     [ ] `release-v2/tag` "tag v2.0.0" (held by this session, just now)  ← next
+//     [ ] `release-v2/tag-release` "tag the release" (held by this session, just now)  ← next
 //     [ ] `release-v2/ci-green` "CI is green"
 ```
 
-The step the agent is in is a *frame*: when it pops the frame with its
+The todo the agent is in is a *frame*: when it pops the frame with its
 result, Gnosh removes everything since the push from the model's context,
 and the result stays. While it is in a frame, the frame is held by its
 session, as the outline says, and no other session takes it. A long task is
@@ -59,61 +64,68 @@ done one frame at a time, the context never filling with finished work
 
 ## In use
 
-### A goal, carried across sessions
+### A todo, carried across sessions
 
 > *(for example)* **You:** Build the `greet` package: a go.mod, `Hello` with a
 > test, and a `make test` that runs the tests. Do the first step now; we'll
 > carry on tomorrow.
 
-The agent puts the goal in mem with each part as a step, does the
-first, and marks it done with what came of it. When a step turns out to be
-wrong for this machine (there is no `make` here), it notes why, drops that
-step and adds the one that replaces it, so mem shows the plan as it now
+The agent puts the task in mem as a todo with each part as a todo under it,
+does the first, and marks it done with what came of it. When one turns out to
+be wrong for this machine (there is no `make` here), it notes why, drops that
+todo and adds the one that replaces it, so mem shows the plan as it now
 stands, and why it changed:
 
 ```go mem
-mem.Goal("build greet").Steps("go-mod: go.mod for module greet", "hello: greet.go with Hello", "test: greet_test.go", "make-test: make test runs the tests")
-// added goal `build-greet` "build greet"
-// added `build-greet/go-mod` "go.mod for module greet", `build-greet/hello` "greet.go with Hello", `build-greet/test` "greet_test.go", `build-greet/make-test` "make test runs the tests"; next: `build-greet/go-mod` "go.mod for module greet"
+r := mem.Todo("build greet")
+r.Todo("go.mod")
+r.Todo("Hello in greet.go")
+r.Todo("a test for Hello")
+r.Todo("make test runs the tests")
+// added `build-greet` "build greet"
+// added `build-greet/go-mod` "go.mod"
+// added `build-greet/hello-greet-go` "Hello in greet.go"
+// added `build-greet/test-hello` "a test for Hello"
+// added `build-greet/make-test-runs-tests` "make test runs the tests"
 mem.Push("build-greet")
 mem.Push()
-// in `build-greet` "build greet": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-// in `build-greet/go-mod` "go.mod for module greet": when it is done, pop it with what came of it and what the next step needs. …
+// in `build-greet` "build greet": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `build-greet/go-mod` "go.mod": when it is done, pop it with what came of it and what the next todo needs. …
 mem.Pop("module greet, go 1.22")
-// done `build-greet/go-mod` "go.mod for module greet" → module greet, go 1.22
-// next: `build-greet/hello` "greet.go with Hello": mem.Push()
-mem.Note("build-greet/make-test", "make is not installed here")
-mem.Drop("build-greet/make-test", "no make on this machine")
-mem.Steps("build-greet", "test-sh: test.sh runs go test ./...")
-// noted on `build-greet/make-test` "make test runs the tests" as thought `make-not-installed-here`
-// dropped `build-greet/make-test` "make test runs the tests"; next: `build-greet/hello` "greet.go with Hello"
-// added `build-greet/test-sh` "test.sh runs go test ./..."; next: `build-greet/hello` "greet.go with Hello"
+// done `build-greet/go-mod` "go.mod" → module greet, go 1.22
+// next: `build-greet/hello-greet-go` "Hello in greet.go": mem.Push()
+mem.Note("build-greet/make-test-runs-tests", "make is not installed here")
+mem.Drop("build-greet/make-test-runs-tests", "no make on this machine")
+mem.Todo("test.sh runs the tests")
+// noted on `build-greet/make-test-runs-tests` "make test runs the tests" as thought `make-not-installed-here`
+// dropped `build-greet/make-test-runs-tests` "make test runs the tests"; next: `build-greet/hello-greet-go` "Hello in greet.go"
+// added `build-greet/test-sh-runs-tests` "test.sh runs the tests"
 mem.Show("build-greet")
 // [ ] `build-greet` "build greet" (1/4 done)
 //   held by this session
 //   made by this session, changed just now
-//   [x] `build-greet/go-mod` "go.mod for module greet" → module greet, go 1.22
-//   [ ] `build-greet/hello` "greet.go with Hello"  ← next
-//   [ ] `build-greet/test` "greet_test.go"
-//   [-] `build-greet/make-test` "make test runs the tests" → no make on this machine
-//   [ ] `build-greet/test-sh` "test.sh runs go test ./..."
+//   [x] `build-greet/go-mod` "go.mod" → module greet, go 1.22
+//   [ ] `build-greet/hello-greet-go` "Hello in greet.go"  ← next
+//   [ ] `build-greet/test-hello` "a test for Hello"
+//   [-] `build-greet/make-test-runs-tests` "make test runs the tests" → no make on this machine
+//   [ ] `build-greet/test-sh-runs-tests` "test.sh runs the tests"
 ```
 
 Tomorrow's session is told, with your first message, what mem has open and
-what is next, so it knows where the goal stands without being told; a
+what is next, so it knows where the task stands without being told; a
 session that stopped inside a frame stands in it again when it resumes.
 
-A goal the agent closes is not taken at its word. As the turn ends, a
+A todo the agent closes is not taken at its word. As the turn ends, a
 separate judge checks it against what mem shows of it and the end of the
 conversation. Met, you are told, in the TUI's status bar and on stderr from
 `gnosh run`, as in a real run in the TUI: `Goal met: create release notes
 file (The agent wrote …/notes.md with content 'release notes' and verified
-…)`. Not met, the goal is reopened with the judge's reason as a note, you are
+…)`. Not met, the todo is reopened with the judge's reason as a note, you are
 told so, and the agent goes back to it; when what is missing is yours to do
 or decide, it asks you instead.
 
-Your word counts too, and the verdict says when it is what closed the goal.
-With a release whose last step, "Lin signs off", is still open:
+Your word counts too, and the verdict says when it is what closed the todo.
+With a release whose last todo, "Lin signs off", is still open:
 
 > **You:** Lin signed off on 1.3.0 this morning, so we're done with that
 > release.
@@ -125,34 +137,42 @@ complete.)`.
 
 ### Frames
 
-A step of a plan is a *frame*: the agent enters it, works, and leaves it with
-a result, and everything between the push and the pop, the files it read, the
+A todo is a *frame*: the agent enters it, works, and leaves it with a
+result, and everything between the push and the pop, the files it read, the
 commands it ran, what you said to it in between, is removed from the model's
 context. The result stays, in the context and in mem; its file changes and
-mem changes are not undone. A long task is the plan's steps done one frame
-at a time: the context holds the plan, the results so far and the present
-step's work, however long the task runs, and compaction becomes a backstop.
+mem changes are not undone. This is what makes Gnosh functional AI: the
+agent's context is a call stack, a todo's work leaves it when the todo
+returns, and its result stays, as a function's locals go when it returns and
+its value comes back. A long task is its todos done one frame at a time: the
+context holds the plan, the results so far and the present todo's work,
+however long the task runs, and compaction becomes a backstop.
 
 ```go mem
-mem.Goal("fix the flaky test", "fix-flaky").Steps("find-cause: find why TestFlaky fails", "rerun: rerun the suite 20 times")
-mem.Push("fix-flaky")
+mem.Todo("fix the flaky test").Push()
+mem.Todo("find why TestFlaky fails")
+mem.Todo("rerun the suite 20 times")
 mem.Push()
-// added goal `fix-flaky` "fix the flaky test"
-// added `fix-flaky/find-cause` "find why TestFlaky fails", `fix-flaky/rerun` "rerun the suite 20 times"; next: `fix-flaky/find-cause` "find why TestFlaky fails"
-// in `fix-flaky` "fix the flaky test": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-// in `fix-flaky/find-cause` "find why TestFlaky fails": when it is done, pop it with what came of it and what the next step needs. …
+// added `fix-flaky-test` "fix the flaky test"
+// in `fix-flaky-test` "fix the flaky test": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// added `fix-flaky-test/find-why-testflaky-fails` "find why TestFlaky fails"
+// added `fix-flaky-test/rerun-suite-20-times` "rerun the suite 20 times"
+// in `fix-flaky-test/find-why-testflaky-fails` "find why TestFlaky fails": when it is done, pop it with what came of it and what the next todo needs. …
 mem.Think("the shared port is 8080")
-// thought `shared-port-8080` kept on `fix-flaky/find-cause`
+// thought `shared-port-8080` kept on `fix-flaky-test/find-why-testflaky-fails`
 mem.Pop("TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)")
 mem.Push()
-// done `fix-flaky/find-cause` "find why TestFlaky fails" → TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)
-// in `fix-flaky/rerun` "rerun the suite 20 times": when it is done, pop it with what came of it and what the next step needs. …
+// done `fix-flaky-test/find-why-testflaky-fails` "find why TestFlaky fails" → TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)
+// in `fix-flaky-test/rerun-suite-20-times` "rerun the suite 20 times": when it is done, pop it with what came of it and what the next todo needs. …
+mem.Thought("shared-port-8080")
+// thought `shared-port-8080` on `fix-flaky-test/find-why-testflaky-fails`: the shared port is 8080
 ```
 
-To that result Gnosh adds what the pop did: "Everything since you entered
-`fix-flaky/find-cause` was removed from your context: this result stays,
-and its 1 thought is in mem (mem.Show("fix-flaky/find-cause") lists them
-when you need them); the user still sees all of it. In it you edited
+To the pop's result Gnosh adds what the pop did: "Everything since you
+entered `fix-flaky-test/find-why-testflaky-fails` was removed from your
+context: this result stays, and its 1 thought is in mem
+(mem.Show("fix-flaky-test/find-why-testflaky-fails") lists it when you need
+it); the user still sees all of it. In it you edited
 internal/net/listen_test.go. Your reads inside it are forgotten: view a
 file before you edit it."
 
@@ -160,20 +180,21 @@ What a frame should remember beyond its result it keeps as a *thought*: a
 line on the frame, `mem.Think("the shared port is 8080")`, which costs
 nothing and removes nothing, and stays in mem under the frame after its pop.
 Its name is made for the agent, by the session's small model or, as here,
-from its words (`shared-port-8080`); a name the agent gives,
-`mem.Think("port", "…")`, stays as it is. `mem.Thought("shared-port-8080")`
-reads it by name from any frame below on the stack, `mem.Recall("shared
-port")` finds thoughts, frames and facts by meaning, and
+from its words (`shared-port-8080`), and no two thoughts in mem share one; a
+name the agent gives, `mem.Think("port", "…")`, stays as it is. So a thought
+is just its name: `mem.Thought("shared-port-8080")` reads it from anywhere,
+as the last call above does from the next todo, `mem.Recall("shared port")`
+finds thoughts, frames and facts by meaning, and
 `mem.Thought("shared-port-8080").Push()` turns a thought that needs real
-work into a step of the same name and enters it. You see every pop in the chat as the tool's result (the removed
+work into a todo of the same name and enters it. You see every pop in the chat as the tool's result (the removed
 rows stay there and in `/export`; only the model's view loses them), the
 frame the agent is in where the sidebar shows its work, `/mem log` lists
 each push and pop, and `gnosh run` prints what a pop took out of the
 context. A frame a session holds is its own: no other session, and not
 `/mem`, closes, drops or takes it; the session pops it, resumed by id if it
-has ended. So a goal entered in one session stays open, even with every step
-done in later sessions, until that session is resumed: in real runs on 31
-October, readme-goal and long-goal-sessions both ended that way.
+has ended. So a todo entered in one session stays open, even with every todo
+under it done in later sessions, until that session is resumed: in real runs
+on 31 October, readme-goal and long-goal-sessions both ended that way.
 
 ### A knowledge base
 
@@ -216,8 +237,9 @@ it moved there the week of 2026-10-26."
 
 A fact that changes is set again under the name it already has, rather than
 added a second time to disagree with the first. What the agent finds while it
-works is kept on the item it was working on, as thoughts, and a question for you
-is a step of its own (`mem.Ask`), which holds its goal until you answer.
+works is kept on the todo it was working on, as thoughts, and a question for
+you is a todo of its own (`mem.Ask`), which holds the todo it is under until
+you answer.
 
 ### Found by meaning, if you want it
 
@@ -264,9 +286,9 @@ unset, nothing is sent anywhere. `/mem` then ends with a line that says so, as
 >
 > *(next session)* **You:** Morning! Anything I should know before I start?
 
-The agent keeps the reminder in mem as an open goal; in one real run, a goal
-that waits on the expiry:
-`mem.Goal("rotate the staging API key").Steps("rotate the key").Wait("expires this week (2026-10-30)")`.
+The agent keeps the reminder in mem as an open todo; in one real run, a todo
+that waits on the expiry (the calls here are written as they are made now):
+`mem.Todo("rotate the staging API key").Wait("expires this week (2026-10-30)")`.
 A new session is given what mem has open, and what waits on you, along with
 its first prompt, so a check-in like this one brings the reminder back: "So:
 **rotate the staging API key today** — it expires 2026-10-30. Want me to take
@@ -280,7 +302,7 @@ reminder back on every check-in (3 of 3), and beside an unrelated task it
 raised it in 4 runs of 4 that morning and in 8 of 13 on later builds. How it
 was kept decided it. Kept as a question for you, Gnosh's own line shows it as
 the session starts (`mem waiting on you: …`), every time, and the agent
-raised it too in 6 runs of 8. Kept as a goal that waits for "our next
+raised it too in 6 runs of 8. Kept as a todo that waits for "our next
 conversation", it went unsaid every time (3 of 3), so such a wait now points
 the agent to a question instead, which it took in 2 runs of 2. With the
 earlier mem, whose recipe told the model to use mem only where the task at
@@ -296,7 +318,7 @@ A reminder can be for a day:
 > when?
 
 In a real run the agent kept
-`mem.Goal("renew TLS cert for api.acme.test").Wait("2026-11-03")`, a day of
+`mem.Todo("renew TLS cert for api.acme.test").Wait("2026-11-03")`, a day of
 the right year, and the next session answered: "One reminder:
 **`renew-tls-cert-api`** — renew the TLS cert for api.acme.test, scheduled for
 **2026-11-03**."
@@ -308,8 +330,8 @@ A reminder can wait on something happening rather than on a day:
 >
 > *(next session)* **You:** Morning. What's on?
 
-The agent kept `mem.Goal("bump the gno pin").Wait("PR #6399 merged")`, and
-the next session opened with it among the open goals,
+The agent kept `mem.Todo("bump the gno pin").Wait("PR #6399 merged")`, and
+the next session opened with it among the open todos,
 ``- `bump-gno-pin` "bump the gno pin" (just now) waits for: PR #6399 merged``.
 In a real run the check-in got "One thing: goal `bump-gno-pin` (bump the gno
 pin) — still blocked on PR #6399", after the agent had looked the pull
@@ -376,9 +398,10 @@ pasted, then changed the database to the wrong one. Its calls come first,
 after ❯; the notice is what the next session starts with; the rest is you:
 
 ```
-❯ mem.Goal("release v2").Steps("bump the version", "tag: tag v2.0.0").Ask("which day suits you for the release?")
-  added goal `release-v2` "release v2"
-  added `release-v2/bump-version` "bump the version", `release-v2/tag` "tag v2.0.0"; next: `release-v2/bump-version` "bump the version"
+❯ r := mem.Todo("release v2"); r.Todo("bump the version"); r.Todo("tag the release"); r.Ask("which day suits you for the release?")
+  added `release-v2` "release v2"
+  added `release-v2/bump-version` "bump the version"
+  added `release-v2/tag-release` "tag the release"
   asked `release-v2/which-day-suits-you` "which day suits you for the release?" (for the user); `release-v2` waits on it; next: `release-v2/bump-version` "bump the version"
 ❯ mem.Fact("staging-db", "The staging database is db-stg-7.")
   fact `staging-db` is new
@@ -388,13 +411,13 @@ after ❯; the notice is what the next session starts with; the rest is you:
   fact `staging-db` changed (was "The staging database is db-stg-7.")
 mem waiting on you: "which day suits you for the release?" (release-v2/which-day-suits-you)
 /mem
-  mem: 1 goal open, 1 question for the user · 2 facts
+  mem: 1 todo open, 1 question for the user · 2 facts
   questions for the user:
     [?] `release-v2/which-day-suits-you` "which day suits you for the release?"
-  goals:
+  todos:
     [ ] `release-v2` "release v2" (0/3 done · session "Release v2" · just now · waits on the user)
       [ ] `release-v2/bump-version` "bump the version"  ← next
-      [ ] `release-v2/tag` "tag v2.0.0"
+      [ ] `release-v2/tag-release` "tag the release"
       [?] `release-v2/which-day-suits-you` "which day suits you for the release?"
   facts, newest first:
     `staging-db` = The staging database is db-stg-8.
@@ -414,7 +437,7 @@ mem waiting on you: "which day suits you for the release?" (release-v2/which-day
   redacted it in 1 place; gnosh rewrites mem's files
   (mem's journal was written again without what was erased; its store and index are built afresh from it)
 /mem find sk-live
-  nothing in mem matches "sk-live": Find matches the words as they were stored; /mem lists 1 goal, 0 rules and 2 facts
+  nothing in mem matches "sk-live": Find matches the words as they were stored; /mem lists 1 todo, 0 rules and 2 facts
 /mem log 4
   #3 2026-10-30 10:12, the agent in "Release v2": (redacted)
       fact `deploy`: "Deploy with the key (redacted), then run make deploy."
@@ -429,14 +452,14 @@ mem waiting on you: "which day suits you for the release?" (release-v2/which-day
 ```
 
 `/mem` alone shows the outline the agent reads: what waits on you, each open
-goal with its next step and the session that made it, and the newest facts.
-Past ten facts it lists the rest by the first part of their names, as
+todo with what is next under it and the session that made it, and the newest
+facts. Past ten facts it lists the rest by the first part of their names, as
 ``… 22 more facts, in `api/` (1), `auth/` (1), …: /mem show api lists a group``.
 `/mem log` lists every change: when, who made it (you, or the agent by its
 session's title), the call, and what it changed. `/mem undo` takes a change
 back, as a change of yours. `/mem redact` takes a secret's exact text out of
-mem and out of its history, and `/mem forget` erases a goal, a step, a fact
-or a rule with its history; both write mem's journal again without it, and
+mem and out of its history, and `/mem forget` erases a todo, a fact or a
+rule with its history; both write mem's journal again without it, and
 neither can be undone. `/mem show` shows one item in full.
 
 From a terminal, with no session and no model, `gnosh mem` prints the same
@@ -558,7 +581,7 @@ Gnosh's system prompt carries a short recipe, so the model needs no setup:
 `mem` is made the first time it is used. What the recipe tells the model:
 
 - **When a session starts**, it is given, with its first prompt, the rules you
-  gave, what is due, what waits on you, the open goals with what is next in
+  gave, what is due, what waits on you, the open todos with what is next in
   each, and the newest facts; `mem.Show()` gives the whole outline. It is
   given them again after a summary, and with your next prompt when you come
   back to a session after mem changed elsewhere, in another session or by
@@ -567,19 +590,20 @@ Gnosh's system prompt carries a short recipe, so the model needs no setup:
 - **When a task starts**: `mem.Show()`, and carry on from `← next`. When mem
   does not hold what it was asked, say so, and never build an answer out of
   the facts beside it.
-- **A task of two or more steps**: `mem.Goal("…").Steps("name: purpose",
-  "…")`, then the steps as frames: `mem.Push("goal")` enters
-  the goal, `mem.Push()` its first step, and
-  `mem.Pop("what came of it")` with the next push on the next line
-  moves on; a pop removes the step's work from the model's context and keeps
-  the result. A goal cannot be done while a step of it is open, so a success
-  condition is a step ("go test ./... passes"), popped only after its check
-  has run, and a goal it closes is judged before it counts as done.
+- **A task of two or more steps**: `mem.Todo("…").Push()` adds a todo and
+  enters it, `mem.Todo("…")` for each part adds the work under it, named for
+  the agent, and then those todos as frames: `mem.Push()` enters the first,
+  and `mem.Pop("what came of it")` with the next push on the next line
+  moves on; a pop removes the todo's work from the model's context and keeps
+  the result. A todo cannot be done while one under it is open, so a success
+  condition is a todo ("go test ./... passes"), popped only after its check
+  has run, and a task it closes is judged before it counts as done.
 - **What should outlive a pop is a thought**: `mem.Think("…")` on the frame
-  it stands in, found again by name, by meaning (`mem.Recall`), or in
-  the frame's outline, and dived into with `mem.Push`. **A question
-  for you**: `mem.Ask(name, "…")`, answered with Done.
-- **Later, or when something happens**: `mem.Goal("…").Wait("2026-12-01")`,
+  it stands in, found again by name (`mem.Thought`), by meaning
+  (`mem.Recall`), or in the frame's outline, and dived into with
+  `mem.Thought(name).Push()`. **A question for you**: `mem.Ask(name, "…")`,
+  or `mem.Todo("…").Ask("…")`, answered with Done.
+- **Later, or when something happens**: `mem.Todo("…").Wait("2026-12-01")`,
   or `.Wait("PR #6399 merged")`.
 - **Facts and rules**: `mem.Fact("cmd/test", "go test -race ./...")` for a
   command, how something works, a decision and why, or where something is,
@@ -613,51 +637,53 @@ type Todo struct {
 	Wait    string   // a day ("2026-12-01") or words ("PR #6399 merged"); "" none
 	For     string   // "user": a question or request for you
 	Doing   string   // the session that holds it
-	Steps   []string // its steps' names, in order
-	Notes   []note   // its thoughts, oldest first: name, text, the step made from it
+	Steps   []string // the names of the todos under it, in order
+	Notes   []note   // its thoughts, oldest first: name, text, the todo made from it
 	// ...
 }
 
 type Frame struct { Id, Purpose, Result, State, Doing string; Todos []*Frame; Thoughts []Thought } // a Todo seen through the stack
-type Thought struct { Text string; Frame *Frame } // Name() its name, given or made from the text
+type Thought struct { Text string; Frame *Frame } // Name() its name, given or made from the text; Frame the todo made from it, if any
 type Namable interface { Name() string; Kind() string; Says() string } // *Frame, Thought and Fact
 
-func (m *Mem) Frame(id ...string) *Frame         // the present frame, or one by id; f.NextTodo() its first step to do
-func (m *Mem) NewFrame(name string, purpose ...string) *Frame
-func (m *Mem) Push(f *Frame)                // enter it: from here the context will be cut
+func (m *Mem) Todo(task string) *Frame      // a todo under the frame the agent is in, or a top-level one at the root, named for it
+func (f *Frame) Todo(task string) *Frame    // a todo under f, without entering f: r := mem.Todo("…"); r.Todo("…")
+func (f *Frame) Wait(until string) *Frame   // mem.Todo("renew the TLS cert").Wait("2026-12-01")
+func (f *Frame) Ask(question string) *Frame // a question for you, as a todo under f
+func (f *Frame) Push()                      // enter it: from here the context will be cut
+func (f *Frame) NextTodo() *Frame           // the first todo under it to do; nil for none
+func (m *Mem) Frame(id ...string) *Frame    // the present frame, or one by id
+func (m *Mem) Push(id ...string)            // enter the present frame's next todo, or the frame with that id
 func (m *Mem) Pop(result string)            // leave it done: everything since the push is removed
-func (m *Mem) Think(text string) Thought          // a thought on the present frame, named for you; or Think(name, text)
-func (m *Mem) Thought(name string) Thought
+func (m *Mem) Think(args ...string) Thought // Think(text): a thought on the present frame, named for the agent; or Think(name, text)
+func (m *Mem) Thought(name string) Thought  // a thought by name, from anywhere
+func (t Thought) Push(why ...string)        // a todo named as the thought, made if it has none, entered
 func (m *Mem) Recall(words string) []Namable
-func (m *Mem) Push(t Thought, why ...string)
-func (m *Mem) Goal(title string, name ...string) Goal // .Steps(...), .Wait(...), .Ask(...), .Note(...), .Start()
-func (m *Mem) Steps(name string, titles ...string)
 func (m *Mem) Ask(name, question string)
 func (m *Mem) Start(name string)
 func (m *Mem) Done(name string, result ...string)
 func (m *Mem) Drop(name, why string)
-func (m *Mem) Reopen(name string)
+func (m *Mem) Reopen(name string, why ...string)
 func (m *Mem) Note(name, note string)
 func (m *Mem) Wait(name, until string)
-func (m *Mem) Fact(name, fact string)            // or Fact(text), named for you
+func (m *Mem) Fact(args ...string)          // Fact(name, text); or Fact(text), named for the agent
 func (m *Mem) Rule(name, rule string)
 func (m *Mem) Forget(name string)
 func (m *Mem) Redact(secret string)
 func (m *Mem) Find(words string) string
 func (m *Mem) Show(names ...string) string
-func (m *Mem) JSON(names ...string) string
 func (m *Mem) Next(name string) string
 ```
 
 - **Names, not numbers.** Everything has a lowercase name, printed in
-  backticks: a goal's comes from its title (`release-v2`) or is given, a
-  step's is given ("tag: tag v2.0.0", `mem.NewFrame("tag", …)`) or made from
-  its title's words (`release-v2/bump-version`), a thought's or a fact's is
-  given (`mem.Think("port", …)`, `mem.Fact("cmd/test", …)`) or made for the
-  agent when it gives only the text: Gnosh asks its small model for two to
-  four words, falls back to the text's own words, and adds -2, -3 when the
-  name is taken. A goal's name is never reused, and a wrong name is answered
-  with what it should have been.
+  backticks. A todo's is made from its task (`release-v2`; one added under
+  it, `release-v2/bump-version`), and a thought's or a fact's is given
+  (`mem.Think("port", …)`, `mem.Fact("cmd/test", …)`) or made for the agent
+  when it gives only the text: Gnosh asks its small model for two to four
+  words, falls back to the text's own words, and adds -2, -3 when the name
+  is taken. No two thoughts in mem share a name, so a thought is just its
+  name; a top-level todo's name is never given twice; and a wrong name is
+  answered with what it should have been.
 - **The stack is Gnosh's.** mem keeps the tree; which frames a session is
   in is derived from the session's own pushes and pops, kept with each
   `gnovm_run` result, so a /branch or a rewind copy starts at the root, and
@@ -685,8 +711,8 @@ func (m *Mem) Next(name string) string
   stays, prompts, replies and tool results, and Gnosh names the sessions
   that still show a redacted secret.
 - **Short by construction.** Show's outline stays under about 3000 bytes:
-  the rules, what is due, the open goals newest first (a long run of finished
-  steps folded into one line), the goals closed lately, and the newest facts,
+  the rules, what is due, the open todos newest first (a long run of finished
+  todos folded into one line), the todos closed lately, and the newest facts,
   with the rest of them by group.
 
 ## The machines

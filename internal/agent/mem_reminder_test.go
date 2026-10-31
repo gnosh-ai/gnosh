@@ -56,7 +56,7 @@ func TestMemReminderDue(t *testing.T) {
 func TestMemReminderText(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "<system_reminder>mem hasn't been used recently. If you're working on a task of two or more steps, plan it in mem (gnovm_run name \"mem\": mem.Goal(\"…\").Steps(\"…\", \"…\")) and mark each step done as it finishes; if it is planned, carry on from its next step. This is just a gentle reminder - ignore if not applicable.\n</system_reminder>", memReminder(nil, ""))
+	require.Equal(t, "<system_reminder>mem hasn't been used recently. If you're working on a task of two or more steps, plan it in mem (gnovm_run name \"mem\": mem.Todo(\"…\").Push(), then mem.Todo(\"…\") for each step) and pop each step with its result as it finishes; if it is planned, carry on from its next todo. This is just a gentle reminder - ignore if not applicable.\n</system_reminder>", memReminder(nil, ""))
 	withList := memReminder([]session.Todo{
 		{Content: "Write the test", Status: session.TodoStatusCompleted},
 		{Content: "Land it", Status: session.TodoStatusInProgress},

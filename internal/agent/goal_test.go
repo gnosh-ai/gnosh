@@ -116,6 +116,18 @@ func (r goalRun) mem(code string) string {
 	return res.Output
 }
 
+// memUnbound runs code in mem with no /goal bound, as the session was
+// before /goal: a todo it adds at the root is top-level.
+func (r goalRun) memUnbound(code string) string {
+	r.t.Helper()
+	client, err := r.goals.client()
+	require.NoError(r.t, err)
+	res, err := client.Run(context.Background(), gnovm.RunRequest{Project: r.goals.project, Session: r.sessionID, Name: gnovm.MemVM, Code: code})
+	require.NoError(r.t, err, code)
+	require.NoError(r.t, res.Err, code)
+	return res.Output
+}
+
 // goal is the session's goal, and whether it is set.
 func (r goalRun) goal() (Goal, bool) {
 	return r.goals.get(context.Background(), r.sessionID)
@@ -158,7 +170,7 @@ func TestGoalDrivesTheTurnFromMem(t *testing.T) {
 	main := &promptAwareModel{turns: &turns, answer: func(string) string {
 		switch turns.Load() {
 		case 1:
-			r.mem(`mem.Steps("tests-pass", "fix the parser")`)
+			r.mem(`mem.Todo("fix the parser")`)
 			return "Planned."
 		case 2:
 			r.mem(`mem.Done("tests-pass/fix-parser", "fixed"); mem.Done("tests-pass", "go test ./... → ok")`)
@@ -184,7 +196,7 @@ func TestGoalDrivesTheTurnFromMem(t *testing.T) {
 	require.Equal(t, []string{"The check found the goal not met: the tests still fail. It is reopened, and the agent goes back to it"}, r.notices(notify.TypeWarning))
 	prompts := r.hiddenPrompts()
 	require.Len(t, prompts, 2)
-	require.Contains(t, prompts[0], "Its next step is `tests-pass/fix-parser` \"fix the parser\"")
+	require.Contains(t, prompts[0], "Its next todo is `tests-pass/fix-parser` \"fix the parser\"")
 	require.Contains(t, prompts[1], "The check found the goal `tests-pass` not met: the tests still fail")
 	require.Contains(t, r.mem(`mem.Show("tests-pass")`), "the check found it not met: the tests still fail")
 }
@@ -198,11 +210,11 @@ func TestEveryGoalClosedIsJudged(t *testing.T) {
 	main := &promptAwareModel{turns: &turns, answer: func(string) string {
 		switch turns.Load() {
 		case 1:
-			r.mem(`mem.Goal("fix the login loop", "fix-login").Steps("set SameSite on the cookie")`)
-			r.mem(`mem.Done("fix-login/set-samesite-cookie", "SameSite=Lax"); mem.Done("fix-login", "fixed in auth.go")`)
+			r.mem(`mem.Todo("fix the login loop").Todo("set SameSite on the cookie")`)
+			r.mem(`mem.Done("fix-login-loop/set-samesite-cookie", "SameSite=Lax"); mem.Done("fix-login-loop", "fixed in auth.go")`)
 			return "Fixed."
 		case 2:
-			r.mem(`mem.Done("fix-login", "go test ./auth → ok")`)
+			r.mem(`mem.Done("fix-login-loop", "go test ./auth → ok")`)
 			return "Fixed, and the test passes."
 		default:
 			return "You're welcome."
@@ -220,12 +232,12 @@ func TestEveryGoalClosedIsJudged(t *testing.T) {
 	requireQueueEmpty(t, r.stopHookRun)
 	prompts := r.hiddenPrompts()
 	require.Len(t, prompts, 1)
-	require.Contains(t, prompts[0], "The check found the goal `fix-login` not met: no test was run")
+	require.Contains(t, prompts[0], "The check found the goal `fix-login-loop` not met: no test was run")
 	require.Contains(t, prompts[0], "The goal: fix the login loop")
-	require.Contains(t, r.mem(`mem.Show("fix-login")`), "the check found it not met: no test was run")
+	require.Contains(t, r.mem(`mem.Show("fix-login-loop")`), "the check found it not met: no test was run")
 	require.Equal(t, []string{"Goal met: fix the login loop (the auth tests pass)"}, r.notices(notify.TypeGoalMet))
-	require.Equal(t, []string{"The check found the goal `fix-login` not met: no test was run. It is reopened, and the agent goes back to it"}, r.notices(notify.TypeWarning))
-	require.Contains(t, prompts[0], "ask them with `mem.Ask(\"fix-login\", \"…\")` instead. Either way, tell the user what the check found.")
+	require.Equal(t, []string{"The check found the goal `fix-login-loop` not met: no test was run. It is reopened, and the agent goes back to it"}, r.notices(notify.TypeWarning))
+	require.Contains(t, prompts[0], "ask them with `mem.Ask(\"fix-login-loop\", \"…\")` instead. Either way, tell the user what the check found.")
 
 	// The next turn closes nothing: the goal closed before it is not
 	// judged again.
@@ -244,9 +256,9 @@ func TestAJudgedGoalReflectsEveryTenContinuations(t *testing.T) {
 			return "It cannot pass: the staging server is down.\n" + StopMarker
 		}
 		if turns.Load() == 1 {
-			r.mem(`mem.Goal("deploy to staging", "deploy")`)
+			r.mem(`mem.Todo("deploy to staging")`)
 		}
-		r.mem(`mem.Done("deploy", "deployed")`)
+		r.mem(`mem.Done("deploy-staging", "deployed")`)
 		return "Deployed."
 	}}
 	judge := &judgeModel{verdicts: []string{`{"ok": false, "reason": "the deploy failed"}`}}
@@ -257,14 +269,14 @@ func TestAJudgedGoalReflectsEveryTenContinuations(t *testing.T) {
 	require.Equal(t, int64(stopHookReflectEvery), judge.checks.Load())
 	warnings := r.notices(notify.TypeWarning)
 	require.Len(t, warnings, stopHookReflectEvery+1, "a notice each time the check reopened it, then why the agent stopped")
-	require.Equal(t, "The check found the goal `deploy` not met: the deploy failed. It is reopened, and the agent goes back to it", warnings[0])
-	require.Equal(t, "The agent judged it should stop working on the goal `deploy`: It cannot pass: the staging server is down. It stays open in mem", warnings[stopHookReflectEvery])
+	require.Equal(t, "The check found the goal `deploy-staging` not met: the deploy failed. It is reopened, and the agent goes back to it", warnings[0])
+	require.Equal(t, "The agent judged it should stop working on the goal `deploy-staging`: It cannot pass: the staging server is down. It stays open in mem", warnings[stopHookReflectEvery])
 	var j struct {
 		Goals []struct {
 			Status string `json:"status"`
 		} `json:"goals"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(r.mem(`print(mem.JSON("deploy"))`))), &j))
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(r.mem(`print(mem.JSON("deploy-staging"))`))), &j))
 	require.Len(t, j.Goals, 1)
 	require.Empty(t, j.Goals[0].Status, "reopened, and left open")
 }
@@ -274,7 +286,7 @@ func TestAJudgedGoalWithNoVerdictStaysClosed(t *testing.T) {
 	var turns atomic.Int64
 	var r goalRun
 	main := &promptAwareModel{turns: &turns, answer: func(string) string {
-		r.mem(`mem.Goal("tidy the README", "tidy"); mem.Done("tidy", "tidied")`)
+		r.mem(`mem.Todo("tidy the README"); mem.Done("tidy-readme", "tidied")`)
 		return "Tidied."
 	}}
 	r = newGoalRun(t, "", main, &turns, &judgeModel{verdicts: []string{"maybe"}})
@@ -282,21 +294,24 @@ func TestAJudgedGoalWithNoVerdictStaysClosed(t *testing.T) {
 
 	require.Equal(t, int64(1), turns.Load())
 	require.Len(t, r.notifier.warnings(), 1)
-	require.Equal(t, "The goal `tidy` could not be checked, so it stays closed unchecked: its answer was not a verdict: maybe", r.notifier.warnings()[0].Message)
+	require.Equal(t, "The goal `tidy-readme` could not be checked, so it stays closed unchecked: its answer was not a verdict: maybe", r.notifier.warnings()[0].Message)
 }
 
 // With a /goal set, a goal of the agent's own closed in the same turn is
 // judged too, and the bound goal only once, against the user's condition.
+// A bound session adds its todos under its goal, so the agent's own
+// top-level one is from before the /goal was set.
 func TestAJudgedGoalBesideTheBoundOne(t *testing.T) {
 	var turns atomic.Int64
 	var r goalRun
 	main := &promptAwareModel{turns: &turns, answer: func(string) string {
-		r.mem(`mem.Goal("update the changelog", "changelog"); mem.Done("changelog", "CHANGELOG.md has 2.0")`)
+		r.mem(`mem.Done("update-changelog", "CHANGELOG.md has 2.0")`)
 		r.mem(`mem.Done("tests-pass", "go test ./... → ok")`)
 		return "Done."
 	}}
 	judge := &judgeModel{verdicts: []string{`{"ok": true, "reason": "it shows so"}`}}
 	r = newGoalRun(t, "the tests pass", main, &turns, judge)
+	r.memUnbound(`mem.Todo("update the changelog")`)
 	r.run("make the tests pass, and update the changelog")
 
 	require.Equal(t, int64(1), turns.Load())

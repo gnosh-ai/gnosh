@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -54,16 +55,21 @@ func testMemRebuildMatchesLive(t *testing.T, seed int64, calls int) {
 		}
 		return strings.Join(w, " ")
 	}
-	goals, facts, rules := 0, 0, 0
-	goal := func() string { return "g" + strconv.Itoa(1+rng.Intn(max(goals, 1))) }
-	item := func() string {
-		name := goal()
-		for depth := rng.Intn(3); depth > 0; depth-- {
-			name += "/" + strconv.Itoa(1+rng.Intn(3))
+	// ids are the items the calls added, read from their receipts, and
+	// tops the top-level ones among them; a pick with none yet names
+	// nothing in mem.
+	var ids, tops []string
+	facts, rules := 0, 0
+	pick := func(from []string) string {
+		if len(from) == 0 {
+			return "nothing-yet"
 		}
-		return name
+		return from[rng.Intn(len(from))]
 	}
+	goal := func() string { return pick(tops) }
+	item := func() string { return pick(ids) }
 	fact := func() string { return "f/" + strconv.Itoa(1+rng.Intn(max(facts, 1))) }
+	added := regexp.MustCompile("(?m)^(?:added|asked) `([^`]+)`")
 	var secrets []string
 	var last int64
 	kept, failed, undone := 0, 0, 0
@@ -74,17 +80,15 @@ func testMemRebuildMatchesLive(t *testing.T, seed int64, calls int) {
 		}
 		switch rng.Intn(16) {
 		case 0, 1:
-			goals++
-			steps := make([]string, rng.Intn(4))
-			for j := range steps {
-				steps[j] = strconv.Quote(words(2))
-			}
-			code = fmt.Sprintf("mem.Goal(%q, %q)", words(3), "g"+strconv.Itoa(goals))
-			if len(steps) > 0 {
-				code += ".Steps(" + strings.Join(steps, ", ") + ")"
+			code = fmt.Sprintf("mem.Todo(%q)", words(3))
+			if n := rng.Intn(4); n > 0 {
+				code = "t := " + code
+				for ; n > 0; n-- {
+					code += fmt.Sprintf("; t.Todo(%q)", words(2))
+				}
 			}
 		case 2:
-			code = fmt.Sprintf("mem.Steps(%q, %q)", item(), words(2))
+			code = fmt.Sprintf("mem.Frame(%q).Todo(%q)", item(), words(2))
 		case 3, 4:
 			code = fmt.Sprintf("mem.Done(%q, %q)", item(), words(2))
 		case 5:
@@ -155,17 +159,17 @@ func testMemRebuildMatchesLive(t *testing.T, seed int64, calls int) {
 		}
 		kept++
 		last = max(last, res.Seq)
+		for _, m := range added.FindAllStringSubmatch(res.Output, -1) {
+			ids = append(ids, m[1])
+			if !strings.Contains(m[1], "/") {
+				tops = append(tops, m[1])
+			}
+		}
 	}
 	t.Logf("seed %d: %d calls kept or read (%d undos), %d refused", seed, kept, undone, failed)
 	require.Greater(t, kept, calls/4, "many calls should do something")
 
-	var names []string
-	for g := 1; g <= goals; g++ {
-		names = append(names, "g"+strconv.Itoa(g))
-		for s := 1; s <= 3; s++ {
-			names = append(names, "g"+strconv.Itoa(g)+"/"+strconv.Itoa(s))
-		}
-	}
+	names := append([]string(nil), ids...)
 	for f := 1; f <= facts; f++ {
 		names = append(names, "f/"+strconv.Itoa(f))
 	}

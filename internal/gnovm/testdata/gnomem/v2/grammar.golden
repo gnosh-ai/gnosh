@@ -58,16 +58,28 @@ error: a fact's name is at most 64 bytes
 error: names are lowercase: `no-emoji`
 > user: mem.Rule("style/emoji", "no emoji in commit messages")
 rule `style/emoji` is new; every session will be given it
-> s1: mem.Goal("ship it", "Ship-It")
-error: names are lowercase: `ship-it`
-> s1: mem.Goal("ship it", "ship it")
-error: `ship it` is not a name: a goal's name is lowercase words joined by "-", like `ship-it`
-> s1: mem.Goal("ship it", "ship/it")
-error: a goal's name has no "/" (`ship/it` would be a step of `ship`): try `ship-it`
-> s1: mem.Goal("ship it", "ship-it")
-added goal `ship-it` "ship it"
-> s1: mem.Goal("renew the cert", "renew-cert")
-added goal `renew-cert` "renew the cert"
+> s1: mem.Todo("Ship It")
+added `ship` "Ship It"
+> s1: mem.Todo("ship it!")
+error: `ship` "Ship It" (this session, 1m ago) is already open: enter it with mem.Push("ship") and add to it with mem.Todo("…"), or give other work a task that tells them apart
+> s1: mem.Todo("ship/it")
+added `ship-2` "ship/it"
+> s1: mem.Todo("ship-it")
+added `ship-it` "ship-it"
+> s1: mem.Todo("Ship-It")
+error: `ship-it` "ship-it" (this session, 1m ago) is already open: enter it with mem.Push("ship-it") and add to it with mem.Todo("…"), or give other work a task that tells them apart
+> s1: mem.Todo("page the on-call engineer")
+added `page-on-call-engineer` "page the on-call engineer"
+> s1: mem.Todo("rotate the key sk-live-4f9c2b3a8d7e now")
+added `rotate-key-sk-live` "rotate the key sk-live-4f9c2b3a8d7e now"
+> s1: mem.Todo("which Go file declares the most functions?")
+added `which-go-file-declares` "which Go file declares the most functions?"
+> s1: mem.Todo("日本")
+added `todo` "日本"
+> s1: mem.Todo("")
+error: a todo needs a task: mem.Todo("what to get done")
+> s1: mem.Todo("renew the cert")
+added `renew-cert` "renew the cert"
 > s1: mem.Wait("renew-cert", "2026-12-01")
 `renew-cert` "renew the cert" waits until 2026-12-01
 > s1: mem.Wait("renew-cert", "PR #6399 merged")
@@ -105,9 +117,9 @@ error: "2026-13-01" is not on the calendar (today is Thu 2026-10-29)
 > s1: mem.Wait("renew-cert", "2026-10-01")
 error: 2026-10-01 is past (today is Thu 2026-10-29): give a day still to come, or Done the item
 > s1: mem.Wait("renew-cert", "renew-cert")
-error: a wait is a day or words, not an item: to wait for `renew-cert`, make this work a step of it, or say it in words
+error: a wait is a day or words, not an item: to wait for `renew-cert`, make this work a todo under it, or say it in words
 > s1: mem.Wait("renew-cert", "ship-it")
-error: a wait is a day or words, not an item: to wait for `ship-it`, make this work a step of it, or say it in words
+error: a wait is a day or words, not an item: to wait for `ship-it`, make this work a todo under it, or say it in words
 > s1: mem.Wait("renew-cert", "next conversation")
 `renew-cert` "renew the cert" waits for nothing: every session is shown what is open; a reminder the user asked for is an Ask, which every session raises: mem.Ask("renew-cert", "…")
 > s1: mem.Wait("renew-cert", "PR #6399 merged")

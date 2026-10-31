@@ -106,7 +106,7 @@ var memShown = map[string]string{"Frame": ".String()", "Thought": ".String()"}
 
 // memShowExpr is the statement a mem input's trailing expression becomes:
 // a read of mem prints its text; any other call runs as it is, since it may
-// return nothing (mem.Done), or what it printed already (mem.Goal); any
+// return nothing (mem.Done), or what it printed already (mem.Todo); any
 // other expression prints its value.
 func memShowExpr(expr string) string {
 	x, err := parser.ParseExpr(expr)
@@ -176,7 +176,7 @@ func memShowReads(stmts string) string {
 // msg, for the habits of older mems; "" for none.
 func memHint(code, msg string) string {
 	if m := memMissingRe.FindStringSubmatch(msg); m != nil {
-		return memMissing(m[1], m[2] == "Goal")
+		return memMissing(m[1], m[2] == "Frame")
 	}
 	if strings.Contains(msg, "untyped Bigint as StringKind") {
 		return `items are named, not numbered: type the name mem printed in backticks, as mem.Done("release-v2/tag", "…")`
@@ -186,35 +186,35 @@ func memHint(code, msg string) string {
 			return `a name is a string: quote it, as mem.Done("release-v2/bump", "…")`
 		}
 	}
-	if strings.Contains(msg, "as *klash/gnomem/v2.Frame") && strings.Contains(code, "mem.Goal(") {
-		return "mem.Goal(…) gives a Goal, not a Frame: enter it with mem.Goal(…).Push(), or mem.Push(name) by its name"
-	}
 	if strings.Contains(msg, "missing field PushFrame") || strings.Contains(msg, "missing field PopFrame") || strings.Contains(msg, "missing field PushThought") {
-		return "frames are entered with mem.Push() (the next step), mem.Push(id), or .Push() on a Frame or a Thought, and left with mem.Pop(result)"
+		return "frames are entered with mem.Push() (the next todo), mem.Push(id), or .Push() on a Frame or a Thought, and left with mem.Pop(result)"
 	}
-	if strings.Contains(msg, "cannot use klash/gnomem/v2.Goal as string") {
-		return "mem.Goal(…) gives a Goal, not a name: pass its name, g.Name, or the name mem printed in backticks"
+	if strings.Contains(msg, "cannot use *klash/gnomem/v2.Frame as string") {
+		return "mem.Todo(…) gives a Frame, not a name: pass its Id, or the name mem printed in backticks"
 	}
 	if memAssignRe.MatchString(code) {
-		return "mem is your memory, kept by gnosh: change it with its calls (mem.Goal, mem.Done, mem.Fact, …), never by setting it"
+		return "mem is your memory, kept by gnosh: change it with its calls (mem.Todo, mem.Done, mem.Fact, …), never by setting it"
 	}
 	return ""
 }
 
 var (
-	memMissingRe    = regexp.MustCompile(`missing field (\w+) in \*?klash/gnomem/v2\.(Mem|Goal)\b`)
+	memMissingRe    = regexp.MustCompile(`missing field (\w+) in \*?klash/gnomem/v2\.(Mem|Frame)\b`)
 	memUndeclaredRe = regexp.MustCompile(`name (\w+) not declared`)
 	memAssignRe     = regexp.MustCompile(`(^|[^.\w])mem\s*:?=[^=]`)
 )
 
 // memMoved says where an older mem's call or field went.
 var memMoved = map[string]string{
-	"Add":      `mem.Goal("what to get done").Steps("a step", "another") plans a task, and names its steps after it`,
-	"Step":     `mem.Steps("goal-name", "a step") adds a step to an item`,
-	"Remind":   `a reminder for the user is a question for them, which every session raises: mem.Goal("what to do").Ask("…"); one for a day waits for it: mem.Goal("what to do").Wait("2026-12-01")`,
+	"Add":      `mem.Todo("what to get done") adds a todo under the one you are in, a top-level one at the root, and names it for you`,
+	"Goal":     `mem.Todo("what to get done") adds a todo under the one you are in, a top-level one at the root, and names it for you; .Push() enters it`,
+	"Step":     `mem.Todo("a todo") adds one under the todo you are in; mem.Frame("name").Todo("…") adds under another`,
+	"Steps":    `mem.Todo("a todo") adds one under the todo you are in, one call each, in order; mem.Frame("name").Todo("…") adds under another`,
+	"NewFrame": `mem.Todo("what to get done") adds a todo under the one you are in, and names it for you; .Push() enters it`,
+	"Remind":   `a reminder for the user is a question for them, which every session raises: mem.Todo("what to do").Ask("…"); one for a day waits for it: mem.Todo("what to do").Wait("2026-12-01")`,
 	"Remember": `mem.Fact("name", "text") keeps a fact, and mem.Show("name") reads it back`,
 	"Facts":    `mem.Fact("name", "text") keeps a fact, and mem.Show("name") reads it back`,
 	"Items":    `mem.Show("name") shows an item, and mem.JSON("name") gives it as JSON`,
-	"List":     `mem.Show() lists what mem holds, and mem.Show("name") shows a goal with its steps`,
+	"List":     `mem.Show() lists what mem holds, and mem.Show("name") shows a todo with the todos under it`,
 	"Erase":    `mem.Forget("name") erases a closed item and its steps, or a fact; mem.Redact("text") takes a secret out everywhere`,
 }

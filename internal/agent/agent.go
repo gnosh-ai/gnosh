@@ -3186,7 +3186,7 @@ func (a *sessionAgent) NameFor(ctx context.Context, sessionID, text string) (str
 }
 
 // namePrompt is the system prompt for a name.
-var namePrompt = []byte("You name short notes for an index. Answer with the name only: two to four lowercase words joined by dashes, no quotes, no punctuation, no explanation.")
+var namePrompt = []byte("You name short notes and tasks for an index. Answer with the name only: two to four lowercase words joined by dashes, no quotes, no punctuation, no explanation.")
 
 // memName is answer as a mem name: lowercase words of letters and digits
 // joined by dashes, at most four words and 32 bytes, from the first line;

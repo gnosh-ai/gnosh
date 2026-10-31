@@ -45,12 +45,12 @@ from a hosted API to one running on your own machine. On top of that:
 - **Thinks in Gno.** The Gno VM runs inside Gnosh, and the agent works an
   answer out in a machine instead of estimating it:
   [the machines underneath](#thinks-in-gno-the-machines-underneath).
-- **Plans in Gno.** A task is a goal in `mem` with its steps. A goal cannot
-  be closed while a step of it is open, so "the tests pass" is reached, not
-  claimed, and a separate judge checks each closed goal against the
-  conversation: [goals that outlive the session](#goals-that-outlive-the-session).
-- **Plans in frames.** A step done is cut from the model's context with its
-  result kept, so finished steps don't fill the window and compaction becomes
+- **Plans in Gno.** A task is a todo in `mem` with the todos under it. A todo
+  cannot be closed while one under it is open, so "the tests pass" is
+  reached, not claimed, and a separate judge checks each task the agent
+  closes against the conversation: [a todo that outlives the session](#a-todo-that-outlives-the-session).
+- **Plans in frames.** A todo done is cut from the model's context with its
+  result kept, so finished work doesn't fill the window and compaction becomes
   a backstop: [frames](GNOMEM.md#frames).
 - **Remembers in Gno.** What it found, what waits on you and the facts you
   told it stay in `mem` on your disk, and a new session starts with them:
@@ -75,35 +75,35 @@ from a hosted API to one running on your own machine. On top of that:
 
 A model forgets. Each session starts empty, and a compaction throws away most
 of what came before. Gnosh gives the agent `mem`, kept in Gno on your disk
-with no size limit: its goals and their steps, what it tried and found, what
-waits on you, and facts. It is typed data rather than a page of notes, and
-the agent asks it questions instead of re-reading it. [GNOMEM](GNOMEM.md) has the design and real runs.
+with no size limit: its todos and the todos under them, what it tried and
+found, what waits on you, and facts. It is typed data rather than a page of
+notes, and the agent asks it questions instead of re-reading it. [GNOMEM](GNOMEM.md) has the design and real runs.
 
-### Goals that outlive the session
+### A todo that outlives the session
 
 > **You:** Add a `Median` to the stats package, with tests; it's done when
 > `go test ./...` passes. Plan it as steps and do the first one now; we'll
 > carry on in another session.
 
-The agent puts the goal in mem with the condition as a step of its own,
-and works it one step at a time. Each step is a frame: the agent enters it,
-works, and leaves it with a result, and what it read, ran and was told in
-between leaves the model's context with it; the result stays, in the context
-and in mem. A goal cannot be marked done while one of
-its steps is open, so "the tests pass" is something it has to reach, not
+The agent puts the task in mem as a todo, with each step a todo under it and
+the condition one of its own, and works through them one at a time. Each is
+a frame: the agent enters it, works, and leaves it with a result, and what it
+read, ran and was told in between leaves the model's context with it; the
+result stays, in the context and in mem. A todo cannot be marked done while
+one under it is open, so "the tests pass" is something it has to reach, not
 something it can claim. When an approach fails, it notes why and re-plans:
-it drops that step and adds another.
+it drops that todo and adds another.
 
 Start a new session tomorrow and say "Let's carry on with Median." With your
 first message, the agent is told what mem has open and what is next in each
-goal (see [what the agent runs](#what-the-agent-runs)), and it picks up there
+todo (see [what the agent runs](#what-the-agent-runs)), and it picks up there
 and finishes.
 
 Work that is meant to outlast the session is where mem earns its keep, and
 mem is the agent's one list: a plan, a checklist and a "todo list" all go
 there, so what you asked for today is still there tomorrow. The task list under
-your prompt shows the goal the agent is working on, as mem has it: its next
-step in progress, the steps done checked off.
+your prompt shows the todo the agent is working on, as mem has it: the next
+one under it in progress, those done checked off.
 
 ### Facts, kept current
 
@@ -133,7 +133,7 @@ and what is sent.
 > **You:** Before we wrap up: remind me next time we talk to rotate the
 > staging API key. It expires this week.
 
-The reminder stays in mem as an open goal, and the next session is given what
+The reminder stays in mem as an open todo, and the next session is given what
 mem has open along with your first message. So "Morning! Anything I should
 know before I start?" brings it back, and a session that starts on something
 else may raise it too: in one real run, the agent did the task it was given
@@ -165,54 +165,61 @@ These are calls like the ones the agent made in the real runs above, replayed
 on a fresh project in one session; under each call, as comments, what mem
 answered. The agent sends each call as the code of a `gnovm_run` tool call to
 the VM named mem. A test replays them against every change to Gnosh, so they
-stay true. The goal:
+stay true. The task:
 
 ```go mem
 mem.Show()
-// mem is empty: mem.Goal("what to get done").Steps("…", "…") plans a task, and mem.Fact("cmd/test", "…") keeps a fact
-mem.Goal("add Median to stats").Steps("implement Median", "write tests", "go test ./... passes")
-// added goal `add-median-stats` "add Median to stats"
-// added `add-median-stats/implement-median` "implement Median", `add-median-stats/write-tests` "write tests", `add-median-stats/go-test-passes` "go test ./... passes"; next: `add-median-stats/implement-median` "implement Median"
+// mem is empty: mem.Todo("what to get done") adds a todo, and mem.Fact("cmd/test", "…") keeps a fact
+r := mem.Todo("add Median to stats")
+r.Todo("implement Median")
+r.Todo("write tests")
+r.Todo("go test ./... passes")
+// added `add-median-stats` "add Median to stats"
+// added `add-median-stats/implement-median` "implement Median"
+// added `add-median-stats/write-tests` "write tests"
+// added `add-median-stats/go-test-passes` "go test ./... passes"
 mem.Push("add-median-stats")
 mem.Push()
-// in `add-median-stats` "add Median to stats": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-// in `add-median-stats/implement-median` "implement Median": when it is done, pop it with what came of it and what the next step needs. …
+// in `add-median-stats` "add Median to stats": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `add-median-stats/implement-median` "implement Median": when it is done, pop it with what came of it and what the next todo needs. …
 mem.Pop("Median in stats.go:17; copies and sorts, no input mutation")
 // done `add-median-stats/implement-median` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation
 // next: `add-median-stats/write-tests` "write tests": mem.Push()
 mem.Show()
-// mem: 1 goal open
-// goals:
+// mem: 1 todo open
+// todos:
 //   [ ] `add-median-stats` "add Median to stats" (1/3 done · this session · just now · held by this session, just now)
 //     [x] `add-median-stats/implement-median` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation
 //     [ ] `add-median-stats/write-tests` "write tests"  ← next
 //     [ ] `add-median-stats/go-test-passes` "go test ./... passes"
 mem.Push()
-// in `add-median-stats/write-tests` "write tests": when it is done, pop it with what came of it and what the next step needs. …
+// in `add-median-stats/write-tests` "write tests": when it is done, pop it with what came of it and what the next todo needs. …
 mem.Pop("stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates")
 mem.Push()
 // done `add-median-stats/write-tests` "write tests" → stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates
-// in `add-median-stats/go-test-passes` "go test ./... passes": when it is done, pop it with what came of it and what the next step needs. …
+// in `add-median-stats/go-test-passes` "go test ./... passes": when it is done, pop it with what came of it and what the next todo needs. …
 mem.Pop("go test ./... → ok stats 0.006s")
 mem.Push()
 // done `add-median-stats/go-test-passes` "go test ./... passes" → go test ./... → ok stats 0.006s
-// nothing to push: `add-median-stats` has no open step: pop it with its result.
+// nothing to push: `add-median-stats` has no open todo: pop it with its result.
 mem.Pop("Median in stats.go:17; tests in stats_test.go; go test ./... → ok")
 // done `add-median-stats` "add Median to stats" → Median in stats.go:17; tests in stats_test.go; go test ./... → ok
 ```
 
-The agent looked at mem, planned the goal with the condition as a step of its
-own, entered the goal and its first step as frames, and popped the step with
-what came of it; the `mem.Show()` midway is a look at where it stands. Each pop removes the
-step's work from the model's context and keeps its result; the goal is popped
-last, with the evidence that it holds. A goal popped while one of its steps is
-open is refused, naming the step, and nothing from the call is kept.
+The agent looked at mem, planned the task as a todo with the work under it,
+the condition a todo of its own, entered the todo and the first one under it
+as frames, and popped that with what came of it; the `mem.Show()` midway is a
+look at where it stands. Each pop removes the frame's work from the model's
+context and keeps its result; the task's own todo is popped last, with the
+evidence that it holds. A todo popped while one under it is open is refused,
+and the refusal names the open one; nothing from the call is kept.
 
-A goal belongs to the session that entered it. When the work goes on in
-another session, that session takes up the goal's free steps one frame at a
-time, but only the first session, resumed by its id, can pop or close the
-goal: in real runs on 31 October, a goal carried to a new session ended with
-every step done and the goal still open, held by the session that began it.
+A todo belongs to the session that entered it. When the work goes on in
+another session, that session takes up the free todos under it one frame at a
+time, but only the first session, resumed by its id, can pop or close the one
+it entered: in real runs on 31 October, a task carried to a new session ended
+with every todo under it done and the top one still open, held by the session
+that began it.
 
 The facts, across their three sessions:
 
@@ -227,10 +234,10 @@ mem.Fact("staging-db", "The staging database is db-stg-9.")
 
 Setting a fact again replaces it, so mem holds one staging database, the
 current one. Everything in mem has a name, printed in backticks, which the
-agent types back exactly: a goal's name comes from its title, its steps are
-named under it, and a fact's name is any path the agent gives it, or is made
-when it gives only the text: by the session's small model, or from the words
-as in this replay. A new
+agent types back exactly. A todo's name is made from its task, by the
+session's small model or, as in this replay, from the task's words, and a
+todo added under another is named under it; a fact's name is any path the
+agent gives it, or is made the same way when it gives only the text. A new
 session is told, with its first prompt, what mem holds: the rules you gave,
 what is due, what is open and next, and the newest facts.
 
@@ -485,15 +492,15 @@ Claude Code's names work here too.
   as an edit of a file it never read.
 - **`/loop`** keeps a session working on a task until it is done.
 - **`/goal <condition>`** keeps the agent working until the condition holds,
-  as in Claude Code, with the goal kept in mem: the condition becomes a goal
-  there, which the agent plans as steps, and as each turn ends mem says what
-  comes next: the next step, or the end of the turn while the goal waits on
-  you, a day or another session. Once the agent closes the goal, the small
-  model checks the condition against what mem holds of it: met, the goal is
-  cleared; not met, it is reopened with the reason as a note, you are told,
-  and the agent goes back to it, or asks you when what is missing is yours.
-  `/goal` shows the condition, the goal's name and the last
-  check, and `/goal clear` clears it. `gnosh run --goal` does the same in one
+  as in Claude Code, with the goal kept in mem: the condition becomes a
+  top-level todo there, under which the agent plans the work as todos, and as
+  each turn ends mem says what comes next: the next todo, or the end of the
+  turn while the goal waits on you, a day or another session. Once the agent
+  closes the todo, the small model checks the condition against what mem
+  holds of it: met, the goal is cleared; not met, the todo is reopened with
+  the reason as a note, you are told, and the agent goes back to it, or asks
+  you when what is missing is yours. `/goal` shows the condition, the todo's
+  name and the last check, and `/goal clear` clears it. `gnosh run --goal` does the same in one
   run, says on stderr whether the goal was met, and exits non-zero while it
   is still set.
 - **`/rewind`** (or `/checkpoint`, `/undo`, or Esc twice on an empty prompt)

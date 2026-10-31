@@ -97,11 +97,11 @@ func TestMemRealmScale(t *testing.T) {
 		return call.Output
 	}
 	mid := "goal-" + strconv.Itoa(goals-min(goals, open)/2)
-	timed("a call adding a step", `mem.Steps("`+mid+`", "one more")`)
-	timed("a call adding a step", `mem.Steps("`+mid+`", "and one more")`)
-	require.Contains(t, timed("Show(one goal)", `println(mem.Show("`+mid+`"))`), mid+"/12")
+	timed("a call adding a todo", `mem.Frame("`+mid+`").Todo("one more")`)
+	timed("a call adding a todo", `mem.Frame("`+mid+`").Todo("and one more")`)
+	require.Contains(t, timed("Show(one goal)", `println(mem.Show("`+mid+`"))`), mid+"/one-more-2")
 	timed("Show()", `println(mem.Show())`)
-	timed("Goal(a new title), among the open goals", `mem.Goal("a title no open goal has")`)
+	timed("Todo(a new task), among the open todos", `mem.Todo("a task no open todo has")`)
 	timed("Show(a group of facts)", `println(mem.Show("group-7"))`)
 	timed("JSON()", `println(mem.JSON())`)
 	timed("Show(the goal of a thousand steps)", `println(mem.Show("big"))`)

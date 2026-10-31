@@ -62,7 +62,7 @@ func TestMemLayoutPinned(t *testing.T) {
 		1: "40f2ee6d42a9774f",
 		2: "8aa10005d9fdb3b5",
 		3: "d3f1464566978a19",
-		4: "866c6fb7eee0b303",
+		4: "536614fa09762190",
 	}
 	want, ok := pins[memLayout]
 	if !ok {
@@ -79,9 +79,9 @@ func TestMemRealmPersists(t *testing.T) {
 	dir := t.TempDir()
 	r, err := openMemRealm(newBase(), dir)
 	require.NoError(t, err)
-	call, err := r.run(`mem.Goal("make a pot of tea").Steps("boil water", "pour water")`, "sess-1")
+	call, err := r.run(`tea := mem.Todo("make a pot of tea"); tea.Todo("boil water"); tea.Todo("pour water")`, "sess-1")
 	require.NoError(t, err, call.Output)
-	require.Contains(t, call.Output, "added goal `make-pot-tea`")
+	require.Contains(t, call.Output, "added `make-pot-tea`")
 	require.Contains(t, call.Output, "`make-pot-tea/pour-water` \"pour water\"")
 	require.Equal(t, []memOp{
 		{Kind: "add", Name: "make-pot-tea", New: "make a pot of tea", By: "sess-1"},
@@ -108,13 +108,13 @@ func TestMemRealmGuards(t *testing.T) {
 	r, err := openMemRealm(newBase(), t.TempDir())
 	require.NoError(t, err)
 	defer r.close()
-	_, err = r.run(`mem.Goal("ours")`, "sess-1")
+	_, err = r.run(`mem.Todo("ours")`, "sess-1")
 	require.NoError(t, err)
 
 	for _, tc := range []struct{ name, code, err string }{
-		{"own", "import gnomem \"klash/gnomem/v2\"\nx := gnomem.New(); x.Goal(\"theirs\")", "only mem's own Mem"},
-		{"copy", `x := *mem; x.Goal("theirs")`, "only mem's own Mem"},
-		{"revive", `revive(func() { mem.Goal("theirs"); panic("p") })`, "revive() not enabled"},
+		{"own", "import gnomem \"klash/gnomem/v2\"\nx := gnomem.New(); x.Todo(\"theirs\")", "only mem's own Mem"},
+		{"copy", `x := *mem; x.Todo("theirs")`, "only mem's own Mem"},
+		{"revive", `revive(func() { mem.Todo("theirs"); panic("p") })`, "revive() not enabled"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := r.run(tc.code, "sess-1")
@@ -134,7 +134,7 @@ func TestMemRealmFailedInputKeepsNothing(t *testing.T) {
 	r, err := openMemRealm(newBase(), t.TempDir())
 	require.NoError(t, err)
 	defer r.close()
-	_, err = r.run(`mem.Goal("first"); panic("no")`, "sess-1")
+	_, err = r.run(`mem.Todo("first"); panic("no")`, "sess-1")
 	require.Error(t, err)
 	call, err := r.run(`println(mem.Show())`, "sess-1")
 	require.NoError(t, err, call.Output)

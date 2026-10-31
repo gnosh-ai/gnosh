@@ -1,58 +1,60 @@
-> s1: mem.Goal("fix the flaky test", "fix-flaky").Steps("reproduce: reproduce it", "find why TestFlaky fails", "rerun: rerun the suite 20 times")
-added goal `fix-flaky` "fix the flaky test"
-added `fix-flaky/reproduce` "reproduce it", `fix-flaky/find-why-testflaky-fails` "find why TestFlaky fails", `fix-flaky/rerun` "rerun the suite 20 times"; next: `fix-flaky/reproduce` "reproduce it"
-> s1: mem.NewFrame("side", "a side quest made at the root")
-added goal `side` "a side quest made at the root"
+> s1: f := mem.Todo("fix the flaky test"); f.Todo("reproduce it"); f.Todo("find why TestFlaky fails"); f.Todo("rerun the suite 20 times")
+added `fix-flaky-test` "fix the flaky test"
+added `fix-flaky-test/reproduce` "reproduce it"
+added `fix-flaky-test/find-why-testflaky-fails` "find why TestFlaky fails"
+added `fix-flaky-test/rerun-suite-20-times` "rerun the suite 20 times"
+> s1: mem.Todo("side quest")
+added `side-quest` "side quest"
 > s1: mem.Frame()
-mem: 2 goals open
-goals:
-  [ ] `side` "a side quest made at the root" (this session · 1m ago)
-  [ ] `fix-flaky` "fix the flaky test" (0/3 done · this session · 2m ago)
-    [ ] `fix-flaky/reproduce` "reproduce it"  ← next
-    [ ] `fix-flaky/find-why-testflaky-fails` "find why TestFlaky fails"
-    [ ] `fix-flaky/rerun` "rerun the suite 20 times"
+mem: 2 todos open
+todos:
+  [ ] `side-quest` "side quest" (this session · 1m ago)
+  [ ] `fix-flaky-test` "fix the flaky test" (0/3 done · this session · 2m ago)
+    [ ] `fix-flaky-test/reproduce` "reproduce it"  ← next
+    [ ] `fix-flaky-test/find-why-testflaky-fails` "find why TestFlaky fails"
+    [ ] `fix-flaky-test/rerun-suite-20-times` "rerun the suite 20 times"
 > s1: mem.Push()
-nothing to push at the root: `side` "a side quest made at the root" is open: mem.Push("side") enters it; or make a goal: mem.NewFrame("…", "…").Push().
+nothing to push at the root: `side-quest` "side quest" is open: mem.Push("side-quest") enters it; or make a todo: mem.Todo("…").Push().
 > s1: mem.Frame().Push()
-error: the root is not a frame to enter: push a goal, or make one
+error: the root is not a frame to enter: push a todo, or make one: mem.Todo("…").Push()
 > s1: mem.Think("port", "the shared port is 8080")
 error: you are at the root, in no frame: mem.Fact("…") keeps something to remember
-> s1: mem.Frame("fix-flaky/retry")
-error: there is no frame `fix-flaky/retry`; mem.Show() lists them
-> s1: mem.Frame("Fix-Flaky")
-error: there is no frame `Fix-Flaky`: names are lowercase, typed as printed: `fix-flaky`
-> s1: mem.Push("fix-flaky")
-in `fix-flaky` "fix the flaky test": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  [push `fix-flaky`]
-> s1: mem.NewFrame("Rename-Port-Flag")
-error: names are lowercase: `rename-port-flag`
-> s1: mem.NewFrame("rename port flag")
-error: `rename port flag` is not a name: a frame's name is lowercase words joined by "-", like `rename-port-flag`
-> s1: mem.NewFrame("rename the port flag", "rename-port-flag")
-error: the name comes first, then the purpose: mem.NewFrame("rename-port-flag", "rename the port flag")
-> s1: mem.NewFrame("reproduce")
-error: `fix-flaky` already has a step named `reproduce`
-> s1: mem.NewFrame("rename-port-flag", "rename the port flag")
-added `fix-flaky/rename-port-flag` "rename the port flag"
-> s1: mem.Push("fix-flaky")
-error: `fix-flaky` is already on your stack
+> s1: mem.Frame("fix-flaky-test/retry")
+error: there is no frame `fix-flaky-test/retry`; mem.Show() lists them
+> s1: mem.Frame("Fix-Flaky-Test")
+error: there is no frame `Fix-Flaky-Test`: names are lowercase, typed as printed: `fix-flaky-test`
+> s1: mem.Push("fix-flaky-test")
+in `fix-flaky-test` "fix the flaky test": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  [push `fix-flaky-test`]
+> s1: mem.Todo("reproduce it")
+error: `fix-flaky-test` "fix the flaky test" already has an open todo "reproduce it"
+> s1: mem.Todo("Reproduce it!")
+error: `fix-flaky-test` "fix the flaky test" already has an open todo "Reproduce it!"
+> s1: mem.Todo("")
+error: a todo needs a task: mem.Todo("what to get done")
+> s1: mem.Todo("rename the port flag")
+added `fix-flaky-test/rename-port-flag` "rename the port flag"
+> s1: mem.Todo("rename the port flag")
+error: `fix-flaky-test` "fix the flaky test" already has an open todo "rename the port flag"
+> s1: mem.Push("fix-flaky-test")
+error: `fix-flaky-test` is already on your stack
 > s1: mem.Push()
-in `fix-flaky/reproduce` "reproduce it": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  [push `fix-flaky/reproduce`]
+in `fix-flaky-test/reproduce` "reproduce it": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  [push `fix-flaky-test/reproduce`]
 > s1: mem.Think("port", "the user says the shared port is 8080")
-thought `port` kept on `fix-flaky/reproduce`
+thought `port` kept on `fix-flaky-test/reproduce`
 > s1: mem.Think("port", "again")
-error: `fix-flaky/reproduce` already has a thought named `port`: a thought is never edited; add another, like `port-2`
+error: a thought named `port` is on `fix-flaky-test/reproduce` already: a thought is never edited; add another, like `port-2`
 > s1: mem.Think("Port", "again")
 error: names are lowercase: `port`
 > s1: mem.Think("", "again")
 error: a thought needs a name to find it by: mem.Think("port-env", "the port is read from an env var")
-> s1: mem.Note("fix-flaky/reproduce", "it fails 3 of 20 runs")
-noted on `fix-flaky/reproduce` "reproduce it" as thought `fails-3-20-runs`
+> s1: mem.Note("fix-flaky-test/reproduce", "it fails 3 of 20 runs")
+noted on `fix-flaky-test/reproduce` "reproduce it" as thought `fails-3-20-runs`
 > s1: mem.Think("the fix is to pick a free port in setup")
-thought `fix-pick-free-port` kept on `fix-flaky/reproduce`
+thought `fix-pick-free-port` kept on `fix-flaky-test/reproduce`
 > s1: mem.Think("the fix is to pick a free port in setup")
-thought `fix-pick-free-port-2` kept on `fix-flaky/reproduce`
+thought `fix-pick-free-port-2` kept on `fix-flaky-test/reproduce`
 > s1: mem.Think("a", "b", "c")
 error: Think takes a thought, or a name and a thought: mem.Think("port-env", "the port is read from an env var")
 > s1: mem.Fact("the staging database is db-stg-7")
@@ -62,9 +64,9 @@ fact `staging-database-db-stg-2` is new
 > s1: mem.Fact("cmd/test")
 error: `cmd/test` is a name, not a fact: mem.Fact(name, text) sets a fact, and mem.Show(name) shows one
 > s1: mem.Thought("nope")
-error: no frame on your stack has a thought named `nope`
+error: no thought named `nope` in mem: mem.Recall("…") finds one by meaning
 > s1: mem.Frame()
-[ ] `fix-flaky/reproduce` "reproduce it" (a step of `fix-flaky` "fix the flaky test")
+[ ] `fix-flaky-test/reproduce` "reproduce it" (under `fix-flaky-test` "fix the flaky test")
   held by this session
   made by this session, changed 6m ago
   thought `port`: the user says the shared port is 8080
@@ -72,176 +74,176 @@ error: no frame on your stack has a thought named `nope`
   thought `fix-pick-free-port`: the fix is to pick a free port in setup
   thought `fix-pick-free-port-2`: the fix is to pick a free port in setup
 > s1: mem.Pop("")
-error: say what came of `fix-flaky/reproduce`, even "nothing found"
-> s1: mem.Done("fix-flaky/reproduce")
-error: say what came of `fix-flaky/reproduce`, even "nothing found"
-> s1: mem.Done("fix-flaky", "done")
-error: you are still in `fix-flaky/reproduce`: pop or drop it before `fix-flaky`
-> s1: mem.Drop("fix-flaky", "too hard")
-error: you are still in `fix-flaky/reproduce`: pop or drop it before `fix-flaky`
-> s1: mem.Done("fix-flaky/reproduce", "it fails 3 of 20 runs on the shared port")
-done `fix-flaky/reproduce` "reproduce it" → it fails 3 of 20 runs on the shared port
-next: `fix-flaky/find-why-testflaky-fails` "find why TestFlaky fails": mem.Push()
-  [pop `fix-flaky/reproduce` → it fails 3 of 20 runs on the shared port]
+error: say what came of `fix-flaky-test/reproduce`, even "nothing found"
+> s1: mem.Done("fix-flaky-test/reproduce")
+error: say what came of `fix-flaky-test/reproduce`, even "nothing found"
+> s1: mem.Done("fix-flaky-test", "done")
+error: you are still in `fix-flaky-test/reproduce`: pop or drop it before `fix-flaky-test`
+> s1: mem.Drop("fix-flaky-test", "too hard")
+error: you are still in `fix-flaky-test/reproduce`: pop or drop it before `fix-flaky-test`
+> s1: mem.Done("fix-flaky-test/reproduce", "it fails 3 of 20 runs on the shared port")
+done `fix-flaky-test/reproduce` "reproduce it" → it fails 3 of 20 runs on the shared port
+next: `fix-flaky-test/find-why-testflaky-fails` "find why TestFlaky fails": mem.Push()
+  [pop `fix-flaky-test/reproduce` → it fails 3 of 20 runs on the shared port]
 > s1: mem.Pop("twice")
-error: `fix-flaky` "fix the flaky test" has open steps `fix-flaky/find-why-testflaky-fails` "find why TestFlaky fails", `fix-flaky/rerun` "rerun the suite 20 times" and `fix-flaky/rename-port-flag` "rename the port flag": push and pop them, or drop them, first
+error: `fix-flaky-test` "fix the flaky test" has open todos `fix-flaky-test/find-why-testflaky-fails` "find why TestFlaky fails", `fix-flaky-test/rerun-suite-20-times` "rerun the suite 20 times" and `fix-flaky-test/rename-port-flag` "rename the port flag": push and pop them, or drop them, first
 > s1: mem.Thought("port")
-thought `fix-flaky/reproduce#port`: the user says the shared port is 8080
+thought `port` on `fix-flaky-test/reproduce`: the user says the shared port is 8080
 > s1: mem.Push()
-in `fix-flaky/find-why-testflaky-fails` "find why TestFlaky fails": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  [push `fix-flaky/find-why-testflaky-fails`]
+in `fix-flaky-test/find-why-testflaky-fails` "find why TestFlaky fails": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  [push `fix-flaky-test/find-why-testflaky-fails`]
 > s1: mem.Thought("port").Push()
-thought `port` is now the step `fix-flaky/find-why-testflaky-fails/port`
-in `fix-flaky/find-why-testflaky-fails/port` (thought: "the user says the shared port is 8080"): when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  [push `fix-flaky/find-why-testflaky-fails/port`]
+thought `port` is now the todo `fix-flaky-test/find-why-testflaky-fails/port`
+in `fix-flaky-test/find-why-testflaky-fails/port` (thought: "the user says the shared port is 8080"): when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  [push `fix-flaky-test/find-why-testflaky-fails/port`]
 > s1: mem.Thought("port").Push()
-error: `fix-flaky/find-why-testflaky-fails/port` is already on your stack
-> s1: mem.Frame("fix-flaky/reproduce")
-[x] `fix-flaky/reproduce` "reproduce it" (a step of `fix-flaky` "fix the flaky test")
+error: `fix-flaky-test/find-why-testflaky-fails/port` is already on your stack
+> s1: mem.Frame("fix-flaky-test/reproduce")
+[x] `fix-flaky-test/reproduce` "reproduce it" (under `fix-flaky-test` "fix the flaky test")
   done → it fails 3 of 20 runs on the shared port
   made by this session, changed 2m ago
-  thought `port`: the user says the shared port is 8080 (now the step `fix-flaky/find-why-testflaky-fails/port`)
+  thought `port`: the user says the shared port is 8080 (now the todo `fix-flaky-test/find-why-testflaky-fails/port`)
   thought `fails-3-20-runs`: it fails 3 of 20 runs
   thought `fix-pick-free-port`: the fix is to pick a free port in setup
   thought `fix-pick-free-port-2`: the fix is to pick a free port in setup
 > s1: mem.Pop("8080 comes from PORT in setup")
-done `fix-flaky/find-why-testflaky-fails/port` → 8080 comes from PORT in setup
-next: pop `fix-flaky/find-why-testflaky-fails` with the evidence that it holds
-  [pop `fix-flaky/find-why-testflaky-fails/port` → 8080 comes from PORT in setup]
+done `fix-flaky-test/find-why-testflaky-fails/port` → 8080 comes from PORT in setup
+next: pop `fix-flaky-test/find-why-testflaky-fails` with the evidence that it holds
+  [pop `fix-flaky-test/find-why-testflaky-fails/port` → 8080 comes from PORT in setup]
 > s1: mem.Frame()
-[ ] `fix-flaky/find-why-testflaky-fails` "find why TestFlaky fails" (a step of `fix-flaky` "fix the flaky test") (1/1 done)
+[ ] `fix-flaky-test/find-why-testflaky-fails` "find why TestFlaky fails" (under `fix-flaky-test` "fix the flaky test") (1/1 done)
   held by this session
   made by this session, changed 1m ago
-  [x] `fix-flaky/find-why-testflaky-fails/port` → 8080 comes from PORT in setup
+  [x] `fix-flaky-test/find-why-testflaky-fails/port` → 8080 comes from PORT in setup
 > s1: mem.Pop("TestFlaky races on the shared port")
-mem.Push("fix-flaky/nope")
-done `fix-flaky/find-why-testflaky-fails` "find why TestFlaky fails" → TestFlaky races on the shared port
-error: no item `fix-flaky/nope`; `fix-flaky` has the steps `fix-flaky/reproduce`, `fix-flaky/find-why-testflaky-fails`, `fix-flaky/rerun` and `fix-flaky/rename-port-flag`; nothing was kept
+mem.Push("fix-flaky-test/nope")
+done `fix-flaky-test/find-why-testflaky-fails` "find why TestFlaky fails" → TestFlaky races on the shared port
+error: no item `fix-flaky-test/nope`; `fix-flaky-test` has the todos `fix-flaky-test/reproduce`, `fix-flaky-test/find-why-testflaky-fails`, `fix-flaky-test/rerun-suite-20-times` and `fix-flaky-test/rename-port-flag`; nothing was kept
 > s1: mem.Frame().Id
-fix-flaky/find-why-testflaky-fails
+fix-flaky-test/find-why-testflaky-fails
 > s1: mem.Pop("TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)")
 mem.Push()
-done `fix-flaky/find-why-testflaky-fails` "find why TestFlaky fails" → TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)
-in `fix-flaky/rerun` "rerun the suite 20 times": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  [pop `fix-flaky/find-why-testflaky-fails` → TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)]
-  [push `fix-flaky/rerun`]
+done `fix-flaky-test/find-why-testflaky-fails` "find why TestFlaky fails" → TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)
+in `fix-flaky-test/rerun-suite-20-times` "rerun the suite 20 times": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  [pop `fix-flaky-test/find-why-testflaky-fails` → TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)]
+  [push `fix-flaky-test/rerun-suite-20-times`]
 > s1: mem.Think("flake-rate", "3 of 20 runs failed before the fix")
-thought `flake-rate` kept on `fix-flaky/rerun`
+thought `flake-rate` kept on `fix-flaky-test/rerun-suite-20-times`
 > s1: mem.Thought("flake-rate").Push("measure it again after the fix")
-thought `flake-rate` is now the step `fix-flaky/rerun/flake-rate`
-in `fix-flaky/rerun/flake-rate` "measure it again after the fix": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  [push `fix-flaky/rerun/flake-rate`]
+thought `flake-rate` is now the todo `fix-flaky-test/rerun-suite-20-times/flake-rate`
+in `fix-flaky-test/rerun-suite-20-times/flake-rate` "measure it again after the fix": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  [push `fix-flaky-test/rerun-suite-20-times/flake-rate`]
 > s1: mem.Pop("0 of 20 after the fix")
-done `fix-flaky/rerun/flake-rate` "measure it again after the fix" → 0 of 20 after the fix
-next: pop `fix-flaky/rerun` with the evidence that it holds
-  [pop `fix-flaky/rerun/flake-rate` → 0 of 20 after the fix]
-> s1: mem.Reopen("fix-flaky/rerun/flake-rate")
-reopened `fix-flaky/rerun/flake-rate` "measure it again after the fix"; next: `fix-flaky/rerun/flake-rate` "measure it again after the fix"
+done `fix-flaky-test/rerun-suite-20-times/flake-rate` "measure it again after the fix" → 0 of 20 after the fix
+next: pop `fix-flaky-test/rerun-suite-20-times` with the evidence that it holds
+  [pop `fix-flaky-test/rerun-suite-20-times/flake-rate` → 0 of 20 after the fix]
+> s1: mem.Reopen("fix-flaky-test/rerun-suite-20-times/flake-rate")
+reopened `fix-flaky-test/rerun-suite-20-times/flake-rate` "measure it again after the fix"; next: `fix-flaky-test/rerun-suite-20-times/flake-rate` "measure it again after the fix"
 > s1: mem.Thought("flake-rate").Push()
-in `fix-flaky/rerun/flake-rate` "measure it again after the fix": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  [push `fix-flaky/rerun/flake-rate`]
+in `fix-flaky-test/rerun-suite-20-times/flake-rate` "measure it again after the fix": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  [push `fix-flaky-test/rerun-suite-20-times/flake-rate`]
 > s1: mem.Pop("0 of 50 after the fix")
-done `fix-flaky/rerun/flake-rate` "measure it again after the fix" → 0 of 50 after the fix
-next: pop `fix-flaky/rerun` with the evidence that it holds
-  [pop `fix-flaky/rerun/flake-rate` → 0 of 50 after the fix]
-> s1: mem.NewFrame("twenty", "twenty runs")
-mem.NewFrame("fifty", "fifty runs")
-added `fix-flaky/rerun/twenty` "twenty runs"
-added `fix-flaky/rerun/fifty` "fifty runs"
+done `fix-flaky-test/rerun-suite-20-times/flake-rate` "measure it again after the fix" → 0 of 50 after the fix
+next: pop `fix-flaky-test/rerun-suite-20-times` with the evidence that it holds
+  [pop `fix-flaky-test/rerun-suite-20-times/flake-rate` → 0 of 50 after the fix]
+> s1: mem.Todo("twenty runs")
+mem.Todo("fifty runs")
+added `fix-flaky-test/rerun-suite-20-times/twenty-runs` "twenty runs"
+added `fix-flaky-test/rerun-suite-20-times/fifty-runs` "fifty runs"
 > s1: mem.Push()
-in `fix-flaky/rerun/twenty` "twenty runs": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  [push `fix-flaky/rerun/twenty`]
+in `fix-flaky-test/rerun-suite-20-times/twenty-runs` "twenty runs": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  [push `fix-flaky-test/rerun-suite-20-times/twenty-runs`]
 > s1: mem.Pop("20 of 20 passed")
-done `fix-flaky/rerun/twenty` "twenty runs" → 20 of 20 passed
-next: `fix-flaky/rerun/fifty` "fifty runs": mem.Push()
-  [pop `fix-flaky/rerun/twenty` → 20 of 20 passed]
-> s1: mem.Drop("fix-flaky/rerun", "twenty runs were enough")
-dropped `fix-flaky/rerun` "rerun the suite 20 times", with its open steps `fix-flaky/rerun/fifty`
-next: `fix-flaky/rename-port-flag` "rename the port flag": mem.Push()
-  [pop `fix-flaky/rerun` → dropped: twenty runs were enough]
-> s2: mem.Push("fix-flaky/rename-port-flag")
-in `fix-flaky/rename-port-flag` "rename the port flag": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  [push `fix-flaky/rename-port-flag`]
+done `fix-flaky-test/rerun-suite-20-times/twenty-runs` "twenty runs" → 20 of 20 passed
+next: `fix-flaky-test/rerun-suite-20-times/fifty-runs` "fifty runs": mem.Push()
+  [pop `fix-flaky-test/rerun-suite-20-times/twenty-runs` → 20 of 20 passed]
+> s1: mem.Drop("fix-flaky-test/rerun-suite-20-times", "twenty runs were enough")
+dropped `fix-flaky-test/rerun-suite-20-times` "rerun the suite 20 times", with its open todos `fix-flaky-test/rerun-suite-20-times/fifty-runs`
+next: `fix-flaky-test/rename-port-flag` "rename the port flag": mem.Push()
+  [pop `fix-flaky-test/rerun-suite-20-times` → dropped: twenty runs were enough]
+> s2: mem.Push("fix-flaky-test/rename-port-flag")
+in `fix-flaky-test/rename-port-flag` "rename the port flag": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  [push `fix-flaky-test/rename-port-flag`]
 > s1: mem.Push()
-nothing to push: nothing in `fix-flaky` can be done now: `fix-flaky/rename-port-flag` is held by session s2.
-> s1: mem.Done("fix-flaky/rename-port-flag", "renamed")
-error: `fix-flaky/rename-port-flag` is held by session s2: only it can pop, close or drop it (resume that session if it has ended)
-> s1: mem.Drop("fix-flaky/rename-port-flag", "not needed")
-error: `fix-flaky/rename-port-flag` is held by session s2: only it can pop, close or drop it (resume that session if it has ended)
-> s1: mem.Start("fix-flaky/rename-port-flag")
-error: `fix-flaky/rename-port-flag` is held by session s2: only it can pop, close or drop it (resume that session if it has ended)
-> s1: mem.Push("fix-flaky/rename-port-flag")
-error: `fix-flaky/rename-port-flag` is held by session s2: only it can pop, close or drop it (resume that session if it has ended)
+nothing to push: nothing in `fix-flaky-test` can be done now: `fix-flaky-test/rename-port-flag` is held by session s2.
+> s1: mem.Done("fix-flaky-test/rename-port-flag", "renamed")
+error: `fix-flaky-test/rename-port-flag` is held by session s2: only it can pop, close or drop it (resume that session if it has ended)
+> s1: mem.Drop("fix-flaky-test/rename-port-flag", "not needed")
+error: `fix-flaky-test/rename-port-flag` is held by session s2: only it can pop, close or drop it (resume that session if it has ended)
+> s1: mem.Start("fix-flaky-test/rename-port-flag")
+error: `fix-flaky-test/rename-port-flag` is held by session s2: only it can pop, close or drop it (resume that session if it has ended)
+> s1: mem.Push("fix-flaky-test/rename-port-flag")
+error: `fix-flaky-test/rename-port-flag` is held by session s2: only it can pop, close or drop it (resume that session if it has ended)
 > s1: mem.Pop("the suite passes with the free port")
-error: `fix-flaky` "fix the flaky test" has open steps `fix-flaky/rename-port-flag` "rename the port flag": push and pop them, or drop them, first
-> user: mem.Forget("fix-flaky/rename-port-flag")
-error: `fix-flaky/rename-port-flag` is held by session s2: only it can pop, close or drop it (resume that session if it has ended)
-> user: mem.Drop("fix-flaky", "the user gives up")
-error: `fix-flaky` is held by session s1: only it can pop, close or drop it (resume that session if it has ended)
-> s3: mem.Push("fix-flaky")
-error: `fix-flaky` is held by session s1: only it can pop, close or drop it (resume that session if it has ended)
+error: `fix-flaky-test` "fix the flaky test" has open todos `fix-flaky-test/rename-port-flag` "rename the port flag": push and pop them, or drop them, first
+> user: mem.Forget("fix-flaky-test/rename-port-flag")
+error: `fix-flaky-test/rename-port-flag` is held by session s2: only it can pop, close or drop it (resume that session if it has ended)
+> user: mem.Drop("fix-flaky-test", "the user gives up")
+error: `fix-flaky-test` is held by session s1: only it can pop, close or drop it (resume that session if it has ended)
+> s3: mem.Push("fix-flaky-test")
+error: `fix-flaky-test` is held by session s1: only it can pop, close or drop it (resume that session if it has ended)
 > s3: mem.Push()
-nothing to push at the root: `fix-flaky` "fix the flaky test" is held by session s1, and nothing in it can be done now: make a goal, mem.NewFrame("…", "…").Push().
+nothing to push at the root: `fix-flaky-test` "fix the flaky test" is held by session s1, and nothing in it can be done now: make a todo, mem.Todo("…").Push().
 > s2: mem.Pop("the flag is --port now")
-done `fix-flaky/rename-port-flag` "rename the port flag" → the flag is --port now
-next: mem.Done("fix-flaky", "…") once it holds
-  [pop `fix-flaky/rename-port-flag` → the flag is --port now]
+done `fix-flaky-test/rename-port-flag` "rename the port flag" → the flag is --port now
+next: mem.Done("fix-flaky-test", "…") once it holds
+  [pop `fix-flaky-test/rename-port-flag` → the flag is --port now]
 > s3: mem.Push()
-nothing to push at the root: `fix-flaky` "fix the flaky test" is held by session s1, and nothing in it can be done now: make a goal, mem.NewFrame("…", "…").Push().
+nothing to push at the root: `fix-flaky-test` "fix the flaky test" is held by session s1, and nothing in it can be done now: make a todo, mem.Todo("…").Push().
 > s1: mem.Pop("the suite passes 20 of 20 with the free port")
-done `fix-flaky` "fix the flaky test" → the suite passes 20 of 20 with the free port
-  [pop `fix-flaky` → the suite passes 20 of 20 with the free port]
+done `fix-flaky-test` "fix the flaky test" → the suite passes 20 of 20 with the free port
+  [pop `fix-flaky-test` → the suite passes 20 of 20 with the free port]
 > s1: mem.Push()
-nothing to push at the root: `side` "a side quest made at the root" is open: mem.Push("side") enters it; or make a goal: mem.NewFrame("…", "…").Push().
-> s1: println(mem.Show("fix-flaky"))
-[x] `fix-flaky` "fix the flaky test" (3/3 done)
+nothing to push at the root: `side-quest` "side quest" is open: mem.Push("side-quest") enters it; or make a todo: mem.Todo("…").Push().
+> s1: println(mem.Show("fix-flaky-test"))
+[x] `fix-flaky-test` "fix the flaky test" (3/3 done)
   done → the suite passes 20 of 20 with the free port
   made by this session, changed 2m ago
-  [x] `fix-flaky/reproduce` "reproduce it" → it fails 3 of 20 runs on the shared port
-  [x] `fix-flaky/find-why-testflaky-fails` "find why TestFlaky fails" → TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)
-  [-] `fix-flaky/rerun` "rerun the suite 20 times" → twenty runs were enough
-  [x] `fix-flaky/rename-port-flag` "rename the port flag" → the flag is --port now
+  [x] `fix-flaky-test/reproduce` "reproduce it" → it fails 3 of 20 runs on the shared port
+  [x] `fix-flaky-test/find-why-testflaky-fails` "find why TestFlaky fails" → TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)
+  [-] `fix-flaky-test/rerun-suite-20-times` "rerun the suite 20 times" → twenty runs were enough
+  [x] `fix-flaky-test/rename-port-flag` "rename the port flag" → the flag is --port now
 
-> s1: println(mem.Show("fix-flaky/rerun"))
-[-] `fix-flaky/rerun` "rerun the suite 20 times" (a step of `fix-flaky` "fix the flaky test") (2/2 done)
+> s1: println(mem.Show("fix-flaky-test/rerun-suite-20-times"))
+[-] `fix-flaky-test/rerun-suite-20-times` "rerun the suite 20 times" (under `fix-flaky-test` "fix the flaky test") (2/2 done)
   dropped → twenty runs were enough
   made by this session, changed 17m ago
-  thought `flake-rate`: 3 of 20 runs failed before the fix (now the step `fix-flaky/rerun/flake-rate`)
-  [x] `fix-flaky/rerun/flake-rate` "measure it again after the fix" → 0 of 50 after the fix
-  [x] `fix-flaky/rerun/twenty` "twenty runs" → 20 of 20 passed
-  [-] `fix-flaky/rerun/fifty` "fifty runs"
+  thought `flake-rate`: 3 of 20 runs failed before the fix (now the todo `fix-flaky-test/rerun-suite-20-times/flake-rate`)
+  [x] `fix-flaky-test/rerun-suite-20-times/flake-rate` "measure it again after the fix" → 0 of 50 after the fix
+  [x] `fix-flaky-test/rerun-suite-20-times/twenty-runs` "twenty runs" → 20 of 20 passed
+  [-] `fix-flaky-test/rerun-suite-20-times/fifty-runs` "fifty runs"
 
-> s3: mem.Push("side")
-in `side` "a side quest made at the root": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  [push `side`]
-> s3: mem.NewFrame("look", "look around").Push()
-added `side/look` "look around"
-in `side/look` "look around": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  [push `side/look`]
-> s1: mem.Push("side/look")
-error: `side/look` is held by session s3: only it can pop, close or drop it (resume that session if it has ended)
-> s1: mem.Done("side", "nothing to see")
-error: `side` is held by session s3: only it can pop, close or drop it (resume that session if it has ended)
+> s3: mem.Push("side-quest")
+in `side-quest` "side quest": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  [push `side-quest`]
+> s3: mem.Todo("look around").Push()
+added `side-quest/look-around` "look around"
+in `side-quest/look-around` "look around": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  [push `side-quest/look-around`]
+> s1: mem.Push("side-quest/look-around")
+error: `side-quest/look-around` is held by session s3: only it can pop, close or drop it (resume that session if it has ended)
+> s1: mem.Done("side-quest", "nothing to see")
+error: `side-quest` is held by session s3: only it can pop, close or drop it (resume that session if it has ended)
 > s3: mem.Pop("nothing here")
-done `side/look` "look around" → nothing here
-next: pop `side` with the evidence that it holds
-  [pop `side/look` → nothing here]
+done `side-quest/look-around` "look around" → nothing here
+next: pop `side-quest` with the evidence that it holds
+  [pop `side-quest/look-around` → nothing here]
 > s3: mem.Pop("nothing to see")
-done `side` "a side quest made at the root" → nothing to see
-  [pop `side` → nothing to see]
+done `side-quest` "side quest" → nothing to see
+  [pop `side-quest` → nothing to see]
 > user: mem.Bind("deploy the site")
-added goal `deploy-site` "deploy the site"
+added `deploy-site` "deploy the site"
 > s4: mem.Frame()
 [ ] `deploy-site` "deploy the site"
   made by the user, changed 1m ago
 > s4: mem.Push("deploy-site")
-error: you are in `deploy-site` already: it is this session's goal; push its steps
+error: you are in `deploy-site` already: it is this session's /goal; push its todos
 > s4: mem.Push()
-nothing to push: `deploy-site` is this session's goal and has no open step: mem.Steps to plan more, or mem.Done when it holds.
-> s4: mem.NewFrame("build", "build it")
+nothing to push: `deploy-site` is this session's /goal and has no open todo: mem.Todo("…") to plan more, or mem.Done when it holds.
+> s4: mem.Todo("build it")
 added `deploy-site/build` "build it"
 > s4: mem.Push()
-in `deploy-site/build` "build it": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+in `deploy-site/build` "build it": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
   [push `deploy-site/build`]
 > s4: mem.Done("deploy-site", "built")
 error: you are still in `deploy-site/build`: pop or drop it before `deploy-site`
@@ -250,14 +252,16 @@ done `deploy-site/build` "build it" → built in 3s
 next: mem.Done("deploy-site", "…") once it holds
   [pop `deploy-site/build` → built in 3s]
 > s4: mem.Push()
-nothing to push: `deploy-site` is this session's goal and has no open step: mem.Steps to plan more, or mem.Done when it holds.
+nothing to push: `deploy-site` is this session's /goal and has no open todo: mem.Todo("…") to plan more, or mem.Done when it holds.
 > s4: mem.Drop("deploy-site", "no")
 error: `deploy-site` is the user's /goal for this session, so this session does not drop it: close it with mem.Done("deploy-site", "…") once it holds, or "stopped: …" when the goal says to stop; the user clears it with /goal clear
 > s4: mem.Done("deploy-site", "built and deployed")
 done `deploy-site` "deploy the site" → built and deployed
-> s1: mem.Goal("ship it", "ship").Steps("a", "b", "c")
-added goal `ship` "ship it"
-added `ship/a` "a", `ship/b` "b", `ship/c` "c"; next: `ship/a` "a"
+> s1: sh := mem.Todo("ship it"); sh.Todo("a"); sh.Todo("b"); sh.Todo("c")
+added `ship` "ship it"
+added `ship/a` "a"
+added `ship/b` "b"
+added `ship/c` "c"
 > s1: mem.Ask("ship/a", "which key?")
 mem.Wait("ship/b", "2026-12-01")
 asked `ship/a/which-key` "which key?" (for the user); `ship/a` waits on it; next: `ship/b` "b"
@@ -269,10 +273,10 @@ ship/a open
 ship/b waiting 
 ship/c doing s2
 > s1: mem.Push("ship")
-in `ship` "ship it": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+in `ship` "ship it": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
   [push `ship`]
 > s1: mem.Push()
-in `ship/a` "a": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+in `ship/a` "a": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
   [push `ship/a`]
 > s1: mem.Push()
 nothing to push: nothing in `ship/a` can be done now: `ship/a/which-key` is asked of the user: end your turn so they can answer, or mem.Drop("ship/a/which-key", "why").
@@ -283,30 +287,30 @@ error: `ship/a/which-key` "which key?" is asked of the user: end your turn so th
 > s1: mem.Recall("shared port")
 nothing in mem is about that: mem.Show() lists what it holds, and mem.Find("words") matches words
 > s2: mem.Pop("again")
-`fix-flaky/rename-port-flag` was already done → the flag is --port now: it is off your stack now
-  [pop `fix-flaky/rename-port-flag` → the flag is --port now]
-> s2: mem.Done("fix-flaky/rename-port-flag")
-`fix-flaky/rename-port-flag` was already done → the flag is --port now: it is off your stack now
-  [pop `fix-flaky/rename-port-flag` → the flag is --port now]
-> s3: mem.Goal("email John Hunter about the invoice").Push()
-added goal `email-john-hunter-about` "email John Hunter about the invoice"
-in `email-john-hunter-about` "email John Hunter about the invoice": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+`fix-flaky-test/rename-port-flag` was already done → the flag is --port now: it is off your stack now
+  [pop `fix-flaky-test/rename-port-flag` → the flag is --port now]
+> s2: mem.Done("fix-flaky-test/rename-port-flag")
+`fix-flaky-test/rename-port-flag` was already done → the flag is --port now: it is off your stack now
+  [pop `fix-flaky-test/rename-port-flag` → the flag is --port now]
+> s3: mem.Todo("email John Hunter about the invoice").Push()
+added `email-john-hunter-about` "email John Hunter about the invoice"
+in `email-john-hunter-about` "email John Hunter about the invoice": when it is done, pop it with what came of it and what the next todo needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
   [push `email-john-hunter-about`]
 > s3: mem.Redact("John Hunter")
 error: that text is in the name of `email-john-hunter-about`, which is on your stack: pop it first, then redact
-> s3: mem.NewFrame("a-b-c-d-e", "five words")
-added `email-john-hunter-about/a-b-c-d-e` "five words"
+> s3: mem.Todo("five words")
+added `email-john-hunter-about/five-words` "five words"
 > s3: mem.Pop("sent")
-error: `email-john-hunter-about` "email John Hunter about the invoice" has open steps `email-john-hunter-about/a-b-c-d-e` "five words": push and pop them, or drop them, first
-> s3: mem.NewFrame("a-b-c-d-e", "five words")
-error: `email-john-hunter-about` already has a step named `a-b-c-d-e`
+error: `email-john-hunter-about` "email John Hunter about the invoice" has open todos `email-john-hunter-about/five-words` "five words": push and pop them, or drop them, first
+> s3: mem.Todo("five words")
+error: `email-john-hunter-about` "email John Hunter about the invoice" already has an open todo "five words"
 > s1: println(mem.Show())
-mem: 2 goals open, 1 question for the user · 3 closed · 2 facts
+mem: 2 todos open, 1 question for the user · 3 closed · 2 facts
 questions for the user:
   [?] `ship/a/which-key` "which key?"
-goals:
+todos:
   [ ] `email-john-hunter-about` "email John Hunter about the invoice" (0/1 done · session s3 · 3m ago · held by session s3, 3m ago)
-    [ ] `email-john-hunter-about/a-b-c-d-e` "five words"  ← next
+    [ ] `email-john-hunter-about/five-words` "five words"  ← next
   [ ] `ship` "ship it" (0/3 done · this session · 12m ago · held by this session, 12m ago)
     [ ] `ship/a` "a" (waits on the user · held by this session, 12m ago)
       [?] `ship/a/which-key` "which key?"
@@ -314,8 +318,8 @@ goals:
     [ ] `ship/c` "c" (held by session s2, 15m ago)
 closed lately:
   [x] `deploy-site` "deploy the site" → built and deployed (2026-10-29)
-  [x] `side` "a side quest made at the root" → nothing to see (2026-10-29)
-  [x] `fix-flaky` "fix the flaky test" → the suite passes 20 of 20 with the free port (2026-10-29)
+  [x] `side-quest` "side quest" → nothing to see (2026-10-29)
+  [x] `fix-flaky-test` "fix the flaky test" → the suite passes 20 of 20 with the free port (2026-10-29)
 facts, newest first:
   `staging-database-db-stg-2` = the staging database is db-stg-7
   `staging-database-db-stg` = the staging database is db-stg-7

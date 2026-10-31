@@ -17,17 +17,17 @@ import (
 	"strings"
 )
 
-// memMethod is one of mem's calls, or of a Goal's, as the model writes it:
+// memMethod is one of mem's calls, or of a Frame's, as the model writes it:
 // its name and its parameters, "(name, result...)".
 type memMethod struct {
 	name, params string
 }
 
-// memCalls is what the model may call on mem and on a Goal, in the order
+// memCalls is what the model may call on mem and on a Frame, in the order
 // gnomem declares them. It is read from gnomem's own source, so that what a
 // call that does not fit is told never disagrees with the library.
 type memCalls struct {
-	mem, goal []memMethod
+	mem, frame []memMethod
 }
 
 var memAPI = readMemAPI()
@@ -35,7 +35,7 @@ var memAPI = readMemAPI()
 // memNotCalls are exported for gnosh, not for the model: Bind is /goal's,
 // Apply the journal's, Check the tests', Has gnosh mem's, NextHint the
 // receipt's, and String prints.
-var memNotCalls = map[string]bool{"Bind": true, "Apply": true, "Check": true, "Has": true, "NextHint": true, "String": true, "Name": true, "Kind": true, "Says": true, "Ref": true, "NextTodo": true}
+var memNotCalls = map[string]bool{"Bind": true, "Apply": true, "Check": true, "Has": true, "NextHint": true, "String": true, "Name": true, "Kind": true, "Says": true, "NextTodo": true}
 
 func readMemAPI() memCalls {
 	var api memCalls
@@ -59,14 +59,12 @@ func readMemAPI() memCalls {
 				continue
 			}
 			call := memMethod{fn.Name.Name, memParams(fn.Type.Params)}
-			switch t := fn.Recv.List[0].Type.(type) {
-			case *ast.StarExpr:
-				if id, ok := t.X.(*ast.Ident); ok && id.Name == "Mem" {
+			if t, ok := fn.Recv.List[0].Type.(*ast.StarExpr); ok {
+				switch id, _ := t.X.(*ast.Ident); id.Name {
+				case "Mem":
 					api.mem = append(api.mem, call)
-				}
-			case *ast.Ident:
-				if t.Name == "Goal" {
-					api.goal = append(api.goal, call)
+				case "Frame":
+					api.frame = append(api.frame, call)
 				}
 			}
 		}
@@ -81,21 +79,22 @@ func memParams(list *ast.FieldList) string {
 	for _, field := range list.List {
 		_, many := field.Type.(*ast.Ellipsis)
 		for _, n := range field.Names {
+			name := strings.TrimSuffix(n.Name, "_")
 			if many {
-				names = append(names, n.Name+"...")
+				names = append(names, name+"...")
 			} else {
-				names = append(names, n.Name)
+				names = append(names, name)
 			}
 		}
 	}
 	return "(" + strings.Join(names, ", ") + ")"
 }
 
-// find is the call named name, of mem's or of a Goal's.
-func (calls memCalls) find(onGoal bool, name string) (memMethod, bool) {
+// find is the call named name, of mem's or of a Frame's.
+func (calls memCalls) find(onFrame bool, name string) (memMethod, bool) {
 	list := calls.mem
-	if onGoal {
-		list = calls.goal
+	if onFrame {
+		list = calls.frame
 	}
 	for _, c := range list {
 		if c.name == name {
@@ -105,12 +104,12 @@ func (calls memCalls) find(onGoal bool, name string) (memMethod, bool) {
 	return memMethod{}, false
 }
 
-// names lists the calls of mem's, or of a Goal's, as a sentence does: "a,
+// names lists the calls of mem's, or of a Frame's, as a sentence does: "a,
 // b and c".
-func (calls memCalls) names(onGoal bool) string {
+func (calls memCalls) names(onFrame bool) string {
 	list := calls.mem
-	if onGoal {
-		list = calls.goal
+	if onFrame {
+		list = calls.frame
 	}
 	var names []string
 	for _, c := range list {
@@ -121,7 +120,7 @@ func (calls memCalls) names(onGoal bool) string {
 
 // memArgCount is what gno's "wrong argument count in call to <on>.<name>;
 // want <want> got <got>" says in mem's words, from what the call takes; ""
-// when name is no call of mem's or of a Goal's, and gno's words stand.
+// when name is no call of mem's or of a Frame's, and gno's words stand.
 func memArgCount(on, name, want, got string) string {
 	args := want + " arguments"
 	if want == "1" {
@@ -138,12 +137,12 @@ func memArgCount(on, name, want, got string) string {
 		}
 		return msg + ": mem." + name + c.params
 	}
-	// Anything else called on is a Goal: mem's only other type.
+	// Anything else called on is a Frame, which mem.Todo and mem.Frame give.
 	c, ok := memAPI.find(true, name)
 	if !ok {
 		return ""
 	}
-	msg := "a Goal's " + name + " takes " + args + ", not " + got + ": mem.Goal(…)." + name + c.params
+	msg := "a Frame's " + name + " takes " + args + ", not " + got + ": mem.Todo(…)." + name + c.params
 	if mc, ok := memAPI.find(false, name); ok {
 		msg += ", or mem." + name + mc.params + " for an item by its name"
 	}
@@ -151,16 +150,16 @@ func memArgCount(on, name, want, got string) string {
 }
 
 // memMissing is what to tell the model of gno's "missing field <name> in
-// <Mem or Goal>": a call mem's older versions had, where a Goal's call is
+// <Mem or Frame>": a call mem's older versions had, where a Frame's call is
 // mem's, or what there is to call.
-func memMissing(name string, onGoal bool) string {
-	if !onGoal {
+func memMissing(name string, onFrame bool) string {
+	if !onFrame {
 		if hint, ok := memMoved[name]; ok {
 			return hint
 		}
 		return "mem's calls are " + memAPI.names(false)
 	}
-	has := "a Goal, which mem.Goal(…) gives, has " + memAPI.names(true)
+	has := "a Frame, which mem.Todo(…) and mem.Frame(id) give, has " + memAPI.names(true)
 	if c, ok := memAPI.find(false, name); ok {
 		return has + "; " + name + " is mem's: mem." + name + c.params
 	}

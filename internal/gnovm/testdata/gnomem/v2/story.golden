@@ -1,48 +1,50 @@
 > s1: println(mem.Show())
-mem is empty: mem.Goal("what to get done").Steps("…", "…") plans a task, and mem.Fact("cmd/test", "…") keeps a fact
+mem is empty: mem.Todo("what to get done") adds a todo, and mem.Fact("cmd/test", "…") keeps a fact
 
-> s1: mem.Goal("release v2").Steps("bump the version", "tag: tag v2.0.0", "CI is green")
-added goal `release-v2` "release v2"
-added `release-v2/bump-version` "bump the version", `release-v2/tag` "tag v2.0.0", `release-v2/ci-green` "CI is green"; next: `release-v2/bump-version` "bump the version"
+> s1: r := mem.Todo("release v2"); r.Todo("bump the version"); r.Todo("tag it"); r.Todo("CI is green")
+added `release-v2` "release v2"
+added `release-v2/bump-version` "bump the version"
+added `release-v2/tag` "tag it"
+added `release-v2/ci-green` "CI is green"
 > s1: mem.Done("release-v2/bump-version", "now 2.0.0")
-done `release-v2/bump-version` "bump the version" → now 2.0.0; next: `release-v2/tag` "tag v2.0.0"
+done `release-v2/bump-version` "bump the version" → now 2.0.0; next: `release-v2/tag` "tag it"
 > s1: mem.Ask("release-v2/tag", "which key signs the tag?")
 asked `release-v2/tag/which-key-signs-tag` "which key signs the tag?" (for the user); `release-v2/tag` waits on it; next: `release-v2/ci-green` "CI is green"
 > s1: mem.Done("release-v2/tag", "tagged")
-error: `release-v2/tag` "tag v2.0.0" has open steps `release-v2/tag/which-key-signs-tag` "which key signs the tag?": Done or Drop them first
+error: `release-v2/tag` "tag it" has open todos `release-v2/tag/which-key-signs-tag` "which key signs the tag?": Done or Drop them first
 > s1: mem.Done("release-v2/tag/which-key-signs-tag", "the YubiKey")
-answered `release-v2/tag/which-key-signs-tag` "which key signs the tag?" → the YubiKey; next: `release-v2/tag` "tag v2.0.0"
+answered `release-v2/tag/which-key-signs-tag` "which key signs the tag?" → the YubiKey; next: `release-v2/tag` "tag it"
 > s1: mem.Note("release-v2/tag", "the tag needs the release key")
-noted on `release-v2/tag` "tag v2.0.0" as thought `tag-needs-release-key`
+noted on `release-v2/tag` "tag it" as thought `tag-needs-release-key`
 > s1: mem.Done("Release-v2/tag", "tagged")
 error: names are lowercase, typed as printed: `release-v2/tag`
 > s1: mem.Done("2", "tagged")
-error: `2` is not a name; steps are named under their goal, like `goal/find-cause`: mem.Show() lists them
-> s1: mem.Goal("Release v2")
-error: `release-v2` "release v2" (this session, 3m ago, 1/3 done) is already open: add to it with mem.Steps("release-v2", "…"), or give other work a title that tells them apart
-> s1: mem.Goal("renew the gno.shop TLS cert", "renew-cert").Wait("Dec 1")
-added goal `renew-cert` "renew the gno.shop TLS cert"
-error: write a day as 2026-12-01 (today is Thu 2026-10-29); nothing was kept, so `renew-cert`, added above, is not in mem
-> s1: mem.Goal("renew the gno.shop TLS cert", "renew-cert").Wait("2026-12-01")
-added goal `renew-cert` "renew the gno.shop TLS cert"
-`renew-cert` "renew the gno.shop TLS cert" waits until 2026-12-01
-> s1: mem.Goal("bump the gno pin").Wait("PR #6399 merged")
-added goal `bump-gno-pin` "bump the gno pin"
+error: `2` is not a name; todos are named under the one they are in, like `fix-flaky/find-cause`: mem.Show() lists them
+> s1: mem.Todo("Release v2")
+error: `release-v2` "release v2" (this session, 3m ago, 1/3 done) is already open: enter it with mem.Push("release-v2") and add to it with mem.Todo("…"), or give other work a task that tells them apart
+> s1: mem.Todo("renew the TLS cert").Wait("Dec 1")
+added `renew-tls-cert` "renew the TLS cert"
+error: write a day as 2026-12-01 (today is Thu 2026-10-29); nothing was kept, so `renew-tls-cert`, added above, is not in mem
+> s1: mem.Todo("renew the TLS cert").Wait("2026-12-01")
+added `renew-tls-cert` "renew the TLS cert"
+`renew-tls-cert` "renew the TLS cert" waits until 2026-12-01
+> s1: mem.Todo("bump the gno pin").Wait("PR #6399 merged")
+added `bump-gno-pin` "bump the gno pin"
 `bump-gno-pin` "bump the gno pin" waits for: PR #6399 merged
 > s2: mem.Start("release-v2/tag")
-started `release-v2/tag` "tag v2.0.0"
+started `release-v2/tag` "tag it"
 > s1: println(mem.Next("release-v2"))
 release-v2/ci-green
 > s1: println(mem.Show())
-mem: 3 goals open
-goals:
+mem: 3 todos open
+todos:
   [ ] `release-v2` "release v2" (1/3 done · this session · 2m ago)
     [x] `release-v2/bump-version` "bump the version" → now 2.0.0
-    [ ] `release-v2/tag` "tag v2.0.0" (held by session s2, 2m ago)
+    [ ] `release-v2/tag` "tag it" (held by session s2, 2m ago)
       [x] `release-v2/tag/which-key-signs-tag` "which key signs the tag?" → the YubiKey
     [ ] `release-v2/ci-green` "CI is green"  ← next
   [ ] `bump-gno-pin` "bump the gno pin" (this session · 3m ago · waits for: PR #6399 merged)
-  [ ] `renew-cert` "renew the gno.shop TLS cert" (this session · 4m ago · waits until 2026-12-01)
+  [ ] `renew-tls-cert` "renew the TLS cert" (this session · 4m ago · waits until 2026-12-01)
 
 > s1: mem.Fact("cmd/test", "go test ./...")
 fact `cmd/test` is new
@@ -63,18 +65,18 @@ reopened `bump-gno-pin` "bump the gno pin"; it waits for: PR #6399 merged
 > s1: mem.Done("release-v2/tag", "tagged v2.0.0")
 error: `release-v2/tag` is held by session s2: only it can pop, close or drop it (resume that session if it has ended)
 > s2: mem.Done("release-v2/tag", "tagged v2.0.0")
-done `release-v2/tag` "tag v2.0.0" → tagged v2.0.0; next: `release-v2/ci-green` "CI is green"
+done `release-v2/tag` "tag it" → tagged v2.0.0; next: `release-v2/ci-green` "CI is green"
 > s1: mem.Done("release-v2/ci-green", "go test ./... → ok")
 done `release-v2/ci-green` "CI is green" → go test ./... → ok; next: `release-v2` itself: mem.Done("release-v2", "…") once it holds
 > s1: mem.Done("release-v2", "shipped")
 done `release-v2` "release v2" → shipped
 > s1: println(mem.Show())
-mem: 2 goals open · 1 closed · 1 rule · 3 facts
+mem: 2 todos open · 1 closed · 1 rule · 3 facts
 rules:
   `push-after-landing` = push gnosh main to GitHub only after land-branch.sh prints landed:
-goals:
+todos:
   [ ] `bump-gno-pin` "bump the gno pin" (this session · 5m ago · waits for: PR #6399 merged)
-  [ ] `renew-cert` "renew the gno.shop TLS cert" (this session · 17m ago · waits until 2026-12-01)
+  [ ] `renew-tls-cert` "renew the TLS cert" (this session · 17m ago · waits until 2026-12-01)
 closed lately:
   [x] `release-v2` "release v2" → shipped (2026-10-29)
 facts, newest first:
@@ -87,7 +89,7 @@ facts, newest first:
   done → shipped
   made by this session, changed 2m ago
   [x] `release-v2/bump-version` "bump the version" → now 2.0.0
-  [x] `release-v2/tag` "tag v2.0.0" → tagged v2.0.0
+  [x] `release-v2/tag` "tag it" → tagged v2.0.0
   [x] `release-v2/ci-green` "CI is green" → go test ./... → ok
 
 > s1: println(mem.Show("cmd"))
@@ -97,36 +99,46 @@ under `cmd/`:
   `cmd/tests` = go test ./internal/...
 
 > s1: mem.Thought("tag-needs-release-key")
-error: no frame on your stack has a thought named `tag-needs-release-key`
+thought `tag-needs-release-key` on `release-v2/tag`: the tag needs the release key
 > s1: mem.Frame("release-v2")
 [x] `release-v2` "release v2" (3/3 done)
   done → shipped
   made by this session, changed 5m ago
   [x] `release-v2/bump-version` "bump the version" → now 2.0.0
-  [x] `release-v2/tag` "tag v2.0.0" → tagged v2.0.0
+  [x] `release-v2/tag` "tag it" → tagged v2.0.0
   [x] `release-v2/ci-green` "CI is green" → go test ./... → ok
 > s1: mem.Frame("release-v2/tag")
-[x] `release-v2/tag` "tag v2.0.0" (a step of `release-v2` "release v2") (1/1 done)
+[x] `release-v2/tag` "tag it" (under `release-v2` "release v2") (1/1 done)
   done → tagged v2.0.0
   made by this session, changed 8m ago
   thought `tag-needs-release-key`: the tag needs the release key
   [x] `release-v2/tag/which-key-signs-tag` "which key signs the tag?" → the YubiKey
 > s1: mem.Forget("release-v2")
-forgot `release-v2` and its 4 steps; gnosh erases their text from its files
-> s1: mem.Goal("make tea").Steps("boil water", "pour water")
-added goal `make-tea` "make tea"
-added `make-tea/boil-water` "boil water", `make-tea/pour-water` "pour water"; next: `make-tea/boil-water` "boil water"
+forgot `release-v2` and its 4 todos; gnosh erases their text from its files
+> s1: tea := mem.Todo("make tea"); tea.Todo("boil water"); tea.Todo("pour water")
+added `make-tea` "make tea"
+added `make-tea/boil-water` "boil water"
+added `make-tea/pour-water` "pour water"
 > s1: mem.Drop("make-tea", "no kettle")
-dropped `make-tea` "make tea", with its open steps `make-tea/pour-water` and `make-tea/boil-water`
-> s1: mem.Goal("make tea")
-added goal `make-tea-2` "make tea"
+dropped `make-tea` "make tea", with its open todos `make-tea/pour-water` and `make-tea/boil-water`
+> s1: mem.Todo("make tea")
+added `make-tea-2` "make tea"
 > s1: mem.Forget("make-tea-2")
 error: `make-tea-2` is open: mem.Drop("make-tea-2", "why") first, then forget it
-> s1: mem.Goal("port the tests to gno").Steps("arith", "bytes", "crypto", "errors", "fmt", "io", "math", "sort", "strings", "time")
-added goal `port-tests-gno` "port the tests to gno"
-added `port-tests-gno/arith` "arith", `port-tests-gno/bytes` "bytes", `port-tests-gno/crypto` "crypto", `port-tests-gno/errors` "errors", `port-tests-gno/fmt` "fmt", `port-tests-gno/io` "io", `port-tests-gno/math` "math", `port-tests-gno/sort` "sort", `port-tests-gno/strings` "strings", `port-tests-gno/time` "time"; next: `port-tests-gno/arith` "arith"
+> s1: p := mem.Todo("port the tests to gno"); for _, n := range []string{"arith", "bytes", "crypto", "errors", "fmt", "io", "math", "sort", "strings", "time"} { p.Todo(n) }
+added `port-tests-gno` "port the tests to gno"
+added `port-tests-gno/arith` "arith"
+added `port-tests-gno/bytes` "bytes"
+added `port-tests-gno/crypto` "crypto"
+added `port-tests-gno/errors` "errors"
+added `port-tests-gno/fmt` "fmt"
+added `port-tests-gno/io` "io"
+added `port-tests-gno/math` "math"
+added `port-tests-gno/sort` "sort"
+added `port-tests-gno/strings` "strings"
+added `port-tests-gno/time` "time"
 > s1: mem.Done("port-tests-gno", "all ported")
-error: `port-tests-gno` "port the tests to gno" has open steps `port-tests-gno/arith` "arith", `port-tests-gno/bytes` "bytes", `port-tests-gno/crypto` "crypto", `port-tests-gno/errors` "errors" and 6 more: Done or Drop them first
+error: `port-tests-gno` "port the tests to gno" has open todos `port-tests-gno/arith` "arith", `port-tests-gno/bytes` "bytes", `port-tests-gno/crypto` "crypto", `port-tests-gno/errors` "errors" and 6 more: Done or Drop them first
 > s1: for _, n := range []string{"arith", "bytes", "crypto", "errors", "fmt", "io", "math"} { mem.Done("port-tests-gno/"+n, "ported") }
 done `port-tests-gno/arith` "arith" → ported; next: `port-tests-gno/bytes` "bytes"
 done `port-tests-gno/bytes` "bytes" → ported; next: `port-tests-gno/crypto` "crypto"
@@ -145,22 +157,28 @@ done `port-tests-gno/math` "math" → ported; next: `port-tests-gno/sort` "sort"
   [ ] `port-tests-gno/strings` "strings"
   [ ] `port-tests-gno/time` "time"
 
-> s1: mem.Goal("tidy the docs").Steps("a", "b", "c", "d", "e", "f", "g")
-added goal `tidy-docs` "tidy the docs"
-added `tidy-docs/a` "a", `tidy-docs/b` "b", `tidy-docs/c` "c", `tidy-docs/d` "d", `tidy-docs/e` "e", `tidy-docs/f` "f", `tidy-docs/g` "g"; next: `tidy-docs/a` "a"
+> s1: d := mem.Todo("tidy the docs"); for _, n := range []string{"a", "b", "c", "d", "e", "f", "g"} { d.Todo(n) }
+added `tidy-docs` "tidy the docs"
+added `tidy-docs/a` "a"
+added `tidy-docs/b` "b"
+added `tidy-docs/c` "c"
+added `tidy-docs/d` "d"
+added `tidy-docs/e` "e"
+added `tidy-docs/f` "f"
+added `tidy-docs/g` "g"
 > s1: mem.Drop("tidy-docs", "moved to the docs session")
-dropped `tidy-docs` "tidy the docs", with its open steps `tidy-docs/g`, `tidy-docs/f`, `tidy-docs/e`, `tidy-docs/d` and 3 more
-> s1: mem.Goal("rotate the staging key").Ask("which day suits you?")
-added goal `rotate-staging-key` "rotate the staging key"
+dropped `tidy-docs` "tidy the docs", with its open todos `tidy-docs/g`, `tidy-docs/f`, `tidy-docs/e`, `tidy-docs/d` and 3 more
+> s1: mem.Todo("rotate the staging key").Ask("which day suits you?")
+added `rotate-staging-key` "rotate the staging key"
 asked `rotate-staging-key/which-day-suits-you` "which day suits you?" (for the user); `rotate-staging-key` waits on it
-> s1: mem.Goal("ping the team"); mem.Ask("ping the team", "who is on call?")
-added goal `ping-team` "ping the team"
-error: "ping the team" is a title, not a name: the goal with that title is `ping-team`; nothing was kept, so `ping-team`, added above, is not in mem
-> s1: mem.Goal("goal-until-green", "make go test ./... pass")
-error: the title comes first, then the name: mem.Goal("make go test ./... pass", "goal-until-green")
-> s1: mem.Goal("which Go file declares the most functions?"); mem.Note("which-go-file-declares-the-most-functions", "b.go has 5")
-added goal `which-go-file-declares` "which Go file declares the most functions?"
-error: `which-go-file-declares-the-most-functions` is not a name: a goal's name keeps at most 4 words of its title, and this one's is `which-go-file-declares`; nothing was kept, so `which-go-file-declares`, added above, is not in mem
+> s1: mem.Todo("ping the team"); mem.Ask("ping the team", "who is on call?")
+added `ping-team` "ping the team"
+error: "ping the team" is a task, not a name: the todo with that task is `ping-team`; nothing was kept, so `ping-team`, added above, is not in mem
+> s1: mem.Todo("make go test ./... pass", "until-green")
+error: mem.Todo takes 1 argument, not 2: mem.Todo(task)
+> s1: mem.Todo("which Go file declares the most functions?"); mem.Note("which-go-file-declares-the-most-functions", "b.go has 5")
+added `which-go-file-declares` "which Go file declares the most functions?"
+error: `which-go-file-declares-the-most-functions` is not a name: a todo's name keeps at most 4 words of its task, and this one's is `which-go-file-declares`; nothing was kept, so `which-go-file-declares`, added above, is not in mem
 > s1: mem.Fact("cmd/deploy", "make ship ENV=prod"); mem.Note("qa", "Lin does QA")
 fact `cmd/deploy` is new; `cmd/` also has `cmd/build`, `cmd/test` and `cmd/tests`
 error: no item `qa`; mem.Show() lists them; nothing was kept, so fact `cmd/deploy`, set above, is not in mem
@@ -171,14 +189,14 @@ redacted it in 1 place; gnosh rewrites mem's files
 > s1: mem.Redact("nothing")
 error: mem holds no such text; Redact takes a secret's exact text
 > s1: println(mem.Show())
-mem: 5 goals open, 1 question for the user · 2 closed · 1 rule · 3 facts
+mem: 5 todos open, 1 question for the user · 2 closed · 1 rule · 3 facts
 rules:
   `push-after-landing` = push gnosh main to GitHub only after land-branch.sh prints landed:
 questions for the user:
   [?] `rotate-staging-key/which-day-suits-you` "which day suits you?"
 due:
-  [ ] `renew-cert` "renew the gno.shop TLS cert" (since 2026-12-01)
-goals:
+  [ ] `renew-tls-cert` "renew the TLS cert" (since 2026-12-01)
+todos:
   [ ] `bump-gno-pin` "bump the gno pin" (this session · 33d ago · waits for: PR #6399 merged)
   [ ] `rotate-staging-key` "rotate the staging key" (0/1 done · this session · 33d ago · waits on the user)
     [?] `rotate-staging-key/which-day-suits-you` "which day suits you?"
@@ -190,7 +208,7 @@ goals:
     [ ] `port-tests-gno/strings` "strings"
     [ ] `port-tests-gno/time` "time"
   [ ] `make-tea-2` "make tea" (this session · 33d ago)
-  [ ] `renew-cert` "renew the gno.shop TLS cert" (this session · 33d ago · due since 2026-12-01)
+  [ ] `renew-tls-cert` "renew the TLS cert" (this session · 33d ago · due since 2026-12-01)
 closed lately:
   [-] `tidy-docs` "tidy the docs" → moved to the docs session (2026-10-29)
   [-] `make-tea` "make tea" → no kettle (2026-10-29)

@@ -241,7 +241,7 @@ func (m *Mem) setStatus(name string, it *Todo, status string, at int64) {
 			panic("apply: cannot open `" + name + "` under closed `" + parentOf(name) + "`")
 		}
 	} else if it.Status == "" && it.OpenSteps > 0 {
-		panic("apply: cannot close `" + name + "` while a step of it is open")
+		panic("apply: cannot close `" + name + "` while a todo under it is open")
 	}
 	if parent != nil {
 		parent.countStep(it.Status, -1)

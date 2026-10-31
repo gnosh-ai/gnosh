@@ -4,7 +4,10 @@ answer says, in plain words, what is done, what is next, and what the user
 has to answer before it can go on.
 
 -- mem --
-mem.Goal("release 2.1", "release-2-1").Steps("bump the version to 2.1.0", "update the changelog", "tag v2.1.0")
+r := mem.Todo("release 2.1")
+r.Todo("bump the version to 2.1.0")
+r.Todo("update the changelog")
+r.Todo("tag v2.1.0")
 mem.Done("release-2-1/bump-version-2-1", "VERSION is 2.1.0")
 mem.Done("release-2-1/update-changelog", "CHANGELOG has a 2.1.0 section")
 mem.Ask("release-2-1/tag-v2-1-0", "which key signs the tag?")

@@ -38,7 +38,7 @@ func TestMemErasureScrub(t *testing.T) {
 func TestMemHostSaysWhatItErased(t *testing.T) {
 	t.Parallel()
 	h := newTestMemHost(t, t.TempDir())
-	memOK(t, h, `mem.Goal("plan the surprise party").Steps("book Moonlight Hall")`)
+	memOK(t, h, `mem.Todo("plan the surprise party").Todo("book Moonlight Hall")`)
 	memOK(t, h, `mem.Note("plan-surprise-party/book-moonlight-hall", "the deposit is 200")`)
 	memOK(t, h, `mem.Drop("plan-surprise-party", "called off")`)
 	memOK(t, h, `mem.Fact("phone/alice", "555-0142 ext 9")`)

@@ -178,7 +178,7 @@ func TestMemFindsByMeaning(t *testing.T) {
 	h := newTestMemHost(t, dir)
 	h.embed = newMemEmbedder(f.URL + "/v1")
 	memOK(t, h, `mem.Fact("cmd/test", "go test -race ./...")`)
-	memOK(t, h, `mem.Goal("make tea").Steps("boil water")`)
+	memOK(t, h, `mem.Todo("make tea").Todo("boil water")`)
 	memOK(t, h, `mem.Fact("tea/kind", "green, from the tin")`)
 	find := func(words string) string {
 		t.Helper()
@@ -384,7 +384,7 @@ func TestMemRecall(t *testing.T) {
 	for i := range 25 {
 		mem(`mem.Fact("notes/n` + strconv.Itoa(i) + `", "a note on nothing much")`)
 	}
-	mem(`mem.Goal("ship the site").Steps("deploy to production")`)
+	mem(`mem.Todo("ship the site").Todo("deploy to production")`)
 	mem(`mem.Done("ship-site/deploy-production", "deployed with scripts/deploy.sh")`)
 	dir := memDir(l.opts.Dir, "/proj")
 	require.NoError(t, fillMemVectorsNow(ctx, dir, newMemEmbedder(f.URL+"/v1")))
@@ -450,7 +450,7 @@ func TestMemCommandSaysHowItFindsByMeaning(t *testing.T) {
 	h, l, mem := newRecallHost(t, f)
 	ctx := context.Background()
 	mem(`mem.Fact("cmd/test", "go test ./...")`)
-	mem(`mem.Goal("ship the site")`)
+	mem(`mem.Todo("ship the site")`)
 	show := func(args string) string {
 		t.Helper()
 		out, _, err := h.memCommand(ctx, "/proj", "s1", args, nil)

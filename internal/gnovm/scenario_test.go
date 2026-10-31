@@ -188,7 +188,7 @@ func TestScenarioMemSection(t *testing.T) {
 -- mem --
 mem.Fact("api/staging-key", "sk-staging-0000")
 -- mem --
-mem.Goal("rotate the staging key", "rotate-key")
+mem.Todo("rotate the staging key")
 -- prompt --
 What's the staging API key?
 -- check --
@@ -946,7 +946,7 @@ func TestScenarioChecksReadMem(t *testing.T) {
 	dir := t.TempDir()
 	h := newTestHost(t, dir)
 	for _, code := range []string{
-		`mem.Goal("implement Div").Steps("write it", "test it")`,
+		`d := mem.Todo("implement Div"); d.Todo("write it"); d.Todo("test it")`,
 		`mem.Note("implement-div/write", "see calc.go:12")`,
 		`mem.Done("implement-div/write", "done")`,
 		`mem.Fact("db/staging", "db-stg-9")`,

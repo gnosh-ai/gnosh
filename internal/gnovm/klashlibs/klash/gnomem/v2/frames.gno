@@ -15,7 +15,7 @@ import (
 )
 
 // Frames (FRAMES.md): the task tree seen through a stack. A Frame is a
-// piece of work in mem, a goal or a step; entering one (Push) marks
+// piece of work in mem, a todo; entering one (Push) marks
 // where gnosh will cut the model's context, and leaving it with a result
 // (Pop) cuts everything since. A thought is a labelled line kept on
 // the frame the model stands in: it costs nothing, cuts nothing, and is
@@ -32,7 +32,7 @@ type Frame struct {
 	Result   string    // what came of it, once popped
 	State    string    // "open", "doing", "waiting", "asked", "done" or "dropped": what NextTodo reads
 	Doing    string    // the session working it, when State is "doing"
-	Todos    []*Frame  // its steps, in order, one level
+	Todos    []*Frame  // its todos, in order, one level
 	Thoughts []Thought // its thoughts, oldest first
 	m        *Mem
 }
@@ -42,7 +42,7 @@ type Frame struct {
 type Thought struct {
 	Text  string
 	Frame *Frame // the step it was promoted into; nil until then
-	name  string // its label, unique among the frame's thoughts
+	name  string // its label, unique among mem's thoughts
 	frame string // the id of the frame it is on
 	m     *Mem
 }
@@ -83,9 +83,9 @@ func (f *Frame) String() string {
 	return f.m.Show(f.Id)
 }
 
-// NextTodo is f's first step, in the order of its Todos, whose State is
+// NextTodo is f's first todo, in the order of its Todos, whose State is
 // "open", or "doing" by this session; nil when f has none, and at the
-// unbound root, where a goal is entered by id or made and pushed.
+// unbound root, where a todo is entered by id or made and pushed.
 func (f *Frame) NextTodo() *Frame {
 	if f == nil || f.m == nil {
 		return nil
@@ -97,13 +97,10 @@ func (t Thought) Name() string { return t.name }
 func (t Thought) Kind() string { return "thought" }
 func (t Thought) Says() string { return t.Text }
 
-// Ref is the thought's address: its frame, "#", its name.
-func (t Thought) Ref() string { return t.frame + "#" + t.name }
-
 func (t Thought) String() string {
-	s := "thought `" + t.Ref() + "`: " + t.Text
+	s := "thought `" + t.name + "` on `" + t.frame + "`: " + t.Text
 	if t.Frame != nil {
-		s += " (now the step `" + t.Frame.Id + "`)"
+		s += " (now the todo `" + t.Frame.Id + "`)"
 	}
 	return s + "\n"
 }
@@ -116,7 +113,7 @@ func (f Fact) String() string { return "fact `" + f.name + "` = " + f.Body + "\n
 // Frame is the present frame: the top of this session's stack, or, with
 // the stack empty, the root: the goal the user's /goal bound the session
 // to, or everything open. Given an id, it is that frame:
-// mem.Push("fix-flaky") enters a goal by id.
+// mem.Push("fix-flaky") enters a todo by id.
 func (m *Mem) Frame(id ...string) *Frame {
 	switch {
 	case len(id) > 1:
@@ -143,8 +140,8 @@ func (m *Mem) present() string {
 	return bound()
 }
 
-// frame is frame id, with its steps one level deep and its thoughts; the
-// unbound root's steps are the open goals, newest first.
+// frame is frame id, with its todos one level deep and its thoughts; the
+// unbound root's todos are the open top-level ones, newest first.
 func (m *Mem) frame(id string) *Frame {
 	f := m.shallow(id)
 	if id == "" {
@@ -167,7 +164,7 @@ func (m *Mem) frame(id string) *Frame {
 	return f
 }
 
-// shallow is frame id without its steps and thoughts.
+// shallow is frame id without its todos and thoughts.
 func (m *Mem) shallow(id string) *Frame {
 	if id == "" {
 		return &Frame{Purpose: "everything open", State: "open", m: m}
@@ -245,109 +242,101 @@ func (m *Mem) noFrame(id string) string {
 	msg := "there is no frame " + named(id)
 	low := strings.ToLower(strings.TrimSpace(id))
 	switch {
-	case strings.IndexByte(id, '#') >= 0:
-		item, name := splitAddr(id)
-		return msg + ": that is a thought's address; mem.Thought(" + quote(name) + ") reads it, and mem.Frame(" + quote(item) + ") is its frame"
 	case low != id && m.get(low) != nil:
 		return msg + ": names are lowercase, typed as printed: `" + low + "`"
 	case m.formed(id) != "":
 		return msg + ": did you mean `" + m.formed(id) + "`?"
 	case m.titled(id) != "":
-		return msg + ": that is a title; the goal is `" + m.titled(id) + "`"
+		return msg + ": that is a task; the todo is `" + m.titled(id) + "`"
 	}
 	return msg + "; mem.Show() lists them"
 }
 
-// NewFrame adds a step under the present frame, at the end of its Todos,
-// and returns it; at the unbound root it adds a goal. Frames are named,
-// not numbered: the name is a mem name, unique among the parent's steps,
-// and the Id is the parent's Id and the name. The purpose defaults to the
-// name.
-func (m *Mem) NewFrame(name string, purpose ...string) *Frame {
-	if len(purpose) > 1 {
-		panic("NewFrame takes a name and, after it, one purpose: mem.NewFrame(\"find-cause\", \"find why TestFlaky fails\")")
-	}
-	p := name
-	if len(purpose) == 1 {
-		p = clip(text("the purpose", purpose[0]), maxTitle)
-	}
-	if p == "" {
-		p = name
-	}
-	parent := m.present()
-	id := m.frameName(parent, name, p)
-	if parent == "" {
-		m.refuseOpenTitle(p)
-		m.do(Op{Kind: "add", Name: id, New: p, By: caller()})
-		println("added goal " + ref(id, p))
-		return m.frame(id)
-	}
-	m.addStep(parent, id, p)
-	println("added " + ref(id, p))
-	return m.frame(id)
+// Todo adds a todo and returns it: under the frame you are in, after its
+// other todos, or, at the unbound root, a top-level one. Its name is made
+// from the task: gnosh's small model's label of it, or the task's words,
+// with -2, -3 when that name is taken. A task an open todo beside it
+// already has is refused.
+func (m *Mem) Todo(task string) *Frame {
+	return m.todoUnder(m.present(), task)
 }
 
-// frameName checks a new frame's name under parent ("" for the root), and
-// returns its id.
-func (m *Mem) frameName(parent, name, purpose string) string {
-	where, example := "the root", "fix-flaky"
-	if parent != "" {
-		where, example = "`"+parent+"`", "find-cause"
+// Todo adds a todo under frame f, as mem.Todo does under the present frame:
+// a plan is made without entering it, mem.Todo("…").Todo("…").
+func (f *Frame) Todo(task string) *Frame {
+	if f == nil || f.m == nil {
+		panic("no frame to add a todo to: mem.Todo(task) makes one")
 	}
-	switch {
-	case name == "":
-		panic("a frame needs a name: mem.NewFrame(\"" + example + "\", \"what it is for\")")
-	case strings.ToLower(name) != name && validName(strings.ToLower(name)):
-		panic("names are lowercase: `" + strings.ToLower(name) + "`")
-	case !validName(name) && validName(purpose) && !strings.Contains(purpose, "/"):
-		panic("the name comes first, then the purpose: mem.NewFrame(" + quote(purpose) + ", " + quote(name) + ")")
-	case strings.Contains(name, "/"):
-		panic("a frame's name is one segment, under the frame you are in (" + where + "): try `" + nameForm(stepName(name)) + "`")
-	case !validName(name):
-		panic(named(name) + " is not a name: a frame's name is lowercase words joined by \"-\"" + like(nameForm(name), example))
-	case len(name) > maxGoalName:
-		panic("a frame's name is at most " + strconv.Itoa(maxGoalName) + " bytes: try `" + nameOf(name, "frame") + "`")
+	return f.m.todoUnder(f.Id, task)
+}
+
+// Wait holds the todo back until a day, or until what the words say (see
+// Mem.Wait): mem.Todo("renew the TLS cert").Wait("2026-12-01").
+func (f *Frame) Wait(until string) *Frame {
+	if f == nil || f.m == nil || f.Id == "" {
+		panic("no todo to wait: mem.Todo(task) makes one")
+	}
+	f.m.Wait(f.Id, until)
+	return f
+}
+
+// Ask asks the user something, as a todo under f (see Mem.Ask).
+func (f *Frame) Ask(question string) *Frame {
+	if f == nil || f.m == nil || f.Id == "" {
+		panic("no todo to ask under: mem.Todo(task) makes one, or mem.Ask(\"\", question) asks at the root")
+	}
+	f.m.Ask(f.Id, question)
+	return f
+}
+
+// todoUnder adds a todo for task under parent ("" for the root).
+func (m *Mem) todoUnder(parent, task string) *Frame {
+	task = clip(text("the task", task), maxTitle)
+	if task == "" {
+		panic("a todo needs a task: mem.Todo(\"what to get done\")")
 	}
 	if parent == "" {
-		free := func(n string) bool { return !reserved[n] && !forgottenName(n) && m.taken.Get(n) == nil }
-		switch {
-		case strings.Count(name, "-") >= 4:
-			panic("a goal's name is at most 4 words and " + strconv.Itoa(maxGoalName) + " bytes: try `" + nameOf(name, "goal") + "`")
-		case reserved[name] || forgottenName(name):
-			panic("`" + name + "` is reserved: give another name")
-		case !free(name):
-			panic("the name `" + name + "` is taken, and names are never given twice: give another, like `" + m.freeName(name, free) + "`")
+		m.refuseOpenTitle(task)
+		id := m.freeName(m.madeName(task, "todo"), func(n string) bool { return m.freeTop(n) })
+		m.do(Op{Kind: "add", Name: id, New: task, By: caller()})
+		println("added " + ref(id, task))
+		return m.frame(id)
+	}
+	p := m.openItem(parent)
+	m.eachStep(parent, func(_ string, s *Todo) bool {
+		if s.Status == "" && sameTitle(s.Title) == sameTitle(task) {
+			panic(ref(parent, p.Title) + " already has an open todo " + strconv.Quote(task))
 		}
-		return name
-	}
-	if m.get(parent+"/"+name) != nil {
-		panic("`" + parent + "` already has a step named `" + name + "`")
-	}
-	return parent + "/" + name
+		return false
+	})
+	id := parent + "/" + m.freeStep(parent, m.madeName(task, "todo"))
+	m.addStep(parent, id, task)
+	println("added " + ref(id, task))
+	return m.frame(id)
 }
 
 // addStep adds step id, titled title, under open item parent.
 func (m *Mem) addStep(parent, id, title string) {
 	p := m.openItem(parent)
 	if p.For != "" {
-		panic(ref(parent, p.Title) + " is for the user: it has no steps")
+		panic(ref(parent, p.Title) + " is for the user: it has no todos")
 	}
 	if len(p.Steps) >= maxSteps {
-		panic(ref(parent, p.Title) + " has " + strconv.Itoa(maxSteps) + " steps, the most an item may have")
+		panic(ref(parent, p.Title) + " has " + strconv.Itoa(maxSteps) + " todos, the most an item may have")
 	}
 	m.do(Op{Kind: "add", Name: id, New: title, By: caller()})
 }
 
 // Push enters a frame: it becomes this session's, the top of its stack,
 // and from here the context will be cut when it is popped. With no id it
-// enters the present frame's next step, Frame().NextTodo(), and when there
+// enters the present frame's next todo, Frame().NextTodo(), and when there
 // is none it is a kept no-op that says what to do instead; with an id it
-// enters that frame. A Frame and a Thought have Push too: mem.NewFrame("…",
-// "…").Push(), mem.Thought("port").Push().
+// enters that frame. A Frame and a Thought have Push too:
+// mem.Todo("…").Push(), mem.Thought("port").Push().
 func (m *Mem) Push(id ...string) {
 	switch {
 	case len(id) > 1:
-		panic("Push takes one id, or none for the next step")
+		panic("Push takes one id, or none for the next todo")
 	case len(id) == 1:
 		m.push(id[0], "")
 		return
@@ -364,7 +353,7 @@ func (m *Mem) Push(id ...string) {
 // Push enters the frame, as mem.Push(f.Id) does.
 func (f *Frame) Push() {
 	if f == nil || f.m == nil {
-		panic("no frame to push: mem.Frame(id) or mem.NewFrame(name, purpose) gives one")
+		panic("no frame to push: mem.Frame(id) or mem.Todo(task) gives one")
 	}
 	f.m.push(f.Id, "")
 }
@@ -375,9 +364,9 @@ func (m *Mem) push(id, thought string) {
 	stack := frames()
 	switch {
 	case id == "":
-		panic("the root is not a frame to enter: push a goal, or make one")
+		panic("the root is not a frame to enter: push a todo, or make one: mem.Todo(\"…\").Push()")
 	case id == bound():
-		panic("you are in `" + id + "` already: it is this session's goal; push its steps")
+		panic("you are in `" + id + "` already: it is this session's /goal; push its todos")
 	}
 	it := m.openItem(id)
 	if it.For != "" {
@@ -392,7 +381,7 @@ func (m *Mem) push(id, thought string) {
 		panic("`" + id + "` is already on your stack")
 	}
 	if s := deepestUnder(stack, id); s != "" {
-		panic("`" + id + "` cannot go above its own step `" + s + "`, which is on your stack: pop or drop that first")
+		panic("`" + id + "` cannot go above its own todo `" + s + "`, which is on your stack: pop or drop that first")
 	}
 	if it.Doing != me {
 		m.do(Op{Kind: "set", Name: id, Field: "doing", Old: it.Doing, New: me})
@@ -407,7 +396,7 @@ func pushText(id, title, thought string) string {
 	if title == "" && thought != "" {
 		head = "in `" + id + "` (thought: " + quote(line(thought, 80)) + ")"
 	}
-	return head + ": when it is done, pop it with what came of it and what the next step needs. " +
+	return head + ": when it is done, pop it with what came of it and what the next todo needs. " +
 		"Everything from here until the pop is removed from your context then, what you were told included; " +
 		"what matters after, keep as a thought first. Your result stays, and nothing you did is undone."
 }
@@ -425,29 +414,29 @@ func (m *Mem) nothingToPush() string {
 		if newest != "" {
 			g := m.get(newest)
 			if g.Doing != "" && g.Doing != caller() {
-				// A goal another session holds, ended or not, is not entered;
-				// its free steps are, by id.
+				// A todo another session holds, ended or not, is not entered;
+				// its free todos are, by id.
 				msg := "nothing to push at the root: " + ref(newest, g.Title) + " is held by " + who(g.Doing)
 				if nt := m.nextTodo(newest); nt != nil {
-					return msg + "; its step " + ref(nt.Id, nt.Purpose) + " is free: mem.Push(" + quote(nt.Id) + ") enters it; or make a goal: mem.NewFrame(\"…\", \"…\").Push()."
+					return msg + "; its todo " + ref(nt.Id, nt.Purpose) + " is free: mem.Push(" + quote(nt.Id) + ") enters it; or make a todo: mem.Todo(\"…\").Push()."
 				}
-				return msg + ", and nothing in it can be done now: make a goal, mem.NewFrame(\"…\", \"…\").Push()."
+				return msg + ", and nothing in it can be done now: make a todo, mem.Todo(\"…\").Push()."
 			}
-			return "nothing to push at the root: " + ref(newest, g.Title) + " is open: mem.Push(" + quote(newest) + ") enters it; or make a goal: mem.NewFrame(\"…\", \"…\").Push()."
+			return "nothing to push at the root: " + ref(newest, g.Title) + " is open: mem.Push(" + quote(newest) + ") enters it; or make a todo: mem.Todo(\"…\").Push()."
 		}
-		return "nothing to push at the root: no goal is open: make one, mem.NewFrame(\"…\", \"…\").Push()."
+		return "nothing to push at the root: nothing is open: make a todo, mem.Todo(\"…\").Push()."
 	}
 	it := m.get(p)
 	if it.OpenSteps > 0 {
 		return "nothing to push: nothing in `" + p + "` can be done now: " + m.holdsOf(p) + "."
 	}
 	if len(frames()) == 0 {
-		return "nothing to push: `" + p + "` is this session's goal and has no open step: mem.Steps to plan more, or mem.Done when it holds."
+		return "nothing to push: `" + p + "` is this session's /goal and has no open todo: mem.Todo(\"…\") to plan more, or mem.Done when it holds."
 	}
-	return "nothing to push: `" + p + "` has no open step: pop it with its result."
+	return "nothing to push: `" + p + "` has no open todo: pop it with its result."
 }
 
-// holdsOf says what holds back each open step of frame id that NextTodo
+// holdsOf says what holds back each open todo of frame id that NextTodo
 // passed over: asked of the user, waiting, or held by another session.
 func (m *Mem) holdsOf(id string) string {
 	var parts []string
@@ -466,12 +455,12 @@ func (m *Mem) holdsOf(id string) string {
 }
 
 // heldText refuses a call on a frame another session holds; when the frame
-// has a step this session could enter, it says so, since a goal another
-// session holds, ended or not, does not hold its free steps.
+// has a todo this session could enter, it says so, since a todo another
+// session holds, ended or not, does not hold the free ones under it.
 func (m *Mem) heldText(id string, it *Todo) string {
 	msg := "`" + id + "` is held by " + who(it.Doing) + ": only it can pop, close or drop it (resume that session if it has ended)"
 	if nt := m.nextTodo(id); nt != nil {
-		msg += "; its step " + ref(nt.Id, nt.Purpose) + " is free: mem.Push(" + quote(nt.Id) + ") enters it"
+		msg += "; its todo " + ref(nt.Id, nt.Purpose) + " is free: mem.Push(" + quote(nt.Id) + ") enters it"
 	}
 	return msg
 }
@@ -487,7 +476,7 @@ func (m *Mem) heldByAny(id string, it *Todo) bool {
 }
 
 // refuseHeld refuses to close, drop, forget or start item id while another
-// session holds it, or holds an open step under it.
+// session holds it, or holds an open todo under it.
 func (m *Mem) refuseHeld(id string, it *Todo) {
 	me := caller()
 	if it.Doing != "" && it.Doing != me {
@@ -587,7 +576,7 @@ func (m *Mem) popClosed(id string, it *Todo) {
 }
 
 // pop leaves frame id, the top of the stack: done with result, or, with
-// dropped, dropped with result as why, its open steps dropped first.
+// dropped, dropped with result as why, its open todos dropped first.
 func (m *Mem) pop(id string, it *Todo, result string, dropped bool) {
 	r := clip(text("the result", result), maxText)
 	if r == "" {
@@ -601,13 +590,13 @@ func (m *Mem) pop(id string, it *Todo, result string, dropped bool) {
 		popped(id, it.Title, "dropped: "+r, len(it.Notes))
 		msg := "dropped " + ref(id, it.Title)
 		if len(steps) > 0 {
-			msg += ", with its open steps " + names(outlineOrder(steps))
+			msg += ", with its open todos " + names(outlineOrder(steps))
 		}
 		println(msg)
 		return
 	}
 	if it.OpenSteps > 0 {
-		panic(ref(id, it.Title) + " has open steps " + m.refs(m.openSteps(id)) + ": push and pop them, or drop them, first")
+		panic(ref(id, it.Title) + " has open todos " + m.refs(m.openSteps(id)) + ": push and pop them, or drop them, first")
 	}
 	if it.Wait != "" {
 		m.do(Op{Kind: "set", Name: id, Field: "wait", Old: it.Wait})
@@ -651,8 +640,8 @@ func (m *Mem) NextHint(id string) string {
 
 // Think keeps a thought on the present frame and returns it: one journal
 // line, no cut, nothing on the server. Think(text) names it for you, from
-// the text (gnosh's small model, or its words), with -2, -3 when the frame
-// has that name; Think(name, text) names it yourself. Thoughts are what a
+// the text (gnosh's small model, or its words), with -2, -3 when mem has
+// that name; Think(name, text) names it yourself. Thoughts are what a
 // frame keeps besides its result, and the one way anything a frame learned
 // or was told outlives its pop: they stay in mem under the frame, popped
 // or not. At the unbound root there is no frame to think on.
@@ -669,7 +658,7 @@ func (m *Mem) Think(args ...string) Thought {
 		if thought == "" {
 			panic("a thought needs words: mem.Think(\"what you found\")")
 		}
-		name = freeThoughtName(it, m.madeName(thought, "note"))
+		name = m.freeThought(m.madeName(thought, "note"))
 	case 2:
 		name = m.thoughtName(p, it, args[0])
 		thought = clip(text("the thought", args[1]), maxText)
@@ -707,16 +696,41 @@ func (m *Mem) thoughtName(id string, it *Todo, name string) string {
 		panic(named(name) + " is not a name: a thought's name is lowercase words joined by \"-\"" + like(nameForm(stepName(name)), "port-env"))
 	case len(name) > maxGoalName:
 		panic("a thought's name is at most " + strconv.Itoa(maxGoalName) + " bytes: try `" + nameOf(name, "thought") + "`")
-	case noteIndex(it, name) >= 0:
-		panic("`" + id + "` already has a thought named `" + name + "`: a thought is never edited; add another, like `" + freeThoughtName(it, name) + "`")
+	case m.thoughtOn(name) != "":
+		panic("a thought named `" + name + "` is on `" + m.thoughtOn(name) + "` already: a thought is never edited; add another, like `" + m.freeThought(name) + "`")
 	}
 	return name
 }
 
+// thoughtOn is the id of the item holding the thought named name, or "".
+func (m *Mem) thoughtOn(name string) string {
+	found := ""
+	m.items.Iterate("", "", func(id string, v any) bool {
+		if noteIndex(v.(*Todo), name) >= 0 {
+			found = id
+		}
+		return found != ""
+	})
+	return found
+}
+
+// freeThought is base, or base-2, base-3, …, whichever names no thought in
+// mem yet.
+func (m *Mem) freeThought(base string) string {
+	if m.thoughtOn(base) == "" {
+		return base
+	}
+	for i := 2; ; i++ {
+		if n := base + "-" + strconv.Itoa(i); m.thoughtOn(n) == "" {
+			return n
+		}
+	}
+}
+
 // Thought is a thought by name: the present frame's, else the first found
-// walking down the stack, each frame's own and then its steps', so a
-// thought of a popped step is still reached by name while its goal is on
-// the stack.
+// walking down the stack, each frame's own and then its todos', else the
+// one of that name anywhere in mem; a name mem makes is unique, so a
+// thought is reached by name from any frame.
 func (m *Mem) Thought(name string) Thought {
 	for _, f := range m.framesDown() {
 		it := m.get(f)
@@ -733,7 +747,10 @@ func (m *Mem) Thought(name string) Thought {
 			}
 		}
 	}
-	panic("no frame on your stack has a thought named `" + name + "`")
+	if id := m.thoughtOn(name); id != "" {
+		return m.thoughtOf(id, *noteNamed(m.get(id), name))
+	}
+	panic("no thought named `" + name + "` in mem: mem.Recall(\"…\") finds one by meaning")
 }
 
 // framesDown is the present frame, then the stack from the top down.
@@ -797,11 +814,11 @@ func (m *Mem) Recall(words string) []Namable {
 	return out
 }
 
-// Push dives into the thought: it makes a step named as the thought, if it
+// Push dives into the thought: it makes a todo named as the thought, if it
 // has none, under the thought's frame when that is the present frame or on
-// the stack, else under the present frame; the step's purpose is why, if
+// the stack, else under the present frame; the todo's purpose is why, if
 // given, else empty, since the thought's text is there; then it enters the
-// step as mem.Push does. A thought already dived into enters its step
+// todo as mem.Push does. A thought already dived into enters its todo
 // again. A Thought comes from Think, Thought(name) or Recall.
 func (t Thought) Push(why ...string) {
 	if t.m == nil {
@@ -851,9 +868,9 @@ func (m *Mem) pushThought(t Thought, why ...string) {
 	if len(why) == 1 {
 		purpose = clip(text("why", why[0]), maxTitle)
 	}
-	step := m.frameName(parent, t.name, purpose)
+	step := parent + "/" + m.freeStep(parent, t.name)
 	m.addStep(parent, step, purpose)
 	m.do(Op{Kind: "set", Name: frame + "#" + t.name, Field: "frame", Old: n.Step, New: step})
-	println("thought `" + t.name + "` is now the step `" + step + "`")
+	println("thought `" + t.name + "` is now the todo `" + step + "`")
 	m.push(step, n.Text)
 }

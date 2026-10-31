@@ -66,9 +66,10 @@ func (s *memStory) check(r *memRealm, after string) {
 // TestMemGrammars is the golden list of the names and waits mem takes, and
 // of what it says to each it refuses (MEMPLAN §12):
 // testdata/gnomem/v2/grammar.golden, which GNOMEM_V2_WRITE=1 rewrites. A
-// fact's, a rule's and a goal's given name follow one grammar; a wait is a
-// day written 2026-12-01, or words, and a day written any other way is
-// refused, naming today; a wait for the next session is none.
+// fact's and a rule's given name follow one grammar, and a todo's name is
+// made from its task; a wait is a day written 2026-12-01, or words, and a
+// day written any other way is refused, naming today; a wait for the next
+// session is none.
 func TestMemGrammars(t *testing.T) {
 	s := newMemStory(t)
 	for _, name := range []string{
@@ -80,10 +81,16 @@ func TestMemGrammars(t *testing.T) {
 	}
 	s.run("user", `mem.Rule("No-Emoji", "no emoji in commit messages")`)
 	s.run("user", `mem.Rule("style/emoji", "no emoji in commit messages")`)
-	for _, name := range []string{"Ship-It", "ship it", "ship/it", "ship-it"} {
-		s.run("s1", `mem.Goal("ship it", `+strconv.Quote(name)+`)`)
+	// A todo's name is made from its task: filler words dropped, at most 4
+	// words and 32 bytes, a hyphenated word kept whole, a key skipped, and
+	// -2 when the name is taken; a task an open todo has is not given twice.
+	for _, task := range []string{
+		"Ship It", "ship it!", "ship/it", "ship-it", "Ship-It", "page the on-call engineer",
+		"rotate the key sk-live-4f9c2b3a8d7e now", "which Go file declares the most functions?", "日本", "",
+	} {
+		s.run("s1", `mem.Todo(`+strconv.Quote(task)+`)`)
 	}
-	s.run("s1", `mem.Goal("renew the cert", "renew-cert")`)
+	s.run("s1", `mem.Todo("renew the cert")`)
 	for _, wait := range []string{
 		"2026-12-01", "PR #6399 merged", "the user signs off", "",
 		"Dec 1", "December 1st", "tomorrow", "next week", "in 2 days", "+3d", "12/01", "1/12/2026",
@@ -110,7 +117,7 @@ func TestMemGrammars(t *testing.T) {
 func TestMemStory(t *testing.T) {
 	s := newMemStory(t)
 	s.run("s1", `println(mem.Show())`)
-	s.run("s1", `mem.Goal("release v2").Steps("bump the version", "tag: tag v2.0.0", "CI is green")`)
+	s.run("s1", `r := mem.Todo("release v2"); r.Todo("bump the version"); r.Todo("tag it"); r.Todo("CI is green")`)
 	s.run("s1", `mem.Done("release-v2/bump-version", "now 2.0.0")`)
 	s.run("s1", `mem.Ask("release-v2/tag", "which key signs the tag?")`)
 	s.run("s1", `mem.Done("release-v2/tag", "tagged")`)
@@ -118,10 +125,10 @@ func TestMemStory(t *testing.T) {
 	s.run("s1", `mem.Note("release-v2/tag", "the tag needs the release key")`)
 	s.run("s1", `mem.Done("Release-v2/tag", "tagged")`)
 	s.run("s1", `mem.Done("2", "tagged")`)
-	s.run("s1", `mem.Goal("Release v2")`)
-	s.run("s1", `mem.Goal("renew the gno.shop TLS cert", "renew-cert").Wait("Dec 1")`)
-	s.run("s1", `mem.Goal("renew the gno.shop TLS cert", "renew-cert").Wait("2026-12-01")`)
-	s.run("s1", `mem.Goal("bump the gno pin").Wait("PR #6399 merged")`)
+	s.run("s1", `mem.Todo("Release v2")`)
+	s.run("s1", `mem.Todo("renew the TLS cert").Wait("Dec 1")`)
+	s.run("s1", `mem.Todo("renew the TLS cert").Wait("2026-12-01")`)
+	s.run("s1", `mem.Todo("bump the gno pin").Wait("PR #6399 merged")`)
 	s.run("s2", `mem.Start("release-v2/tag")`)
 	s.run("s1", `println(mem.Next("release-v2"))`)
 	s.run("s1", `println(mem.Show())`)
@@ -144,26 +151,26 @@ func TestMemStory(t *testing.T) {
 	s.run("s1", `mem.Frame("release-v2")`)
 	s.run("s1", `mem.Frame("release-v2/tag")`)
 	s.run("s1", `mem.Forget("release-v2")`)
-	s.run("s1", `mem.Goal("make tea").Steps("boil water", "pour water")`)
+	s.run("s1", `tea := mem.Todo("make tea"); tea.Todo("boil water"); tea.Todo("pour water")`)
 	s.run("s1", `mem.Drop("make-tea", "no kettle")`)
-	s.run("s1", `mem.Goal("make tea")`)
+	s.run("s1", `mem.Todo("make tea")`)
 	s.run("s1", `mem.Forget("make-tea-2")`)
-	// A long task: a refusal and a drop name a few steps and count the
-	// rest, and an outline folds a long run of closed steps.
-	s.run("s1", `mem.Goal("port the tests to gno").Steps("arith", "bytes", "crypto", "errors", "fmt", "io", "math", "sort", "strings", "time")`)
+	// A long task: a refusal and a drop name a few todos and count the
+	// rest, and an outline folds a long run of closed todos.
+	s.run("s1", `p := mem.Todo("port the tests to gno"); for _, n := range []string{"arith", "bytes", "crypto", "errors", "fmt", "io", "math", "sort", "strings", "time"} { p.Todo(n) }`)
 	s.run("s1", `mem.Done("port-tests-gno", "all ported")`)
 	s.run("s1", `for _, n := range []string{"arith", "bytes", "crypto", "errors", "fmt", "io", "math"} { mem.Done("port-tests-gno/"+n, "ported") }`)
 	s.run("s1", `println(mem.Show("port-tests-gno"))`)
-	s.run("s1", `mem.Goal("tidy the docs").Steps("a", "b", "c", "d", "e", "f", "g")`)
+	s.run("s1", `d := mem.Todo("tidy the docs"); for _, n := range []string{"a", "b", "c", "d", "e", "f", "g"} { d.Todo(n) }`)
 	s.run("s1", `mem.Drop("tidy-docs", "moved to the docs session")`)
-	// A question goes with its goal; a title is not a name, and a failed
+	// A question goes with its todo; a task is not a name, and a failed
 	// input says which of what it printed is not in mem.
-	s.run("s1", `mem.Goal("rotate the staging key").Ask("which day suits you?")`)
-	s.run("s1", `mem.Goal("ping the team"); mem.Ask("ping the team", "who is on call?")`)
-	// The real-model pass's slips: the name before the title, a name made
-	// of all a title's words, and a fact before a failure.
-	s.run("s1", `mem.Goal("goal-until-green", "make go test ./... pass")`)
-	s.run("s1", `mem.Goal("which Go file declares the most functions?"); mem.Note("which-go-file-declares-the-most-functions", "b.go has 5")`)
+	s.run("s1", `mem.Todo("rotate the staging key").Ask("which day suits you?")`)
+	s.run("s1", `mem.Todo("ping the team"); mem.Ask("ping the team", "who is on call?")`)
+	// The real-model pass's slips: a name given beside the task, a name made
+	// of all a task's words, and a fact before a failure.
+	s.run("s1", `mem.Todo("make go test ./... pass", "until-green")`)
+	s.run("s1", `mem.Todo("which Go file declares the most functions?"); mem.Note("which-go-file-declares-the-most-functions", "b.go has 5")`)
 	s.run("s1", `mem.Fact("cmd/deploy", "make ship ENV=prod"); mem.Note("qa", "Lin does QA")`)
 	s.holding = func(text string, _ []memOp) ([]string, []string, bool) {
 		if text == "sk-live-4f9c2b" {

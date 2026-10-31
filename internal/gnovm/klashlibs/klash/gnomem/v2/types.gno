@@ -19,7 +19,7 @@ import bptree "klash/bptree/v0"
 // Mem is an agent's memory. Only its methods change it, and they all have
 // pointer receivers: a value receiver would copy the Mem out of its realm.
 type Mem struct {
-	items bptree.BPTree // id → *Todo: a goal's name, then its steps' names, joined by "/"
+	items bptree.BPTree // id → *Todo: a top-level todo's name, then the names of the todos down to it, joined by "/"
 	facts bptree.BPTree // name → *fact
 	rules bptree.BPTree // name → *Rule
 	// The rest is kept by apply, from the three above:
@@ -39,9 +39,10 @@ type Mem struct {
 // for the user.
 type Counts struct{ Open, Done, Dropped, Forgotten, Waits, ForUser int }
 
-// Todo is a piece of work: a goal, a step of one, or a question or request
-// for the user; seen through the stack, a frame (frames.gno). Its id is its
-// key: its goal's name, then the names of the steps down to it.
+// Todo is a piece of work: a top-level todo, one under another, or a
+// question or request for the user; seen through the stack, a frame
+// (frames.gno). Its id is its key: the top-level todo's name, then the
+// names of the todos down to it.
 type Todo struct {
 	Title   string   // what to get done, or what is asked: a frame's purpose; "" for a step made from a thought with no reason given
 	Status  string   // "" while open; "done", "dropped" or "forgotten"

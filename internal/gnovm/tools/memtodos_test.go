@@ -42,7 +42,7 @@ func TestMemGoalIsTheSessionsTodos(t *testing.T) {
 		return session.Todo{Content: content, Status: status, ActiveForm: content}
 	}
 
-	call(t, run, `{"name": "mem", "code": "mem.Goal(\"ship it\").Steps(\"build\", \"test\", \"tag\")"}`)
+	call(t, run, `{"name": "mem", "code": "s := mem.Todo(\"ship it\"); s.Todo(\"build\"); s.Todo(\"test\"); s.Todo(\"tag\")"}`)
 	require.Equal(t, []session.Todo{
 		todo("build", session.TodoStatusInProgress),
 		todo("test", session.TodoStatusPending),

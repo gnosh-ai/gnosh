@@ -26,7 +26,7 @@ func TestMemRead(t *testing.T) {
 	t.Parallel()
 	h := newTestHost(t, t.TempDir())
 	ctx := context.Background()
-	res, err := h.Run(ctx, RunRequest{Project: "/proj", Session: "s1", Name: MemVM, Code: `mem.Goal("ship the release").Steps("build")`})
+	res, err := h.Run(ctx, RunRequest{Project: "/proj", Session: "s1", Name: MemVM, Code: `mem.Todo("ship the release").Todo("build")`})
 	require.NoError(t, err)
 	require.NoError(t, res.Err)
 
@@ -77,19 +77,19 @@ func TestMemCommand(t *testing.T) {
 
 	require.Contains(t, mem(""), "mem is empty")
 	require.Equal(t, "mem has no changes yet", mem("log"))
-	agent(`mem.Goal("ship the release").Steps("build", "test")`) // #1
-	agent(`mem.Fact("cmd/test", "go test ./...")`)               // #2
+	agent(`r := mem.Todo("ship the release"); r.Todo("build"); r.Todo("test")`) // #1
+	agent(`mem.Fact("cmd/test", "go test ./...")`)                              // #2
 
 	require.Contains(t, mem(""), "`ship-release` \"ship the release\" (0/2 done · session \"Release work\" · ")
 	inS1, err := h.MemCommand(ctx, "/proj", "s1", "", titles)
 	require.NoError(t, err)
 	require.Contains(t, inS1, "(0/2 done · this session · ")
-	require.Contains(t, mem("find zzz-nothing"), "/mem lists 1 goal, 0 rules and 1 fact")
+	require.Contains(t, mem("find zzz-nothing"), "/mem lists 1 todo, 0 rules and 1 fact")
 	require.Contains(t, mem("show ship-release cmd/test"), "go test ./...")
 	require.Contains(t, mem("find release"), "`ship-release`")
 	log := mem("log")
 	require.Contains(t, log, `#1 `)
-	require.Contains(t, log, `the agent in "Release work": mem.Goal("ship the release").Steps("build", "test")`)
+	require.Contains(t, log, `the agent in "Release work": r := mem.Todo("ship the release"); r.Todo("build"); r.Todo("test")`)
 	require.Contains(t, log, "    add `ship-release/test`: \"test\"")
 	require.Contains(t, log, "    fact `cmd/test`: \"go test ./...\"")
 	require.NotContains(t, mem("log 1"), "#1 ")
@@ -113,7 +113,7 @@ func TestMemCommand(t *testing.T) {
 
 	// The user forgets an open goal: it is dropped first.
 	out = mem("forget ship-release")
-	require.Contains(t, out, "dropped and forgot `ship-release` and its 2 steps")
+	require.Contains(t, out, "dropped and forgot `ship-release` and its 2 todos")
 	require.Contains(t, out, "(mem's journal was written again without what was erased")
 	requireNowhere(t, dir, "ship the release")
 	require.Contains(t, mem("undo 1"), "change #1 cannot be undone")
@@ -132,7 +132,7 @@ func TestMemCommand(t *testing.T) {
 
 	// The user redacts text however widely mem holds it.
 	for _, title := range []string{"call 555-0199", "text 555-0199", "mail 555-0199", "visit 555-0199"} {
-		agent(`mem.Goal("` + title + `")`)
+		agent(`mem.Todo("` + title + `")`)
 	}
 	require.Contains(t, agent(`mem.Redact("555-0199")`).Err.Error(), "that text is in 4 places")
 	require.Contains(t, mem("redact 555-0199"), "redacted it in 4 places")
@@ -178,16 +178,16 @@ func TestMemUndoRedoes(t *testing.T) {
 		return res.Output
 	}
 	story := []string{
-		`mem.Goal("release v2").Steps("bump the version", "tag v2.0.0", "CI is green")`,
+		`r := mem.Todo("release v2"); r.Todo("bump the version"); r.Todo("tag v2.0.0"); r.Todo("CI is green")`,
 		`mem.Done("release-v2/bump-version", "now 2.0.0")`,
 		`mem.Note("release-v2/tag-v2-0-0", "the tag needs the release key")`,
 		`mem.Ask("release-v2/tag-v2-0-0", "which key signs the tag?")`,
 		`mem.Fact("cmd/test", "go test ./...")`,
 		`mem.Fact("cmd/test", "go test -race ./...")`,
-		`mem.Goal("renew the cert", "renew-cert").Wait("2027-02-01")`,
+		`mem.Todo("renew the cert").Wait("2027-02-01")`,
 		`mem.Wait("renew-cert", "")`,
 		`mem.Start("release-v2/ci-green")`,
-		`mem.Goal("make tea").Steps("boil water", "pour water")`,
+		`tea := mem.Todo("make tea"); tea.Todo("boil water"); tea.Todo("pour water")`,
 		`mem.Drop("make-tea", "no kettle")`,
 		`mem.Reopen("make-tea")`,
 		`mem.Done("release-v2/tag-v2-0-0/which-key-signs-tag", "the YubiKey")`,

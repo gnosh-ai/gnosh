@@ -240,8 +240,9 @@ func NewRunTool(vms *gnovm.Lazy, project string, opts ...RunOption) fantasy.Agen
 
 // unnamedTexts is the texts code keeps in mem without naming them: the one
 // string literal of each mem.Think(…) and mem.Fact(…) called with a single
-// argument, in order, each once. Code that does not parse as statements
-// has none: mem names the texts from their words then.
+// argument, and of each Todo(…), on mem or on a Frame, in order, each once.
+// Code that does not parse as statements has none: mem names the texts
+// from their words then.
 func unnamedTexts(code string) []string {
 	f, err := parser.ParseFile(token.NewFileSet(), "", "package p\nfunc _() {\n"+code+"\n}\n", parser.SkipObjectResolution)
 	if err != nil {
@@ -255,10 +256,10 @@ func unnamedTexts(code string) []string {
 			return true
 		}
 		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || sel.Sel.Name != "Think" && sel.Sel.Name != "Fact" {
+		if !ok || sel.Sel.Name != "Think" && sel.Sel.Name != "Fact" && sel.Sel.Name != "Todo" {
 			return true
 		}
-		if id, ok := sel.X.(*ast.Ident); !ok || id.Name != "mem" {
+		if id, ok := sel.X.(*ast.Ident); sel.Sel.Name != "Todo" && (!ok || id.Name != "mem") {
 			return true
 		}
 		lit, ok := call.Args[0].(*ast.BasicLit)

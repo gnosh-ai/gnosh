@@ -38,13 +38,12 @@ func TestMemHostErasesAtScale(t *testing.T) {
 	h := newTestMemHost(t, dir)
 	const secret = "sk-scale-5f2e8a"
 	start := time.Now()
-	memOK(t, h, `mem.Goal("rotate `+secret+`")`)
+	memOK(t, h, `mem.Todo("rotate `+secret+`")`)
 	for g := 1; g <= 5; g++ {
-		memOK(t, h, fmt.Sprintf(`var titles []string
+		memOK(t, h, fmt.Sprintf(`b := mem.Todo("batch %d")
 for i := 1; i <= 1000; i++ {
-	titles = append(titles, "use %s in place "+strconv.Itoa(i))
-}
-mem.Goal("batch %d").Steps(titles...)`, secret, g))
+	b.Todo("place "+strconv.Itoa(i)+" uses %s")
+}`, g, secret))
 	}
 	t.Logf("5,001 items written in %s", time.Since(start).Round(time.Millisecond))
 
@@ -60,7 +59,7 @@ mem.Goal("batch %d").Steps(titles...)`, secret, g))
 	calls := 0
 	for {
 		calls++
-		res, err = h.call(context.Background(), memRequest{Code: `print(mem.Check()); println(mem.Show("batch-5/1000")); println(mem.Show("forgotten-1"))`, Session: "s1"})
+		res, err = h.call(context.Background(), memRequest{Code: `print(mem.Check()); println(mem.Show("batch-5/place-1000-uses-sk")); println(mem.Show("forgotten-1"))`, Session: "s1"})
 		if busy := (*busyError)(nil); errors.As(err, &busy) {
 			continue
 		}
@@ -68,7 +67,7 @@ mem.Goal("batch %d").Steps(titles...)`, secret, g))
 		break
 	}
 	t.Logf("the store built afresh in %s, %d calls", time.Since(start).Round(time.Millisecond), calls)
-	require.Contains(t, res.Output, "use (redacted) in place 1000")
+	require.Contains(t, res.Output, "place 1000 uses (redacted)")
 	require.Contains(t, res.Output, "rotate (redacted)")
 	requireNowhere(t, dir, secret)
 }

@@ -65,7 +65,7 @@ func (m *Mem) Show(names ...string) string {
 		}
 	}
 	if m.open.Size() > 0 {
-		sb.WriteString("goals:\n")
+		sb.WriteString("todos:\n")
 		// Newest first.
 		m.open.ReverseIterate("", "", func(_ string, v any) bool {
 			m.outline(&sb, v.(string))
@@ -149,10 +149,10 @@ func (m *Mem) String() string { return m.Show() }
 func (m *Mem) showHeader(sb *strings.Builder) {
 	c := m.counts
 	if c.Open+c.Done+c.Dropped == 0 && m.facts.Size() == 0 && m.rules.Size() == 0 {
-		sb.WriteString("mem is empty: mem.Goal(\"what to get done\").Steps(\"…\", \"…\") plans a task, and mem.Fact(\"cmd/test\", \"…\") keeps a fact\n")
+		sb.WriteString("mem is empty: mem.Todo(\"what to get done\") adds a todo, and mem.Fact(\"cmd/test\", \"…\") keeps a fact\n")
 		return
 	}
-	parts := []string{plural(m.open.Size(), "goal") + " open"}
+	parts := []string{plural(m.open.Size(), "todo") + " open"}
 	if c.ForUser > 0 {
 		parts[0] += ", " + plural(c.ForUser, "question") + " for the user"
 	}
@@ -351,7 +351,7 @@ func (m *Mem) Has(name string) bool {
 func (m *Mem) showItem(sb *strings.Builder, name string, it *Todo) {
 	sb.WriteString(mark(it) + " " + ref(name, it.Title))
 	if p := parentOf(name); p != "" {
-		sb.WriteString(" (a step of " + ref(p, m.get(p).Title) + ")")
+		sb.WriteString(" (under " + ref(p, m.get(p).Title) + ")")
 	}
 	if len(it.Steps) > 0 {
 		sb.WriteString(" (" + progress(it) + ")")
@@ -373,7 +373,7 @@ func (m *Mem) showItem(sb *strings.Builder, name string, it *Todo) {
 	for _, n := range it.Notes {
 		sb.WriteString("  thought `" + n.Name + "`: " + n.Text)
 		if n.Step != "" {
-			sb.WriteString(" (now the step `" + n.Step + "`)")
+			sb.WriteString(" (now the todo `" + n.Step + "`)")
 		}
 		sb.WriteString("\n")
 	}
@@ -409,7 +409,7 @@ func (m *Mem) Find(words string) string {
 			facts = "the newest " + strconv.Itoa(maxShowFacts) + " of " + facts + ", with the groups of the rest"
 		}
 		return "nothing in mem matches " + strconv.Quote(words) + how + "; mem.Show() lists " +
-			plural(m.open.Size()+m.closed.Size(), "goal") + ", " + plural(m.rules.Size(), "rule") + " and " + facts + "\n"
+			plural(m.open.Size()+m.closed.Size(), "todo") + ", " + plural(m.rules.Size(), "rule") + " and " + facts + "\n"
 	}
 	var sb strings.Builder
 	for i, n := range names {
@@ -426,7 +426,7 @@ func (m *Mem) Find(words string) string {
 			item, name := splitAddr(n)
 			if it := m.get(item); it != nil && it.Status != "forgotten" {
 				if t := noteNamed(it, name); t != nil {
-					sb.WriteString("thought `" + n + "`: " + line(t.Text, maxLine) + "\n")
+					sb.WriteString("thought `" + name + "` on `" + item + "`: " + line(t.Text, maxLine) + "\n")
 				}
 			}
 		default:
@@ -557,7 +557,7 @@ func cut(s string) string {
 		return s
 	}
 	i := strings.LastIndex(s[:maxShow], "\n")
-	return s[:i+1] + "… (cut: mem.Show(\"name\") shows one goal, mem.Find(\"words\") searches)\n"
+	return s[:i+1] + "… (cut: mem.Show(\"name\") shows one todo, mem.Find(\"words\") searches)\n"
 }
 
 // factsBeside says which facts share name's first segment, for a receipt:

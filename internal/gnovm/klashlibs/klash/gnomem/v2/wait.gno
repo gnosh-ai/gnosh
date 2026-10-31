@@ -37,7 +37,7 @@ func (m *Mem) parseWait(until string) string {
 		panic("write a day as " + suggestDay(until) + " (" + todayIs() + ")")
 	}
 	if validName(until) && m.get(until) != nil {
-		panic("a wait is a day or words, not an item: to wait for `" + until + "`, make this work a step of it, or say it in words")
+		panic("a wait is a day or words, not an item: to wait for `" + until + "`, make this work a todo under it, or say it in words")
 	}
 	return until
 }

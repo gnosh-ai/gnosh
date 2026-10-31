@@ -5273,9 +5273,9 @@ func (m *UI) setInputMode(target uiInputMode) tea.Cmd {
 }
 
 // implementPlanPrompt is what leaving plan mode to carry out the plan
-// sends, hidden: the plan goes on mem first, so its steps are kept, shown
+// sends, hidden: the plan goes on mem first, so its todos are kept, shown
 // in the task list, and survive the session.
-const implementPlanPrompt = "Implement the plan. First put it on mem as a goal with its steps (`mem.Goal(\"…\").Steps(\"…\", \"…\")`), then work through them."
+const implementPlanPrompt = "Implement the plan. First put it on mem as a todo with its parts under it (`mem.Todo(\"…\").Push()` for the plan, then `mem.Todo(\"…\")` for each part, in order), then work through them."
 
 // applyModeSwitch finalizes an input-mode switch once the backend has
 // settled. On error the previous mode is kept so the editor never claims a

@@ -39,7 +39,7 @@ func TestMemCommandReadsTheProjectsMem(t *testing.T) {
 	// A session keeps a goal with a step.
 	c, err := gnovm.Acquire(gnovm.ClientOptions{Options: gnovm.Options{Dir: app.GnoVMDir()}, InProcess: true})
 	require.NoError(t, err)
-	_, err = c.Run(t.Context(), gnovm.RunRequest{Project: project, Session: "s1", Name: gnovm.MemVM, Code: `mem.Goal("ship the release").Steps("tag v2.0.0")`})
+	_, err = c.Run(t.Context(), gnovm.RunRequest{Project: project, Session: "s1", Name: gnovm.MemVM, Code: `mem.Todo("ship the release").Todo("tag v2.0.0")`})
 	c.Release()
 	require.NoError(t, err)
 

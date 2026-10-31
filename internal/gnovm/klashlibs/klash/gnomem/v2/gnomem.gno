@@ -8,13 +8,15 @@
 // the Additional Terms (Strong Attribution) in that file.
 
 // Package gnomem is an agent's memory: the work it means to get done, as
-// goals with steps, and what came of each; what it waits for; what the user
+// todos, one under another, and what came of each; what it waits for; what the user
 // must answer or do; facts to keep; and the user's standing rules. Gnosh
 // keeps one Mem per project, in the realm klash.local/r/mem on disk, and
 // binds it to the name mem in every input the model runs there:
 //
-//	mem.Goal("release v2").Steps("bump: bump the version", "tag v2.0.0", "CI is green")
-//	mem.Push("release-v2")
+//	mem.Todo("release v2").Push()
+//	mem.Todo("bump the version")
+//	mem.Todo("tag v2.0.0")
+//	mem.Todo("CI is green")
 //	mem.Push()
 //	mem.Think("the version lives in version.go")
 //	mem.Pop("now 2.0.0")
@@ -54,13 +56,6 @@ import (
 	"time"
 )
 
-// Goal is a goal just made, so its steps and wait can follow in the same
-// statement.
-type Goal struct {
-	Name string
-	m    *Mem
-}
-
 // Caps on what a Mem keeps; longer text is cut at a character, with "…".
 // (maxSteps, in apply.gno, caps the steps under one item.)
 const (
@@ -68,182 +63,25 @@ const (
 	maxText  = 1000 // bytes of a result, thought, wait, fact or rule
 )
 
-// Goal adds a goal, and returns it so its steps and wait can follow. Its
-// name comes from the title (`make-pot-tea` from "make a pot of tea"), or
-// name gives it; a given name that is not free is refused, with one that
-// is. Goal refuses a title an open goal already has.
-func (m *Mem) Goal(title string, name ...string) Goal {
-	title = clip(text("the title", title), maxTitle)
-	if title == "" {
-		panic("a goal needs a title: mem.Goal(\"what to get done\")")
-	}
-	m.refuseOpenTitle(title)
-	n := m.newGoalName(title, name...)
-	m.do(Op{Kind: "add", Name: n, New: title, By: caller()})
-	println("added goal " + ref(n, title))
-	return Goal{Name: n, m: m}
-}
-
-// Steps adds steps to the goal, after those it has.
-func (g Goal) Steps(titles ...string) Goal {
-	g.m.Steps(g.Name, titles...)
-	return g
-}
-
-// Wait holds the goal back until a day, or until what the words say (see
-// Mem.Wait).
-func (g Goal) Wait(until string) Goal {
-	g.m.Wait(g.Name, until)
-	return g
-}
-
-// Start starts the goal's next step for this session, as mem.Start does,
-// so a plan can be made and begun in one call:
-// mem.Goal("…").Steps("…", "…").Start(). Given a name, it starts that step
-// of the goal instead.
-func (g Goal) Start(step ...string) Goal {
-	g.m.startIn(g.Name, step...)
-	return g
-}
-
-// Push enters the goal as a frame, as mem.Push(name) does, so a plan can
-// be made and entered in one call: mem.Goal("…").Steps("…", "…").Push().
-func (g Goal) Push() Goal {
-	g.m.push(g.Name, "")
-	return g
-}
-
-// startIn is Goal(…).Start, in mem's realm, as its natives need: a Goal
-// is a value outside it.
-func (m *Mem) startIn(goal string, step ...string) {
-	switch {
-	case len(step) > 1:
-		panic("Start takes one step, or none for the next")
-	case len(step) == 1 && step[0] != goal && !strings.HasPrefix(step[0], goal+"/"):
-		panic("`" + step[0] + "` is not a step of `" + goal + "`" + m.stepsOf(goal) + ": .Start() with no name starts the next")
-	case len(step) == 1:
-		m.Start(step[0])
-		return
-	}
-	next := m.nextFor(goal, m.get(goal), caller())
-	if next == "" {
-		panic("`" + goal + "` has no step this session can start now" + m.whatNext(goal))
-	}
-	m.Start(next)
-}
-
-// stepsOf names goal name's steps, for a refusal: ", whose steps are
-// `g/a` and `g/b`", or "" when it has none.
-func (m *Mem) stepsOf(name string) string {
-	it := m.get(name)
-	if it == nil || len(it.Steps) == 0 {
-		return ""
-	}
-	var ids []string
-	for _, s := range it.Steps {
-		ids = append(ids, name+"/"+s)
-	}
-	if len(ids) == 1 {
-		return ", whose step is `" + ids[0] + "`"
-	}
-	return ", whose steps are " + names(ids)
-}
-
-// Ask asks the user something, as a step of the goal (see Mem.Ask).
-func (g Goal) Ask(question string) Goal {
-	g.m.Ask(g.Name, question)
-	return g
-}
-
-// Note records a finding on the goal, as mem.Note does, so that why or
-// when goes with the plan: mem.Goal("…").Note("it expires Friday"). A
-// model reached for it before it was there.
-func (g Goal) Note(note string) Goal {
-	g.m.Note(g.Name, note)
-	return g
-}
-
-// Bind is the goal the user's /goal binds a session to: the open goal
-// titled title, matched as Goal matches titles, or else a new one, made by
-// the user. replacing is the goal the session's earlier /goal added, if
-// any: it is dropped, if it is still open and is not the goal bound now.
+// Bind is the todo the user's /goal binds a session to: the open top-level
+// todo titled title, matched as Todo matches tasks, or else a new one, made
+// by the user. replacing is the todo the session's earlier /goal added, if
+// any: it is dropped, if it is still open and is not the one bound now.
 // Only gnosh calls it, for /goal.
-func (m *Mem) Bind(title string, replacing ...string) Goal {
+func (m *Mem) Bind(title string, replacing ...string) *Frame {
 	if caller() != "user" {
-		panic("only the user's /goal binds a goal; mem.Goal(…) makes one")
+		panic("only the user's /goal binds a todo; mem.Todo(…) makes one")
 	}
-	g := Goal{Name: m.titled(title), m: m}
-	if g.Name == "" {
-		g = m.Goal(title)
+	id := m.titled(title)
+	if id == "" {
+		id = m.todoUnder("", title).Id
 	}
 	for _, r := range replacing {
-		if it := m.get(r); r != g.Name && it != nil && it.Status == "" && !m.heldByAny(r, it) {
+		if it := m.get(r); r != id && it != nil && it.Status == "" && !m.heldByAny(r, it) {
 			m.Drop(r, "replaced by /goal "+strconv.Quote(clip(title, 80)))
 		}
 	}
-	return g
-}
-
-// String is the goal's name and title.
-func (g Goal) String() string {
-	if it := g.m.get(g.Name); it != nil {
-		return ref(g.Name, it.Title)
-	}
-	return "`" + g.Name + "`"
-}
-
-// Steps adds steps to open item name, after those it has, each named by
-// its title: "name: purpose" gives the name, and a bare title names the
-// step from its words, as a goal is named from its title ("find why
-// TestFlaky fails" makes `fix-flaky/find-why-testflaky-fails`). It refuses
-// a purpose an open step of name already has, two steps with one purpose,
-// and a 10,000th step.
-func (m *Mem) Steps(name string, titles ...string) {
-	parent := m.openItem(name)
-	if parent.For != "" {
-		panic(ref(name, parent.Title) + " is for the user: it has no steps")
-	}
-	if len(titles) == 0 {
-		panic("no steps given: mem.Steps(\"" + name + "\", \"a step\", \"another\")")
-	}
-	seen := map[string]bool{}
-	m.eachStep(name, func(_ string, it *Todo) bool {
-		if it.Status == "" && it.Title != "" {
-			seen[sameTitle(it.Title)] = true
-		}
-		return false
-	})
-	var refs []string
-	for i, title := range titles {
-		title = clip(text("step "+strconv.Itoa(i+1), title), maxTitle)
-		if title == "" {
-			panic("step " + strconv.Itoa(i+1) + " needs a title")
-		}
-		sname, purpose := stepTitle(title)
-		if seen[sameTitle(purpose)] {
-			panic(ref(name, parent.Title) + " already has an open step " + strconv.Quote(purpose))
-		}
-		seen[sameTitle(purpose)] = true
-		if len(parent.Steps) >= maxSteps {
-			panic(ref(name, parent.Title) + " has " + strconv.Itoa(maxSteps) + " steps, the most an item may have")
-		}
-		step := name + "/" + m.freeStep(name, sname)
-		m.do(Op{Kind: "add", Name: step, New: purpose, By: caller()})
-		refs = append(refs, ref(step, purpose))
-	}
-	println("added " + strings.Join(refs, ", ") + m.whatNext(name))
-}
-
-// stepTitle splits a step's title into its name and purpose: "name:
-// purpose" gives the name; a bare title names the step from its words.
-func stepTitle(title string) (name, purpose string) {
-	if i := strings.Index(title, ":"); i > 0 {
-		n, rest := title[:i], strings.TrimSpace(title[i+1:])
-		if validName(n) && !strings.Contains(n, "/") && len(n) <= maxGoalName && rest != "" {
-			return n, rest
-		}
-	}
-	return nameOf(title, "step"), title
+	return m.frame(id)
 }
 
 // freeStep is base, or base-2, base-3, …, whichever names no step of
@@ -259,7 +97,7 @@ func (m *Mem) freeStep(parent, base string) string {
 	}
 }
 
-// Ask adds a question or a request for the user as a step of item name
+// Ask adds a question or a request for the user as a todo under item name
 // (with name "", as a top-level item named from the question). It is never
 // the agent's next, the user is shown it, and the item it is under cannot
 // be done until it is answered: Done(it, "the answer").
@@ -271,14 +109,14 @@ func (m *Mem) Ask(name, question string) {
 	var asked string
 	if name == "" {
 		m.refuseOpenTitle(question)
-		asked = m.newGoalName("q " + question)
+		asked = m.freeName(nameOf("q "+question, "ask"), func(n string) bool { return m.freeTop(n) })
 	} else {
 		parent := m.openItem(name)
 		if parent.For != "" {
 			panic(ref(name, parent.Title) + " is for the user already")
 		}
 		if len(parent.Steps) >= maxSteps {
-			panic(ref(name, parent.Title) + " has " + strconv.Itoa(maxSteps) + " steps, the most an item may have")
+			panic(ref(name, parent.Title) + " has " + strconv.Itoa(maxSteps) + " todos, the most an item may have")
 		}
 		asked = name + "/" + m.freeStep(name, nameOf(question, "ask"))
 	}
@@ -286,7 +124,7 @@ func (m *Mem) Ask(name, question string) {
 	m.do(Op{Kind: "set", Name: asked, Field: "for", New: "user"})
 	msg := "asked " + ref(asked, question) + " (for the user)"
 	if name != "" {
-		// "waits on it" says why, when nothing else in the goal is free.
+		// "waits on it" says why, when nothing else in the todo is free.
 		msg += "; `" + name + "` waits on it"
 		if g := goalOf(name); m.nextFor(g, m.get(g), caller()) != "" {
 			msg += m.whatNext(g)
@@ -349,7 +187,7 @@ func (m *Mem) Done(name string, result ...string) {
 	}
 	m.refuseHeld(name, it)
 	if it.OpenSteps > 0 {
-		panic(ref(name, it.Title) + " has open steps " + m.refs(m.openSteps(name)) + ": Done or Drop them first")
+		panic(ref(name, it.Title) + " has open todos " + m.refs(m.openSteps(name)) + ": Done or Drop them first")
 	}
 	r := clip(text("the result", strings.Join(result, " ")), maxText)
 	if it.Wait != "" {
@@ -393,7 +231,7 @@ func (m *Mem) Drop(name, why string) {
 	dropped := m.drop(name, it, why)
 	msg := "dropped " + ref(name, it.Title)
 	if len(dropped) > 0 {
-		msg += ", with its open steps " + names(outlineOrder(dropped))
+		msg += ", with its open todos " + names(outlineOrder(dropped))
 	}
 	println(msg + m.whatNext(goalOf(name)))
 }
@@ -505,8 +343,7 @@ func (m *Mem) reopenOne(n string) []string {
 }
 
 // Note keeps a finding or an attempt on item name, open or closed, as a
-// thought named from its words (Think names one). A thought of the present
-// frame is better kept with mem.Think(name, text), to find it by name.
+// thought named from its words (Think keeps one on the present frame).
 func (m *Mem) Note(name, text_ string) {
 	it := m.item(name)
 	text_ = clip(text("the note", text_), maxText)
@@ -520,7 +357,7 @@ func (m *Mem) Note(name, text_ string) {
 // note keeps text on item it, named name, as a thought named from the
 // text's words, and returns the thought's name.
 func (m *Mem) note(name string, it *Todo, text string) string {
-	tname := freeThoughtName(it, nameOf(text, "note"))
+	tname := m.freeThought(nameOf(text, "note"))
 	m.do(Op{Kind: "note", Name: name + "#" + tname, New: text})
 	return tname
 }
@@ -684,7 +521,7 @@ func (m *Mem) Forget(name string) {
 	m.do(Op{Kind: "forget", Name: name})
 	msg := verb + " `" + name + "`"
 	if len(gone) > 0 {
-		msg += " and its " + plural(len(gone), "step")
+		msg += " and its " + plural(len(gone), "todo")
 	}
 	println(msg + "; gnosh erases their text from its files")
 }

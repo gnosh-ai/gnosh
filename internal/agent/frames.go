@@ -640,7 +640,7 @@ func frameLine(stack []stackFrame) string {
 }
 
 // frameLineRest ends the first sentence of frameLine and adds its second.
-const frameLineRest = ": pop it with its result when it is done; everything until then is removed from your context when you pop it, what the user says included, so keep what matters as a thought. Other work the user asks for meanwhile goes in a frame of its own: mem.NewFrame(\"rename-port-flag\", \"rename the port flag\").Push(), popped when done."
+const frameLineRest = ": pop it with its result when it is done; everything until then is removed from your context when you pop it, what the user says included, so keep what matters as a thought. Other work the user asks for meanwhile goes in a frame of its own: mem.Todo(\"rename the port flag\").Push(), popped when done."
 
 // frameReminder is the first sentence of frameLine, for the mem reminder.
 func frameReminder(top stackFrame) string {

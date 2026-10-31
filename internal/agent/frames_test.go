@@ -217,7 +217,7 @@ func TestPopClauses(t *testing.T) {
 	rows := []message.Message{
 		row(message.Assistant, "a1",
 			message.ToolCall{ID: "e1", Name: tools.EditToolName, Input: `{"file_path":"/w/internal/net/listen_test.go","old_string":"a","new_string":"b"}`, Finished: true},
-			message.ToolCall{ID: "m1", Name: "gnovm_run", Input: `{"name":"mem","code":"mem.Fact(\"port\", \"8080\")\nmem.Think(\"port\", \"8080\")\nmem.Show()\nmem.Steps(\"fix-flaky\", \"a\", \"b\")\nmem.Note(\"fix-flaky\", \"n\")\nmem.Rule(\"r\", \"x\")\nmem.Forget(\"old\")\nmem.Pop(\"x\")"}`, Finished: true},
+			message.ToolCall{ID: "m1", Name: "gnovm_run", Input: `{"name":"mem","code":"mem.Fact(\"port\", \"8080\")\nmem.Think(\"port\", \"8080\")\nmem.Show()\nmem.Todo(\"a\")\nmem.Note(\"fix-flaky\", \"n\")\nmem.Rule(\"r\", \"x\")\nmem.Forget(\"old\")\nmem.Pop(\"x\")"}`, Finished: true},
 		),
 		row(message.Tool, "t1",
 			message.ToolResult{ToolCallID: "e1", Name: tools.EditToolName, Content: "edited", Metadata: `{"old_content":"a","new_content":"b"}`},
@@ -231,7 +231,7 @@ func TestPopClauses(t *testing.T) {
 	got := popClauses(ev, rows, calls, "/w", false)
 	require.Contains(t, got, "its 2 thoughts are in mem (mem.Show(\"fix-flaky/find-cause\") lists them when you need them)")
 	require.Contains(t, got, " In it you edited internal/net/listen_test.go.")
-	require.Contains(t, got, " In it you also changed mem: Fact `port`, Steps `fix-flaky`, Note `fix-flaky`, Rule `r` and 1 more.")
+	require.Contains(t, got, " In it you also changed mem: Fact `port`, Todo `a`, Note `fix-flaky`, Rule `r` and 1 more.")
 	require.NotContains(t, got, "Think")
 	require.NotContains(t, got, "reads inside it")
 }
@@ -240,7 +240,7 @@ func TestFrameLine(t *testing.T) {
 	t.Parallel()
 
 	one := frameLine([]stackFrame{{id: "fix-flaky", purpose: "fix the flaky test"}})
-	require.True(t, strings.HasPrefix(one, "You are in `fix-flaky` \"fix the flaky test\": pop it with its result when it is done; everything until then is removed from your context when you pop it, what the user says included, so keep what matters as a thought. Other work the user asks for meanwhile goes in a frame of its own: mem.NewFrame(\"rename-port-flag\", \"rename the port flag\").Push(), popped when done."), one)
+	require.True(t, strings.HasPrefix(one, "You are in `fix-flaky` \"fix the flaky test\": pop it with its result when it is done; everything until then is removed from your context when you pop it, what the user says included, so keep what matters as a thought. Other work the user asks for meanwhile goes in a frame of its own: mem.Todo(\"rename the port flag\").Push(), popped when done."), one)
 	two := frameLine([]stackFrame{{id: "fix-flaky", purpose: "fix the flaky test"}, {id: "fix-flaky/find-cause", purpose: "find why TestFlaky fails"}})
 	require.Contains(t, two, "You are in `fix-flaky/find-cause` \"find why TestFlaky fails\" (your stack: `fix-flaky`, then `fix-flaky/find-cause`): pop it")
 	require.Equal(t, "You are in `fix-flaky/find-cause` \"find why TestFlaky fails\": pop it with its result when it is done; everything until then is removed from your context when you pop it, what the user says included, so keep what matters as a thought.",

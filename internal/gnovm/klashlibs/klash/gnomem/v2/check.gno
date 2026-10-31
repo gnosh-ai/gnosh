@@ -61,7 +61,7 @@ func (m *Mem) Check() string {
 			if top {
 				open++
 				if m.open.Get(stampKey(it.Changed, name)) == nil {
-					bad("open `" + name + "` is not in the open goals")
+					bad("open `" + name + "` is not in the open todos")
 				}
 				if m.titles.Get(sameTitle(it.Title)+"|"+name) == nil {
 					bad("open `" + name + "` is not in the titles")
@@ -93,7 +93,7 @@ func (m *Mem) Check() string {
 			if top {
 				closed++
 				if m.closed.Get(stampKey(it.Changed, name)) == nil {
-					bad("closed `" + name + "` is not in the closed goals")
+					bad("closed `" + name + "` is not in the closed todos")
 				}
 			}
 		case "forgotten":
@@ -102,7 +102,7 @@ func (m *Mem) Check() string {
 			bad("`" + name + "` has status " + strconv.Quote(it.Status))
 		}
 		if top && m.taken.Get(name) == nil {
-			bad("goal `" + name + "` is not among the names taken")
+			bad("todo `" + name + "` is not among the names taken")
 		}
 		return len(problems) >= 10
 	})
@@ -124,8 +124,8 @@ func (m *Mem) Check() string {
 		what       string
 		size, want int
 	}{
-		{"open goals", m.open.Size(), open},
-		{"closed goals", m.closed.Size(), closed},
+		{"open todos", m.open.Size(), open},
+		{"closed todos", m.closed.Size(), closed},
 		{"questions", m.asks.Size(), asks},
 		{"days", m.days.Size(), days},
 		{"words", m.words.Size(), words},

@@ -33,7 +33,7 @@ const (
 // reserved are names no goal may take.
 var reserved = map[string]bool{"all": true, "next": true, "none": true}
 
-// filler are the words a goal's name leaves out.
+// filler are the words a made name leaves out.
 var filler = map[string]bool{
 	"a": true, "an": true, "and": true, "are": true, "as": true, "at": true, "be": true,
 	"by": true, "for": true, "from": true, "in": true, "is": true, "it": true, "its": true,
@@ -105,15 +105,10 @@ func fold(r rune) rune {
 	return r
 }
 
-// goalName makes a goal's name from its title: filler words dropped, words
-// that look like keys or hashes skipped (so a token in a title rarely
-// reaches a name), at most 4 words and 32 bytes.
-func goalName(title string) string {
-	return nameOf(title, "goal")
-}
-
-// nameOf makes a name from text, as goalName does; fallback names it when
-// the text has no words to use ("goal", "step", "note").
+// nameOf makes a name from text: filler words dropped, words that look
+// like keys or hashes skipped (so a token in a title rarely reaches a
+// name), at most 4 words and 32 bytes; fallback names it when the text has
+// no words to use ("todo", "note").
 func nameOf(title, fallback string) string {
 	all := nameWords(title)
 	var kept []string
@@ -205,33 +200,10 @@ func keyLike(w string) bool {
 	return letters && digits
 }
 
-// newGoalName is the name a new goal gets: the one given, which must be
-// free, or one made from its title, with -2, -3, … if taken.
-func (m *Mem) newGoalName(title string, given ...string) string {
-	free := func(n string) bool { return !reserved[n] && !forgottenName(n) && m.taken.Get(n) == nil }
-	if len(given) > 0 && given[0] != "" {
-		n := given[0]
-		switch {
-		case len(given) > 1:
-			panic("a goal takes one name: mem.Goal(\"title\", \"name\")")
-		case validName(title) && !validName(n):
-			panic("the title comes first, then the name: mem.Goal(" + strconv.Quote(n) + ", \"" + title + "\")")
-		case strings.Contains(n, "/"):
-			panic("a goal's name has no \"/\" (`" + n + "` would be a step of `" + parentOf(n) + "`): try `" + nameForm(n) + "`")
-		case strings.ToLower(n) != n && validName(strings.ToLower(n)):
-			panic("names are lowercase: `" + strings.ToLower(n) + "`")
-		case !validName(n):
-			panic(named(n) + " is not a name: a goal's name is lowercase words joined by \"-\"" + like(nameForm(n), "release-v2"))
-		case len(n) > maxGoalName || strings.Count(n, "-") >= 4:
-			panic("a goal's name is at most 4 words and " + strconv.Itoa(maxGoalName) + " bytes; the title comes first: mem.Goal(\"" + title + "\", \"" + goalName(n) + "\")")
-		case reserved[n] || forgottenName(n):
-			panic("`" + n + "` is reserved; leave the name out to get `" + m.newGoalName(title) + "`")
-		case !free(n):
-			panic("the name `" + n + "` is taken, and names are never given twice: give another, like `" + m.freeName(n, free) + "`, or leave it out")
-		}
-		return n
-	}
-	return m.freeName(goalName(title), free)
+// freeTop reports whether n can name a new top-level todo: it is not
+// reserved, not a forgotten one's, and was never given before.
+func (m *Mem) freeTop(n string) bool {
+	return !reserved[n] && !forgottenName(n) && m.taken.Get(n) == nil
 }
 
 func (m *Mem) freeName(base string, free func(string) bool) string {
@@ -253,7 +225,11 @@ func forgottenName(n string) bool {
 func (m *Mem) refuseOpenTitle(title string) {
 	if n := m.titled(title); n != "" {
 		it := m.get(n)
-		panic(ref(n, it.Title) + " (" + who(it.By) + ", " + ago(it.Changed) + ", " + progress(it) + ") is already open: add to it with mem.Steps(\"" + n + "\", \"…\"), or give other work a title that tells them apart")
+		aside := who(it.By) + ", " + ago(it.Changed)
+		if len(it.Steps) > 0 {
+			aside += ", " + progress(it)
+		}
+		panic(ref(n, it.Title) + " (" + aside + ") is already open: enter it with mem.Push(\"" + n + "\") and add to it with mem.Todo(\"…\"), or give other work a task that tells them apart")
 	}
 }
 
@@ -308,7 +284,7 @@ func (m *Mem) miss(name string) string {
 		item, thought := splitAddr(name)
 		return "`" + name + "` is a thought's address, not an item's: mem.Thought(" + strconv.Quote(thought) + ") reads it, and mem.Show(" + strconv.Quote(item) + ") shows its frame"
 	case isNumber(strings.TrimLeft(name, "#")):
-		return "`" + name + "` is not a name; steps are named under their goal, like `goal/find-cause`: mem.Show() lists them"
+		return "`" + name + "` is not a name; todos are named under the one they are in, like `fix-flaky/find-cause`: mem.Show() lists them"
 	case m.getFact(name) != nil:
 		return "`" + name + "` is a fact, not an item; to change it: mem.Fact(\"" + name + "\", \"…\")"
 	case m.getRule(name) != nil:
@@ -316,28 +292,28 @@ func (m *Mem) miss(name string) string {
 	case m.formed(name) != "":
 		return "no item `" + name + "` (a name joins its words with \"-\": did you mean `" + m.formed(name) + "`?)"
 	case m.titled(name) != "":
-		return strconv.Quote(name) + " is a title, not a name: the goal with that title is `" + m.titled(name) + "`"
+		return strconv.Quote(name) + " is a task, not a name: the todo with that task is `" + m.titled(name) + "`"
 	case m.get(goalOf(name)) == nil && m.slugged(goalOf(name)) != "":
 		g := goalOf(name)
-		msg := "`" + g + "` is not a name: a goal's name keeps at most 4 words of its title, and this one's is `" + m.slugged(g) + "`"
+		msg := "`" + g + "` is not a name: a todo's name keeps at most 4 words of its task, and this one's is `" + m.slugged(g) + "`"
 		if rest := name[len(g):]; rest != "" {
-			msg += ", so the step is `" + m.slugged(g) + rest + "`"
+			msg += ", so the todo is `" + m.slugged(g) + rest + "`"
 		}
 		return msg
 	}
 	if p := parentOf(name); p != "" {
 		if it := m.get(p); it != nil {
 			if len(it.Steps) == 0 {
-				return "no item `" + name + "`; `" + p + "` has no steps"
+				return "no item `" + name + "`; `" + p + "` has no todos"
 			}
 			var ids []string
 			for _, s := range it.Steps {
 				ids = append(ids, p+"/"+s)
 			}
 			if len(ids) == 1 {
-				return "no item `" + name + "`; `" + p + "` has the step `" + ids[0] + "`"
+				return "no item `" + name + "`; `" + p + "` has the todo `" + ids[0] + "`"
 			}
-			return "no item `" + name + "`; `" + p + "` has the steps " + names(ids)
+			return "no item `" + name + "`; `" + p + "` has the todos " + names(ids)
 		}
 	}
 	return "no item `" + name + "`; mem.Show() lists them"

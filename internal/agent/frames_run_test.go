@@ -321,9 +321,9 @@ const (
 	popS1      = `mem.Pop("found it")`
 	popS2      = `mem.Pop("20 of 20 passed")`
 	popG       = `mem.Pop("fixed")`
-	inG        = "in `g` \"fix it\": when it is done, pop it with what came of it and what the next step needs."
-	inS1       = "in `g/s1` \"find the cause\": when it is done, pop it with what came of it and what the next step needs."
-	inS2       = "in `g/s2` \"rerun\": when it is done, pop it with what came of it and what the next step needs."
+	inG        = "in `g` \"fix it\": when it is done, pop it with what came of it and what the next todo needs."
+	inS1       = "in `g/s1` \"find the cause\": when it is done, pop it with what came of it and what the next todo needs."
+	inS2       = "in `g/s2` \"rerun\": when it is done, pop it with what came of it and what the next todo needs."
 	doneS1     = "done `g/s1` \"find the cause\" → found it"
 )
 

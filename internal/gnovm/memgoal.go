@@ -73,8 +73,8 @@ func goalTitle(condition string) string {
 // GoalDirective is what /goal sends the agent once its goal is bound.
 func GoalDirective(b GoalBinding) string {
 	return fmt.Sprintf("Goal `%[1]s` %[2]q is set: %[3]s\n\n"+
-		"Plan it as steps (`mem.Steps(%[1]q, \"…\", \"…\")`) and work through them in frames: you stand in the goal already, so "+
-		"`mem.Push()` enters its first step, and `mem.Pop(\"what came of it\")` then `mem.Push()` on the next line moves on. "+
+		"Plan it as todos (`mem.Todo(\"…\")` for each, in order) and work through them in frames: you stand in the goal already, so "+
+		"`mem.Push()` enters its first todo, and `mem.Pop(\"what came of it\")` then `mem.Push()` on the next line moves on. "+
 		"Keep as facts what future sessions "+
 		"should know, as you learn it. Once the goal holds, close it with `mem.Done(%[1]q, \"<command> → <result>\")`; "+
 		"a separate check confirms it then. If the condition says when to stop and that has happened, drop the steps "+
@@ -96,7 +96,7 @@ func (h *memHost) bindGoal(ctx context.Context, session, condition string, prev 
 	if prev != nil && prev.Added && prev.Name != "" {
 		args += ", " + strconv.Quote(prev.Name)
 	}
-	res, err := h.call(ctx, memRequest{Code: "print(mem.JSON(mem.Bind(" + args + ").Name))", Session: session, User: true})
+	res, err := h.call(ctx, memRequest{Code: "print(mem.JSON(mem.Bind(" + args + ").Id))", Session: session, User: true})
 	if err != nil {
 		return GoalBinding{}, err
 	}
@@ -211,11 +211,11 @@ func goalTurn(b GoalBinding, g memGoalJSON, now time.Time, marker string) (GoalT
 	}
 	switch {
 	case g.Next == b.Name:
-		return GoalTurn{Do: "continue", Prompt: "The goal " + ref + " is not closed, and none of its steps is open. Once it holds, close it with " +
-			"`mem.Done(" + strconv.Quote(b.Name) + ", \"<command> → <result>\")`; otherwise add the steps still needed " +
-			"(`mem.Steps(" + strconv.Quote(b.Name) + ", \"…\")`) and do them."}, b
+		return GoalTurn{Do: "continue", Prompt: "The goal " + ref + " is not closed, and none of its todos is open. Once it holds, close it with " +
+			"`mem.Done(" + strconv.Quote(b.Name) + ", \"<command> → <result>\")`; otherwise add the todos still needed " +
+			"(`mem.Todo(\"…\")`, standing in it) and do them."}, b
 	case g.Next != "":
-		return GoalTurn{Do: "continue", Prompt: "The goal " + ref + " is not done. Its next step is `" + g.Next + "` " +
+		return GoalTurn{Do: "continue", Prompt: "The goal " + ref + " is not done. Its next todo is `" + g.Next + "` " +
 			strconv.Quote(memLine(g.NextTitle, 120)) + ": do it, and mark it with `mem.Done(" + strconv.Quote(g.Next) + ", \"…\")`. " +
 			"Once the goal holds, close it with `mem.Done(" + strconv.Quote(b.Name) + ", \"<command> → <result>\")`."}, b
 	}
