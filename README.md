@@ -264,20 +264,17 @@ fmt.Println("the 10th retry goes out after", total, "ms =", total/1000, "s")
 // the 10th retry goes out after 111000 ms = 111 s
 ```
 
-and answers from those lines: "111 s. The waits are 200, 400, 800, 1600,
-3200, 6400, 12800, 25600 ms, then the 30 s cap kicks in for retries 9 and 10:
-total = 51 000 + 30 000 + 30 000 = 111 000 ms." In five real runs on 30
-October with Qwen thinking, as it does by default, it printed every wait in a
-machine and got 111 s every time. With its thinking turned off it also used a
-machine every time and was right in 4 runs of 5; the miss ran a loop one wait
-short and said 81 s.
+and answers from those lines: "111 s". In five real runs on 30 October with
+Qwen thinking, as it does by default, it printed every wait in a machine and
+got 111 s every time; with its thinking turned off it was right in 4 runs of
+5, and the one miss ran its loop one wait short.
 
-Gnosh holds the model to its work. When a loop in the scratch machine shows
-only its result, the model is told so, in a note under the output: "only the
-loop's result was printed: if your answer gives its terms or a breakdown,
-print them too, run it again, and give them as printed". Over 28 scored runs
-of the backoff question on 30 October, an answer was right in 18 runs of 18
-when the machine printed every term, and in 2 of 10 when it showed one line.
+Gnosh holds the model to its work: when a loop in the scratch machine prints
+only its result, a note under the output says so: "only the loop's result was
+printed: if your answer gives its terms or a breakdown, print them too, run it
+again, and give them as printed". Over 28 scored runs of this question on 30
+October, the answer was right in 18 of 18 when the machine printed every
+term, and in 2 of 10 when it showed one line.
 
 `mem` is one machine among many. Gnosh carries the GnoVM, gno.land's
 interpreter for its Go dialect, and runs named virtual machines in it for the
