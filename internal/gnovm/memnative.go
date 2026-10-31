@@ -36,6 +36,12 @@ type memContext struct {
 	today string
 	// bound is the goal the user's /goal binds the caller's session to.
 	bound string
+	// stack is the caller's session's stack of frames, bottom to top, as
+	// gnosh derived it before the call; frames is where the call's pushes
+	// and pops go (memCall.Frames), so frames() answers the stack as it
+	// stands.
+	stack  []string
+	frames *[]MemFrame
 	// limit bounds the call (memrealm.go).
 	limit memLimit
 	// find and holding answer from mem's index and journal; nil finds
@@ -59,7 +65,7 @@ type memOp struct {
 var memNativeGas = gno.NativeGasInfo{Base: 1000, SlopeIdx: -1, SlopeKind: gno.SizeFlat}
 
 func init() {
-	for _, name := range []gno.Name{"caller", "today", "bound", "record", "pending", "find", "holding", "quote", "jsonString"} {
+	for _, name := range []gno.Name{"caller", "today", "bound", "frames", "pushed", "popped", "record", "pending", "find", "holding", "quote", "jsonString"} {
 		info := memNativeGas
 		gno.RegisterNativeGas(memLibPath, name, &info)
 	}
@@ -78,6 +84,22 @@ func memNative(name gno.Name) func(*gno.Machine) {
 	case "bound":
 		return func(m *gno.Machine) {
 			memPush(m, memCallContext(m, "bound").bound)
+		}
+	case "frames":
+		return func(m *gno.Machine) {
+			ctx := memCallContext(m, "frames")
+			memPush(m, stackAfter(ctx.stack, *ctx.frames))
+		}
+	case "pushed":
+		return func(m *gno.Machine) {
+			ctx := memCallContext(m, "pushed")
+			*ctx.frames = append(*ctx.frames, MemFrame{Kind: "push", Id: memArg(m, 0), Purpose: memArg(m, 1), Session: ctx.caller})
+		}
+	case "popped":
+		return func(m *gno.Machine) {
+			ctx := memCallContext(m, "popped")
+			thoughts := m.LastBlock().GetPointerTo(nil, gno.NewValuePathBlock(1, 3, "")).TV.GetInt()
+			*ctx.frames = append(*ctx.frames, MemFrame{Kind: "pop", Id: memArg(m, 0), Purpose: memArg(m, 1), Result: memArg(m, 2), Thoughts: int(thoughts), Session: ctx.caller})
 		}
 	case "today":
 		return func(m *gno.Machine) {
@@ -163,10 +185,31 @@ func memPush[T any](m *gno.Machine, v T) {
 
 func memCallContext(m *gno.Machine, native string) memContext {
 	ctx, ok := m.Context.(memContext)
-	if !ok || ctx.ops == nil || m.Realm == nil || m.Realm.Path != memRealmPath {
+	if !ok || ctx.ops == nil || ctx.frames == nil || m.Realm == nil || m.Realm.Path != memRealmPath {
 		panic(native + ": only mem's own Mem, in a mem call, may change mem")
 	}
 	return ctx
+}
+
+// stackAfter is stack, a session's frames bottom to top, after events, a
+// call's pushes and pops in order: a push goes on top, and a pop takes its
+// frame off.
+func stackAfter(stack []string, events []MemFrame) []string {
+	out := append([]string(nil), stack...)
+	for _, e := range events {
+		switch e.Kind {
+		case "push":
+			out = append(out, e.Id)
+		case "pop":
+			for i := len(out) - 1; i >= 0; i-- {
+				if out[i] == e.Id {
+					out = append(out[:i:i], out[i+1:]...)
+					break
+				}
+			}
+		}
+	}
+	return out
 }
 
 // memArg is the native's i'th parameter, a string.

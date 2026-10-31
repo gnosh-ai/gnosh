@@ -45,6 +45,10 @@ type memEntry struct {
 	// Code is the Gno the input ran, and Ops what it changed, in order.
 	Code string  `json:"code"`
 	Ops  []memOp `json:"ops"`
+	// Frames is the frames the input pushed and popped, in order
+	// (FRAMES.md): a record beside the Ops, which nothing replays and undo
+	// leaves alone.
+	Frames []MemFrame `json:"frames,omitempty"`
 }
 
 func (e memEntry) seqNo() int64 { return e.Seq }
@@ -156,10 +160,13 @@ func (er memErasure) scrub(s string) string {
 //   - every non-empty Old and New of an Op naming a forgotten item becomes
 //     "(forgotten)", except a status set's, and redacts of it are dropped;
 //     an entry with such an Op has its statements replaced whole;
-//   - a goal that is forgotten, or whose name holds a secret, typed or in a
-//     name's form, is renamed forgotten-<n> in every entry; a fact or rule
-//     that is forgotten, or whose name holds a secret, loses every Op, its
-//     forget among them, and the entries that had one their statements.
+//   - an item that is forgotten, or whose own name holds a secret, typed or
+//     in a name's form, is renamed forgotten-<n> in every entry, under its
+//     parent's name as that stands (a goal's steps are named from their
+//     titles, as a goal is), and a thought of a forgotten item, or whose
+//     name holds a secret, thought-<n>; a fact or rule that is forgotten,
+//     or whose name holds a secret, loses every Op, its forget among them,
+//     and the entries that had one their statements.
 //
 // Kinds, fields, status words and who made what are left as they are. It
 // returns the entries, and what gnosh's own copies must lose too (see
@@ -177,29 +184,79 @@ func erase(entries []memEntry, er memErasure) ([]memEntry, MemErasure) {
 				gone.Texts[t] = memForgotten
 			}
 		}
-		if !slices.Contains(gone.Names, op.Name) {
-			gone.Names = append(gone.Names, op.Name)
+		if item := memItemOf(op.Name); !slices.Contains(gone.Names, item) {
+			gone.Names = append(gone.Names, item)
 		}
+	}
+	// A thought's name is made from its text: one of a forgotten item, or
+	// one holding a secret, is renamed thought-<n> in every entry.
+	thoughts := map[string]string{}
+	nextThought := 1
+	for _, e := range entries {
+		for _, op := range e.Ops {
+			if _, name, ok := strings.Cut(op.Name, "#"); ok && opTarget(op) == "item" {
+				if n, err := strconv.Atoi(strings.TrimPrefix(name, "thought-")); err == nil && n >= nextThought {
+					nextThought = n + 1
+				}
+			}
+		}
+	}
+	renameThought := func(addr string) string {
+		item, name, ok := strings.Cut(addr, "#")
+		if !ok || strings.HasPrefix(name, "thought-") {
+			return addr
+		}
+		if !er.forgets("item", item) && !er.nameHolds(name) {
+			return addr
+		}
+		if thoughts[addr] == "" {
+			thoughts[addr] = item + "#thought-" + strconv.Itoa(nextThought)
+			nextThought++
+		}
+		return thoughts[addr]
 	}
 	next := 1
 	for _, e := range entries {
 		for _, op := range e.Ops {
-			if g := goalPart(op.Name); opTarget(op) == "item" && strings.HasPrefix(g, "forgotten-") {
-				if n, err := strconv.Atoi(strings.TrimPrefix(g, "forgotten-")); err == nil && n >= next {
+			if opTarget(op) != "item" {
+				continue
+			}
+			for _, seg := range strings.Split(memItemOf(op.Name), "/") {
+				if n, err := strconv.Atoi(strings.TrimPrefix(seg, "forgotten-")); err == nil && strings.HasPrefix(seg, "forgotten-") && n >= next {
 					next = n + 1
 				}
 			}
 		}
 	}
+	// renamed maps each item's id, as the journal has it, to its new id;
+	// an item under a renamed one is renamed with it.
 	for _, e := range entries {
 		for _, op := range e.Ops {
-			g := goalPart(op.Name)
-			if opTarget(op) != "item" || renamed[g] != "" || strings.HasPrefix(g, "forgotten-") {
+			if opTarget(op) != "item" {
 				continue
 			}
-			if er.forgets("item", g) || er.nameHolds(g) {
-				renamed[g] = "forgotten-" + strconv.Itoa(next)
-				next++
+			id := ""
+			for _, seg := range strings.Split(memItemOf(op.Name), "/") {
+				parent := id
+				if id == "" {
+					id = seg
+				} else {
+					id += "/" + seg
+				}
+				if renamed[id] != "" {
+					continue
+				}
+				name := seg
+				if strings.HasPrefix(seg, "forgotten-") {
+					continue
+				}
+				if er.forgets("item", id) || er.nameHolds(seg) {
+					name = "forgotten-" + strconv.Itoa(next)
+					next++
+				}
+				if name != seg || renamed[parent] != "" {
+					renamed[id] = memJoinID(memRenamed(renamed, parent), name)
+				}
 			}
 		}
 	}
@@ -220,7 +277,7 @@ func erase(entries []memEntry, er memErasure) ([]memEntry, MemErasure) {
 					wipe = memForgotten
 				}
 				continue
-			case target == "item" && er.forgets("item", op.Name):
+			case target == "item" && er.forgets("item", memItemOf(op.Name)):
 				if op.Kind == "redact" {
 					wipe = memForgotten
 					continue
@@ -244,8 +301,13 @@ func erase(entries []memEntry, er memErasure) ([]memEntry, MemErasure) {
 				op.Old, op.New = er.scrub(op.Old), er.scrub(op.New)
 				wipe = memRedacted
 			}
-			if g := goalPart(op.Name); opTarget(op) == "item" && renamed[g] != "" {
-				op.Name = renamed[g] + op.Name[len(g):]
+			if opTarget(op) == "item" {
+				op.Name = renameThought(op.Name)
+				item, thought, ok := strings.Cut(op.Name, "#")
+				op.Name = memRenamed(renamed, item)
+				if ok {
+					op.Name += "#" + thought
+				}
 			}
 			ops = append(ops, op)
 		}
@@ -259,6 +321,22 @@ func erase(entries []memEntry, er memErasure) ([]memEntry, MemErasure) {
 	}
 	gone.Renamed = renamed
 	return out, gone
+}
+
+// memRenamed is id as renamed has it, or id.
+func memRenamed(renamed map[string]string, id string) string {
+	if r := renamed[id]; r != "" {
+		return r
+	}
+	return id
+}
+
+// memJoinID is parent and name as an id.
+func memJoinID(parent, name string) string {
+	if parent == "" {
+		return name
+	}
+	return parent + "/" + name
 }
 
 // memTextOp reports whether an Op on an item carries the item's text: its
@@ -302,10 +380,18 @@ func rewriteMemJournal(path, instance string, entries []memEntry, now time.Time)
 	return j, nil
 }
 
-// goalPart is the goal an item's name is in: its first segment.
+// goalPart is the goal an item's name is in: its first segment (a
+// thought's address, item#name, names its item's goal).
 func goalPart(name string) string {
-	g, _, _ := strings.Cut(name, "/")
+	g, _, _ := strings.Cut(memItemOf(name), "/")
 	return g
+}
+
+// memItemOf is the item a thought's address, item#name, is on; a plain
+// item name as it is.
+func memItemOf(name string) string {
+	item, _, _ := strings.Cut(name, "#")
+	return item
 }
 
 // quotedInner is s as it sits inside a Go-quoted string: strconv.Quote

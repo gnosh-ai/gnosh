@@ -273,6 +273,13 @@ func memEntryText(e memEntry, titles map[string]string) string {
 	for _, op := range e.Ops {
 		lines = append(lines, "    "+memOpText(op))
 	}
+	for _, f := range e.Frames {
+		if f.Kind == "pop" {
+			lines = append(lines, "    pop `"+f.Id+"` → "+strconv.Quote(memLine(f.Result, 80)))
+		} else {
+			lines = append(lines, "    "+f.Kind+" `"+f.Id+"`")
+		}
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -442,10 +449,11 @@ func memOpKey(op memOp) string {
 	return opTarget(op) + " " + op.Name
 }
 
-// memUnder reports whether name is one of names, or under one.
+// memUnder reports whether name is one of names, or under one: a step of
+// it, or a thought on it.
 func memUnder(name string, names []string) bool {
 	for _, n := range names {
-		if name == n || strings.HasPrefix(name, n+"/") {
+		if name == n || strings.HasPrefix(name, n+"/") || strings.HasPrefix(name, n+"#") {
 			return true
 		}
 	}

@@ -196,9 +196,9 @@ func TestMemFindsByMeaning(t *testing.T) {
 	require.NotContains(t, out, "tea")
 
 	out = find("boil")
-	require.Contains(t, out, "`make-tea/1`")
+	require.Contains(t, out, "`make-tea/boil-water`")
 	require.Contains(t, out, "fact `tea/kind`")
-	require.Less(t, strings.Index(out, "`make-tea/1`"), strings.Index(out, "fact `tea/kind`"),
+	require.Less(t, strings.Index(out, "`make-tea/boil-water`"), strings.Index(out, "fact `tea/kind`"),
 		"the row holding the word comes before those close in meaning")
 
 	require.Contains(t, find("deploy production"), `nothing in mem matches "deploy production", in its words or in meaning`)
@@ -385,26 +385,26 @@ func TestMemRecall(t *testing.T) {
 		mem(`mem.Fact("notes/n` + strconv.Itoa(i) + `", "a note on nothing much")`)
 	}
 	mem(`mem.Goal("ship the site").Steps("deploy to production")`)
-	mem(`mem.Done("ship-site/1", "deployed with scripts/deploy.sh")`)
+	mem(`mem.Done("ship-site/deploy-production", "deployed with scripts/deploy.sh")`)
 	dir := memDir(l.opts.Dir, "/proj")
 	require.NoError(t, fillMemVectorsNow(ctx, dir, newMemEmbedder(f.URL+"/v1")))
 
 	got := l.MemRecall(ctx, "/proj", "s1", "how do we deploy the site?")
 	require.Equal(t, "<mem>\n"+
 		"From your memory (mem), what may bear on what the user just wrote, found by meaning; `mem.Show(\"name\")` shows one in full:\n"+
-		"- [x] `ship-site/1` \"deploy to production\" → deployed with scripts/deploy.sh\n"+
+		"- [x] `ship-site/deploy-production` \"deploy to production\" → deployed with scripts/deploy.sh\n"+
 		"</mem>", got, "the goal itself is in the <mem> block the session is given")
 	require.Empty(t, l.MemRecall(ctx, "/proj", "s1", "deploy it again"), "once until the next summary")
-	require.Contains(t, l.MemRecall(ctx, "/proj", "s2", "deploy it again"), "`ship-site/1`", "another session")
+	require.Contains(t, l.MemRecall(ctx, "/proj", "s2", "deploy it again"), "`ship-site/deploy-production`", "another session")
 	l.MemSummarized("s1")
-	require.Contains(t, l.MemRecall(ctx, "/proj", "s1", "deploy it again"), "`ship-site/1`")
+	require.Contains(t, l.MemRecall(ctx, "/proj", "s1", "deploy it again"), "`ship-site/deploy-production`")
 
 	require.Empty(t, l.MemRecall(ctx, "/proj", "s3", "write a haiku about autumn"))
 	require.Contains(t, l.MemRecall(ctx, "/proj", "s4", "run the testing suite"), "- fact `cmd/test` = go test -race ./...\n")
 	block := l.MemBlock("/proj", "s5")
 	require.Contains(t, block, "`ship-site`")
 	got = l.MemRecall(ctx, "/proj", "s5", "ship the site to production")
-	require.Contains(t, got, "`ship-site/1`")
+	require.Contains(t, got, "`ship-site/deploy-production`")
 	require.NotContains(t, got, "`ship-site`", "the block named it")
 
 	f.down.Store(true)

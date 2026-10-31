@@ -24,6 +24,18 @@ func today() string
 // for none.
 func bound() string
 
+// frames is this input's session's stack of frames, bottom to top, as it
+// stands: what gnosh derived from the session's own pushes without pops,
+// with this input's pushes and pops so far.
+func frames() []string
+
+// pushed tells gnosh this input entered frame id, titled purpose.
+func pushed(id, purpose string)
+
+// popped tells gnosh this input left frame id, titled purpose, with
+// result, holding thoughts thoughts.
+func popped(id, purpose, result string, thoughts int)
+
 // record hands gnosh an Op of this call.
 func record(kind, name, field, old, new, by string)
 
@@ -32,9 +44,10 @@ func record(kind, name, field, old, new, by string)
 func pending() (kinds, names, fields, olds, news, bys []string, ats []int64)
 
 // find is gnosh's index: the best matches for words, with their kinds
-// ("item", "fact" or "rule"). how is "meaning" when it looked by meaning as
-// well as by the words, which it does when gnosh has an embedding server;
-// "words" when the server did not answer this search; "" otherwise.
+// ("item", "thought", "fact" or "rule"). how is "meaning" when it looked by
+// meaning as well as by the words, which it does when gnosh has an
+// embedding server; "words" when the server did not answer this search; ""
+// otherwise.
 func find(words string, max int) (names, kinds []string, how string)
 
 // holding is where the journal, and this call's Ops, ever held text or its

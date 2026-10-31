@@ -67,8 +67,8 @@ func TestMemRecallLive(t *testing.T) {
 	}
 	for _, code := range []string{
 		`mem.Goal("release v2").Steps("bump the version", "tag v2.0.0", "CI is green")`,
-		`mem.Done("release-v2/1", "now 2.0.0")`,
-		`mem.Note("release-v2/2", "the tag needs the release key")`,
+		`mem.Done("release-v2/bump-version", "now 2.0.0")`,
+		`mem.Note("release-v2/tag-v2-0-0", "the tag needs the release key")`,
 		`mem.Goal("renew the gno.shop TLS cert", "renew-cert")`,
 		`mem.Goal("fix the login redirect loop", "fix-login")`,
 		`mem.Done("fix-login", "the session cookie lacked SameSite=Lax; fixed in auth.go")`,
@@ -113,7 +113,7 @@ func TestMemRecallLive(t *testing.T) {
 		{"why are we not using cgo for sqlite?", []string{"decisions/sqlite"}},
 		{"users get logged out and bounced back to the login page", []string{"fix-login"}},
 		{"who should review the x402 Go client?", []string{"people/guilhem"}},
-		{"what's left before we ship 2.0?", []string{"release-v2", "release-v2/2", "release-v2/3"}},
+		{"what's left before we ship 2.0?", []string{"release-v2", "release-v2/tag-v2-0-0", "release-v2/ci-green"}},
 		{"pick colors for the new banner", []string{"ui/colors"}},
 		{"go builds act weird after bumping modules", []string{"ci/cache"}},
 		{"where do the backups go?", []string{"hosts/backup-droplet", "backup-journal"}},

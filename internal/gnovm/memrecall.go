@@ -97,7 +97,7 @@ func (l *Lazy) MemRecall(ctx context.Context, project, session, prompt string) s
 	}
 	var b strings.Builder
 	var names []string
-	for _, r := range s.nearest(qs, model, memRecallScore, "item", "fact") {
+	for _, r := range s.nearest(qs, model, memRecallScore, "item", "thought", "fact") {
 		if len(names) == memRecalls {
 			break
 		}

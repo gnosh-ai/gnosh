@@ -39,13 +39,13 @@ func TestMemHostSaysWhatItErased(t *testing.T) {
 	t.Parallel()
 	h := newTestMemHost(t, t.TempDir())
 	memOK(t, h, `mem.Goal("plan the surprise party").Steps("book Moonlight Hall")`)
-	memOK(t, h, `mem.Note("plan-surprise-party/1", "the deposit is 200")`)
+	memOK(t, h, `mem.Note("plan-surprise-party/book-moonlight-hall", "the deposit is 200")`)
 	memOK(t, h, `mem.Drop("plan-surprise-party", "called off")`)
 	memOK(t, h, `mem.Fact("phone/alice", "555-0142 ext 9")`)
 	res := memOK(t, h, `mem.Forget("plan-surprise-party")`)
 	require.NotNil(t, res.Erased)
-	require.Equal(t, map[string]string{"plan-surprise-party": "forgotten-1"}, res.Erased.Renamed)
-	require.ElementsMatch(t, []string{"plan-surprise-party", "plan-surprise-party/1"}, res.Erased.Names)
+	require.Equal(t, map[string]string{"plan-surprise-party": "forgotten-1", "plan-surprise-party/book-moonlight-hall": "forgotten-1/forgotten-2"}, res.Erased.Renamed)
+	require.ElementsMatch(t, []string{"plan-surprise-party", "plan-surprise-party/book-moonlight-hall"}, res.Erased.Names)
 	for _, text := range []string{"plan the surprise party", "book Moonlight Hall", "the deposit is 200", "called off"} {
 		require.Equal(t, "(forgotten)", res.Erased.Texts[text], text)
 	}

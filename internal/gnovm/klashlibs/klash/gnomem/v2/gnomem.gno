@@ -13,10 +13,12 @@
 // keeps one Mem per project, in the realm klash.local/r/mem on disk, and
 // binds it to the name mem in every input the model runs there:
 //
-//	mem.Goal("release v2").Steps("bump the version", "tag v2.0.0", "CI is green")
-//	mem.Done("release-v2/1", "now 2.0.0")
-//	mem.Ask("release-v2/2", "which key signs the tag?")
-//	mem.Note("release-v2/2", "the tag needs the release key")
+//	mem.Goal("release v2").Steps("bump: bump the version", "tag v2.0.0", "CI is green")
+//	mem.PushFrame(mem.Frame("release-v2"))
+//	mem.PushFrame(mem.Frame().NextTodo())
+//	mem.Think("version", "the version lives in version.go")
+//	mem.PopFrame("now 2.0.0")
+//	mem.Ask("release-v2/tag-v2-0-0", "which key signs the tag?")
 //	mem.Goal("renew the gno.shop TLS cert", "renew-cert").Wait("2026-12-01")
 //	mem.Fact("cmd/test", "go test -race ./...")
 //	mem.Rule("push-after-landing", "push to GitHub only after landed:")
@@ -24,16 +26,19 @@
 //	mem.Show()
 //
 // Everything has a name: a lowercase path, printed in backticks. An item's
-// name is its goal's name, then the step numbers: `release-v2`,
-// `release-v2/2`, `release-v2/2/1`. A fact's or a rule's name is any path:
-// `cmd/test`. Names are typed exactly as printed, never reused, and never
-// renamed (an erasure aside).
+// id is its goal's name, then its steps' names: `release-v2`,
+// `release-v2/bump`, `release-v2/bump/version`. A fact's or a rule's name
+// is any path: `cmd/test`. Names are typed exactly as printed, never reused,
+// and never renamed (an erasure aside).
 //
 // An item is open until it is done, dropped or forgotten, and no open item
 // is ever under a closed one. A condition is a step: an item cannot be done
 // while a step of it is open. An item may wait for a day or for what its
 // words say; a wait holds back only next. An item for the user (a question
 // or a request) is never the agent's next. A day is the user's local date.
+// Seen through a session's stack, an item is a frame (frames.gno): a
+// session holds the frames it has pushed, and nobody else closes, drops or
+// takes one it holds.
 //
 // Every change is an Op, and one function, apply, changes a Mem. The calls
 // only decide which Ops to make, and hand each to gnosh, which journals it.
@@ -60,7 +65,7 @@ type Goal struct {
 // (maxSteps, in apply.gno, caps the steps under one item.)
 const (
 	maxTitle = 200  // bytes of a title
-	maxText  = 1000 // bytes of a result, note, wait, fact or rule
+	maxText  = 1000 // bytes of a result, thought, wait, fact or rule
 )
 
 // Goal adds a goal, and returns it so its steps and wait can follow. Its
@@ -79,7 +84,7 @@ func (m *Mem) Goal(title string, name ...string) Goal {
 	return Goal{Name: n, m: m}
 }
 
-// Steps adds steps to the goal, numbered after the last it had.
+// Steps adds steps to the goal, after those it has.
 func (g Goal) Steps(titles ...string) Goal {
 	g.m.Steps(g.Name, titles...)
 	return g
@@ -121,16 +126,20 @@ func (m *Mem) startIn(goal string, step ...string) {
 }
 
 // stepsOf names goal name's steps, for a refusal: ", whose steps are
-// `g/1` to `g/3`", or "" when it has none.
+// `g/a` and `g/b`", or "" when it has none.
 func (m *Mem) stepsOf(name string) string {
 	it := m.get(name)
-	if it == nil || it.Last == 0 {
+	if it == nil || len(it.Steps) == 0 {
 		return ""
 	}
-	if it.Last == 1 {
-		return ", whose step is `" + name + "/1`"
+	var ids []string
+	for _, s := range it.Steps {
+		ids = append(ids, name+"/"+s)
 	}
-	return ", whose steps are `" + name + "/1` to `" + name + "/" + strconv.Itoa(it.Last) + "`"
+	if len(ids) == 1 {
+		return ", whose step is `" + ids[0] + "`"
+	}
+	return ", whose steps are " + names(ids)
 }
 
 // Ask asks the user something, as a step of the goal (see Mem.Ask).
@@ -176,9 +185,12 @@ func (g Goal) String() string {
 	return "`" + g.Name + "`"
 }
 
-// Steps adds steps to open item name, numbered after the last it had
-// (name/1, name/2, …). It refuses a title an open step of name already has,
-// two steps with one title, and a 10,000th step.
+// Steps adds steps to open item name, after those it has, each named by
+// its title: "name: purpose" gives the name, and a bare title names the
+// step from its words, as a goal is named from its title ("find why
+// TestFlaky fails" makes `fix-flaky/find-why-testflaky-fails`). It refuses
+// a purpose an open step of name already has, two steps with one purpose,
+// and a 10,000th step.
 func (m *Mem) Steps(name string, titles ...string) {
 	parent := m.openItem(name)
 	if parent.For != "" {
@@ -189,7 +201,7 @@ func (m *Mem) Steps(name string, titles ...string) {
 	}
 	seen := map[string]bool{}
 	m.eachStep(name, func(_ string, it *Todo) bool {
-		if it.Status == "" {
+		if it.Status == "" && it.Title != "" {
 			seen[sameTitle(it.Title)] = true
 		}
 		return false
@@ -200,18 +212,44 @@ func (m *Mem) Steps(name string, titles ...string) {
 		if title == "" {
 			panic("step " + strconv.Itoa(i+1) + " needs a title")
 		}
-		if seen[sameTitle(title)] {
-			panic(ref(name, parent.Title) + " already has an open step " + strconv.Quote(title))
+		sname, purpose := stepTitle(title)
+		if seen[sameTitle(purpose)] {
+			panic(ref(name, parent.Title) + " already has an open step " + strconv.Quote(purpose))
 		}
-		seen[sameTitle(title)] = true
-		if parent.Last >= maxSteps {
+		seen[sameTitle(purpose)] = true
+		if len(parent.Steps) >= maxSteps {
 			panic(ref(name, parent.Title) + " has " + strconv.Itoa(maxSteps) + " steps, the most an item may have")
 		}
-		step := name + "/" + strconv.Itoa(parent.Last+1)
-		m.do(Op{Kind: "add", Name: step, New: title, By: caller()})
-		refs = append(refs, ref(step, title))
+		step := name + "/" + m.freeStep(name, sname)
+		m.do(Op{Kind: "add", Name: step, New: purpose, By: caller()})
+		refs = append(refs, ref(step, purpose))
 	}
 	println("added " + strings.Join(refs, ", ") + m.whatNext(name))
+}
+
+// stepTitle splits a step's title into its name and purpose: "name:
+// purpose" gives the name; a bare title names the step from its words.
+func stepTitle(title string) (name, purpose string) {
+	if i := strings.Index(title, ":"); i > 0 {
+		n, rest := title[:i], strings.TrimSpace(title[i+1:])
+		if validName(n) && !strings.Contains(n, "/") && len(n) <= maxGoalName && rest != "" {
+			return n, rest
+		}
+	}
+	return nameOf(title, "step"), title
+}
+
+// freeStep is base, or base-2, base-3, …, whichever names no step of
+// parent yet.
+func (m *Mem) freeStep(parent, base string) string {
+	if m.get(parent+"/"+base) == nil {
+		return base
+	}
+	for i := 2; ; i++ {
+		if n := base + "-" + strconv.Itoa(i); m.get(parent+"/"+n) == nil {
+			return n
+		}
+	}
 }
 
 // Ask adds a question or a request for the user as a step of item name
@@ -232,10 +270,10 @@ func (m *Mem) Ask(name, question string) {
 		if parent.For != "" {
 			panic(ref(name, parent.Title) + " is for the user already")
 		}
-		if parent.Last >= maxSteps {
+		if len(parent.Steps) >= maxSteps {
 			panic(ref(name, parent.Title) + " has " + strconv.Itoa(maxSteps) + " steps, the most an item may have")
 		}
-		asked = name + "/" + strconv.Itoa(parent.Last+1)
+		asked = name + "/" + m.freeStep(name, nameOf(question, "ask"))
 	}
 	m.do(Op{Kind: "add", Name: asked, New: question, By: caller()})
 	m.do(Op{Kind: "set", Name: asked, Field: "for", New: "user"})
@@ -250,46 +288,39 @@ func (m *Mem) Ask(name, question string) {
 	println(msg)
 }
 
-// Start marks open item name as being worked on by this session, so that
-// other sessions' next skips it; Show marks it "(started by …)". Done and
-// Drop clear the mark. Starting an item another session started takes it
-// over, and says from whom: that is how a step left by a session that has
-// ended is picked up. An item that waits, or is under one that waits, is
-// not started: mem would say it is being worked on while it waits for a
-// day or for something said, and a later session could not tell which
-// holds.
+// Start marks open item name as being worked on by this session, with no
+// cut (PushFrame enters it as a frame), so that other sessions' next skips
+// it; Show marks it "(held by …)". Done and Drop clear the mark. An item
+// another session holds is refused: that session pops or closes it. An
+// item that waits, or is under one that waits, is not started: mem would
+// say it is being worked on while it waits for a day or for something
+// said, and a later session could not tell which holds.
 func (m *Mem) Start(name string) {
 	it := m.openItem(name)
 	if it.For != "" {
 		panic(ref(name, it.Title) + " is for the user: only they can do it")
 	}
-	for p := name; p != ""; p = parentOf(p) {
-		if w := m.get(p); m.waiting(w) {
-			until := "until " + w.Wait
-			if !isDay(w.Wait) {
-				until = "for " + strconv.Quote(w.Wait)
-			}
-			panic(ref(p, w.Title) + " waits " + until + ": start it then, or clear the wait with mem.Wait(\"" + p + "\", \"\")")
-		}
-	}
+	m.refuseWait(name)
 	me := caller()
 	if it.Doing == me {
 		println(ref(name, it.Title) + " is started already, by this session")
 		return
 	}
-	from := it.Doing
-	m.do(Op{Kind: "set", Name: name, Field: "doing", Old: from, New: me})
-	msg := "started " + ref(name, it.Title)
-	if from != "" {
-		msg += " (taken over from " + who(from) + ")"
+	if it.Doing != "" {
+		panic(m.heldText(name, it))
 	}
-	println(msg)
+	m.do(Op{Kind: "set", Name: name, Field: "doing", Old: "", New: me})
+	println("started " + ref(name, it.Title))
 }
 
 // Done closes open item name with what came of it, if anything is given,
 // and clears its wait. It refuses while a step of it is open, naming those
 // steps and saying to Done or Drop them first. Done of a done item says
-// "already done → <result>" and changes nothing.
+// "already done → <result>" and changes nothing. Done of the present frame,
+// the top of this session's stack, is PopFrame: a result is required, and
+// gnosh cuts the context; Done of a frame below the top, or of one with a
+// frame of the stack under it, is refused; and nobody closes a frame
+// another session holds.
 func (m *Mem) Done(name string, result ...string) {
 	it := m.item(name)
 	switch it.Status {
@@ -299,6 +330,13 @@ func (m *Mem) Done(name string, result ...string) {
 	case "dropped":
 		panic(ref(name, it.Title) + " was dropped: " + it.Result + "; mem.Reopen(\"" + name + "\") to take it up again")
 	}
+	stack := frames()
+	m.refuseInside(stack, name)
+	if name == top(stack) {
+		m.pop(name, it, strings.Join(result, " "), false)
+		return
+	}
+	m.refuseHeld(name, it)
 	if it.OpenSteps > 0 {
 		panic(ref(name, it.Title) + " has open steps " + m.refs(m.openSteps(name)) + ": Done or Drop them first")
 	}
@@ -321,8 +359,12 @@ func (m *Mem) Done(name string, result ...string) {
 }
 
 // Drop closes open item name as not to be done, with why. Its open steps
-// are dropped with it (the lowest first), keeping no reason; they, and its
-// wait, come back when it is reopened.
+// are dropped with it (the deepest first), keeping no reason; they, and
+// its wait, come back when it is reopened. Drop of the present frame pops
+// it, dropped, and gnosh cuts the context, since the work is given up;
+// Drop of a frame below the top, or of one with a frame of the stack under
+// it, is refused, and so is Drop of a frame another session holds, or
+// that has a step another session holds.
 func (m *Mem) Drop(name, why string) {
 	it := m.openItem(name)
 	m.refuseBound(name, "drop")
@@ -330,13 +372,17 @@ func (m *Mem) Drop(name, why string) {
 	if why == "" {
 		panic("say why: mem.Drop(\"" + name + "\", \"why\")")
 	}
+	stack := frames()
+	m.refuseInside(stack, name)
+	m.refuseHeld(name, it)
+	if name == top(stack) {
+		m.pop(name, it, why, true)
+		return
+	}
 	dropped := m.drop(name, it, why)
 	msg := "dropped " + ref(name, it.Title)
 	if len(dropped) > 0 {
-		for i, j := 0, len(dropped)-1; i < j; i, j = i+1, j-1 {
-			dropped[i], dropped[j] = dropped[j], dropped[i]
-		}
-		msg += ", with its open steps " + names(dropped)
+		msg += ", with its open steps " + names(outlineOrder(dropped))
 	}
 	println(msg + m.whatNext(goalOf(name)))
 }
@@ -350,8 +396,17 @@ func (m *Mem) refuseBound(name, verb string) {
 	}
 }
 
+// outlineOrder is ids, which a bottom-up walk listed, in outline order.
+func outlineOrder(ids []string) []string {
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[len(ids)-1-i] = id
+	}
+	return out
+}
+
 // drop closes open item it, named name, as dropped with why, and its open
-// steps with it, the lowest first, which it returns.
+// steps with it, the deepest first, which it returns.
 func (m *Mem) drop(name string, it *Todo, why string) []string {
 	var dropped []string
 	m.eachBelow(name, true, func(step string, s *Todo) {
@@ -373,10 +428,11 @@ func (m *Mem) drop(name string, it *Todo, why string) []string {
 }
 
 // Reopen opens item name again if it is done or dropped, with the items it
-// belongs to and the steps dropped with any of them (the highest first);
-// what came of each becomes a note, and so does why, if given: why it is
-// taken up again, as Drop keeps why it was put down. An open item is left
-// as it is.
+// belongs to and the steps dropped with any of them (the deepest first);
+// what came of each becomes a thought, and so does why, if given: why it
+// is taken up again, as Drop keeps why it was put down. An open item is
+// left as it is. A frame popped and reopened does not bring back what its
+// pop removed from a context.
 func (m *Mem) Reopen(name string, why ...string) {
 	it := m.item(name)
 	reason := clip(text("why", strings.Join(why, " ")), maxText)
@@ -400,7 +456,7 @@ func (m *Mem) Reopen(name string, why ...string) {
 		}
 	}
 	if reason != "" {
-		m.do(Op{Kind: "note", Name: name, New: "reopened: " + reason})
+		m.note(name, m.get(name), "reopened: "+reason)
 	}
 	msg := "reopened " + ref(name, it.Title)
 	if len(others) > 0 {
@@ -409,7 +465,7 @@ func (m *Mem) Reopen(name string, why ...string) {
 	println(msg + m.whatNext(goalOf(name)))
 }
 
-// reopenOne reopens item n, then the steps dropped with it, the highest
+// reopenOne reopens item n, then the steps dropped with it, the deepest
 // first, and returns their names.
 func (m *Mem) reopenOne(n string) []string {
 	it := m.get(n)
@@ -418,7 +474,7 @@ func (m *Mem) reopenOne(n string) []string {
 	}
 	dropped := it.Status == "dropped"
 	if it.Result != "" {
-		m.do(Op{Kind: "note", Name: n, New: "was " + it.Status + ": " + it.Result})
+		m.note(n, it, "was "+it.Status+": "+it.Result)
 		m.do(Op{Kind: "set", Name: n, Field: "result", Old: it.Result})
 	}
 	m.do(Op{Kind: "set", Name: n, Field: "status", Old: it.Status})
@@ -437,15 +493,25 @@ func (m *Mem) reopenOne(n string) []string {
 	return out
 }
 
-// Note records a finding or an attempt on item name, open or closed.
-func (m *Mem) Note(name, note string) {
+// Note keeps a finding or an attempt on item name, open or closed, as a
+// thought named from its words (Think names one). A thought of the present
+// frame is better kept with mem.Think(name, text), to find it by name.
+func (m *Mem) Note(name, text_ string) {
 	it := m.item(name)
-	note = clip(text("the note", note), maxText)
-	if note == "" {
+	text_ = clip(text("the note", text_), maxText)
+	if text_ == "" {
 		panic("a note needs words: mem.Note(\"" + name + "\", \"what you found\")")
 	}
-	m.do(Op{Kind: "note", Name: name, New: note})
-	println("noted on " + ref(name, it.Title))
+	tname := m.note(name, it, text_)
+	println("noted on " + ref(name, it.Title) + " as thought `" + tname + "`")
+}
+
+// note keeps text on item it, named name, as a thought named from the
+// text's words, and returns the thought's name.
+func (m *Mem) note(name string, it *Todo, text string) string {
+	tname := freeThoughtName(it, nameOf(text, "note"))
+	m.do(Op{Kind: "note", Name: name + "#" + tname, New: text})
+	return tname
 }
 
 // Wait sets what open item name waits for: a day, "2026-12-01", until that
@@ -541,11 +607,11 @@ func (m *Mem) Rule(name, rule string) {
 }
 
 // Forget empties closed item name and every item under it (title, result,
-// wait, notes) and closes them as forgotten; or it removes fact or rule
+// wait, thoughts) and closes them as forgotten; or it removes fact or rule
 // name. Gnosh erases their text from the journal and the index. It refuses
 // an open item (Drop it first), which the user's /mem forget drops; only
-// the user forgets a rule; and every other call refuses a forgotten item.
-// Its receipt names no text.
+// the user forgets a rule; nobody forgets a frame a session holds; and
+// every other call refuses a forgotten item. Its receipt names no text.
 func (m *Mem) Forget(name string) {
 	m.refuseBound(name, "forget")
 	it := m.get(name)
@@ -571,6 +637,8 @@ func (m *Mem) Forget(name string) {
 		if caller() != "user" {
 			panic("`" + name + "` is open: mem.Drop(\"" + name + "\", \"why\") first, then forget it")
 		}
+		m.refuseInside(frames(), name)
+		m.refuseHeld(name, it)
 		m.drop(name, it, "forgotten")
 		verb = "dropped and forgot"
 	case "forgotten":
@@ -593,7 +661,7 @@ func (m *Mem) Forget(name string) {
 }
 
 // Redact replaces a secret's exact text with "(redacted)" wherever mem holds
-// or ever held it: titles, results, waits, notes, facts, rules, and the
+// or ever held it: titles, results, waits, thoughts, facts, rules, and the
 // statements of past inputs. It is for a secret's exact text: it refuses
 // text under 6 bytes, text held nowhere, text that overlaps "(redacted)",
 // and text held in more than 3 places (/mem redact has no such limit). Its

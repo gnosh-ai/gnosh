@@ -20,10 +20,11 @@ import (
 // has a letter. A name is typed exactly as printed; anything else is
 // refused with the name it should have been.
 //
-// An item's name is its goal's name, then step numbers: release-v2/2/1. A
-// goal's name is one segment of at most 4 words and 32 bytes, made from
-// its title or given, never reserved and never given twice. A fact's or a
-// rule's name is any name of at most 64 bytes.
+// An item's id is its goal's name, then its steps' names:
+// release-v2/bump/version. A goal's, a step's or a thought's name is one
+// segment of at most 32 bytes (a goal's of at most 4 words), made from its
+// title or given; a goal's is never reserved and never given twice. A
+// fact's or a rule's name is any name of at most 64 bytes.
 const (
 	maxGoalName = 32
 	maxName     = 64
@@ -108,6 +109,12 @@ func fold(r rune) rune {
 // that look like keys or hashes skipped (so a token in a title rarely
 // reaches a name), at most 4 words and 32 bytes.
 func goalName(title string) string {
+	return nameOf(title, "goal")
+}
+
+// nameOf makes a name from text, as goalName does; fallback names it when
+// the text has no words to use ("goal", "step", "note").
+func nameOf(title, fallback string) string {
 	all := words(title)
 	var kept []string
 	for _, w := range all {
@@ -135,9 +142,9 @@ func goalName(title string) string {
 	}
 	switch {
 	case name == "":
-		return "goal"
+		return fallback
 	case !validName(name):
-		return "goal-" + name
+		return fallback + "-" + name
 	}
 	return name
 }
@@ -261,8 +268,11 @@ func (m *Mem) miss(name string) string {
 		return "no item named \"\": mem.Show() lists them"
 	case low != name && m.get(low) != nil:
 		return "names are lowercase, typed as printed: `" + low + "`"
-	case strings.Contains(name, "#") || isNumber(strings.TrimLeft(name, "#")):
-		return "`" + name + "` is not a name; steps are named under their goal, like `goal/2`: mem.Show() lists them"
+	case strings.Contains(name, "#"):
+		item, thought := splitAddr(name)
+		return "`" + name + "` is a thought's address, not an item's: mem.Thought(" + strconv.Quote(thought) + ") reads it, and mem.Show(" + strconv.Quote(item) + ") shows its frame"
+	case isNumber(strings.TrimLeft(name, "#")):
+		return "`" + name + "` is not a name; steps are named under their goal, like `goal/find-cause`: mem.Show() lists them"
 	case m.getFact(name) != nil:
 		return "`" + name + "` is a fact, not an item; to change it: mem.Fact(\"" + name + "\", \"…\")"
 	case m.getRule(name) != nil:
@@ -271,7 +281,7 @@ func (m *Mem) miss(name string) string {
 		return "no item `" + name + "` (a name joins its words with \"-\": did you mean `" + m.formed(name) + "`?)"
 	case m.titled(name) != "":
 		return strconv.Quote(name) + " is a title, not a name: the goal with that title is `" + m.titled(name) + "`"
-	case m.slugged(goalOf(name)) != "":
+	case m.get(goalOf(name)) == nil && m.slugged(goalOf(name)) != "":
 		g := goalOf(name)
 		msg := "`" + g + "` is not a name: a goal's name keeps at most 4 words of its title, and this one's is `" + m.slugged(g) + "`"
 		if rest := name[len(g):]; rest != "" {
@@ -281,10 +291,10 @@ func (m *Mem) miss(name string) string {
 	}
 	if p := parentOf(name); p != "" {
 		if it := m.get(p); it != nil {
-			if it.Last == 0 {
+			if len(it.Steps) == 0 {
 				return "no item `" + name + "`; `" + p + "` has no steps"
 			}
-			return "no item `" + name + "`; `" + p + "` has `" + p + "/1` to `" + p + "/" + strconv.Itoa(it.Last) + "`"
+			return "no item `" + name + "`; `" + p + "` has the steps" + m.stepsOf(p)[len(", whose steps are"):]
 		}
 	}
 	return "no item `" + name + "`; mem.Show() lists them"

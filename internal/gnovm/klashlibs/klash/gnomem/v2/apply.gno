@@ -14,22 +14,23 @@ import (
 	"strings"
 )
 
-// maxSteps caps the steps under one item: keys pad step numbers to 4
-// digits, so that keys sort as the outline does.
+// maxSteps caps the steps under one item.
 const maxSteps = 9999
 
 // apply is the only code that changes a Mem. It reads only the Mem, op and
 // at, and panics, so nothing is kept, when op does not fit:
 //   - set, fact, rule, unnote: Old is not the current value (unnote: the
-//     last note);
-//   - add: the name exists, its parent is missing or closed, or its step
-//     number is not 1 to maxSteps; unadd: the item is closed, or has steps,
-//     notes, a result or a wait;
+//     last thought);
+//   - add: the id exists, its parent is missing or closed, or the parent has
+//     maxSteps steps; unadd: the item is closed, or has steps, thoughts, a
+//     result or a wait;
+//   - note: the item already has a thought of that name;
 //   - a set would open an item under a closed one, or close one with an
 //     open step;
 //   - a forget names an open item, or a missing fact or rule.
 //
-// A redact naming a missing item, fact or rule changes and stamps nothing.
+// A redact naming a missing item, thought, fact or rule changes and stamps
+// nothing.
 func (m *Mem) apply(op Op, at int64) {
 	switch op.Kind {
 	case "add":
@@ -39,16 +40,15 @@ func (m *Mem) apply(op Op, at int64) {
 	case "set":
 		m.applySet(op, at)
 	case "note":
-		it := m.must(op)
-		notes := make([]string, len(it.Notes), len(it.Notes)+1)
-		copy(notes, it.Notes)
-		it.Notes = append(notes, op.New)
+		m.applyNote(op)
 	case "unnote":
-		it := m.must(op)
-		if len(it.Notes) == 0 || it.Notes[len(it.Notes)-1] != op.Old {
-			panic("apply: `" + op.Name + "`'s last note is not " + strconv.Quote(op.Old))
+		item, name := splitAddr(op.Name)
+		it := m.mustItem(item)
+		last := len(it.Notes) - 1
+		if last < 0 || it.Notes[last].Text != op.Old || name != "" && it.Notes[last].Name != name {
+			panic("apply: `" + item + "`'s last thought is not " + strconv.Quote(op.Old))
 		}
-		notes := make([]string, len(it.Notes)-1)
+		notes := make([]note, last)
 		copy(notes, it.Notes)
 		it.Notes = notes
 	case "fact":
@@ -75,7 +75,7 @@ func (m *Mem) apply(op Op, at int64) {
 			m.rules.Remove(op.Name)
 			return
 		}
-		it := m.must(op)
+		it := m.mustItem(op.Name)
 		if it.Status == "" {
 			panic("apply: cannot forget open `" + op.Name + "`")
 		}
@@ -95,52 +95,96 @@ func (m *Mem) apply(op Op, at int64) {
 	default:
 		panic("apply: unknown op " + strconv.Quote(op.Kind))
 	}
-	m.stamp(op.Name, at)
+	item, _ := splitAddr(op.Name)
+	m.stamp(item, at)
 }
 
 func (m *Mem) applyAdd(op Op) {
 	if m.get(op.Name) != nil {
 		panic("apply: `" + op.Name + "` exists")
 	}
+	if strings.IndexByte(op.Name, '#') >= 0 {
+		panic("apply: `" + op.Name + "` is a thought's address, not an item's")
+	}
 	if p := parentOf(op.Name); p != "" {
 		parent := m.get(p)
 		if parent == nil || parent.Status != "" {
 			panic("apply: `" + p + "` is missing or closed")
 		}
-		n := stepNumber(op.Name)
-		if n < 1 || n > maxSteps {
-			panic("apply: `" + op.Name + "` has no step number from 1 to " + strconv.Itoa(maxSteps))
+		if len(parent.Steps) >= maxSteps {
+			panic("apply: `" + p + "` has " + strconv.Itoa(maxSteps) + " steps, the most an item may have")
 		}
-		if n > parent.Last {
-			parent.Last = n
-		}
+		steps := make([]string, len(parent.Steps), len(parent.Steps)+1)
+		copy(steps, parent.Steps)
+		parent.Steps = append(steps, op.Name[len(p)+1:])
 		parent.OpenSteps++
 	} else {
 		m.taken.Set(op.Name, true)
 		m.open.Set(stampKey(0, op.Name), op.Name)
 		m.titles.Set(sameTitle(op.New)+"|"+op.Name, op.Name)
 	}
-	m.items.Set(key(op.Name), &Todo{Title: op.New, By: op.By})
+	m.items.Set(op.Name, &Todo{Title: op.New, By: op.By})
 	m.counts.Open++
 }
 
 func (m *Mem) applyUnadd(op Op) {
-	it := m.must(op)
-	if it.Status != "" || it.Result != "" || it.Wait != "" || it.For != "" || it.Doing != "" || len(it.Notes) > 0 || m.hasSteps(op.Name) {
+	it := m.mustItem(op.Name)
+	if it.Status != "" || it.Result != "" || it.Wait != "" || it.For != "" || it.Doing != "" || len(it.Notes) > 0 || len(it.Steps) > 0 {
 		panic("apply: `" + op.Name + "` has changed since it was added")
 	}
-	m.items.Remove(key(op.Name))
+	m.items.Remove(op.Name)
 	if p := parentOf(op.Name); p == "" {
 		m.open.Remove(stampKey(it.Changed, op.Name))
 		m.titles.Remove(sameTitle(it.Title) + "|" + op.Name)
 	} else {
-		m.get(p).OpenSteps--
+		parent := m.get(p)
+		name := op.Name[len(p)+1:]
+		steps := make([]string, 0, len(parent.Steps))
+		for _, s := range parent.Steps {
+			if s != name {
+				steps = append(steps, s)
+			}
+		}
+		parent.Steps = steps
+		parent.OpenSteps--
 	}
 	m.counts.Open--
 }
 
+// applyNote appends a thought to an item: under the name in op's address,
+// or, for an address with none (a note from before thoughts had names),
+// under one made from the text's words.
+func (m *Mem) applyNote(op Op) {
+	item, name := splitAddr(op.Name)
+	it := m.mustItem(item)
+	if name == "" {
+		name = freeThoughtName(it, nameOf(op.New, "note"))
+	} else if noteNamed(it, name) != nil {
+		panic("apply: `" + item + "` already has a thought named `" + name + "`")
+	}
+	notes := make([]note, len(it.Notes), len(it.Notes)+1)
+	copy(notes, it.Notes)
+	it.Notes = append(notes, note{Name: name, Text: op.New})
+}
+
 func (m *Mem) applySet(op Op, at int64) {
-	it := m.must(op)
+	if op.Field == "frame" {
+		item, name := splitAddr(op.Name)
+		it := m.mustItem(item)
+		i := noteIndex(it, name)
+		if i < 0 {
+			panic("apply: `" + item + "` has no thought named `" + name + "`")
+		}
+		if it.Notes[i].Step != op.Old {
+			panic("apply: thought `" + op.Name + "`'s frame is " + strconv.Quote(it.Notes[i].Step) + ", not " + strconv.Quote(op.Old))
+		}
+		notes := make([]note, len(it.Notes))
+		copy(notes, it.Notes)
+		notes[i].Step = op.New
+		it.Notes = notes
+		return
+	}
+	it := m.mustItem(op.Name)
 	var cur string
 	switch op.Field {
 	case "status":
@@ -322,7 +366,7 @@ func (m *Mem) applyFact(op Op, at int64) {
 		return
 	}
 	if f == nil {
-		f = &Fact{}
+		f = &fact{}
 		m.facts.Set(op.Name, f)
 		m.group(op.Name, 1)
 	}
@@ -351,26 +395,39 @@ func (m *Mem) applyRule(op Op, at int64) {
 }
 
 // applyRedact replaces op.Old with "(redacted)" in what op names, and
-// reports whether there was anything to change.
+// reports whether there was anything to change. An item's address with a
+// thought's name redacts that thought alone.
 func (m *Mem) applyRedact(op Op) bool {
 	re := func(s string) string { return strings.ReplaceAll(s, op.Old, redacted) }
 	switch op.Field {
 	case "item":
-		it := m.get(op.Name)
+		item, name := splitAddr(op.Name)
+		it := m.get(item)
 		if it == nil {
 			return false
 		}
-		if parentOf(op.Name) == "" && it.Status == "" {
-			m.titles.Remove(sameTitle(it.Title) + "|" + op.Name)
-			m.titles.Set(sameTitle(re(it.Title))+"|"+op.Name, op.Name)
+		if name != "" {
+			i := noteIndex(it, name)
+			if i < 0 {
+				return false
+			}
+			notes := make([]note, len(it.Notes))
+			copy(notes, it.Notes)
+			notes[i].Text = re(notes[i].Text)
+			it.Notes = notes
+			return true
+		}
+		if parentOf(item) == "" && it.Status == "" {
+			m.titles.Remove(sameTitle(it.Title) + "|" + item)
+			m.titles.Set(sameTitle(re(it.Title))+"|"+item, item)
 		}
 		it.Title, it.Result = re(it.Title), re(it.Result)
 		if it.Wait != "" {
-			m.setWait(op.Name, it, re(it.Wait))
+			m.setWait(item, it, re(it.Wait))
 		}
-		notes := make([]string, len(it.Notes))
+		notes := make([]note, len(it.Notes))
 		for i, n := range it.Notes {
-			notes[i] = re(n)
+			notes[i] = note{Name: n.Name, Text: re(n.Text), Step: n.Step}
 		}
 		it.Notes = notes
 	case "fact":
@@ -472,28 +529,29 @@ func stampKey(at int64, name string) string {
 	return s + "|" + name
 }
 
-func (m *Mem) must(op Op) *Todo {
-	it := m.get(op.Name)
+// mustItem is item name, which an Op must find.
+func (m *Mem) mustItem(name string) *Todo {
+	it := m.get(name)
 	if it == nil {
-		panic("apply: no item `" + op.Name + "`")
+		panic("apply: no item `" + name + "`")
 	}
 	return it
 }
 
 func (m *Mem) get(name string) *Todo {
-	v := m.items.Get(key(name))
+	v := m.items.Get(name)
 	if v == nil {
 		return nil
 	}
 	return v.(*Todo)
 }
 
-func (m *Mem) getFact(name string) *Fact {
+func (m *Mem) getFact(name string) *fact {
 	v := m.facts.Get(name)
 	if v == nil {
 		return nil
 	}
-	return v.(*Fact)
+	return v.(*fact)
 }
 
 func (m *Mem) getRule(name string) *Rule {
@@ -504,34 +562,44 @@ func (m *Mem) getRule(name string) *Rule {
 	return v.(*Rule)
 }
 
-func (m *Mem) hasSteps(name string) bool {
-	found := false
-	m.items.Iterate(key(name)+"/", key(name)+"/\xff", func(string, any) bool {
-		found = true
-		return true
-	})
-	return found
+// splitAddr splits a thought's address, item#name, into the item and the
+// thought's name; a plain item id has no thought.
+func splitAddr(addr string) (item, name string) {
+	if i := strings.IndexByte(addr, '#'); i >= 0 {
+		return addr[:i], addr[i+1:]
+	}
+	return addr, ""
 }
 
-// key is name with each step number padded to 4 digits, so the B+tree keeps
-// an outline's order: release-v2/0002/0001.
-func key(name string) string {
-	segs := strings.Split(name, "/")
-	for i := 1; i < len(segs); i++ {
-		for len(segs[i]) < 4 {
-			segs[i] = "0" + segs[i]
+// noteIndex is where item it keeps its thought named name; -1 for none.
+func noteIndex(it *Todo, name string) int {
+	for i, n := range it.Notes {
+		if n.Name == name {
+			return i
 		}
 	}
-	return strings.Join(segs, "/")
+	return -1
 }
 
-// unkey undoes key.
-func unkey(k string) string {
-	segs := strings.Split(k, "/")
-	for i := 1; i < len(segs); i++ {
-		segs[i] = strings.TrimLeft(segs[i], "0")
+// noteNamed is item it's thought named name, or nil.
+func noteNamed(it *Todo, name string) *note {
+	if i := noteIndex(it, name); i >= 0 {
+		return &it.Notes[i]
 	}
-	return strings.Join(segs, "/")
+	return nil
+}
+
+// freeThoughtName is base, or base-2, base-3, …, whichever names no thought
+// of it yet.
+func freeThoughtName(it *Todo, base string) string {
+	if noteIndex(it, base) < 0 {
+		return base
+	}
+	for i := 2; ; i++ {
+		if n := base + "-" + strconv.Itoa(i); noteIndex(it, n) < 0 {
+			return n
+		}
+	}
 }
 
 // isDay reports whether a wait is a day, 2026-12-01, which the days index
@@ -548,19 +616,10 @@ func isDay(s string) bool {
 	return true
 }
 
-// parentOf is the name of the item name is a step of; "" for a goal.
+// parentOf is the id of the item name is a step of; "" for a goal.
 func parentOf(name string) string {
 	if i := strings.LastIndex(name, "/"); i >= 0 {
 		return name[:i]
 	}
 	return ""
-}
-
-// stepNumber is name's last segment as a step number, or 0.
-func stepNumber(name string) int {
-	n, err := strconv.Atoi(name[strings.LastIndex(name, "/")+1:])
-	if err != nil {
-		return 0
-	}
-	return n
 }

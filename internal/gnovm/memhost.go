@@ -165,13 +165,13 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 	case q.Session != "":
 		who, caller = "agent", q.Session
 	}
-	call, err := r.call(q.Code, memContext{caller: caller, bound: q.Goal, find: h.finder(ctx, x, j), holding: h.holding(j), limit: memLimit{ctx: ctx}})
-	res := memResult{Output: call.Output, Ops: call.Ops, Notes: notes, Instance: j.instance}
+	call, err := r.call(q.Code, memContext{caller: caller, bound: q.Goal, stack: q.Frames, find: h.finder(ctx, x, j), holding: h.holding(j), limit: memLimit{ctx: ctx}})
+	res := memResult{Output: call.Output, Ops: call.Ops, Frames: call.Frames, Notes: notes, Instance: j.instance}
 	if err != nil || call.batch == nil {
 		return res, err
 	}
 	_, offset := time.Unix(call.At, 0).Zone()
-	e := &memEntry{Seq: j.seq + 1, Time: call.At, Offset: offset, Req: q.Req, Who: who, Session: q.Session, Code: q.Code, Ops: call.Ops}
+	e := &memEntry{Seq: j.seq + 1, Time: call.At, Offset: offset, Req: q.Req, Who: who, Session: q.Session, Code: q.Code, Ops: call.Ops, Frames: call.Frames}
 	if er, ok := erasureOf(call.Ops); ok {
 		r.close()
 		x.close()
@@ -192,7 +192,27 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 	}
 	h.writeStatus(r, j)
 	res.Goals = h.touched(r, caller, call.Ops)
+	if hint := nextHint(r, caller, q.Goal, q.Frames, call.Frames); hint != "" {
+		res.Output += hint + "\n"
+	}
 	return res, nil
+}
+
+// nextHint is what a receipt ends with after a pop that no push followed
+// in the same input: what mem.NextHint says to do next, with the stack as
+// it stands after the call (FRAMES.md). "" when the call ended with no pop,
+// or the hint cannot be read.
+func nextHint(r *memRealm, caller, bound string, stack []string, events []MemFrame) string {
+	if len(events) == 0 || events[len(events)-1].Kind != "pop" {
+		return ""
+	}
+	last := events[len(events)-1]
+	call, err := r.call("print(mem.NextHint("+strconv.Quote(last.Id)+"))", memContext{caller: caller, bound: bound, stack: stackAfter(stack, events)})
+	if err != nil {
+		slog.Warn("mem's next hint could not be read", "error", err)
+		return ""
+	}
+	return strings.TrimSpace(call.Output)
 }
 
 // touched is the goals ops changed, as caller sees them, read from the
@@ -681,8 +701,8 @@ func (h *memHost) removeOtherGenerations(gen string) {
 
 // memIndexLayout is the layout of mem's index: a change to its schema or to
 // how Ops become rows is a new number, and an index of another is rebuilt.
-// 2 keeps an item's status.
-const memIndexLayout = 2
+// 2 keeps an item's status; 3 gives thoughts rows of their own.
+const memIndexLayout = 3
 
 func (h *memHost) indexStamp(j *journal) memStamp {
 	return memStamp{Layout: memIndexLayout, Generation: j.generation, Seq: j.seq, End: j.size, Hash: j.lastHash}

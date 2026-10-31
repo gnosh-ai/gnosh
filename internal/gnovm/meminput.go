@@ -99,6 +99,11 @@ func declaresFunc(decls string) bool {
 // memReads are mem's calls that return text to show.
 var memReads = map[string]bool{"Show": true, "Find": true, "Next": true, "JSON": true, "Check": true, "String": true}
 
+// memShown are mem's calls that return a value with a String of its own to
+// show: a Frame, a Thought; and Recall, whose Instantiations are shown one
+// a line.
+var memShown = map[string]string{"Frame": ".String()", "Thought": ".String()"}
+
 // memShowExpr is the statement a mem input's trailing expression becomes:
 // a read of mem prints its text; any other call runs as it is, since it may
 // return nothing (mem.Done), or what it printed already (mem.Goal); any
@@ -115,8 +120,15 @@ func memShowExpr(expr string) string {
 		}
 	case *ast.CallExpr:
 		if sel, ok := x.Fun.(*ast.SelectorExpr); ok {
-			if id, ok := sel.X.(*ast.Ident); ok && id.Name == "mem" && memReads[sel.Sel.Name] {
-				return "showMem_(" + expr + ")"
+			if id, ok := sel.X.(*ast.Ident); ok && id.Name == "mem" {
+				switch {
+				case memReads[sel.Sel.Name]:
+					return "showMem_(" + expr + ")"
+				case sel.Sel.Name == "Recall":
+					return "showRecall_(" + expr + ")"
+				case memShown[sel.Sel.Name] != "":
+					return "showMem_(" + expr + memShown[sel.Sel.Name] + ")"
+				}
 			}
 		}
 		return expr
@@ -148,7 +160,7 @@ func memShowReads(stmts string) string {
 		}
 		start, end := fset.Position(e.Pos()).Offset-len(head), fset.Position(e.End()).Offset-len(head)
 		shown := memShowExpr(stmts[start:end])
-		if !strings.HasPrefix(shown, "showMem_(") {
+		if !strings.HasPrefix(shown, "showMem_(") && !strings.HasPrefix(shown, "showRecall_(") {
 			continue
 		}
 		b.WriteString(stmts[last:start] + shown)
@@ -167,11 +179,11 @@ func memHint(code, msg string) string {
 		return memMissing(m[1], m[2] == "Goal")
 	}
 	if strings.Contains(msg, "untyped Bigint as StringKind") {
-		return `items are named, not numbered: type the name mem printed in backticks, as mem.Done("release-v2/2", "…")`
+		return `items are named, not numbered: type the name mem printed in backticks, as mem.Done("release-v2/tag", "…")`
 	}
 	if m := memUndeclaredRe.FindStringSubmatch(msg); m != nil {
 		if regexp.MustCompile(`mem\.\w+\(\s*` + regexp.QuoteMeta(m[1]) + `[-/]`).MatchString(code) {
-			return `a name is a string: quote it, as mem.Done("release-v2/1", "…")`
+			return `a name is a string: quote it, as mem.Done("release-v2/bump", "…")`
 		}
 	}
 	if strings.Contains(msg, "cannot use klash/gnomem/v2.Goal as string") {

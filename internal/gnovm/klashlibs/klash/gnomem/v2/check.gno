@@ -23,19 +23,33 @@ func (m *Mem) Check() string {
 	bad := func(s string) { problems = append(problems, s) }
 	var c Counts
 	open, closed, asks, days, words := 0, 0, 0, 0, 0
-	m.items.Iterate("", "", func(k string, v any) bool {
-		name, it := unkey(k), v.(*Todo)
+	m.items.Iterate("", "", func(name string, v any) bool {
+		it := v.(*Todo)
 		stepsOpen, stepsDone := 0, 0
-		if it.Last > 0 {
-			m.eachStep(name, func(_ string, s *Todo) bool {
-				switch s.Status {
-				case "":
-					stepsOpen++
-				case "done":
-					stepsDone++
+		m.eachStep(name, func(step string, s *Todo) bool {
+			if s == nil {
+				bad("`" + name + "` lists the step `" + step + "`, which is not there")
+				return true
+			}
+			switch s.Status {
+			case "":
+				stepsOpen++
+			case "done":
+				stepsDone++
+			}
+			return false
+		})
+		if p := parentOf(name); p != "" {
+			parent := m.get(p)
+			listed := false
+			if parent != nil {
+				for _, s := range parent.Steps {
+					listed = listed || s == stepName(name)
 				}
-				return false
-			})
+			}
+			if !listed {
+				bad("`" + name + "` is not among `" + p + "`'s steps")
+			}
 		}
 		if stepsOpen != it.OpenSteps || stepsDone != it.DoneSteps {
 			bad("`" + name + "` counts " + strconv.Itoa(it.OpenSteps) + " open and " + strconv.Itoa(it.DoneSteps) + " done steps, but has " + strconv.Itoa(stepsOpen) + " and " + strconv.Itoa(stepsDone))

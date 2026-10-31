@@ -227,7 +227,7 @@ func (m *Mem) outlineStep(sb *strings.Builder, name string, it *Todo, depth int,
 		sb.WriteString("  ← next")
 	}
 	sb.WriteString("\n")
-	if it.Status == "" && it.Last > 0 {
+	if it.Status == "" && len(it.Steps) > 0 {
 		m.outlineSteps(sb, name, depth+1, next)
 	}
 }
@@ -237,7 +237,7 @@ func (m *Mem) outlineStep(sb *strings.Builder, name string, it *Todo, depth int,
 func (m *Mem) aside(name string, it *Todo, top bool) string {
 	var parts []string
 	if top {
-		if it.Last > 0 {
+		if len(it.Steps) > 0 {
 			parts = append(parts, progress(it))
 		}
 		parts = append(parts, who(it.By), ago(it.Changed))
@@ -252,7 +252,7 @@ func (m *Mem) aside(name string, it *Todo, top bool) string {
 			parts = append(parts, "waits on the user")
 		}
 		if it.Doing != "" {
-			parts = append(parts, "started by "+who(it.Doing)+", "+ago(it.Changed))
+			parts = append(parts, "held by "+who(it.Doing)+", "+ago(it.Changed))
 		}
 	}
 	if len(parts) == 0 {
@@ -305,7 +305,7 @@ func (m *Mem) showName(sb *strings.Builder, name string) {
 			more++
 			return false
 		}
-		under = append(under, "  `"+n+"` = "+line(v.(*Fact).Text, maxLine))
+		under = append(under, "  `"+n+"` = "+line(v.(*fact).Text, maxLine))
 		return false
 	})
 	m.rules.Iterate(name+"/", name+"/\xff", func(n string, v any) bool {
@@ -353,7 +353,7 @@ func (m *Mem) showItem(sb *strings.Builder, name string, it *Todo) {
 	if p := parentOf(name); p != "" {
 		sb.WriteString(" (a step of " + ref(p, m.get(p).Title) + ")")
 	}
-	if it.Last > 0 {
+	if len(it.Steps) > 0 {
 		sb.WriteString(" (" + progress(it) + ")")
 	}
 	sb.WriteString("\n")
@@ -367,11 +367,15 @@ func (m *Mem) showItem(sb *strings.Builder, name string, it *Todo) {
 		sb.WriteString("  for the user\n")
 	}
 	if it.Doing != "" {
-		sb.WriteString("  started by " + who(it.Doing) + "\n")
+		sb.WriteString("  held by " + who(it.Doing) + "\n")
 	}
 	sb.WriteString("  made by " + who(it.By) + ", changed " + ago(it.Changed) + "\n")
-	for i, n := range it.Notes {
-		sb.WriteString("  note " + strconv.Itoa(i+1) + ": " + n + "\n")
+	for _, n := range it.Notes {
+		sb.WriteString("  thought `" + n.Name + "`: " + n.Text)
+		if n.Step != "" {
+			sb.WriteString(" (now the step `" + n.Step + "`)")
+		}
+		sb.WriteString("\n")
 	}
 	m.outlineSteps(sb, name, 1, m.nextFor(goalOf(name), m.get(goalOf(name)), caller()))
 }
@@ -418,6 +422,13 @@ func (m *Mem) Find(words string) string {
 			if r := m.getRule(n); r != nil {
 				sb.WriteString("rule `" + n + "` = " + line(r.Text, maxLine) + "\n")
 			}
+		case "thought":
+			item, name := splitAddr(n)
+			if it := m.get(item); it != nil && it.Status != "forgotten" {
+				if t := noteNamed(it, name); t != nil {
+					sb.WriteString("thought `" + n + "`: " + line(t.Text, maxLine) + "\n")
+				}
+			}
 		default:
 			if it := m.get(n); it != nil && it.Status != "forgotten" {
 				sb.WriteString(mark(it) + " " + ref(n, it.Title) + arrow(it.Result) + " (" + day(it.Changed) + ")\n")
@@ -430,8 +441,12 @@ func (m *Mem) Find(words string) string {
 	return cut(sb.String())
 }
 
-// ref names an item by its name and title: `release-v2` "release v2".
+// ref names an item by its name and title: `release-v2` "release v2"; one
+// with no title (a step made from a thought) by its name alone.
 func ref(name, title string) string {
+	if title == "" {
+		return "`" + name + "`"
+	}
 	return "`" + name + "` " + quote(line(title, 80))
 }
 

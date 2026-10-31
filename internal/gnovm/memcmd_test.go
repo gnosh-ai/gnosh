@@ -90,7 +90,7 @@ func TestMemCommand(t *testing.T) {
 	log := mem("log")
 	require.Contains(t, log, `#1 `)
 	require.Contains(t, log, `the agent in "Release work": mem.Goal("ship the release").Steps("build", "test")`)
-	require.Contains(t, log, "    add `ship-release/2`: \"test\"")
+	require.Contains(t, log, "    add `ship-release/test`: \"test\"")
 	require.Contains(t, log, "    fact `cmd/test`: \"go test ./...\"")
 	require.NotContains(t, mem("log 1"), "#1 ")
 
@@ -104,12 +104,12 @@ func TestMemCommand(t *testing.T) {
 	require.Contains(t, agent(`mem.Show("cmd/test")`).Output, "go test ./...")
 
 	// What a later change built on is not undone.
-	agent(`mem.Done("ship-release/1", "built")`) // #5
-	require.Contains(t, mem("undo 1"), "change #1 cannot be undone: #5, after it, changed the same thing (set `ship-release/1` status: \"\" → \"done\")")
+	agent(`mem.Done("ship-release/build", "built")`) // #5
+	require.Contains(t, mem("undo 1"), "change #1 cannot be undone: #5, after it, changed the same thing (set `ship-release/build` status: \"\" → \"done\")")
 	require.Contains(t, mem("undo 9"), "mem has no change #9")
 	require.Contains(t, mem("undo x"), "/mem undo takes a change's number")
 	require.Contains(t, mem("undo 5"), "undid #5 as #6:")
-	require.Contains(t, mem(""), "[ ] `ship-release/1` \"build\"")
+	require.Contains(t, mem(""), "[ ] `ship-release/build` \"build\"")
 
 	// The user forgets an open goal: it is dropped first.
 	out = mem("forget ship-release")
@@ -170,7 +170,7 @@ func TestMemUndoRedoes(t *testing.T) {
 		t.Helper()
 		res, err := h.Run(ctx, RunRequest{Project: "/proj", Session: "s9", Name: MemVM, Code: `
 			println(strings.SplitN(mem.Show(), "\n", 2)[0])
-			for _, n := range strings.Fields("release-v2 release-v2/1 release-v2/2 release-v2/2/1 release-v2/3 renew-cert make-tea cmd/test cmd/build style") {
+			for _, n := range strings.Fields("release-v2 release-v2/bump-version release-v2/tag-v2-0-0 release-v2/tag-v2-0-0/which-key-signs-tag release-v2/ci-green renew-cert make-tea cmd/test cmd/build style") {
 				println(mem.Show(n))
 			}`})
 		require.NoError(t, err)
@@ -179,18 +179,18 @@ func TestMemUndoRedoes(t *testing.T) {
 	}
 	story := []string{
 		`mem.Goal("release v2").Steps("bump the version", "tag v2.0.0", "CI is green")`,
-		`mem.Done("release-v2/1", "now 2.0.0")`,
-		`mem.Note("release-v2/2", "the tag needs the release key")`,
-		`mem.Ask("release-v2/2", "which key signs the tag?")`,
+		`mem.Done("release-v2/bump-version", "now 2.0.0")`,
+		`mem.Note("release-v2/tag-v2-0-0", "the tag needs the release key")`,
+		`mem.Ask("release-v2/tag-v2-0-0", "which key signs the tag?")`,
 		`mem.Fact("cmd/test", "go test ./...")`,
 		`mem.Fact("cmd/test", "go test -race ./...")`,
 		`mem.Goal("renew the cert", "renew-cert").Wait("2027-02-01")`,
 		`mem.Wait("renew-cert", "")`,
-		`mem.Start("release-v2/3")`,
+		`mem.Start("release-v2/ci-green")`,
 		`mem.Goal("make tea").Steps("boil water", "pour water")`,
 		`mem.Drop("make-tea", "no kettle")`,
 		`mem.Reopen("make-tea")`,
-		`mem.Done("release-v2/2/1", "the YubiKey")`,
+		`mem.Done("release-v2/tag-v2-0-0/which-key-signs-tag", "the YubiKey")`,
 		`mem.Fact("cmd/build", "make build")`,
 		`mem.Fact("cmd/build", "")`,
 	}
@@ -216,13 +216,13 @@ func TestMemUndoRedoes(t *testing.T) {
 	}
 	require.Equal(t, []int{2, 3, 6, 8, 9, 12, 13, 15, 16}, undone)
 
-	run("s1", `mem.Done("make-tea/1", "boiled"); mem.Done("make-tea/2", "poured")`)
+	run("s1", `mem.Done("make-tea/boil-water", "boiled"); mem.Done("make-tea/pour-water", "poured")`)
 	run("s1", `mem.Done("make-tea", "tea made")`)
 	last := strings.TrimPrefix(regexp.MustCompile(`#\d+`).FindString(mem("undo")), "#")
 	seq, err := strconv.Atoi(last)
 	require.NoError(t, err)
 	before := dump()
-	require.Regexp(t, "change #\\d+ cannot be undone: cannot open `make-tea/\\d` under closed `make-tea`", mem("undo "+strconv.Itoa(seq-1)))
+	require.Regexp(t, "change #\\d+ cannot be undone: cannot open `make-tea/[a-z-]+` under closed `make-tea`", mem("undo "+strconv.Itoa(seq-1)))
 	require.Equal(t, before, dump())
 }
 

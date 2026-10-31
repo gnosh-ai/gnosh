@@ -62,6 +62,7 @@ func TestMemLayoutPinned(t *testing.T) {
 		1: "40f2ee6d42a9774f",
 		2: "8aa10005d9fdb3b5",
 		3: "d3f1464566978a19",
+		4: "ca09189319edada8",
 	}
 	want, ok := pins[memLayout]
 	if !ok {
@@ -81,11 +82,11 @@ func TestMemRealmPersists(t *testing.T) {
 	call, err := r.run(`mem.Goal("make a pot of tea").Steps("boil water", "pour water")`, "sess-1")
 	require.NoError(t, err, call.Output)
 	require.Contains(t, call.Output, "added goal `make-pot-tea`")
-	require.Contains(t, call.Output, "`make-pot-tea/2` \"pour water\"")
+	require.Contains(t, call.Output, "`make-pot-tea/pour-water` \"pour water\"")
 	require.Equal(t, []memOp{
 		{Kind: "add", Name: "make-pot-tea", New: "make a pot of tea", By: "sess-1"},
-		{Kind: "add", Name: "make-pot-tea/1", New: "boil water", By: "sess-1"},
-		{Kind: "add", Name: "make-pot-tea/2", New: "pour water", By: "sess-1"},
+		{Kind: "add", Name: "make-pot-tea/boil-water", New: "boil water", By: "sess-1"},
+		{Kind: "add", Name: "make-pot-tea/pour-water", New: "pour water", By: "sess-1"},
 	}, call.Ops)
 	require.NoError(t, r.close())
 
@@ -95,8 +96,8 @@ func TestMemRealmPersists(t *testing.T) {
 	call, err = r.run(`println(mem.Show("make-pot-tea"))`, "sess-2")
 	require.NoError(t, err, call.Output)
 	require.Empty(t, call.Ops)
-	require.Contains(t, call.Output, "`make-pot-tea/1` \"boil water\"")
-	require.Contains(t, call.Output, "`make-pot-tea/2` \"pour water\"")
+	require.Contains(t, call.Output, "`make-pot-tea/boil-water` \"boil water\"")
+	require.Contains(t, call.Output, "`make-pot-tea/pour-water` \"pour water\"")
 }
 
 // TestMemRealmGuards: only mem's own Mem, through its methods, changes mem.

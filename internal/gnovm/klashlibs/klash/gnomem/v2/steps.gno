@@ -11,37 +11,45 @@ package gnomem
 
 import "strings"
 
-// eachStep calls fn on each step of item name, in order, until fn returns
-// true. It walks the items' leaves rather than looking each step up.
+// eachStep calls fn on each step of item name, in the order they were
+// added, until fn returns true.
 func (m *Mem) eachStep(name string, fn func(step string, s *Todo) bool) {
-	prefix := key(name) + "/"
-	m.items.Iterate(prefix, prefix+"\xff", func(k string, v any) bool {
-		num := k[len(prefix):]
-		if strings.IndexByte(num, '/') >= 0 {
-			return false // under a step
+	it := m.get(name)
+	if it == nil {
+		return
+	}
+	for _, s := range it.Steps {
+		step := name + "/" + s
+		if fn(step, m.get(step)) {
+			return
 		}
-		return fn(name+"/"+strings.TrimLeft(num, "0"), v.(*Todo))
-	})
+	}
 }
 
 // eachBelow calls fn on every item under name: in outline order, or, with
 // bottomUp, each item after everything under it. fn may apply Ops to the
-// items, which changes no key.
+// items, which changes no step's place.
 func (m *Mem) eachBelow(name string, bottomUp bool, fn func(n string, it *Todo)) {
-	var ks []string
-	var its []*Todo
-	m.items.Iterate(key(name)+"/", key(name)+"/\xff", func(k string, v any) bool {
-		ks = append(ks, k)
-		its = append(its, v.(*Todo))
-		return false
-	})
-	for i := range ks {
-		j := i
-		if bottomUp {
-			j = len(ks) - 1 - i
+	var walk func(n string)
+	walk = func(n string) {
+		it := m.get(n)
+		if it == nil {
+			return
 		}
-		fn(unkey(ks[j]), its[j])
+		steps := make([]string, len(it.Steps))
+		copy(steps, it.Steps)
+		for _, s := range steps {
+			step := n + "/" + s
+			if !bottomUp {
+				fn(step, m.get(step))
+			}
+			walk(step)
+			if bottomUp {
+				fn(step, m.get(step))
+			}
+		}
 	}
+	walk(name)
 }
 
 // openSteps lists item name's open steps.
@@ -56,10 +64,17 @@ func (m *Mem) openSteps(name string) []string {
 	return open
 }
 
-// goalOf is the goal name is in: its first segment.
+// goalOf is the goal name is in: its first segment (a thought's address
+// aside).
 func goalOf(name string) string {
+	name, _ = splitAddr(name)
 	if i := strings.Index(name, "/"); i >= 0 {
 		return name[:i]
 	}
 	return name
+}
+
+// stepName is the name of step id: its last segment.
+func stepName(id string) string {
+	return id[strings.LastIndex(id, "/")+1:]
 }

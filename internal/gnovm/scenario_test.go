@@ -947,8 +947,8 @@ func TestScenarioChecksReadMem(t *testing.T) {
 	h := newTestHost(t, dir)
 	for _, code := range []string{
 		`mem.Goal("implement Div").Steps("write it", "test it")`,
-		`mem.Note("implement-div/1", "see calc.go:12")`,
-		`mem.Done("implement-div/1", "done")`,
+		`mem.Note("implement-div/write", "see calc.go:12")`,
+		`mem.Done("implement-div/write", "done")`,
 		`mem.Fact("db/staging", "db-stg-9")`,
 	} {
 		run(t, h, MemVM, code)
@@ -959,12 +959,12 @@ func TestScenarioChecksReadMem(t *testing.T) {
 	require.Len(t, dumps, 1)
 	require.Contains(t, dumps[MemVM], "4 entries\n")
 	require.Contains(t, dumps[MemVM], "[ ] `implement-div` \"implement Div\"")
-	require.Contains(t, dumps[MemVM], "op note implement-div/1: see calc.go:12\n")
+	require.Contains(t, dumps[MemVM], "op note implement-div/write#see-calc-go-12: see calc.go:12\n")
 	require.Contains(t, dumps[MemVM], "op fact db/staging: db-stg-9\n")
 
 	got, err := evalInVM(dir, "/proj", MemVM, "mem.Show()")
 	require.NoError(t, err)
-	require.Contains(t, got, "[x] `implement-div/1` \"write it\" → done")
+	require.Contains(t, got, "[x] `implement-div/write` \"write it\" → done")
 	for what, want := range map[string]int{"open": 2, "done": 1, "items": 3, "facts": 1, "rules": 0} {
 		n, err := memCount(dir, "/proj", what)
 		require.NoError(t, err)

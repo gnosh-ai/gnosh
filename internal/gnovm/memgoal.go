@@ -72,7 +72,9 @@ func goalTitle(condition string) string {
 // GoalDirective is what /goal sends the agent once its goal is bound.
 func GoalDirective(b GoalBinding) string {
 	return fmt.Sprintf("Goal `%[1]s` %[2]q is set: %[3]s\n\n"+
-		"Plan it as steps (`mem.Steps(%[1]q, \"…\", \"…\")`) and work through them; keep as facts what future sessions "+
+		"Plan it as steps (`mem.Steps(%[1]q, \"…\", \"…\")`) and work through them in frames: you stand in the goal already, so "+
+		"`mem.PushFrame(mem.Frame().NextTodo())` enters its first step, and `mem.PopFrame(\"what came of it\")` then "+
+		"`mem.PushFrame(mem.Frame().NextTodo())` on the next line moves on. Keep as facts what future sessions "+
 		"should know, as you learn it. Once the goal holds, close it with `mem.Done(%[1]q, \"<command> → <result>\")`; "+
 		"a separate check confirms it then. If the condition says when to stop and that has happened, drop the steps "+
 		"left (`mem.Drop(name, \"why\")`), then close it with `mem.Done(%[1]q, \"stopped: <why>\")`.",

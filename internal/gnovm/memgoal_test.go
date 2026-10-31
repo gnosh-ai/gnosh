@@ -76,23 +76,23 @@ func TestGoalBinding(t *testing.T) {
 	agent(`mem.Steps("ship-release", "write the notes", "tag it")`, b.Name)
 	tn, b = turn(b)
 	require.Equal(t, "continue", tn.Do)
-	require.Contains(t, tn.Prompt, "Its next step is `ship-release/1` \"write the notes\"")
+	require.Contains(t, tn.Prompt, "Its next step is `ship-release/write-notes` \"write the notes\"")
 
 	// Waiting on the user ends the turn; waiting on words asks once first.
-	agent(`mem.Done("ship-release/1", "written"); mem.Ask("ship-release/2", "which key signs the tag?")`, b.Name)
+	agent(`mem.Done("ship-release/write-notes", "written"); mem.Ask("ship-release/tag", "which key signs the tag?")`, b.Name)
 	tn, b = turn(b)
 	require.Equal(t, "end", tn.Do)
-	require.Contains(t, tn.Notice, "`ship-release/2/1` \"which key signs the tag?\" is for the user")
-	agent(`mem.Done("ship-release/2/1", "the YubiKey"); mem.Wait("ship-release/2", "CI is green")`, b.Name)
+	require.Contains(t, tn.Notice, "`ship-release/tag/which-key-signs-tag` \"which key signs the tag?\" is for the user")
+	agent(`mem.Done("ship-release/tag/which-key-signs-tag", "the YubiKey"); mem.Wait("ship-release/tag", "CI is green")`, b.Name)
 	tn, b = turn(b)
 	require.Equal(t, "checkpoint", tn.Do)
-	require.Contains(t, tn.Prompt, "`ship-release/2` \"tag it\" waits for \"CI is green\"")
+	require.Contains(t, tn.Prompt, "`ship-release/tag` \"tag it\" waits for \"CI is green\"")
 	require.True(t, strings.HasSuffix(tn.Prompt, "on its own:\nSTOP"))
 	tn, b = turn(b)
 	require.Equal(t, "end", tn.Do, "asked once already")
 
 	// Closed as done, the judge is asked; not met, the goal is reopened.
-	agent(`mem.Wait("ship-release/2", ""); mem.Done("ship-release/2", "tagged v2.0.0"); mem.Done("ship-release", "git tag → v2.0.0")`, b.Name)
+	agent(`mem.Wait("ship-release/tag", ""); mem.Done("ship-release/tag", "tagged v2.0.0"); mem.Done("ship-release", "git tag → v2.0.0")`, b.Name)
 	tn, b = turn(b)
 	require.Equal(t, "judge", tn.Do)
 	require.Contains(t, tn.Show, "tagged v2.0.0")
@@ -183,7 +183,7 @@ func TestGoalTurnEndsWhileAQuestionUnderItIsOpen(t *testing.T) {
 	require.NoError(t, err)
 	for _, code := range []string{
 		`mem.Steps("` + b.Name + `", "ask the user which day suits the release", "record the chosen release day as a fact in mem")`,
-		`mem.Ask("` + b.Name + `/1", "which day suits you for the release?")`,
+		`mem.Ask("` + b.Name + `/ask-user-which-day", "which day suits you for the release?")`,
 	} {
 		res, err := h.Run(ctx, RunRequest{Project: "/proj", Session: "s1", Name: MemVM, Code: code, Goal: b.Name})
 		require.NoError(t, err, code)
@@ -224,7 +224,7 @@ func TestClosedGoals(t *testing.T) {
 	mu.Unlock()
 	since := clock()
 	mem("s1", `mem.Goal("release v2").Steps("bump the version", "tag v2.0.0")`)
-	mem("s1", `mem.Done("release-v2/1", "now 2.0.0")`)
+	mem("s1", `mem.Done("release-v2/bump-version", "now 2.0.0")`)
 	mem("s1", `mem.Goal("fix the login loop", "fix-login"); mem.Done("fix-login", "SameSite=Lax → the login test passes")`)
 	mem("s1", `mem.Goal("what /goal binds", "bound"); mem.Done("bound", "ok")`)
 	mem("s1", `mem.Goal("closed, then reopened", "reopened"); mem.Done("reopened", "ok"); mem.Reopen("reopened")`)

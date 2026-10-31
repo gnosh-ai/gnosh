@@ -739,7 +739,7 @@ func (h *memHost) nearest(ctx context.Context, x *memIndex, j *journal, words st
 		return nil, ""
 	}
 	s := memSnapshot{gen: j.generation, rows: all, vecs: vecs, model: had}
-	return s.nearest(qs, model, memFindScore, "item", "fact", "rule"), "meaning"
+	return s.nearest(qs, model, memFindScore, "item", "thought", "fact", "rule"), "meaning"
 }
 
 // meaningLine is what /mem says of finding by meaning: which model, and how

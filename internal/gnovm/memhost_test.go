@@ -76,7 +76,7 @@ func TestMemHostKeepsWhatChanged(t *testing.T) {
 	// A read keeps nothing.
 	res = memOK(t, h, `println(mem.Show())`)
 	require.Zero(t, res.Seq)
-	require.Contains(t, res.Output, "`ship/1` \"build\"")
+	require.Contains(t, res.Output, "`ship/build` \"build\"")
 
 	// A failed input keeps nothing, though it printed a receipt first.
 	res, err := h.call(context.Background(), memRequest{Code: `mem.Goal("half"); panic("no")`, Session: "s1"})
@@ -134,7 +134,7 @@ func TestMemHostRebuildsAnOlderStore(t *testing.T) {
 	dir := t.TempDir()
 	h := newTestMemHost(t, dir)
 	memOK(t, h, `mem.Goal("keep me").Steps("one")`)
-	memOK(t, h, `mem.Done("keep-me/1", "ok")`)
+	memOK(t, h, `mem.Done("keep-me/one", "ok")`)
 	before := memOK(t, h, `println(mem.JSON("keep-me"))`).Output
 
 	setStamp := func(edit func(*memStamp)) {
@@ -251,7 +251,7 @@ func TestMemHostChecksARebuild(t *testing.T) {
 	dir := t.TempDir()
 	h := newTestMemHost(t, dir)
 	memOK(t, h, `mem.Goal("release v2").Steps("bump", "tag")`)
-	memOK(t, h, `mem.Done("release-v2/1", "bumped")`)
+	memOK(t, h, `mem.Done("release-v2/bump", "bumped")`)
 	memOK(t, h, `mem.Fact("cmd/test", "go test ./...")`)
 	rebuild := func() []string {
 		t.Helper()
@@ -282,17 +282,17 @@ func TestMemHostFinds(t *testing.T) {
 	dir := t.TempDir()
 	h := newTestMemHost(t, dir)
 	memOK(t, h, `mem.Goal("fix the CI").Steps("TestFoo flakes under -race")`)
-	memOK(t, h, `mem.Note("fix-ci/1", "only on the AI box")`)
+	memOK(t, h, `mem.Note("fix-ci/testfoo-flakes-under-race", "only on the AI box")`)
 	memOK(t, h, `mem.Fact("cmd/test", "go test -race ./...")`)
 	find := func(words string) string {
 		t.Helper()
 		return memOK(t, h, `print(mem.Find("`+words+`"))`).Output
 	}
-	require.Contains(t, find("flak"), "`fix-ci/1`")
+	require.Contains(t, find("flak"), "`fix-ci/testfoo-flakes-under-race`")
 	out := find("race")
-	require.Contains(t, out, "`fix-ci/1`")
+	require.Contains(t, out, "`fix-ci/testfoo-flakes-under-race`")
 	require.Contains(t, out, "fact `cmd/test` = go test -race ./...")
-	require.Contains(t, find("box"), "`fix-ci/1`")
+	require.Contains(t, find("box"), "thought `fix-ci/testfoo-flakes-under-race#only-ai-box`: only on the AI box")
 	require.Contains(t, find("nothing here"), "nothing in mem matches")
 	// A word too short for trigrams is found as a word of its own, and
 	// only as one: "CI" is in "fix the CI", not in "decision".
@@ -363,7 +363,7 @@ func TestMemHostRedacts(t *testing.T) {
 	requireNowhere(t, dir, secret)
 
 	out := memOK(t, h, `print(mem.Check()); println(mem.Show("rotate-token")); println(mem.Show("tokens/old"))`).Output
-	require.Contains(t, out, "note 1: it was (redacted)")
+	require.Contains(t, out, "thought `thought-1`: it was (redacted)")
 	require.Contains(t, out, "the old token: (redacted)")
 }
 
@@ -420,7 +420,7 @@ func TestMemHostFinishesACrashedErasure(t *testing.T) {
 	}))
 	require.True(t, held, "the old generation's files hold the secret again")
 
-	require.Contains(t, memOK(t, h, `mem.Show("rotate-key")`).Output, "note 1: the old key was (redacted)")
+	require.Contains(t, memOK(t, h, `mem.Show("rotate-key")`).Output, "thought `old-key-was-sk`: the old key was (redacted)")
 	requireNowhere(t, dir, secret)
 }
 
@@ -431,12 +431,12 @@ func TestMemHostForgets(t *testing.T) {
 	dir := t.TempDir()
 	h := newTestMemHost(t, dir)
 	memOK(t, h, `mem.Goal("plan the surprise party").Steps("book the venue", "invite everyone")`)
-	memOK(t, h, `mem.Note("plan-surprise-party/1", "the venue is Moonlight Hall")`)
-	memOK(t, h, `mem.Done("plan-surprise-party/1", "booked Moonlight Hall")`)
+	memOK(t, h, `mem.Note("plan-surprise-party/book-venue", "the venue is Moonlight Hall")`)
+	memOK(t, h, `mem.Done("plan-surprise-party/book-venue", "booked Moonlight Hall")`)
 	memOK(t, h, `mem.Goal("buy milk")`)
 	memOK(t, h, `mem.Drop("plan-surprise-party", "called off")`)
 	res := memOK(t, h, `mem.Forget("plan-surprise-party")`)
-	require.Equal(t, map[string]string{"plan-surprise-party": "forgotten-1"}, res.Renamed)
+	require.Equal(t, map[string]string{"plan-surprise-party": "forgotten-1", "plan-surprise-party/book-venue": "forgotten-1/forgotten-2", "plan-surprise-party/invite-everyone": "forgotten-1/forgotten-3"}, res.Renamed)
 	for _, s := range []string{"surprise", "venue", "Moonlight", "invite everyone", "called off"} {
 		requireNowhere(t, dir, s)
 	}
@@ -514,22 +514,22 @@ func TestHostRunsMem(t *testing.T) {
 	res = call(`mem.Show()`)
 	require.NoError(t, res.Err)
 	require.False(t, res.Journaled)
-	require.Contains(t, res.Output, "[ ] `ship/1` \"build\"  ← next")
+	require.Contains(t, res.Output, "[ ] `ship/build` \"build\"  ← next")
 	// Every read standing as a statement of its own is shown, not only the
 	// last: a call with three showed only the third.
 	res = call("mem.Show(\"ship\")\nx := 1\n_ = x\nmem.Find(\"test\"); mem.Find(\"build\")")
 	require.NoError(t, res.Err)
 	require.Contains(t, res.Output, "← next", "the first read is shown too")
-	require.Contains(t, res.Output, "`ship/2` \"test\" (")
-	require.Contains(t, res.Output, "`ship/1` \"build\" (")
+	require.Contains(t, res.Output, "`ship/test` \"test\" (")
+	require.Contains(t, res.Output, "`ship/build` \"build\" (")
 
 	res = call(`mem.Add("x", "y")`)
 	require.ErrorContains(t, res.Err, "missing field Add in *klash/gnomem/v2.Mem")
 	require.Contains(t, res.Notes, `mem.Goal("what to get done").Steps("a step", "another") plans a task, and names its steps after it`)
 	res = call(`mem.Done(1, "built")`)
-	require.Contains(t, res.Notes, `items are named, not numbered: type the name mem printed in backticks, as mem.Done("release-v2/2", "…")`)
+	require.Contains(t, res.Notes, `items are named, not numbered: type the name mem printed in backticks, as mem.Done("release-v2/tag", "…")`)
 	res = call(`mem.Done(ship/1, "built")`)
-	require.Contains(t, res.Notes, `a name is a string: quote it, as mem.Done("release-v2/1", "…")`)
+	require.Contains(t, res.Notes, `a name is a string: quote it, as mem.Done("release-v2/bump", "…")`)
 	// The real-model pass's slips: a call chained off one that returns
 	// nothing, a Goal where a name goes, mem.List, and mem imported.
 	res = call(`mem.Fact("staging-db", "db-stg-7").Fact("release-manager", "Priya")`)
@@ -542,10 +542,10 @@ func TestHostRunsMem(t *testing.T) {
 	// for another goal's, and calls joined with commas, as a list.
 	res = call(`mem.Goal("add Median to stats").Steps("implement Median", "add tests").Start()`)
 	require.NoError(t, res.Err)
-	require.Contains(t, res.Output, "started `add-median-stats/1` \"implement Median\"")
+	require.Contains(t, res.Output, "started `add-median-stats/implement-median` \"implement Median\"")
 	res = call(`mem.Goal("tidy the tests").Steps("a", "b").Start("tests/1")`)
-	require.ErrorContains(t, res.Err, "`tests/1` is not a step of `tidy-tests`, whose steps are `tidy-tests/1` to `tidy-tests/2`: .Start() with no name starts the next")
-	res = call("mem.Done(\"add-median-stats/1\", \"done\"),\nmem.Done(\"add-median-stats/2\", \"done\")")
+	require.ErrorContains(t, res.Err, "`tests/1` is not a step of `tidy-tests`, whose steps are `tidy-tests/a` and `tidy-tests/b`: .Start() with no name starts the next")
+	res = call("mem.Done(\"add-median-stats/implement-median\", \"done\"),\nmem.Done(\"add-median-stats/add-tests\", \"done\")")
 	require.ErrorContains(t, res.Err, "(mem's calls go one per line, with no comma after them)")
 	res = call(`mem.Fact("release/qa-signoff")`)
 	require.EqualError(t, res.Err, "mem.Fact takes 2 arguments, not 1: mem.Fact(name, text) sets a fact, and mem.Show(name) shows one")
@@ -558,12 +558,12 @@ func TestHostRunsMem(t *testing.T) {
 	require.Contains(t, res.Notes, "a Goal, which mem.Goal(…) gives, has Steps, Wait, Start, Ask and Note; Done is mem's: mem.Done(name, result...)")
 	res = call(`mem.Goal("release 1.3.0").Steps("tag it").Ask("release-1-3-0/1", "who signs?")`)
 	require.EqualError(t, res.Err, "a Goal's Ask takes 1 argument, not 2: mem.Goal(…).Ask(question), or mem.Ask(name, question) for an item by its name")
-	res = call("mem.Goal(\"release 1.3.0\").Steps(\"tag it\")\nmem.Done(\"release-1.3.0/1\", \"tagged\")")
-	require.ErrorContains(t, res.Err, "no item `release-1.3.0/1` (a name joins its words with \"-\": did you mean `release-1-3-0/1`?); nothing was kept")
+	res = call("mem.Goal(\"release 1.3.0\").Steps(\"tag it\")\nmem.Done(\"release-1.3.0/tag\", \"tagged\")")
+	require.ErrorContains(t, res.Err, "no item `release-1.3.0/tag` (a name joins its words with \"-\": did you mean `release-1-3-0/tag`?); nothing was kept")
 	res = call(`mem.Drop("ship")`)
 	require.EqualError(t, res.Err, "mem.Drop takes 2 arguments, not 1: mem.Drop(name, why)")
 	res = call(`mem.Frobnicate("x")`)
-	require.Contains(t, res.Notes, "mem's calls are Goal, Steps, Ask, Start, Done, Drop, Reopen, Note, Wait, Fact, Rule, Forget, Redact, JSON, Next, Show and Find")
+	require.Contains(t, res.Notes, "mem's calls are Frame, NewFrame, PushFrame, PopFrame, Think, Thought, Recall, PushThought, Goal, Steps, Ask, Start, Done, Drop, Reopen, Note, Wait, Fact, Rule, Forget, Redact, JSON, Next, Show and Find")
 	res = call("import \"mem\"\nmem.Fact(\"cmd/test\", \"go test ./...\")")
 	require.NoError(t, res.Err)
 	require.Equal(t, "fact `cmd/test` is new\n", res.Output)
@@ -589,7 +589,7 @@ func TestHostRunsMem(t *testing.T) {
 	block := MemBlock(dir, "/proj")
 	require.Contains(t, block, "<mem>\n")
 	require.Contains(t, block, "- `ship` \"ship it\" (0/2 done · ")
-	require.Contains(t, block, "next: `ship/1` \"build\"")
+	require.Contains(t, block, "next: `ship/build` \"build\"")
 	require.Empty(t, MemBlock(dir, "/elsewhere"))
 
 	// QA's reminder probe reached for a note on the plan, chained as the
@@ -676,7 +676,7 @@ func TestMemBlock(t *testing.T) {
 	for _, q := range []memRequest{
 		{Code: `mem.Rule("push-after-landing", "push to GitHub only after landed:")`, User: true},
 		{Code: `mem.Goal("release v2").Steps("bump the version", "tag v2.0.0")`, Session: "s1"},
-		{Code: `mem.Ask("release-v2/2", "which key signs the <tag>?")`, Session: "s1"},
+		{Code: `mem.Ask("release-v2/tag-v2-0-0", "which key signs the <tag>?")`, Session: "s1"},
 		{Code: `mem.Goal("renew the TLS cert").Wait("2026-12-01")`, Session: "s1"},
 		{Code: `mem.Fact("cmd/test", "go test -race ./...")`, Session: "s1"},
 	} {
@@ -695,10 +695,10 @@ func TestMemBlock(t *testing.T) {
 		"From your memory (mem), kept by gnosh for this project: what you found and were told in earlier sessions. `mem.Show()` shows the outline; `mem.Find(\"words\")` searches everything.\n"+
 		"mem: 5 items open · 1 question for the user · 1 fact\n"+
 		"due: `renew-tls-cert` \"renew the TLS cert\" (since 2026-12-01)\n"+
-		"waiting on the user: `release-v2/2/1` \"which key signs the &lt;tag&gt;?\"\n"+
+		"waiting on the user: `release-v2/tag-v2-0-0/which-key-signs-tag` \"which key signs the &lt;tag&gt;?\"\n"+
 		"open goals, newest first:\n"+
 		"- `renew-tls-cert` \"renew the TLS cert\" (32d ago) due since 2026-12-01\n"+
-		"- `release-v2` \"release v2\" (0/2 done · 32d ago) next: `release-v2/1` \"bump the version\"\n"+
+		"- `release-v2` \"release v2\" (0/2 done · 32d ago) next: `release-v2/bump-version` \"bump the version\"\n"+
 		"facts, newest first: `cmd/test` = go test -race ./...\n"+
 		"</mem>", block)
 }
@@ -759,12 +759,12 @@ func TestMemNotice(t *testing.T) {
 	}
 	st, ok := readMemStatus(dir)
 	require.True(t, ok)
-	require.Equal(t, `mem waiting on you: "which day suits you?" (plan-release/1)`,
+	require.Equal(t, `mem waiting on you: "which day suits you?" (plan-release/which-day-suits-you)`,
 		memNotice(st, time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)))
-	require.Equal(t, `mem due: "renew the TLS cert" (renew-tls-cert) (since 2026-12-01) · waiting on you: "which day suits you?" (plan-release/1)`,
+	require.Equal(t, `mem due: "renew the TLS cert" (renew-tls-cert) (since 2026-12-01) · waiting on you: "which day suits you?" (plan-release/which-day-suits-you)`,
 		memNotice(st, time.Date(2026, 12, 2, 9, 0, 0, 0, time.UTC)))
 
-	res, err := h.call(context.Background(), memRequest{Code: `mem.Done("plan-release/1", "Tuesday")`, User: true})
+	res, err := h.call(context.Background(), memRequest{Code: `mem.Done("plan-release/which-day-suits-you", "Tuesday")`, User: true})
 	require.NoError(t, err, res.Output)
 	st, _ = readMemStatus(dir)
 	require.Empty(t, memNotice(st, time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)), "nothing due, nothing waiting")
@@ -937,7 +937,7 @@ func TestMemStartRefusesAWaitAndReopenKeepsWhy(t *testing.T) {
 	require.ErrorContains(t, start(`mem.Start("renew-cert")`),
 		"`renew-cert` \"renew the TLS cert\" waits until 2026-11-03: start it then, or clear the wait with mem.Wait(\"renew-cert\", \"\")")
 	memOK(t, h, `mem.Goal("tag the release", "tag").Steps("push the tag").Wait("PR #6399 merged")`)
-	require.ErrorContains(t, start(`mem.Start("tag/1")`),
+	require.ErrorContains(t, start(`mem.Start("tag/push-tag")`),
 		"`tag` \"tag the release\" waits for \"PR #6399 merged\": start it then, or clear the wait with mem.Wait(\"tag\", \"\")")
 	memOK(t, h, `mem.Goal("check the backups", "backups").Wait("2026-10-30")`)
 	require.Contains(t, memOK(t, h, `mem.Start("backups")`).Output, "started `backups`", "its day has come")

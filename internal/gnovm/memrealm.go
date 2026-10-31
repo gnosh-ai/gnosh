@@ -56,8 +56,9 @@ const memLibPath = "klash/gnomem/v2"
 // apply.gno, bptree v0 and the realm's source fix how a Mem is stored, and
 // TestMemLayoutPinned pins their hash to this number: changing them means a
 // new number, and a store of an older one is rebuilt from its journal.
-// 3 indexes open goals by title, items waiting for words, and fact groups.
-const memLayout = 3
+// 3 indexes open goals by title, items waiting for words, and fact groups;
+// 4 names steps and thoughts (FRAMES.md).
+const memLayout = 4
 
 // memLayoutFiles are the library sources memLayout covers.
 var memLayoutFiles = []string{
@@ -176,6 +177,8 @@ func (b *base) preprocessMemRealm() (err error) {
 type memCall struct {
 	Output string
 	Ops    []memOp
+	// Frames is the frames the input pushed and popped, in order.
+	Frames []MemFrame
 	// At is the call's time, which its Ops share.
 	At int64
 	// batch is what the call wrote, held back from the store until commit;
@@ -295,6 +298,7 @@ func (r *memRealm) call(code string, ctx memContext) (call memCall, err error) {
 	ctx.ExecContext = execContext(0, now)
 	ctx.OriginCaller = memRunAddr.Bech32()
 	ctx.ops = &call.Ops
+	ctx.frames = &call.Frames
 	if ctx.today == "" {
 		ctx.today = now.Format(time.DateOnly)
 	}
@@ -307,6 +311,7 @@ func (r *memRealm) call(code string, ctx memContext) (call memCall, err error) {
 			msg += "; nothing was kept" + memNotKept(call.Ops)
 		}
 		call.Ops = nil
+		call.Frames = nil
 		err = errors.New(msg)
 	}
 	defer func() {
@@ -550,7 +555,10 @@ func memInput(src memSource) (*std.MemPackage, int) {
 // realm's Mem, and how a trailing read of it is shown.
 const memBinding = `package main
 
-import memr "` + memRealmPath + `"
+import (
+	gnomem "` + memLibPath + `"
+	memr "` + memRealmPath + `"
+)
 
 var mem = memr.M
 
@@ -560,6 +568,17 @@ func showMem_(s string) {
 		s += "\n"
 	}
 	print(s)
+}
+
+// showRecall_ prints what mem.Recall found, one a line.
+func showRecall_(found []gnomem.Instantiation) {
+	if len(found) == 0 {
+		print("nothing in mem is about that: mem.Show() lists what it holds, and mem.Find(\"words\") matches words\n")
+		return
+	}
+	for _, x := range found {
+		showMem_(x.String())
+	}
 }
 `
 

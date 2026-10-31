@@ -139,28 +139,28 @@ func (x *memIndex) apply(entries [][]memOp, st memStamp) error {
 }
 
 // applyIndexOp changes the rows an Op changes the text or the status of.
-// Asks and claims are not kept, and a Field "statements" redact has no row.
+// A thought is a row of its own, of kind "thought", named by its address
+// (item#name), with its text as its title. Asks and claims are not kept,
+// and a Field "statements" redact has no row.
 func applyIndexOp(tx *sql.Tx, op memOp) error {
 	switch op.Kind {
 	case "add":
 		return putRow(tx, "item", op.Name, map[string]string{"title": op.New})
-	case "unadd", "forget":
-		return deleteRow(tx, opTarget(op), op.Name)
+	case "unadd":
+		return deleteRow(tx, "item", op.Name)
+	case "forget":
+		if err := deleteRow(tx, opTarget(op), op.Name); err != nil || op.Field != "" {
+			return err
+		}
+		return deleteThoughts(tx, op.Name)
 	case "set":
 		if op.Field == "result" || op.Field == "wait" || op.Field == "status" {
 			return setColumn(tx, "item", op.Name, op.Field, op.New)
 		}
-	case "note", "unnote":
-		notes, err := column(tx, "item", op.Name, "notes")
-		if err != nil {
-			return err
-		}
-		if op.Kind == "note" {
-			notes = strings.TrimPrefix(notes+"\n"+op.New, "\n")
-		} else {
-			notes = strings.TrimSuffix(strings.TrimSuffix(notes, op.Old), "\n")
-		}
-		return setColumn(tx, "item", op.Name, "notes", notes)
+	case "note":
+		return putRow(tx, "thought", op.Name, map[string]string{"title": op.New})
+	case "unnote":
+		return deleteRow(tx, "thought", op.Name)
 	case "fact", "rule":
 		if op.New == "" {
 			return deleteRow(tx, op.Kind, op.Name)
@@ -170,15 +170,19 @@ func applyIndexOp(tx *sql.Tx, op memOp) error {
 		if op.Field == "statements" {
 			return nil
 		}
+		kind := op.Field
+		if kind == "item" && strings.Contains(op.Name, "#") {
+			kind = "thought"
+		}
 		for _, col := range []string{"title", "result", "wait", "notes"} {
-			s, err := column(tx, op.Field, op.Name, col)
+			s, err := column(tx, kind, op.Name, col)
 			if err != nil || !strings.Contains(s, op.Old) {
 				if err != nil {
 					return err
 				}
 				continue
 			}
-			if err := setColumn(tx, op.Field, op.Name, col, strings.ReplaceAll(s, op.Old, "(redacted)")); err != nil {
+			if err := setColumn(tx, kind, op.Name, col, strings.ReplaceAll(s, op.Old, "(redacted)")); err != nil {
 				return err
 			}
 		}
@@ -217,6 +221,30 @@ func putRow(tx *sql.Tx, kind, name string, cols map[string]string) error {
 	_, err = tx.Exec(`INSERT INTO docs(rowid, name, title, result, wait, notes, status) VALUES(?, ?, ?, ?, ?, ?, ?)`,
 		id, name, cols["title"], cols["result"], cols["wait"], cols["notes"], cols["status"])
 	return err
+}
+
+// deleteThoughts deletes the thought rows of item name.
+func deleteThoughts(tx *sql.Tx, name string) error {
+	rows, err := tx.Query(`SELECT name FROM names WHERE kind = 'thought' AND name LIKE ? ESCAPE '\'`, strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(name)+"#%")
+	if err != nil {
+		return err
+	}
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return err
+		}
+		names = append(names, n)
+	}
+	rows.Close()
+	for _, n := range names {
+		if err := deleteRow(tx, "thought", n); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func deleteRow(tx *sql.Tx, kind, name string) error {
