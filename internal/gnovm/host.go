@@ -689,6 +689,10 @@ type RunRequest struct {
 	// Goal is the goal in mem the user's /goal binds the session to, which
 	// the session's own mem calls may not drop or forget.
 	Goal string `json:",omitempty"`
+	// Frames is the session's stack of frames in mem, bottom to top: the
+	// frames it has pushed and not popped (FRAMES.md), which the agent
+	// derives from its own rows.
+	Frames []string `json:",omitempty"`
 }
 
 // RunResult is what a call did.
@@ -718,6 +722,9 @@ type RunResult struct {
 	// user is told of (gnovm_run hands them to OnMemRules): every session
 	// is given them as the user's own words.
 	Rules []MemRule `json:",omitempty"`
+	// Frames are the frames a call to mem pushed and popped, in order
+	// (gnovm_run keeps them with its result and hands them to OnMemFrames).
+	Frames []MemFrame `json:",omitempty"`
 	// Err is the run's failure; nothing from the call was kept. (The wire
 	// carries it apart, keeping its kind; see wireRun.)
 	Err error `json:"-"`

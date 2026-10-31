@@ -92,14 +92,41 @@ type DropParams struct {
 // session sees them: what that session's task list should show.
 type MemGoalsFunc func(ctx context.Context, session string, goals []gnovm.MemGoal)
 
+// MemFramesFunc is told the frames a call to mem pushed and popped, in
+// order, with the call's id, and answers what the call's result tells the
+// model besides mem's own output: on a pop, what was removed from its
+// context and what that changed ("" for nothing to add).
+type MemFramesFunc func(ctx context.Context, sessionID, callID string, frames []gnovm.MemFrame) string
+
+// RunResponseMetadata is what gnovm_run keeps with a result besides its
+// text: the frames a call to mem pushed and popped, from which a session's
+// stack is derived (FRAMES.md).
+type RunResponseMetadata struct {
+	Frames []gnovm.MemFrame `json:"frames,omitempty"`
+}
+
 // RunOption sets up gnovm_run.
 type RunOption func(*runOptions)
 
 type runOptions struct {
 	onMem    MemGoalsFunc
 	bound    func(ctx context.Context, sessionID string) string
+	stack    func(ctx context.Context, sessionID string) []string
+	onFrames MemFramesFunc
 	onErased func(ctx context.Context, sessionID string, e gnovm.MemErasure)
 	onRules  func(ctx context.Context, sessionID string, rules []gnovm.MemRule)
+}
+
+// MemStack has gnovm_run ask f for the session's stack of frames in mem,
+// bottom to top, before each call to mem.
+func MemStack(f func(ctx context.Context, sessionID string) []string) RunOption {
+	return func(o *runOptions) { o.stack = f }
+}
+
+// OnMemFrames has gnovm_run tell f the frames each call to mem pushed and
+// popped, and add what f answers to the call's result.
+func OnMemFrames(f MemFramesFunc) RunOption {
+	return func(o *runOptions) { o.onFrames = f }
 }
 
 // OnMemRules has gnovm_run tell f the rules a call to mem set, changed or
@@ -150,6 +177,9 @@ func NewRunTool(vms *gnovm.Lazy, project string, opts ...RunOption) fantasy.Agen
 			if o.bound != nil && p.Name == gnovm.MemVM {
 				req.Goal = o.bound(ctx, session)
 			}
+			if o.stack != nil && p.Name == gnovm.MemVM {
+				req.Frames = o.stack(ctx, session)
+			}
 			res, err := c.Run(ctx, req)
 			var died interface{ Error() string }
 			if err != nil && errors.As(err, &died) && strings.Contains(err.Error(), "worker ended before it replied") {
@@ -158,10 +188,14 @@ func NewRunTool(vms *gnovm.Lazy, project string, opts ...RunOption) fantasy.Agen
 			if err != nil {
 				return fantasy.NewTextErrorResponse(refusalText(err)), nil
 			}
-			text := renderRun(res)
 			if res.Err != nil {
-				return fantasy.NewTextErrorResponse(text), nil
+				return fantasy.NewTextErrorResponse(renderRun(res, "")), nil
 			}
+			var frames string
+			if o.onFrames != nil && len(res.Frames) > 0 {
+				frames = o.onFrames(ctx, session, call.ID, res.Frames)
+			}
+			text := renderRun(res, frames)
 			if o.onMem != nil && len(res.MemGoals) > 0 {
 				o.onMem(ctx, session, res.MemGoals)
 			}
@@ -170,6 +204,9 @@ func NewRunTool(vms *gnovm.Lazy, project string, opts ...RunOption) fantasy.Agen
 			}
 			if o.onRules != nil && len(res.Rules) > 0 {
 				o.onRules(ctx, session, res.Rules)
+			}
+			if len(res.Frames) > 0 {
+				return fantasy.WithResponseMetadata(fantasy.NewTextResponse(text), RunResponseMetadata{Frames: res.Frames}), nil
 			}
 			return fantasy.NewTextResponse(text), nil
 		})
@@ -209,8 +246,9 @@ func refusalText(err error) string {
 }
 
 // renderRun is a run's result as the model reads it: the value and output
-// first, then one status line, then notes.
-func renderRun(res *gnovm.RunResult) string {
+// first, then what gnosh adds about frames (what a pop removed), then one
+// status line, then notes.
+func renderRun(res *gnovm.RunResult, frames string) string {
 	var b strings.Builder
 	if res.Err != nil {
 		fmt.Fprintf(&b, "ERROR — nothing from this call was kept: %s\n", res.Err)
@@ -233,6 +271,9 @@ func renderRun(res *gnovm.RunResult) string {
 			}
 			b.WriteString(strings.TrimRight(res.Output, "\n") + "\n")
 		}
+	}
+	if frames != "" {
+		b.WriteString(strings.TrimRight(frames, "\n") + "\n")
 	}
 	b.WriteString(statusLine(res) + "\n")
 	for _, n := range res.Notes {

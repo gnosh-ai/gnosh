@@ -74,6 +74,8 @@ type memRequest struct {
 	Req string
 	// Goal is the goal the user's /goal binds the session to.
 	Goal string
+	// Frames is the session's stack of frames, bottom to top.
+	Frames []string
 }
 
 // memResult is what an input to mem did.
@@ -90,12 +92,34 @@ type memResult struct {
 	Erased  *MemErasure
 	// Goals are the goals the input changed, as its session sees them.
 	Goals []MemGoal
+	// Frames are the frames the input pushed and popped, in order.
+	Frames []MemFrame
 	// Instance is mem's instance id, which a mem made anew does not share.
 	Instance string
 }
 
 // MemGoal is a goal a mem call changed, as a session's task list shows it:
 // its steps, and what is next.
+// MemFrame is a push or a pop of a frame by a call to mem: the model
+// entering a piece of work, or leaving it with its result. The agent keeps
+// them with the call's tool result, derives a session's stack of frames
+// from them, and on a pop removes from the model's context everything since
+// the push (FRAMES.md).
+type MemFrame struct {
+	// Kind is "push" or "pop".
+	Kind string `json:"kind"`
+	// Id is the frame: `fix-flaky`, `fix-flaky/find-cause`.
+	Id string `json:"id"`
+	// Purpose is the frame's purpose, for the stack line and the sidebar.
+	Purpose string `json:"purpose,omitempty"`
+	// Result is a pop's result.
+	Result string `json:"result,omitempty"`
+	// Thoughts is how many thoughts the frame holds when it is popped.
+	Thoughts int `json:"thoughts,omitempty"`
+	// Session is the session that made it.
+	Session string `json:"session"`
+}
+
 type MemGoal struct {
 	Name   string    `json:"name"`
 	Title  string    `json:"title"`
@@ -756,8 +780,8 @@ func memRules(ops []memOp) []MemRule {
 // runMem runs a gnovm_run call against the project's mem.
 func (h *Host) runMem(ctx context.Context, req RunRequest) (*RunResult, error) {
 	start := time.Now()
-	res, err := h.mem(req.Project).call(ctx, memRequest{Code: req.Code, Session: req.Session, Req: req.Req, Goal: req.Goal})
-	out := &RunResult{VM: MemVM, Output: res.Output, Journaled: res.Seq > 0, Seq: res.Seq, Notes: res.Notes, Wall: time.Since(start), MemGoals: res.Goals, Erased: res.Erased}
+	res, err := h.mem(req.Project).call(ctx, memRequest{Code: req.Code, Session: req.Session, Req: req.Req, Goal: req.Goal, Frames: req.Frames})
+	out := &RunResult{VM: MemVM, Output: res.Output, Journaled: res.Seq > 0, Seq: res.Seq, Notes: res.Notes, Wall: time.Since(start), MemGoals: res.Goals, Erased: res.Erased, Frames: res.Frames}
 	if res.Seq > 0 {
 		out.Rules = memRules(res.Ops)
 	}
