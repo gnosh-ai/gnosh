@@ -139,8 +139,8 @@ mem.Push()
 // added `fix-flaky/find-cause` "find why TestFlaky fails", `fix-flaky/rerun` "rerun the suite 20 times"; next: `fix-flaky/find-cause` "find why TestFlaky fails"
 // in `fix-flaky` "fix the flaky test": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
 // in `fix-flaky/find-cause` "find why TestFlaky fails": when it is done, pop it with what came of it and what the next step needs. …
-mem.Think("port", "the user says the shared port is 8080")
-// thought `port` kept on `fix-flaky/find-cause`
+mem.Think("the shared port is 8080")
+// thought `shared-port-8080` kept on `fix-flaky/find-cause`
 mem.Pop("TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)")
 mem.Push()
 // done `fix-flaky/find-cause` "find why TestFlaky fails" → TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)
@@ -155,13 +155,15 @@ internal/net/listen_test.go. Your reads inside it are forgotten: view a
 file before you edit it."
 
 What a frame should remember beyond its result it keeps as a *thought*: a
-labelled line on the frame, `mem.Think("port", "the user says the shared
-port is 8080")`, which costs nothing and removes nothing, and stays in mem
-under the frame after its pop: `mem.Thought("port")` reads it by name from
-any frame below on the stack, `mem.Recall("shared port")` finds thoughts,
-frames and facts by meaning, and `mem.Thought("port").Push()`
-turns a thought that needs real work into a step of the same name and
-enters it. You see every pop in the chat as the tool's result (the removed
+line on the frame, `mem.Think("the shared port is 8080")`, which costs
+nothing and removes nothing, and stays in mem under the frame after its pop.
+Its name is made for the agent, by the session's small model or, as here,
+from its words (`shared-port-8080`); a name the agent gives,
+`mem.Think("port", "…")`, stays as it is. `mem.Thought("shared-port-8080")`
+reads it by name from any frame below on the stack, `mem.Recall("shared
+port")` finds thoughts, frames and facts by meaning, and
+`mem.Thought("shared-port-8080").Push()` turns a thought that needs real
+work into a step of the same name and enters it. You see every pop in the chat as the tool's result (the removed
 rows stay there and in `/export`; only the model's view loses them), the
 frame the agent is in where the sidebar shows its work, `/mem log` lists
 each push and pop, and `gnosh run` prints what a pop took out of the
@@ -579,8 +581,8 @@ Gnosh's system prompt carries a short recipe, so the model needs no setup:
   the result. A goal cannot be done while a step of it is open, so a success
   condition is a step ("go test ./... passes"), popped only after its check
   has run, and a goal it closes is judged before it counts as done.
-- **What should outlive a pop is a thought**: `mem.Think("port", "…")` on the
-  frame it stands in, found again by name, by meaning (`mem.Recall`), or in
+- **What should outlive a pop is a thought**: `mem.Think("…")` on the frame
+  it stands in, found again by name, by meaning (`mem.Recall`), or in
   the frame's outline, and dived into with `mem.Push`. **A question
   for you**: `mem.Ask(name, "…")`, answered with Done.
 - **Later, or when something happens**: `mem.Goal("…").Wait("2026-12-01")`,
