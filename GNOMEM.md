@@ -17,11 +17,11 @@ mem.Goal("release v2").Steps("bump the version", "tag: tag v2.0.0", "CI is green
 mem.Push("release-v2")
 mem.Push()
 // in `release-v2` "release v2": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-// in `release-v2/bump-version` "bump the version": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `release-v2/bump-version` "bump the version": when it is done, pop it with what came of it and what the next step needs. …
 mem.Pop("now 2.0.0")
 mem.Push()
 // done `release-v2/bump-version` "bump the version" → now 2.0.0
-// in `release-v2/tag` "tag v2.0.0": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `release-v2/tag` "tag v2.0.0": when it is done, pop it with what came of it and what the next step needs. …
 mem.Show()
 // mem: 1 goal open
 // goals:
@@ -76,7 +76,7 @@ mem.Goal("build greet").Steps("go-mod: go.mod for module greet", "hello: greet.g
 mem.Push("build-greet")
 mem.Push()
 // in `build-greet` "build greet": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-// in `build-greet/go-mod` "go.mod for module greet": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `build-greet/go-mod` "go.mod for module greet": when it is done, pop it with what came of it and what the next step needs. …
 mem.Pop("module greet, go 1.22")
 // done `build-greet/go-mod` "go.mod for module greet" → module greet, go 1.22
 // next: `build-greet/hello` "greet.go with Hello": mem.Push()
@@ -138,13 +138,13 @@ mem.Push()
 // added goal `fix-flaky` "fix the flaky test"
 // added `fix-flaky/find-cause` "find why TestFlaky fails", `fix-flaky/rerun` "rerun the suite 20 times"; next: `fix-flaky/find-cause` "find why TestFlaky fails"
 // in `fix-flaky` "fix the flaky test": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-// in `fix-flaky/find-cause` "find why TestFlaky fails": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `fix-flaky/find-cause` "find why TestFlaky fails": when it is done, pop it with what came of it and what the next step needs. …
 mem.Think("port", "the user says the shared port is 8080")
 // thought `port` kept on `fix-flaky/find-cause`
 mem.Pop("TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)")
 mem.Push()
 // done `fix-flaky/find-cause` "find why TestFlaky fails" → TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)
-// in `fix-flaky/rerun` "rerun the suite 20 times": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `fix-flaky/rerun` "rerun the suite 20 times": when it is done, pop it with what came of it and what the next step needs. …
 ```
 
 To that result gnosh adds what the pop did: "Everything since you entered

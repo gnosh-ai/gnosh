@@ -223,13 +223,51 @@ func TestDocExamplesRun(t *testing.T) {
 							"%s line %d: gnosh's notice as a session starts is no longer what the document says", doc, c.line)
 					default:
 						resp := docRun(t, run, c.input)
-						assert.Equal(t, c.want, shown(resp.Content),
-							"%s line %d: gnovm_run %s no longer shows what the document says. Update the example, or the code if the document is right.\nThe full result was:\n%s",
-							doc, c.line, c.input, resp.Content)
+						if got := shown(resp.Content); !docMatch(c.want, got) {
+							assert.Equal(t, c.want, got,
+								"%s line %d: gnovm_run %s no longer shows what the document says. Update the example, or the code if the document is right.\nThe full result was:\n%s",
+								doc, c.line, c.input, resp.Content)
+						}
 					}
 				}
 			})
 		}
+	}
+}
+
+// docMatch is whether what a call showed is what the document says. A line
+// of the document that ends in " …" shows how the call's line begins and
+// leaves the rest out, as a document does with a hint it has shown in full
+// once already; the words shown are whole.
+func docMatch(want, got string) bool {
+	w, g := strings.Split(want, "\n"), strings.Split(got, "\n")
+	if len(w) != len(g) {
+		return false
+	}
+	for i := range w {
+		if w[i] == g[i] {
+			continue
+		}
+		if head, cut := strings.CutSuffix(w[i], " …"); !cut || !strings.HasPrefix(g[i], head+" ") {
+			return false
+		}
+	}
+	return true
+}
+
+func TestDocMatch(t *testing.T) {
+	for _, c := range []struct {
+		want, got string
+		ok        bool
+	}{
+		{"a\nb", "a\nb", true},
+		{"a\nb", "a\nc", false},
+		{"in `x`: pop it. …", "in `x`: pop it. Everything from here is removed.", true},
+		{"in `x`: pop it. …", "in `x`: pop it.", false},           // nothing was left out
+		{"in `x`: pop it …", "in `x`: pop it. Everything", false}, // the words shown are whole
+		{"a …", "a\nb", false}, // a line's end, not the lines after it
+	} {
+		assert.Equal(t, c.ok, docMatch(c.want, c.got), "%q against %q", c.want, c.got)
 	}
 }
 

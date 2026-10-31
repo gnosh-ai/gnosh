@@ -179,7 +179,7 @@ mem.Goal("add Median to stats").Steps("implement Median", "write tests", "go tes
 mem.Push("add-median-stats")
 mem.Push()
 // in `add-median-stats` "add Median to stats": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-// in `add-median-stats/implement-median` "implement Median": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `add-median-stats/implement-median` "implement Median": when it is done, pop it with what came of it and what the next step needs. …
 mem.Pop("Median in stats.go:17; copies and sorts, no input mutation")
 // done `add-median-stats/implement-median` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation
 // next: `add-median-stats/write-tests` "write tests": mem.Push()
@@ -191,11 +191,11 @@ mem.Show()
 //     [ ] `add-median-stats/write-tests` "write tests"  ← next
 //     [ ] `add-median-stats/go-test-passes` "go test ./... passes"
 mem.Push()
-// in `add-median-stats/write-tests` "write tests": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `add-median-stats/write-tests` "write tests": when it is done, pop it with what came of it and what the next step needs. …
 mem.Pop("stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates")
 mem.Push()
 // done `add-median-stats/write-tests` "write tests" → stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates
-// in `add-median-stats/go-test-passes` "go test ./... passes": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `add-median-stats/go-test-passes` "go test ./... passes": when it is done, pop it with what came of it and what the next step needs. …
 mem.Pop("go test ./... → ok stats 0.006s")
 mem.Push()
 // done `add-median-stats/go-test-passes` "go test ./... passes" → go test ./... → ok stats 0.006s
