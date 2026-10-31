@@ -295,6 +295,12 @@ func (m *Mem) todoUnder(parent, task string) *Frame {
 	if task == "" {
 		panic("a todo needs a task: mem.Todo(\"what to get done\")")
 	}
+	if validName(task) && strings.Contains(task, "-") {
+		// A model that writes mem.Todo("fix-flaky") means the todo of that
+		// name, as it would have given one; a nested todo named from it is
+		// not what it meant.
+		panic("`" + task + "` is a name, not a task: mem.Frame(" + quote(task) + ") is the todo of that name, and .Todo(\"what to get done\") on it adds under it; a task is words")
+	}
 	if parent == "" {
 		m.refuseOpenTitle(task)
 		id := m.freeName(m.madeName(task, "todo"), func(n string) bool { return m.freeTop(n) })

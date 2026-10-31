@@ -1,7 +1,7 @@
 A rename carried into a second session: the project is called klash and
 must be called gnosh everywhere, in the code, the tests, the README and the
-config example. The user asks for the code now and the rest later. The
-first session must keep the plan in mem and do the code; a new session,
+config example. The user asks for the first todo now and the rest later.
+The first session must keep the plan in mem and do one todo; a new session,
 which has only what was kept, must finish the rest, until nothing mentions
 the old name and the tests pass.
 
@@ -78,14 +78,13 @@ build:
 test:
 	go test ./...
 -- prompt --
-Rename the project from klash to gnosh everywhere: the code, the tests, the README, the Makefile and the config example. Do the code now; we'll carry on with the rest in another session. It's done when nothing in the project mentions klash and `go test ./...` passes.
+Rename the project from klash to gnosh everywhere: the code, the tests, the README, the Makefile and the config example. Plan it as todos and do the first one now; we'll carry on in another session. It's done when nothing in the project mentions klash and `go test ./...` passes.
 -- prompt-new --
 Let's carry on with the rename.
 -- check --
 turn 1 tool gnovm_run >= 1
-after 1 file main.go contains gnosh
 after 1 file README.md contains klash
-cmd ! grep -rqi klash . && ! ls -R | grep -qi klash
+cmd ! grep -rqi --exclude-dir=.gnosh klash . && [ -z "$(find . -path ./.gnosh -prune -o -iname '*klash*' -print)" ]
 cmd go test ./...
 mem-count items >= 4
 mem-count done >= 3

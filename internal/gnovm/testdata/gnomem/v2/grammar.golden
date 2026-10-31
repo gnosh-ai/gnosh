@@ -65,9 +65,9 @@ error: `ship` "Ship It" (this session, 1m ago) is already open: enter it with me
 > s1: mem.Todo("ship/it")
 added `ship-2` "ship/it"
 > s1: mem.Todo("ship-it")
-added `ship-it` "ship-it"
+error: `ship-it` is a name, not a task: mem.Frame("ship-it") is the todo of that name, and .Todo("what to get done") on it adds under it; a task is words
 > s1: mem.Todo("Ship-It")
-error: `ship-it` "ship-it" (this session, 1m ago) is already open: enter it with mem.Push("ship-it") and add to it with mem.Todo("…"), or give other work a task that tells them apart
+added `ship-it` "Ship-It"
 > s1: mem.Todo("page the on-call engineer")
 added `page-on-call-engineer` "page the on-call engineer"
 > s1: mem.Todo("rotate the key sk-live-4f9c2b3a8d7e now")

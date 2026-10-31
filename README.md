@@ -82,9 +82,9 @@ notes, and the agent asks it questions instead of re-reading it. [GNOMEM](GNOMEM
 ### A todo that outlives the session
 
 > **You:** Rename the project from klash to gnosh everywhere: the code, the
-> tests, the README, the Makefile and the config example. Do the code now;
-> we'll carry on with the rest in another session. It's done when nothing in
-> the project mentions klash and `go test ./...` passes.
+> tests, the README, the Makefile and the config example. Plan it as todos
+> and do the first one now; we'll carry on in another session. It's done
+> when nothing in the project mentions klash and `go test ./...` passes.
 
 The agent puts the task in mem as a todo, with each part a todo under it and
 the condition one of its own, and works through them one at a time. Each is

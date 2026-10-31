@@ -495,12 +495,21 @@ var memStatement = regexp.MustCompile(`(?m)^\s*mem\.([A-Z]\w*)\(\s*(?:"((?:[^"\\
 
 // memChanges is the calls to mem in rows' inputs that changed it, other
 // than Think and the frame calls themselves, by first word and name:
-// "Fact `port`". A read (Show, Find, …) changed nothing and is left out.
+// "Fact `port`". A read (Show, Find, …) changed nothing and is left out,
+// and so is a call mem refused, which kept nothing.
 func memChanges(rows []message.Message) []string {
+	failed := map[string]bool{}
+	for _, row := range rows {
+		for _, res := range row.ToolResults() {
+			if res.IsError || strings.Contains("\n"+res.Content, "\nfailed · ") {
+				failed[res.ToolCallID] = true
+			}
+		}
+	}
 	var changes []string
 	for _, row := range rows {
 		for _, call := range row.ToolCalls() {
-			if !isMemCall(call) {
+			if !isMemCall(call) || failed[call.ID] {
 				continue
 			}
 			var input struct {

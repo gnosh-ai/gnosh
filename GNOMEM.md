@@ -194,7 +194,7 @@ context. A frame a session holds is its own: no other session, and not
 `/mem`, closes, drops or takes it; the session pops it, resumed by id if it
 has ended. So a todo entered in one session stays open, even with every todo
 under it done in later sessions, until that session is resumed: in real runs
-on 31 October, readme-goal and long-goal-sessions both ended that way.
+on 31 October, the README's task and long-goal-sessions both ended that way.
 
 ### A knowledge base
 
@@ -492,12 +492,12 @@ second column says, never naming Gno or mem unless it says so. The checks are
 scripted: files, test results, the final answer, and what mem holds at the
 end.
 
-Of the 38 use cases, 35 passed every check; the notes under the table say
+Of the 38 use cases, 34 passed every check; the notes under the table say
 what the other 3 did.
 
 | Use case | What the user asks | Sessions | Checks passed |
 |---|---|---|---|
-| readme-goal | the README's goal: plan it as steps, do the first now, "we'll carry on in another session" | 2 | all 3 |
+| rename-project | the README's task: rename klash to gnosh everywhere, "plan it as todos and do the first one now; we'll carry on in another session" | 2 | 4 of 6 |
 | long-goal-sessions | a four-step plan kept in Gno, one step per session | 4 | all 14 |
 | resume-checklist | a checklist of four jobs, two now, the rest in a new session | 2 | all 8 |
 | goal-until-green | make `go test ./...` pass, keeping the goal and its condition in Gno | 1 | all 7 |

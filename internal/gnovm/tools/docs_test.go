@@ -555,7 +555,7 @@ func TestDocLinkProblems(t *testing.T) {
 // prompt of the scenario must appear in the document word for word. Change
 // the example and this fails until the scenario says the same, and is run.
 var docPrompts = []struct{ doc, scenario string }{
-	{"README.md", "readme-goal.txtar"},
+	{"README.md", "rename-project.txtar"},
 	{"README.md", "remind-next-time.txtar"},
 	{"GNOMEM.md", "remind-next-time.txtar"},
 	{"README.md", "memory-update.txtar"},

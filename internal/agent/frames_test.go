@@ -223,6 +223,13 @@ func TestPopClauses(t *testing.T) {
 			message.ToolResult{ToolCallID: "e1", Name: tools.EditToolName, Content: "edited", Metadata: `{"old_content":"a","new_content":"b"}`},
 			message.ToolResult{ToolCallID: "m1", Name: "gnovm_run", Content: "ok"},
 		),
+		// A call mem refused kept nothing, so it is not a change.
+		row(message.Assistant, "a2",
+			message.ToolCall{ID: "m2", Name: "gnovm_run", Input: `{"name":"mem","code":"mem.Todo(\"b\").Push()"}`, Finished: true},
+		),
+		row(message.Tool, "t2",
+			message.ToolResult{ToolCallID: "m2", Name: "gnovm_run", Content: "ERROR — nothing from this call was kept: `fix-flaky` has open todos\nfailed · mem · ran 1ms · nothing kept\n"},
+		),
 	}
 	calls := map[string]message.ToolCall{}
 	for _, call := range rows[0].ToolCalls() {
@@ -233,6 +240,7 @@ func TestPopClauses(t *testing.T) {
 	require.Contains(t, got, " In it you edited internal/net/listen_test.go.")
 	require.Contains(t, got, " In it you also changed mem: Fact `port`, Todo `a`, Note `fix-flaky`, Rule `r` and 1 more.")
 	require.NotContains(t, got, "Think")
+	require.NotContains(t, got, "Todo `b`")
 	require.NotContains(t, got, "reads inside it")
 }
 
