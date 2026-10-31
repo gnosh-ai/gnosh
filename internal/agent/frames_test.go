@@ -24,6 +24,7 @@ func assistant(calls ...string) fantasy.Message {
 	}
 	return fantasy.Message{Role: fantasy.MessageRoleAssistant, Content: parts}
 }
+
 func toolMsg(calls ...string) fantasy.Message {
 	var parts []fantasy.MessagePart
 	for _, id := range calls {
@@ -99,8 +100,10 @@ func TestCutPopped(t *testing.T) {
 	t.Run("one pop", func(t *testing.T) {
 		t.Parallel()
 		got := cutPopped(list, []poppedRange{{frame: "g/s1", pushCallID: "c2", popCallID: "c3"}})
-		require.Equal(t, []string{"system:system", "user:fix it", "assistant:c1", "tool:c1", "assistant:c2", "tool:c2", "assistant:c3", "tool:c3",
-			"assistant:v2", "tool:v2", "assistant:c4", "tool:c4", "assistant:c5", "tool:c5", "assistant:working"}, texts(got))
+		require.Equal(t, []string{
+			"system:system", "user:fix it", "assistant:c1", "tool:c1", "assistant:c2", "tool:c2", "assistant:c3", "tool:c3",
+			"assistant:v2", "tool:v2", "assistant:c4", "tool:c4", "assistant:c5", "tool:c5", "assistant:working",
+		}, texts(got))
 		validSequence(t, got)
 	})
 	t.Run("nested pops remove the union, the inner push and pop rounds too", func(t *testing.T) {
@@ -146,12 +149,15 @@ func TestCutPopped(t *testing.T) {
 func row(role message.MessageRole, id string, parts ...message.ContentPart) message.Message {
 	return message.Message{ID: id, Role: role, Parts: parts}
 }
+
 func callPart(id string) message.ToolCall {
 	return message.ToolCall{ID: id, Name: "gnovm_run", Input: "{}", Finished: true}
 }
+
 func resultPart(id string) message.ToolResult {
 	return message.ToolResult{ToolCallID: id, Name: "gnovm_run", Content: "ok"}
 }
+
 func rowIDs(rows []message.Message) []string {
 	ids := make([]string, len(rows))
 	for i, r := range rows {

@@ -13,7 +13,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"github.com/charmbracelet/crush/internal/gnovm"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +20,8 @@ import (
 	"strings"
 	"testing"
 	"unicode"
+
+	"github.com/charmbracelet/crush/internal/gnovm"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"

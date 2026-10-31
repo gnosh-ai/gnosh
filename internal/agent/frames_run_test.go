@@ -175,7 +175,8 @@ func (m *fakeMem) tool() fantasy.AgentTool {
 func viewTool(env fakeEnv) fantasy.AgentTool {
 	return fantasy.NewAgentTool(tools.ViewToolName, "view", func(ctx context.Context, p struct {
 		FilePath string `json:"file_path"`
-	}, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+	}, call fantasy.ToolCall,
+	) (fantasy.ToolResponse, error) {
 		data, err := os.ReadFile(p.FilePath)
 		if err != nil {
 			return fantasy.NewTextErrorResponse(err.Error()), nil
@@ -191,7 +192,8 @@ func workTool() fantasy.AgentTool {
 	return fantasy.NewAgentTool("work", "work", func(ctx context.Context, p struct {
 		N   int    `json:"n"`
 		Tag string `json:"tag"`
-	}, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+	}, call fantasy.ToolCall,
+	) (fantasy.ToolResponse, error) {
 		return fantasy.NewTextResponse(strings.Repeat(fmt.Sprintf("line of the work %s\n", p.Tag), 30*max(p.N, 1))), nil
 	})
 }
