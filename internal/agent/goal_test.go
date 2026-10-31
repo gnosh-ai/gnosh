@@ -161,7 +161,7 @@ func TestGoalDrivesTheTurnFromMem(t *testing.T) {
 			r.mem(`mem.Steps("tests-pass", "fix the parser")`)
 			return "Planned."
 		case 2:
-			r.mem(`mem.Done("tests-pass/1", "fixed"); mem.Done("tests-pass", "go test ./... → ok")`)
+			r.mem(`mem.Done("tests-pass/fix-parser", "fixed"); mem.Done("tests-pass", "go test ./... → ok")`)
 			return "Done."
 		default:
 			r.mem(`mem.Done("tests-pass", "go test ./... → ok, all of it")`)
@@ -184,7 +184,7 @@ func TestGoalDrivesTheTurnFromMem(t *testing.T) {
 	require.Equal(t, []string{"The check found the goal not met: the tests still fail. It is reopened, and the agent goes back to it"}, r.notices(notify.TypeWarning))
 	prompts := r.hiddenPrompts()
 	require.Len(t, prompts, 2)
-	require.Contains(t, prompts[0], "Its next step is `tests-pass/1` \"fix the parser\"")
+	require.Contains(t, prompts[0], "Its next step is `tests-pass/fix-parser` \"fix the parser\"")
 	require.Contains(t, prompts[1], "The check found the goal `tests-pass` not met: the tests still fail")
 	require.Contains(t, r.mem(`mem.Show("tests-pass")`), "the check found it not met: the tests still fail")
 }
@@ -199,7 +199,7 @@ func TestEveryGoalClosedIsJudged(t *testing.T) {
 		switch turns.Load() {
 		case 1:
 			r.mem(`mem.Goal("fix the login loop", "fix-login").Steps("set SameSite on the cookie")`)
-			r.mem(`mem.Done("fix-login/1", "SameSite=Lax"); mem.Done("fix-login", "fixed in auth.go")`)
+			r.mem(`mem.Done("fix-login/set-samesite-cookie", "SameSite=Lax"); mem.Done("fix-login", "fixed in auth.go")`)
 			return "Fixed."
 		case 2:
 			r.mem(`mem.Done("fix-login", "go test ./auth → ok")`)
@@ -374,7 +374,7 @@ func TestGoalWaitingOnTheUserEndsTheTurn(t *testing.T) {
 	_, set := r.goal()
 	require.True(t, set)
 	require.Len(t, r.notifier.warnings(), 1)
-	require.Contains(t, r.notifier.warnings()[0].Message, "`tests-pass/1` \"which test runner do you use?\" is for the user. It stays set")
+	require.Contains(t, r.notifier.warnings()[0].Message, "`tests-pass/which-test-runner-do` \"which test runner do you use?\" is for the user. It stays set")
 }
 
 // No cap: every stopHookReflectEvery continuations in a row the agent is

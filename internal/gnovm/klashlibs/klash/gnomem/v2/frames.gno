@@ -613,14 +613,16 @@ func (m *Mem) thoughtName(id string, it *Todo, name string) string {
 	switch {
 	case name == "":
 		panic("a thought needs a name to find it by: mem.Think(\"port-env\", \"the port is read from an env var\")")
+	case name == id || strings.Contains(name, "/") && m.get(name) != nil:
+		panic("`" + name + "` is a frame; a thought's name is a label of your own on the frame you are in, `" + id + "`: mem.Think(\"attempt-1\", \"…\")")
 	case strings.ToLower(name) != name && validName(strings.ToLower(name)):
 		panic("names are lowercase: `" + strings.ToLower(name) + "`")
 	case strings.Contains(name, "/") || !validName(name):
-		panic(named(name) + " is not a name: a thought's name is lowercase words joined by \"-\"" + like(nameForm(name), "port-env"))
+		panic(named(name) + " is not a name: a thought's name is lowercase words joined by \"-\"" + like(nameForm(stepName(name)), "port-env"))
 	case len(name) > maxGoalName:
 		panic("a thought's name is at most " + strconv.Itoa(maxGoalName) + " bytes: try `" + nameOf(name, "thought") + "`")
 	case noteIndex(it, name) >= 0:
-		panic("`" + id + "` already has a thought named `" + name + "`")
+		panic("`" + id + "` already has a thought named `" + name + "`: a thought is never edited; add another, like `" + freeThoughtName(it, name) + "`")
 	}
 	return name
 }

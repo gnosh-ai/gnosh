@@ -42,7 +42,7 @@ in `fix-flaky/reproduce` "reproduce it": when it is done, pop it with what came 
 > s1: mem.Think("port", "the user says the shared port is 8080")
 thought `port` kept on `fix-flaky/reproduce`
 > s1: mem.Think("port", "again")
-error: `fix-flaky/reproduce` already has a thought named `port`
+error: `fix-flaky/reproduce` already has a thought named `port`: a thought is never edited; add another, like `port-2`
 > s1: mem.Think("Port", "again")
 error: names are lowercase: `port`
 > s1: mem.Think("", "again")

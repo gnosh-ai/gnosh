@@ -294,7 +294,14 @@ func (m *Mem) miss(name string) string {
 			if len(it.Steps) == 0 {
 				return "no item `" + name + "`; `" + p + "` has no steps"
 			}
-			return "no item `" + name + "`; `" + p + "` has the steps" + m.stepsOf(p)[len(", whose steps are"):]
+			var ids []string
+			for _, s := range it.Steps {
+				ids = append(ids, p+"/"+s)
+			}
+			if len(ids) == 1 {
+				return "no item `" + name + "`; `" + p + "` has the step `" + ids[0] + "`"
+			}
+			return "no item `" + name + "`; `" + p + "` has the steps " + names(ids)
 		}
 	}
 	return "no item `" + name + "`; mem.Show() lists them"
