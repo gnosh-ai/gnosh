@@ -10,23 +10,25 @@ asks it what is next. It does not re-read a page of notes.
 Each project has one mem, shared by its worktrees and its sessions
 ([klash/gnomem/v2](internal/gnovm/klashlibs/klash/gnomem/v2/gnomem.gno)):
 
-```
-gnovm_run {"name": "mem", "code": "mem.Goal(\"release v2\").Steps(\"bump the version\", \"tag: tag v2.0.0\", \"CI is green\")"}
-  added goal `release-v2` "release v2"
-  added `release-v2/bump-version` "bump the version", `release-v2/tag` "tag v2.0.0", `release-v2/ci-green` "CI is green"; next: `release-v2/bump-version` "bump the version"
-gnovm_run {"name": "mem", "code": "mem.Push(\"release-v2\")\nmem.Push()"}
-  in `release-v2` "release v2": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  in `release-v2/bump-version` "bump the version": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-gnovm_run {"name": "mem", "code": "mem.Pop(\"now 2.0.0\")\nmem.Push()"}
-  done `release-v2/bump-version` "bump the version" → now 2.0.0
-  in `release-v2/tag` "tag v2.0.0": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-gnovm_run {"name": "mem", "code": "mem.Show()"}
-  mem: 1 goal open
-  goals:
-    [ ] `release-v2` "release v2" (1/3 done · this session · just now · held by this session, just now)
-      [x] `release-v2/bump-version` "bump the version" → now 2.0.0
-      [ ] `release-v2/tag` "tag v2.0.0" (held by this session, just now)  ← next
-      [ ] `release-v2/ci-green` "CI is green"
+```go mem
+mem.Goal("release v2").Steps("bump the version", "tag: tag v2.0.0", "CI is green")
+// added goal `release-v2` "release v2"
+// added `release-v2/bump-version` "bump the version", `release-v2/tag` "tag v2.0.0", `release-v2/ci-green` "CI is green"; next: `release-v2/bump-version` "bump the version"
+mem.Push("release-v2")
+mem.Push()
+// in `release-v2` "release v2": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `release-v2/bump-version` "bump the version": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+mem.Pop("now 2.0.0")
+mem.Push()
+// done `release-v2/bump-version` "bump the version" → now 2.0.0
+// in `release-v2/tag` "tag v2.0.0": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+mem.Show()
+// mem: 1 goal open
+// goals:
+//   [ ] `release-v2` "release v2" (1/3 done · this session · just now · held by this session, just now)
+//     [x] `release-v2/bump-version` "bump the version" → now 2.0.0
+//     [ ] `release-v2/tag` "tag v2.0.0" (held by this session, just now)  ← next
+//     [ ] `release-v2/ci-green` "CI is green"
 ```
 
 The step the agent is in is a *frame*: when it pops the frame with its
@@ -67,29 +69,32 @@ wrong for this machine (there is no `make` here), it notes why, drops that
 step and adds the one that replaces it, so mem shows the plan as it now
 stands, and why it changed:
 
-```
-gnovm_run {"name": "mem", "code": "mem.Goal(\"build greet\").Steps(\"go-mod: go.mod for module greet\", \"hello: greet.go with Hello\", \"test: greet_test.go\", \"make-test: make test runs the tests\")"}
-  added goal `build-greet` "build greet"
-  added `build-greet/go-mod` "go.mod for module greet", `build-greet/hello` "greet.go with Hello", `build-greet/test` "greet_test.go", `build-greet/make-test` "make test runs the tests"; next: `build-greet/go-mod` "go.mod for module greet"
-gnovm_run {"name": "mem", "code": "mem.Push(\"build-greet\")\nmem.Push()"}
-  in `build-greet` "build greet": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  in `build-greet/go-mod` "go.mod for module greet": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-gnovm_run {"name": "mem", "code": "mem.Pop(\"module greet, go 1.22\")"}
-  done `build-greet/go-mod` "go.mod for module greet" → module greet, go 1.22
-  next: `build-greet/hello` "greet.go with Hello": mem.Push()
-gnovm_run {"name": "mem", "code": "mem.Note(\"build-greet/make-test\", \"make is not installed here\")\nmem.Drop(\"build-greet/make-test\", \"no make on this machine\")\nmem.Steps(\"build-greet\", \"test-sh: test.sh runs go test ./...\")"}
-  noted on `build-greet/make-test` "make test runs the tests" as thought `make-not-installed-here`
-  dropped `build-greet/make-test` "make test runs the tests"; next: `build-greet/hello` "greet.go with Hello"
-  added `build-greet/test-sh` "test.sh runs go test ./..."; next: `build-greet/hello` "greet.go with Hello"
-gnovm_run {"name": "mem", "code": "mem.Show(\"build-greet\")"}
-  [ ] `build-greet` "build greet" (1/4 done)
-    held by this session
-    made by this session, changed just now
-    [x] `build-greet/go-mod` "go.mod for module greet" → module greet, go 1.22
-    [ ] `build-greet/hello` "greet.go with Hello"  ← next
-    [ ] `build-greet/test` "greet_test.go"
-    [-] `build-greet/make-test` "make test runs the tests" → no make on this machine
-    [ ] `build-greet/test-sh` "test.sh runs go test ./..."
+```go mem
+mem.Goal("build greet").Steps("go-mod: go.mod for module greet", "hello: greet.go with Hello", "test: greet_test.go", "make-test: make test runs the tests")
+// added goal `build-greet` "build greet"
+// added `build-greet/go-mod` "go.mod for module greet", `build-greet/hello` "greet.go with Hello", `build-greet/test` "greet_test.go", `build-greet/make-test` "make test runs the tests"; next: `build-greet/go-mod` "go.mod for module greet"
+mem.Push("build-greet")
+mem.Push()
+// in `build-greet` "build greet": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `build-greet/go-mod` "go.mod for module greet": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+mem.Pop("module greet, go 1.22")
+// done `build-greet/go-mod` "go.mod for module greet" → module greet, go 1.22
+// next: `build-greet/hello` "greet.go with Hello": mem.Push()
+mem.Note("build-greet/make-test", "make is not installed here")
+mem.Drop("build-greet/make-test", "no make on this machine")
+mem.Steps("build-greet", "test-sh: test.sh runs go test ./...")
+// noted on `build-greet/make-test` "make test runs the tests" as thought `make-not-installed-here`
+// dropped `build-greet/make-test` "make test runs the tests"; next: `build-greet/hello` "greet.go with Hello"
+// added `build-greet/test-sh` "test.sh runs go test ./..."; next: `build-greet/hello` "greet.go with Hello"
+mem.Show("build-greet")
+// [ ] `build-greet` "build greet" (1/4 done)
+//   held by this session
+//   made by this session, changed just now
+//   [x] `build-greet/go-mod` "go.mod for module greet" → module greet, go 1.22
+//   [ ] `build-greet/hello` "greet.go with Hello"  ← next
+//   [ ] `build-greet/test` "greet_test.go"
+//   [-] `build-greet/make-test` "make test runs the tests" → no make on this machine
+//   [ ] `build-greet/test-sh` "test.sh runs go test ./..."
 ```
 
 Tomorrow's session is told, with your first message, what mem has open and
@@ -126,17 +131,20 @@ mem changes are not undone. A long task is the plan's steps done one frame
 at a time: the context holds the plan, the results so far and the present
 step's work, however long the task runs, and compaction becomes a backstop.
 
-```
-gnovm_run {"name": "mem", "code": "mem.Goal(\"fix the flaky test\", \"fix-flaky\").Steps(\"find-cause: find why TestFlaky fails\", \"rerun: rerun the suite 20 times\")\nmem.Push(\"fix-flaky\")\nmem.Push()"}
-  added goal `fix-flaky` "fix the flaky test"
-  added `fix-flaky/find-cause` "find why TestFlaky fails", `fix-flaky/rerun` "rerun the suite 20 times"; next: `fix-flaky/find-cause` "find why TestFlaky fails"
-  in `fix-flaky` "fix the flaky test": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-  in `fix-flaky/find-cause` "find why TestFlaky fails": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
-gnovm_run {"name": "mem", "code": "mem.Think(\"port\", \"the user says the shared port is 8080\")"}
-  thought `port` kept on `fix-flaky/find-cause`
-gnovm_run {"name": "mem", "code": "mem.Pop(\"TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)\")\nmem.Push()"}
-  done `fix-flaky/find-cause` "find why TestFlaky fails" → TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)
-  in `fix-flaky/rerun` "rerun the suite 20 times": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+```go mem
+mem.Goal("fix the flaky test", "fix-flaky").Steps("find-cause: find why TestFlaky fails", "rerun: rerun the suite 20 times")
+mem.Push("fix-flaky")
+mem.Push()
+// added goal `fix-flaky` "fix the flaky test"
+// added `fix-flaky/find-cause` "find why TestFlaky fails", `fix-flaky/rerun` "rerun the suite 20 times"; next: `fix-flaky/find-cause` "find why TestFlaky fails"
+// in `fix-flaky` "fix the flaky test": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+// in `fix-flaky/find-cause` "find why TestFlaky fails": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+mem.Think("port", "the user says the shared port is 8080")
+// thought `port` kept on `fix-flaky/find-cause`
+mem.Pop("TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)")
+mem.Push()
+// done `fix-flaky/find-cause` "find why TestFlaky fails" → TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)
+// in `fix-flaky/rerun` "rerun the suite 20 times": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
 ```
 
 To that result gnosh adds what the pop did: "Everything since you entered
@@ -178,10 +186,11 @@ question put in other words without a single call to mem, in three seconds:
 first — she does QA sign-off on every release." These are the calls the first
 session made, and what each showed it:
 
-```
-gnovm_run {"name": "mem", "code": "mem.Fact(\"cmd/ship\", \"make ship ENV=prod\")\nmem.Fact(\"qa\", \"Lin Wei does QA sign-off on every release\")"}
-  fact `cmd/ship` is new
-  fact `qa` is new
+```go mem
+mem.Fact("cmd/ship", "make ship ENV=prod")
+mem.Fact("qa", "Lin Wei does QA sign-off on every release")
+// fact `cmd/ship` is new
+// fact `qa` is new
 ```
 
 A fact you only mention is kept as well, beside the work you asked for:
@@ -200,12 +209,13 @@ it moved there the week of 2026-10-26."
 
 An older fact, no longer among the newest, is found by its words:
 
-```
-gnovm_run {"name": "mem", "code": "mem.Fact(\"cmd/ship\", \"make ship ENV=prod\")\nmem.Fact(\"qa\", \"Lin Wei does QA sign-off on every release\")"}
-  fact `cmd/ship` is new
-  fact `qa` is new
-gnovm_run {"name": "mem", "code": "mem.Find(\"sign-off\")"}
-  fact `qa` = Lin Wei does QA sign-off on every release
+```go mem
+mem.Fact("cmd/ship", "make ship ENV=prod")
+mem.Fact("qa", "Lin Wei does QA sign-off on every release")
+// fact `cmd/ship` is new
+// fact `qa` is new
+mem.Find("sign-off")
+// fact `qa` = Lin Wei does QA sign-off on every release
 ```
 
 A fact that changes is set again under the name it already has, rather than
@@ -319,9 +329,9 @@ request up and found it still open.
 The agent keeps it as a rule, which every later session is given in full, as
 your words. In a real run:
 
-```
-gnovm_run {"code":"mem.Rule(\"gofumpt-before-commit\", \"Always run `gofumpt -l .` before committing anything in this project\")","name":"mem"}
-  rule `gofumpt-before-commit` is new; every session will be given it
+```go mem
+mem.Rule("gofumpt-before-commit", "Always run `gofumpt -l .` before committing anything in this project")
+// rule `gofumpt-before-commit` is new; every session will be given it
 ```
 
 And Gnosh told the user, as a warning in the session (on stderr from
@@ -340,15 +350,15 @@ its text, is yours to do, with `/mem forget` and `/mem redact`. It can remove
 one with `mem.Rule(name, "")`, and you are told, with `/mem undo` to put it
 back:
 
-```
-gnovm_run {"name": "mem", "code": "mem.Rule(\"gofumpt-before-commit\", \"Always run `gofumpt -l .` before committing anything in this project\")"}
-  rule `gofumpt-before-commit` is new; every session will be given it
-gnovm_run {"name": "mem", "code": "mem.Forget(\"gofumpt-before-commit\")"}
-  ERROR — nothing from this call was kept: rules are the user's: they forget one with /mem forget gofumpt-before-commit
-gnovm_run {"name": "mem", "code": "mem.Redact(\"gofumpt -l .\")"}
-  ERROR — nothing from this call was kept: that text is in the rule `gofumpt-before-commit`, and rules are the user's: they redact it with /mem redact
-gnovm_run {"name": "mem", "code": "mem.Rule(\"gofumpt-before-commit\", \"\")"}
-  removed rule `gofumpt-before-commit`
+```go mem
+mem.Rule("gofumpt-before-commit", "Always run `gofumpt -l .` before committing anything in this project")
+// rule `gofumpt-before-commit` is new; every session will be given it
+mem.Forget("gofumpt-before-commit")
+// ERROR — nothing from this call was kept: rules are the user's: they forget one with /mem forget gofumpt-before-commit
+mem.Redact("gofumpt -l .")
+// ERROR — nothing from this call was kept: that text is in the rule `gofumpt-before-commit`, and rules are the user's: they redact it with /mem redact
+mem.Rule("gofumpt-before-commit", "")
+// removed rule `gofumpt-before-commit`
 ```
 
 Only your words are meant to become rules, and a README that says "always
