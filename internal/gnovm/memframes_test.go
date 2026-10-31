@@ -103,4 +103,12 @@ func TestHostFrames(t *testing.T) {
 	res = run("s2", nil, `mem.PushFrame(mem.Frame("fix-flaky/rerun"))`)
 	require.ErrorContains(t, res.Err, "`fix-flaky/rerun` is held by session s1: only it can pop, close or drop it")
 	require.Empty(t, res.Frames, "a refused input records no event")
+
+	// A redacted secret leaves the journal's frames record too: the pop's
+	// result in /mem log.
+	ok("s1", stack, `mem.Redact("shared port")`)
+	log, err = h.MemCommand(ctx, "/proj", "s1", "log", nil)
+	require.NoError(t, err)
+	require.NotContains(t, log, "shared port")
+	require.Contains(t, log, "pop `fix-flaky/find-cause` → \"it races on the (redacted)\"")
 }

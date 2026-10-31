@@ -178,6 +178,20 @@ func TestFramesStory(t *testing.T) {
 	s.run("s1", "", `mem.PushFrame(mem.Frame("ship/b"))`)
 	s.run("s1", "", `mem.PushFrame(mem.Frame("ship/a/which-key"))`)
 	s.run("s1", "", `mem.Recall("shared port")`)
+	// A frame of the stack that mem holds closed (an undo, or a rewind
+	// that kept the push and lost the pop) is popped without a change.
+	s.stacks["s2"] = []string{"fix-flaky/rename-port-flag"}
+	s.run("s2", "", `mem.PopFrame("again")`)
+	s.stacks["s2"] = []string{"fix-flaky/rename-port-flag"}
+	s.run("s2", "", `mem.Done("fix-flaky/rename-port-flag")`)
+	// A secret in the name of a frame on the stack is not redacted under
+	// the session's feet; the bound root is never pushed; a goal's name
+	// keeps a goal's rules.
+	s.run("s3", "", `mem.Goal("email John Hunter about the invoice").Push()`)
+	s.run("s3", "", `mem.Redact("John Hunter")`)
+	s.run("s3", "", `mem.NewFrame("a-b-c-d-e", "five words")`)
+	s.run("s3", "", `mem.PopFrame("sent")`)
+	s.run("s3", "", `mem.NewFrame("a-b-c-d-e", "five words")`)
 	s.run("s1", "", `println(mem.Show())`)
 
 	golden := filepath.Join("testdata", "gnomem", "v2", "frames.golden")

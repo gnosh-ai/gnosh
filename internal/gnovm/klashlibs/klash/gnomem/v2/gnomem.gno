@@ -106,6 +106,14 @@ func (g Goal) Start(step ...string) Goal {
 	return g
 }
 
+// Push enters the goal as a frame, as mem.PushFrame(mem.Frame(name)) does,
+// so a plan can be made and entered in one call:
+// mem.Goal("…").Steps("…", "…").Push().
+func (g Goal) Push() Goal {
+	g.m.push(g.Name, "")
+	return g
+}
+
 // startIn is Goal(…).Start, in mem's realm, as its natives need: a Goal
 // is a value outside it.
 func (m *Mem) startIn(goal string, step ...string) {
@@ -170,7 +178,7 @@ func (m *Mem) Bind(title string, replacing ...string) Goal {
 		g = m.Goal(title)
 	}
 	for _, r := range replacing {
-		if it := m.get(r); r != g.Name && it != nil && it.Status == "" {
+		if it := m.get(r); r != g.Name && it != nil && it.Status == "" && !m.heldByAny(r, it) {
 			m.Drop(r, "replaced by /goal "+strconv.Quote(clip(title, 80)))
 		}
 	}
@@ -323,6 +331,11 @@ func (m *Mem) Start(name string) {
 // another session holds.
 func (m *Mem) Done(name string, result ...string) {
 	it := m.item(name)
+	stack := frames()
+	if it.Status != "" && name == top(stack) {
+		m.popClosed(name, it)
+		return
+	}
 	switch it.Status {
 	case "done":
 		println(ref(name, it.Title) + " is already done" + arrow(it.Result))
@@ -330,7 +343,6 @@ func (m *Mem) Done(name string, result ...string) {
 	case "dropped":
 		panic(ref(name, it.Title) + " was dropped: " + it.Result + "; mem.Reopen(\"" + name + "\") to take it up again")
 	}
-	stack := frames()
 	m.refuseInside(stack, name)
 	if name == top(stack) {
 		m.pop(name, it, strings.Join(result, " "), false)
@@ -673,6 +685,15 @@ func (m *Mem) Redact(secret string) {
 	}
 	if overlapsMarker(secret) {
 		panic("that text overlaps \"(redacted)\": give the secret alone")
+	}
+	// An erasure renames an item whose name holds the secret; a frame on
+	// the stack renamed under the session would be lost to it.
+	if f := nameForm(secret); f != "" {
+		for _, id := range frames() {
+			if strings.Contains(id, f) {
+				panic("that text is in the name of `" + id + "`, which is on your stack: pop it first, then redact")
+			}
+		}
 	}
 	names, kinds, statements := holding(secret)
 	places := len(names)

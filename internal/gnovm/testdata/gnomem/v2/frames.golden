@@ -266,16 +266,36 @@ error: `ship/b` "b" waits until 2026-12-01: start it then, or clear the wait wit
 error: `ship/a/which-key` "which key?" is asked of the user: end your turn so they can answer, or mem.Drop("ship/a/which-key", "why")
 > s1: mem.Recall("shared port")
 nothing in mem is about that: mem.Show() lists what it holds, and mem.Find("words") matches words
+> s2: mem.PopFrame("again")
+`fix-flaky/rename-port-flag` was already done → the flag is --port now: it is off your stack now
+  [pop `fix-flaky/rename-port-flag` → the flag is --port now]
+> s2: mem.Done("fix-flaky/rename-port-flag")
+`fix-flaky/rename-port-flag` was already done → the flag is --port now: it is off your stack now
+  [pop `fix-flaky/rename-port-flag` → the flag is --port now]
+> s3: mem.Goal("email John Hunter about the invoice").Push()
+added goal `email-john-hunter-about` "email John Hunter about the invoice"
+in `email-john-hunter-about` "email John Hunter about the invoice": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  [push `email-john-hunter-about`]
+> s3: mem.Redact("John Hunter")
+error: that text is in the name of `email-john-hunter-about`, which is on your stack: pop it first, then redact
+> s3: mem.NewFrame("a-b-c-d-e", "five words")
+added `email-john-hunter-about/a-b-c-d-e` "five words"
+> s3: mem.PopFrame("sent")
+error: `email-john-hunter-about` "email John Hunter about the invoice" has open steps `email-john-hunter-about/a-b-c-d-e` "five words": push and pop them, or drop them, first
+> s3: mem.NewFrame("a-b-c-d-e", "five words")
+error: `email-john-hunter-about` already has a step named `a-b-c-d-e`
 > s1: println(mem.Show())
-mem: 1 goal open, 1 question for the user · 3 closed
+mem: 2 goals open, 1 question for the user · 3 closed
 questions for the user:
   [?] `ship/a/which-key` "which key?"
 goals:
-  [ ] `ship` "ship it" (0/3 done · this session · 5m ago · held by this session, 5m ago)
-    [ ] `ship/a` "a" (waits on the user · held by this session, 5m ago)
+  [ ] `email-john-hunter-about` "email John Hunter about the invoice" (0/1 done · session s3 · 3m ago · held by session s3, 3m ago)
+    [ ] `email-john-hunter-about/a-b-c-d-e` "five words"  ← next
+  [ ] `ship` "ship it" (0/3 done · this session · 12m ago · held by this session, 12m ago)
+    [ ] `ship/a` "a" (waits on the user · held by this session, 12m ago)
       [?] `ship/a/which-key` "which key?"
     [ ] `ship/b` "b" (waits until 2026-12-01)
-    [ ] `ship/c` "c" (held by session s2, 8m ago)
+    [ ] `ship/c` "c" (held by session s2, 15m ago)
 closed lately:
   [x] `deploy-site` "deploy the site" → built and deployed (2026-10-29)
   [x] `side` "a side quest made at the root" → nothing to see (2026-10-29)

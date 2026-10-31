@@ -343,12 +343,7 @@ func (h *memHost) holding(j *journal) func(text string, ops []memOp) (names, kin
 			if target == "statements" {
 				return
 			}
-			held := er.holds(op.Old) || er.holds(op.New)
-			if target == "item" {
-				held = held || er.nameHolds(goalPart(name))
-			} else {
-				held = held || er.nameHolds(name)
-			}
+			held := er.holds(op.Old) || er.holds(op.New) || er.nameHolds(name)
 			if held && !seen[target+" "+name] {
 				seen[target+" "+name] = true
 				names, kinds = append(names, name), append(kinds, target)

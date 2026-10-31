@@ -1307,6 +1307,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// held against the session's counts: that step's usage report counts
 	// the cut list, and spends the estimate (see frameStacks.estimate).
 	var cutSent bool
+	var cutTokens int64
 	var shouldSummarize bool
 	// The tool calls the agent was caught repeating, when that is what
 	// stopped the run; see loopContinuation.
@@ -1347,7 +1348,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			inputLen := len(options.Messages)
 			var added []fantasy.Message
 			popped := a.frames.estimate(call.SessionID)
-			cutSent = popped > 0
+			cutSent, cutTokens = popped > 0, popped
 
 			// Use latest tools (updated by SetTools when MCP tools
 			// change).
@@ -1585,7 +1586,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 			// A report for a request that went out after a pop counts the
 			// cut list: what the pop removed is no longer held against it.
 			if cutSent && !usageIsZero(usage) {
-				a.frames.counted(call.SessionID)
+				a.frames.counted(call.SessionID, cutTokens)
 				cutSent = false
 			}
 			// Only the usage is written: the title model's title, or a

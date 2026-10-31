@@ -308,6 +308,8 @@ func (m *Mem) frameName(parent, name, purpose string) string {
 	if parent == "" {
 		free := func(n string) bool { return !reserved[n] && !forgottenName(n) && m.taken.Get(n) == nil }
 		switch {
+		case strings.Count(name, "-") >= 4:
+			panic("a goal's name is at most 4 words and " + strconv.Itoa(maxGoalName) + " bytes: try `" + nameOf(name, "goal") + "`")
 		case reserved[name] || forgottenName(name):
 			panic("`" + name + "` is reserved: give another name")
 		case !free(name):
@@ -353,7 +355,7 @@ func (m *Mem) push(id, thought string) {
 	switch {
 	case id == "":
 		panic("the root is not a frame to enter: push a goal, or make one")
-	case id == bound() && len(stack) == 0:
+	case id == bound():
 		panic("you are in `" + id + "` already: it is this session's goal; push its steps")
 	}
 	it := m.openItem(id)
@@ -453,6 +455,16 @@ func (m *Mem) heldText(id string, it *Todo) string {
 	return msg
 }
 
+// heldByAny reports whether item id is held by any session, or an open
+// step under it is.
+func (m *Mem) heldByAny(id string, it *Todo) bool {
+	held := it.Status == "" && it.Doing != ""
+	m.eachBelow(id, false, func(_ string, s *Todo) {
+		held = held || s.Status == "" && s.Doing != ""
+	})
+	return held
+}
+
 // refuseHeld refuses to close, drop, forget or start item id while another
 // session holds it, or holds an open step under it.
 func (m *Mem) refuseHeld(id string, it *Todo) {
@@ -537,7 +549,20 @@ func (m *Mem) PopFrame(result string) {
 		panic("nothing to pop: you are at the root")
 	}
 	id := top(stack)
-	m.pop(id, m.item(id), result, false)
+	it := m.item(id)
+	if it.Status != "" {
+		m.popClosed(id, it)
+		return
+	}
+	m.pop(id, it, result, false)
+}
+
+// popClosed pops a frame of the stack that mem already holds closed: one
+// closed by an undo, or kept on the stack by a rewind that lost its pop.
+// Nothing changes in mem; the stack is told.
+func (m *Mem) popClosed(id string, it *Todo) {
+	popped(id, it.Title, it.Result, len(it.Notes))
+	println("`" + id + "` was already " + it.Status + arrow(it.Result) + ": it is off your stack now")
 }
 
 // pop leaves frame id, the top of the stack: done with result, or, with
@@ -764,7 +789,11 @@ func (m *Mem) PushThought(t Thought, why ...string) {
 		parent = present
 	}
 	if parent == "" {
-		panic("`" + frame + "` is " + it.Status + ", and you are at the root, in no frame: enter a frame to dive into `" + t.Name + "` from")
+		why := "is not on your stack"
+		if it.Status != "" {
+			why = "is " + it.Status
+		}
+		panic("`" + frame + "` " + why + ", and you are at the root, in no frame: enter a frame to dive into `" + t.Name + "` from")
 	}
 	purpose := ""
 	if len(why) == 1 {

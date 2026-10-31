@@ -218,16 +218,16 @@ func (f *frameStacks) estimate(sessionID string) int64 {
 	return 0
 }
 
-// counted records that a usage report counted the cut list: the estimate
-// is spent.
-func (f *frameStacks) counted(sessionID string) {
+// counted records that a usage report counted a list cut by spent tokens:
+// that much of the estimate is spent; a pop made since stays held.
+func (f *frameStacks) counted(sessionID string, spent int64) {
 	if f == nil {
 		return
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if rec, ok := f.records[sessionID]; ok {
-		rec.estimate = 0
+		rec.estimate = max(rec.estimate-spent, 0)
 	}
 }
 
@@ -310,9 +310,13 @@ func (f *frameStacks) pop(ctx context.Context, sessionID string, rec *sessionFra
 	if f.forgetGiven != nil {
 		f.forgetGiven(sessionID, ids)
 	}
+	// Rows an inner pop removed already are out of the context: they are
+	// marked again, not counted again.
 	var removed int64
 	for _, row := range rows {
-		removed += estimateMessageTokens(row.ToAIMessage())
+		if row.Popped == "" {
+			removed += estimateMessageTokens(row.ToAIMessage())
+		}
 	}
 	rec.estimate += removed
 	if f.notify != nil {

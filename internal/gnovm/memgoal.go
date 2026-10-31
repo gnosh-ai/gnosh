@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -285,6 +286,10 @@ func goalHolds(g memGoalJSON, now time.Time) string {
 	return strings.Join(parts, "; ")
 }
 
+// memHeldRe is mem's refusal of a change to a frame a session holds, with
+// the frame.
+var memHeldRe = regexp.MustCompile("^`([^`]+)` is held by ")
+
 // memShortID is a session's id as the user reads it: its first 8 bytes.
 func memShortID(id string) string {
 	if len(id) > 8 {
@@ -397,6 +402,9 @@ func (h *memHost) goalClear(ctx context.Context, session string, b GoalBinding) 
 		return "/goal is cleared", nil
 	}
 	if _, err := h.call(ctx, memRequest{Code: "mem.Drop(" + strconv.Quote(b.Name) + ", \"cleared by the user\")", Session: session, User: true}); err != nil {
+		if m := memHeldRe.FindStringSubmatch(err.Error()); m != nil {
+			return "/goal is cleared; the goal `" + b.Name + "` it added stays open while the agent is in `" + m[1] + "`: it closes or drops it from there", nil
+		}
 		return "", err
 	}
 	return "/goal is cleared, and the goal `" + b.Name + "` it added is dropped", nil

@@ -555,7 +555,7 @@ func TestHostRunsMem(t *testing.T) {
 	// gnomem's source (memAPI).
 	res = call(`mem.Goal("release 1.3.0").Steps("tag it", "sign off").Done("x")`)
 	require.ErrorContains(t, res.Err, "missing field Done in klash/gnomem/v2.Goal")
-	require.Contains(t, res.Notes, "a Goal, which mem.Goal(…) gives, has Steps, Wait, Start, Ask and Note; Done is mem's: mem.Done(name, result...)")
+	require.Contains(t, res.Notes, "a Goal, which mem.Goal(…) gives, has Steps, Wait, Start, Push, Ask and Note; Done is mem's: mem.Done(name, result...)")
 	res = call(`mem.Goal("release 1.3.0").Steps("tag it").Ask("release-1-3-0/1", "who signs?")`)
 	require.EqualError(t, res.Err, "a Goal's Ask takes 1 argument, not 2: mem.Goal(…).Ask(question), or mem.Ask(name, question) for an item by its name")
 	res = call("mem.Goal(\"release 1.3.0\").Steps(\"tag it\")\nmem.Done(\"release-1.3.0/tag\", \"tagged\")")

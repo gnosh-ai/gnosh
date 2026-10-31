@@ -157,10 +157,25 @@ func applyIndexOp(tx *sql.Tx, op memOp) error {
 		if op.Field == "result" || op.Field == "wait" || op.Field == "status" {
 			return setColumn(tx, "item", op.Name, op.Field, op.New)
 		}
-	case "note":
-		return putRow(tx, "thought", op.Name, map[string]string{"title": op.New})
-	case "unnote":
-		return deleteRow(tx, "thought", op.Name)
+	case "note", "unnote":
+		if strings.Contains(op.Name, "#") {
+			if op.Kind == "note" {
+				return putRow(tx, "thought", op.Name, map[string]string{"title": op.New})
+			}
+			return deleteRow(tx, "thought", op.Name)
+		}
+		// A note from before thoughts had names: the item's notes column,
+		// so the item is still found by its words.
+		notes, err := column(tx, "item", op.Name, "notes")
+		if err != nil {
+			return err
+		}
+		if op.Kind == "note" {
+			notes = strings.TrimPrefix(notes+"\n"+op.New, "\n")
+		} else {
+			notes = strings.TrimSuffix(strings.TrimSuffix(notes, op.Old), "\n")
+		}
+		return setColumn(tx, "item", op.Name, "notes", notes)
 	case "fact", "rule":
 		if op.New == "" {
 			return deleteRow(tx, op.Kind, op.Name)

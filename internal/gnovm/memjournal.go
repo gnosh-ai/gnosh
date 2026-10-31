@@ -317,6 +317,24 @@ func erase(entries []memEntry, er memErasure) ([]memEntry, MemErasure) {
 		} else {
 			e.Code = er.scrub(e.Code)
 		}
+		if len(e.Frames) > 0 {
+			frames := make([]MemFrame, len(e.Frames))
+			for i, f := range e.Frames {
+				if er.forgets("item", f.Id) {
+					if f.Purpose != "" {
+						f.Purpose = memForgotten
+					}
+					if f.Result != "" {
+						f.Result = memForgotten
+					}
+				} else {
+					f.Purpose, f.Result = er.scrub(f.Purpose), er.scrub(f.Result)
+				}
+				f.Id = memRenamed(renamed, f.Id)
+				frames[i] = f
+			}
+			e.Frames = frames
+		}
 		out = append(out, e)
 	}
 	gone.Renamed = renamed
