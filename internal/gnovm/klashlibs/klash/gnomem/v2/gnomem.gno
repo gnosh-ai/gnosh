@@ -563,9 +563,27 @@ func (m *Mem) Wait(name, until string) {
 }
 
 // Fact keeps text under name, any path, replacing what was there; "" removes
-// it. Its receipt says whether it is new or changed (and from what), and
-// lists the other facts beside it.
-func (m *Mem) Fact(name, fact string) {
+// it. Fact(text) alone names it for you, from the text (gnosh's small
+// model, or its words), under a name no fact has yet. Its receipt says
+// whether it is new or changed (and from what), and lists the other facts
+// beside it.
+func (m *Mem) Fact(args ...string) {
+	var name, fact string
+	switch len(args) {
+	case 1:
+		fact = clip(text("the fact", args[0]), maxText)
+		if fact == "" {
+			panic("a fact needs words: mem.Fact(\"what to remember\")")
+		}
+		if validName(fact) {
+			panic("`" + fact + "` is a name, not a fact: mem.Fact(name, text) sets a fact, and mem.Show(name) shows one")
+		}
+		name = m.freeName(m.madeName(fact, "fact"), func(n string) bool { return m.getFact(n) == nil })
+	case 2:
+		name, fact = args[0], args[1]
+	default:
+		panic("Fact takes a fact, or a name and a fact: mem.Fact(\"cmd/test\", \"go test -race ./...\")")
+	}
 	m.checkName(name, "fact")
 	fact = clip(text("the fact", fact), maxText)
 	old := ""

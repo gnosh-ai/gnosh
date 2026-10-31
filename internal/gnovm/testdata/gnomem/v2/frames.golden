@@ -16,7 +16,7 @@ nothing to push at the root: `side` "a side quest made at the root" is open: mem
 > s1: mem.PushFrame(mem.Frame())
 error: the root is not a frame to enter: push a goal, or make one
 > s1: mem.Think("port", "the shared port is 8080")
-error: you are at the root, in no frame: mem.Fact("…", "…") keeps something to remember
+error: you are at the root, in no frame: mem.Fact("…") keeps something to remember
 > s1: mem.Frame("fix-flaky/retry")
 error: there is no frame `fix-flaky/retry`; mem.Show() lists them
 > s1: mem.Frame("Fix-Flaky")
@@ -49,14 +49,28 @@ error: names are lowercase: `port`
 error: a thought needs a name to find it by: mem.Think("port-env", "the port is read from an env var")
 > s1: mem.Note("fix-flaky/reproduce", "it fails 3 of 20 runs")
 noted on `fix-flaky/reproduce` "reproduce it" as thought `fails-3-20-runs`
+> s1: mem.Think("the fix is to pick a free port in setup")
+thought `fix-pick-free-port` kept on `fix-flaky/reproduce`
+> s1: mem.Think("the fix is to pick a free port in setup")
+thought `fix-pick-free-port-2` kept on `fix-flaky/reproduce`
+> s1: mem.Think("a", "b", "c")
+error: Think takes a thought, or a name and a thought: mem.Think("port-env", "the port is read from an env var")
+> s1: mem.Fact("the staging database is db-stg-7")
+fact `staging-database-db-stg` is new
+> s1: mem.Fact("the staging database is db-stg-7")
+fact `staging-database-db-stg-2` is new
+> s1: mem.Fact("cmd/test")
+error: `cmd/test` is a name, not a fact: mem.Fact(name, text) sets a fact, and mem.Show(name) shows one
 > s1: mem.Thought("nope")
 error: no frame on your stack has a thought named `nope`
 > s1: mem.Frame()
 [ ] `fix-flaky/reproduce` "reproduce it" (a step of `fix-flaky` "fix the flaky test")
   held by this session
-  made by this session, changed 2m ago
+  made by this session, changed 6m ago
   thought `port`: the user says the shared port is 8080
   thought `fails-3-20-runs`: it fails 3 of 20 runs
+  thought `fix-pick-free-port`: the fix is to pick a free port in setup
+  thought `fix-pick-free-port-2`: the fix is to pick a free port in setup
 > s1: mem.PopFrame("")
 error: say what came of `fix-flaky/reproduce`, even "nothing found"
 > s1: mem.Done("fix-flaky/reproduce")
@@ -88,6 +102,8 @@ error: `fix-flaky/find-why-testflaky-fails/port` is already on your stack
   made by this session, changed 2m ago
   thought `port`: the user says the shared port is 8080 (now the step `fix-flaky/find-why-testflaky-fails/port`)
   thought `fails-3-20-runs`: it fails 3 of 20 runs
+  thought `fix-pick-free-port`: the fix is to pick a free port in setup
+  thought `fix-pick-free-port-2`: the fix is to pick a free port in setup
 > s1: mem.PopFrame("8080 comes from PORT in setup")
 done `fix-flaky/find-why-testflaky-fails/port` → 8080 comes from PORT in setup
 next: pop `fix-flaky/find-why-testflaky-fails` with the evidence that it holds
@@ -285,7 +301,7 @@ error: `email-john-hunter-about` "email John Hunter about the invoice" has open 
 > s3: mem.NewFrame("a-b-c-d-e", "five words")
 error: `email-john-hunter-about` already has a step named `a-b-c-d-e`
 > s1: println(mem.Show())
-mem: 2 goals open, 1 question for the user · 3 closed
+mem: 2 goals open, 1 question for the user · 3 closed · 2 facts
 questions for the user:
   [?] `ship/a/which-key` "which key?"
 goals:
@@ -300,4 +316,7 @@ closed lately:
   [x] `deploy-site` "deploy the site" → built and deployed (2026-10-29)
   [x] `side` "a side quest made at the root" → nothing to see (2026-10-29)
   [x] `fix-flaky` "fix the flaky test" → the suite passes 20 of 20 with the free port (2026-10-29)
+facts, newest first:
+  `staging-database-db-stg-2` = the staging database is db-stg-7
+  `staging-database-db-stg` = the staging database is db-stg-7
 

@@ -111,4 +111,12 @@ func TestHostFrames(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, log, "shared port")
 	require.Contains(t, log, "pop `fix-flaky/find-cause` → \"it races on the (redacted)\"")
+
+	// A name gnosh made for a text (its small model's) reaches the realm by
+	// text; a name the frame has already gets -2; a text with no made name
+	// is named from its words.
+	res, err = h.Run(ctx, RunRequest{Project: "/proj", Session: "s1", Name: MemVM, Code: "mem.Think(\"the suite shares port 8080\")\nmem.Think(\"the suite shares port 8080\")\nmem.Think(\"nobody named this one\")", Frames: stack, Names: map[string]string{"the suite shares port 8080": "shared-port"}})
+	require.NoError(t, err)
+	require.NoError(t, res.Err, res.Output)
+	require.Contains(t, res.Output, "thought `shared-port` kept on `fix-flaky`\nthought `shared-port-2` kept on `fix-flaky`\nthought `nobody-named-one` kept on `fix-flaky`\n")
 }

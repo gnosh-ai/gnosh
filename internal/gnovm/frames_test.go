@@ -94,6 +94,12 @@ func TestFramesStory(t *testing.T) {
 	s.run("s1", "", `mem.Think("Port", "again")`)
 	s.run("s1", "", `mem.Think("", "again")`)
 	s.run("s1", "", `mem.Note("fix-flaky/reproduce", "it fails 3 of 20 runs")`)
+	s.run("s1", "", `mem.Think("the fix is to pick a free port in setup")`)
+	s.run("s1", "", `mem.Think("the fix is to pick a free port in setup")`)
+	s.run("s1", "", `mem.Think("a", "b", "c")`)
+	s.run("s1", "", `mem.Fact("the staging database is db-stg-7")`)
+	s.run("s1", "", `mem.Fact("the staging database is db-stg-7")`)
+	s.run("s1", "", `mem.Fact("cmd/test")`)
 	s.run("s1", "", `mem.Thought("nope")`)
 	s.run("s1", "", `mem.Frame()`)
 	// Closing the present frame by another spelling pops it; below the top

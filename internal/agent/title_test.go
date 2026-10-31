@@ -243,3 +243,21 @@ func TestRunTitlesAfterTheTurn(t *testing.T) {
 		return err == nil && s.Title == "Fix the flaky test"
 	}, 5*time.Second, 10*time.Millisecond, "titled by the model after it")
 }
+
+// memName makes a mem name of what the small model answers, however it
+// dresses it, and nothing of an answer that is not one.
+func TestMemName(t *testing.T) {
+	t.Parallel()
+	for answer, want := range map[string]string{
+		"shared-port":                         "shared-port",
+		"Shared Port\n\nbecause it is shared": "shared-port",
+		"`staging-db`.":                       "staging-db",
+		"the port is read from an env var":    "the-port-is-read",
+		"\"version lives in version.go\"":     "version-lives-in-version",
+		"2fa setup":                           "",
+		"":                                    "",
+		"---":                                 "",
+	} {
+		require.Equal(t, want, memName(answer), "%q", answer)
+	}
+}

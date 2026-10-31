@@ -611,16 +611,16 @@ type Todo struct {
 }
 
 type Frame struct { Id, Purpose, Result, State, Doing string; Todos []*Frame; Thoughts []Thought } // a Todo seen through the stack
-type Thought struct { Name, Text string; Frame *Frame }
-type Instantiation interface { Kind() string; Ref() string; Says() string } // *Frame, Thought and Fact
+type Thought struct { Text string; Frame *Frame } // Name() its name, given or made from the text
+type Namable interface { Name() string; Kind() string; Says() string } // *Frame, Thought and Fact
 
 func (m *Mem) Frame(id ...string) *Frame         // the present frame, or one by id; f.NextTodo() its first step to do
 func (m *Mem) NewFrame(name string, purpose ...string) *Frame
 func (m *Mem) PushFrame(f *Frame)                // enter it: from here the context will be cut
 func (m *Mem) PopFrame(result string)            // leave it done: everything since the push is removed
-func (m *Mem) Think(name, text string) Thought    // a labelled thought on the present frame
+func (m *Mem) Think(text string) Thought          // a thought on the present frame, named for you; or Think(name, text)
 func (m *Mem) Thought(name string) Thought
-func (m *Mem) Recall(words string) []Instantiation
+func (m *Mem) Recall(words string) []Namable
 func (m *Mem) PushThought(t Thought, why ...string)
 func (m *Mem) Goal(title string, name ...string) Goal // .Steps(...), .Wait(...), .Ask(...), .Note(...), .Start()
 func (m *Mem) Steps(name string, titles ...string)
@@ -631,7 +631,7 @@ func (m *Mem) Drop(name, why string)
 func (m *Mem) Reopen(name string)
 func (m *Mem) Note(name, note string)
 func (m *Mem) Wait(name, until string)
-func (m *Mem) Fact(name, fact string)
+func (m *Mem) Fact(name, fact string)            // or Fact(text), named for you
 func (m *Mem) Rule(name, rule string)
 func (m *Mem) Forget(name string)
 func (m *Mem) Redact(secret string)
@@ -644,9 +644,11 @@ func (m *Mem) Next(name string) string
 - **Names, not numbers.** Everything has a lowercase name, printed in
   backticks: a goal's comes from its title (`release-v2`) or is given, a
   step's is given ("tag: tag v2.0.0", `mem.NewFrame("tag", …)`) or made from
-  its title's words (`release-v2/bump-version`), a thought's is given to
-  `mem.Think` or made from its words, and a fact's or a rule's is any path
-  (`cmd/test`). A goal's name is never reused, and a wrong name is answered
+  its title's words (`release-v2/bump-version`), a thought's or a fact's is
+  given (`mem.Think("port", …)`, `mem.Fact("cmd/test", …)`) or made for the
+  agent when it gives only the text: Gnosh asks its small model for two to
+  four words, falls back to the text's own words, and adds -2, -3 when the
+  name is taken. A goal's name is never reused, and a wrong name is answered
   with what it should have been.
 - **The stack is gnosh's.** mem keeps the tree; which frames a session is
   in is derived from the session's own pushes and pops, kept with each

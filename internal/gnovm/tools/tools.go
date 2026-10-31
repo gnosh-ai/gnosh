@@ -17,7 +17,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -105,6 +109,11 @@ type RunResponseMetadata struct {
 	Frames []gnovm.MemFrame `json:"frames,omitempty"`
 }
 
+// NamerFunc names a text the agent keeps in mem without naming it
+// (mem.Think(text), mem.Fact(text)): a short lowercase dashed name, or ""
+// when it has none, when mem names it from the text's words.
+type NamerFunc func(ctx context.Context, sessionID, text string) string
+
 // RunOption sets up gnovm_run.
 type RunOption func(*runOptions)
 
@@ -113,8 +122,15 @@ type runOptions struct {
 	bound    func(ctx context.Context, sessionID string) string
 	stack    func(ctx context.Context, sessionID string) []string
 	onFrames MemFramesFunc
+	namer    NamerFunc
 	onErased func(ctx context.Context, sessionID string, e gnovm.MemErasure)
 	onRules  func(ctx context.Context, sessionID string, rules []gnovm.MemRule)
+}
+
+// Namer has gnovm_run ask f, before a call to mem, for a name for each text
+// the call keeps without naming it.
+func Namer(f NamerFunc) RunOption {
+	return func(o *runOptions) { o.namer = f }
 }
 
 // MemStack has gnovm_run ask f for the session's stack of frames in mem,
@@ -180,6 +196,16 @@ func NewRunTool(vms *gnovm.Lazy, project string, opts ...RunOption) fantasy.Agen
 			if o.stack != nil && p.Name == gnovm.MemVM {
 				req.Frames = o.stack(ctx, session)
 			}
+			if o.namer != nil && p.Name == gnovm.MemVM {
+				for _, text := range unnamedTexts(p.Code) {
+					if name := o.namer(ctx, session, text); name != "" {
+						if req.Names == nil {
+							req.Names = map[string]string{}
+						}
+						req.Names[text] = name
+					}
+				}
+			}
 			res, err := c.Run(ctx, req)
 			var died interface{ Error() string }
 			if err != nil && errors.As(err, &died) && strings.Contains(err.Error(), "worker ended before it replied") {
@@ -210,6 +236,42 @@ func NewRunTool(vms *gnovm.Lazy, project string, opts ...RunOption) fantasy.Agen
 			}
 			return fantasy.NewTextResponse(text), nil
 		})
+}
+
+// unnamedTexts is the texts code keeps in mem without naming them: the one
+// string literal of each mem.Think(…) and mem.Fact(…) called with a single
+// argument, in order, each once. Code that does not parse as statements
+// has none: mem names the texts from their words then.
+func unnamedTexts(code string) []string {
+	f, err := parser.ParseFile(token.NewFileSet(), "", "package p\nfunc _() {\n"+code+"\n}\n", parser.SkipObjectResolution)
+	if err != nil {
+		return nil
+	}
+	var texts []string
+	seen := map[string]bool{}
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || len(call.Args) != 1 {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "Think" && sel.Sel.Name != "Fact" {
+			return true
+		}
+		if id, ok := sel.X.(*ast.Ident); !ok || id.Name != "mem" {
+			return true
+		}
+		lit, ok := call.Args[0].(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		if text, err := strconv.Unquote(lit.Value); err == nil && text != "" && !seen[text] {
+			seen[text] = true
+			texts = append(texts, text)
+		}
+		return true
+	})
+	return texts
 }
 
 // gasParam turns a JSON number (a model writes 1e9) into a gas limit.

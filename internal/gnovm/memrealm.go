@@ -576,7 +576,7 @@ func showMem_(s string) {
 }
 
 // showRecall_ prints what mem.Recall found, one a line.
-func showRecall_(found []gnomem.Instantiation) {
+func showRecall_(found []gnomem.Namable) {
 	if len(found) == 0 {
 		print("nothing in mem is about that: mem.Show() lists what it holds, and mem.Find(\"words\") matches words\n")
 		return

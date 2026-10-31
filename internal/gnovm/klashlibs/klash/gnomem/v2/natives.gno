@@ -37,6 +37,11 @@ func pushed(id, purpose string)
 // result, holding thoughts thoughts.
 func popped(id, purpose, result string, thoughts int)
 
+// nameMade is the name gnosh made for text, when the agent gave none: its
+// small model's answer, or "" when there is none; the realm checks it and
+// falls back to the text's words.
+func nameMade(text string) string
+
 // record hands gnosh an Op of this call.
 func record(kind, name, field, old, new, by string)
 

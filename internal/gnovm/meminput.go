@@ -100,8 +100,8 @@ func declaresFunc(decls string) bool {
 var memReads = map[string]bool{"Show": true, "Find": true, "Next": true, "JSON": true, "Check": true, "String": true}
 
 // memShown are mem's calls that return a value with a String of its own to
-// show: a Frame, a Thought; and Recall, whose Instantiations are shown one
-// a line.
+// show: a Frame, a Thought; and Recall, whose Namables are shown one a
+// line.
 var memShown = map[string]string{"Frame": ".String()", "Thought": ".String()"}
 
 // memShowExpr is the statement a mem input's trailing expression becomes:

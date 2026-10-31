@@ -67,6 +67,10 @@ func (m *mockSessionAgent) GenerateSessionName(context.Context, string) (string,
 	return "", nil
 }
 
+func (m *mockSessionAgent) NameFor(context.Context, string, string) (string, error) {
+	return "", nil
+}
+
 func (m *mockSessionAgent) ListSettledMessages(context.Context, string) ([]message.Message, error) {
 	return nil, nil
 }

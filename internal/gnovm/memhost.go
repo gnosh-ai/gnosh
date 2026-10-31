@@ -76,6 +76,9 @@ type memRequest struct {
 	Goal string
 	// Frames is the session's stack of frames, bottom to top.
 	Frames []string
+	// Names are the names gnosh made for the texts the input keeps without
+	// naming them, by text (RunRequest.Names).
+	Names map[string]string
 }
 
 // memResult is what an input to mem did.
@@ -165,7 +168,7 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 	case q.Session != "":
 		who, caller = "agent", q.Session
 	}
-	call, err := r.call(q.Code, memContext{caller: caller, bound: q.Goal, stack: q.Frames, find: h.finder(ctx, x, j), holding: h.holding(j), limit: memLimit{ctx: ctx}})
+	call, err := r.call(q.Code, memContext{caller: caller, bound: q.Goal, stack: q.Frames, names: q.Names, find: h.finder(ctx, x, j), holding: h.holding(j), limit: memLimit{ctx: ctx}})
 	res := memResult{Output: call.Output, Ops: call.Ops, Frames: call.Frames, Notes: notes, Instance: j.instance}
 	if err != nil || call.batch == nil {
 		return res, err
@@ -795,7 +798,7 @@ func memRules(ops []memOp) []MemRule {
 // runMem runs a gnovm_run call against the project's mem.
 func (h *Host) runMem(ctx context.Context, req RunRequest) (*RunResult, error) {
 	start := time.Now()
-	res, err := h.mem(req.Project).call(ctx, memRequest{Code: req.Code, Session: req.Session, Req: req.Req, Goal: req.Goal, Frames: req.Frames})
+	res, err := h.mem(req.Project).call(ctx, memRequest{Code: req.Code, Session: req.Session, Req: req.Req, Goal: req.Goal, Frames: req.Frames, Names: req.Names})
 	out := &RunResult{VM: MemVM, Output: res.Output, Journaled: res.Seq > 0, Seq: res.Seq, Notes: res.Notes, Wall: time.Since(start), MemGoals: res.Goals, Erased: res.Erased, Frames: res.Frames}
 	if res.Seq > 0 {
 		out.Rules = memRules(res.Ops)

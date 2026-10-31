@@ -45,6 +45,10 @@ type memContext struct {
 	// nilPush is how many events the call had made when it last pushed
 	// nil; -1 for never. A pop that a nil push followed gets no hint.
 	nilPush *int
+	// names are the names gnosh made for the texts the input keeps without
+	// naming them (mem.Think(text), mem.Fact(text)), by text; the realm
+	// asks for them with nameMade().
+	names map[string]string
 	// limit bounds the call (memrealm.go).
 	limit memLimit
 	// find and holding answer from mem's index and journal; nil finds
@@ -68,7 +72,7 @@ type memOp struct {
 var memNativeGas = gno.NativeGasInfo{Base: 1000, SlopeIdx: -1, SlopeKind: gno.SizeFlat}
 
 func init() {
-	for _, name := range []gno.Name{"caller", "today", "bound", "frames", "pushed", "popped", "record", "pending", "find", "holding", "quote", "jsonString"} {
+	for _, name := range []gno.Name{"caller", "today", "bound", "frames", "pushed", "popped", "nameMade", "record", "pending", "find", "holding", "quote", "jsonString"} {
 		info := memNativeGas
 		gno.RegisterNativeGas(memLibPath, name, &info)
 	}
@@ -107,6 +111,11 @@ func memNative(name gno.Name) func(*gno.Machine) {
 			ctx := memCallContext(m, "popped")
 			thoughts := m.LastBlock().GetPointerTo(nil, gno.NewValuePathBlock(1, 3, "")).TV.GetInt()
 			*ctx.frames = append(*ctx.frames, MemFrame{Kind: "pop", Id: memArg(m, 0), Purpose: memArg(m, 1), Result: memArg(m, 2), Thoughts: int(thoughts), Session: ctx.caller})
+		}
+	case "nameMade":
+		return func(m *gno.Machine) {
+			ctx := memCallContext(m, "nameMade")
+			memPush(m, ctx.names[memArg(m, 0)])
 		}
 	case "today":
 		return func(m *gno.Machine) {

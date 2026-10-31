@@ -548,7 +548,7 @@ func TestHostRunsMem(t *testing.T) {
 	res = call("mem.Done(\"add-median-stats/implement-median\", \"done\"),\nmem.Done(\"add-median-stats/add-tests\", \"done\")")
 	require.ErrorContains(t, res.Err, "(mem's calls go one per line, with no comma after them)")
 	res = call(`mem.Fact("release/qa-signoff")`)
-	require.EqualError(t, res.Err, "mem.Fact takes 2 arguments, not 1: mem.Fact(name, text) sets a fact, and mem.Show(name) shows one")
+	require.EqualError(t, res.Err, "`release/qa-signoff` is a name, not a fact: mem.Fact(name, text) sets a fact, and mem.Show(name) shows one")
 	// From the release-waits-for-signoff scenario on a local Qwen: a step
 	// marked done on the plan, a question given a name, a name made from a
 	// title by hand. What a call takes, and what a Goal has, are read from

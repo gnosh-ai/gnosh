@@ -38,36 +38,36 @@ type Frame struct {
 }
 
 // Thought is a labelled line kept on a frame, and the step it was promoted
-// into, if any.
+// into, if any. Its name is given to Think, or made from its text.
 type Thought struct {
-	Name  string // its label, unique among the frame's thoughts
 	Text  string
 	Frame *Frame // the step it was promoted into; nil until then
+	name  string // its label, unique among the frame's thoughts
 	frame string // the id of the frame it is on
 	m     *Mem
 }
 
 // Fact is a fact as Recall returns it.
 type Fact struct {
-	Name string
 	Body string
+	name string
 }
 
-// Instantiation is what a Frame, a Thought and a Fact have in common: a
-// concrete piece of memory, which Recall returns. *Frame, Thought and Fact
-// implement it; a type switch tells them apart.
-type Instantiation interface {
+// Namable is what a Frame, a Thought and a Fact have in common: a piece
+// of memory under a name, given or made, which Recall returns. *Frame,
+// Thought and Fact implement it; a type switch tells them apart.
+type Namable interface {
+	Name() string   // how a call names it: a frame's Id, a thought's name, a fact's name
 	Kind() string   // "frame", "thought" or "fact"
-	Ref() string    // how a call names it: a frame's Id, a thought's frame and name, a fact's name
 	Says() string   // a frame's purpose, a thought's text, a fact's body
 	String() string // how it is shown
 }
 
-// maxRecall is how many Instantiations Recall returns at most.
+// maxRecall is how many Namables Recall returns at most.
 const maxRecall = 5
 
+func (f *Frame) Name() string { return f.Id }
 func (f *Frame) Kind() string { return "frame" }
-func (f *Frame) Ref() string  { return f.Id }
 func (f *Frame) Says() string { return f.Purpose }
 
 // String shows the frame as mem.Show would: the root as the whole outline.
@@ -93,9 +93,12 @@ func (f *Frame) NextTodo() *Frame {
 	return f.m.nextTodo(f.Id)
 }
 
+func (t Thought) Name() string { return t.name }
 func (t Thought) Kind() string { return "thought" }
-func (t Thought) Ref() string  { return t.frame + "#" + t.Name }
 func (t Thought) Says() string { return t.Text }
+
+// Ref is the thought's address: its frame, "#", its name.
+func (t Thought) Ref() string { return t.frame + "#" + t.name }
 
 func (t Thought) String() string {
 	s := "thought `" + t.Ref() + "`: " + t.Text
@@ -105,10 +108,10 @@ func (t Thought) String() string {
 	return s + "\n"
 }
 
+func (f Fact) Name() string   { return f.name }
 func (f Fact) Kind() string   { return "fact" }
-func (f Fact) Ref() string    { return f.Name }
 func (f Fact) Says() string   { return f.Body }
-func (f Fact) String() string { return "fact `" + f.Name + "` = " + f.Body + "\n" }
+func (f Fact) String() string { return "fact `" + f.name + "` = " + f.Body + "\n" }
 
 // Frame is the present frame: the top of this session's stack, or, with
 // the stack empty, the root: the goal the user's /goal bound the session
@@ -175,7 +178,7 @@ func (m *Mem) shallow(id string) *Frame {
 
 // thoughtOf is thought n of frame id, as a Thought.
 func (m *Mem) thoughtOf(id string, n note) Thought {
-	t := Thought{Name: n.Name, Text: n.Text, frame: id, m: m}
+	t := Thought{name: n.Name, Text: n.Text, frame: id, m: m}
 	if n.Step != "" {
 		if s := m.get(n.Step); s != nil && s.Status != "forgotten" {
 			t.Frame = m.shallow(n.Step)
@@ -628,25 +631,49 @@ func (m *Mem) NextHint(id string) string {
 	return "next: mem.Done(" + quote(parent) + ", \"…\") once it holds"
 }
 
-// Think keeps a labelled thought on the present frame and returns it: one
-// journal line, no cut, nothing on the server. Thoughts are what a frame
-// keeps besides its result, and the one way anything a frame learned or
-// was told outlives its pop: they stay in mem under the frame, popped or
-// not. At the unbound root there is no frame to think on.
-func (m *Mem) Think(name, thought string) Thought {
+// Think keeps a thought on the present frame and returns it: one journal
+// line, no cut, nothing on the server. Think(text) names it for you, from
+// the text (gnosh's small model, or its words), with -2, -3 when the frame
+// has that name; Think(name, text) names it yourself. Thoughts are what a
+// frame keeps besides its result, and the one way anything a frame learned
+// or was told outlives its pop: they stay in mem under the frame, popped
+// or not. At the unbound root there is no frame to think on.
+func (m *Mem) Think(args ...string) Thought {
 	p := m.present()
 	if p == "" {
-		panic("you are at the root, in no frame: mem.Fact(\"…\", \"…\") keeps something to remember")
+		panic("you are at the root, in no frame: mem.Fact(\"…\") keeps something to remember")
 	}
 	it := m.item(p)
-	name = m.thoughtName(p, it, name)
-	thought = clip(text("the thought", thought), maxText)
-	if thought == "" {
-		panic("a thought needs words: mem.Think(" + quote(name) + ", \"what you found\")")
+	var name, thought string
+	switch len(args) {
+	case 1:
+		thought = clip(text("the thought", args[0]), maxText)
+		if thought == "" {
+			panic("a thought needs words: mem.Think(\"what you found\")")
+		}
+		name = freeThoughtName(it, m.madeName(thought, "note"))
+	case 2:
+		name = m.thoughtName(p, it, args[0])
+		thought = clip(text("the thought", args[1]), maxText)
+		if thought == "" {
+			panic("a thought needs words: mem.Think(" + quote(name) + ", \"what you found\")")
+		}
+	default:
+		panic("Think takes a thought, or a name and a thought: mem.Think(\"port-env\", \"the port is read from an env var\")")
 	}
 	m.do(Op{Kind: "note", Name: p + "#" + name, New: thought})
 	println("thought `" + name + "` kept on `" + p + "`")
-	return Thought{Name: name, Text: thought, frame: p, m: m}
+	return Thought{name: name, Text: thought, frame: p, m: m}
+}
+
+// madeName is the name mem makes for text when the agent gives none:
+// gnosh's small model's, when it answered one that is a name, else the
+// text's words (nameOf, fallback for a text with none).
+func (m *Mem) madeName(text, fallback string) string {
+	if n := nameMade(text); n != "" && validName(n) && !strings.Contains(n, "/") && len(n) <= maxGoalName {
+		return n
+	}
+	return nameOf(text, fallback)
 }
 
 // thoughtName checks a new thought's name on frame id.
@@ -709,8 +736,8 @@ func (m *Mem) framesDown() []string {
 // Recall is what in mem is about words, by meaning where gnosh has an
 // embedding server and by the words otherwise: frames by their purpose,
 // thoughts by their text and facts by their body, a handful at most, each
-// an Instantiation. A promoted thought is one entry, the thought.
-func (m *Mem) Recall(words string) []Instantiation {
+// a Namable. A promoted thought is one entry, the thought.
+func (m *Mem) Recall(words string) []Namable {
 	words = text("the words", words)
 	if words == "" {
 		panic("Recall needs words: mem.Recall(\"shared port\")")
@@ -726,7 +753,7 @@ func (m *Mem) Recall(words string) []Instantiation {
 			}
 		}
 	}
-	var out []Instantiation
+	var out []Namable
 	for i, n := range names {
 		if len(out) == maxRecall {
 			break
@@ -745,7 +772,7 @@ func (m *Mem) Recall(words string) []Instantiation {
 			}
 		case "fact":
 			if f := m.getFact(n); f != nil {
-				out = append(out, Fact{Name: n, Body: f.Text})
+				out = append(out, Fact{name: n, Body: f.Text})
 			}
 		}
 	}
@@ -773,9 +800,9 @@ func (m *Mem) PushThought(t Thought, why ...string) {
 	if it == nil || it.Status == "forgotten" {
 		panic(m.noFrame(frame))
 	}
-	n := noteNamed(it, t.Name)
+	n := noteNamed(it, t.name)
 	if n == nil {
-		panic("`" + frame + "` has no thought named `" + t.Name + "`")
+		panic("`" + frame + "` has no thought named `" + t.name + "`")
 	}
 	if n.Step != "" {
 		if s := m.get(n.Step); s != nil && s.Status != "forgotten" {
@@ -793,15 +820,15 @@ func (m *Mem) PushThought(t Thought, why ...string) {
 		if it.Status != "" {
 			why = "is " + it.Status
 		}
-		panic("`" + frame + "` " + why + ", and you are at the root, in no frame: enter a frame to dive into `" + t.Name + "` from")
+		panic("`" + frame + "` " + why + ", and you are at the root, in no frame: enter a frame to dive into `" + t.name + "` from")
 	}
 	purpose := ""
 	if len(why) == 1 {
 		purpose = clip(text("why", why[0]), maxTitle)
 	}
-	step := m.frameName(parent, t.Name, purpose)
+	step := m.frameName(parent, t.name, purpose)
 	m.addStep(parent, step, purpose)
-	m.do(Op{Kind: "set", Name: frame + "#" + t.Name, Field: "frame", Old: n.Step, New: step})
-	println("thought `" + t.Name + "` is now the step `" + step + "`")
+	m.do(Op{Kind: "set", Name: frame + "#" + t.name, Field: "frame", Old: n.Step, New: step})
+	println("thought `" + t.name + "` is now the step `" + step + "`")
 	m.push(step, n.Text)
 }

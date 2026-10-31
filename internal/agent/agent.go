@@ -281,6 +281,7 @@ type SessionAgent interface {
 	Model() Model
 	GenerateTitle(ctx context.Context, sessionID, userPrompt string)
 	GenerateSessionName(ctx context.Context, sessionID string) (string, error)
+	NameFor(ctx context.Context, sessionID, text string) (string, error)
 }
 
 type Model struct {
@@ -3164,6 +3165,72 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID, userPrompt,
 // the provider has a switch, and maxTokens for the answer (a reasoning
 // model's whole default instead, as it may think anyway). what names it
 // in the log.
+// NameFor is the name the small model gives a text the agent keeps in mem
+// without naming it: lowercase words joined by dashes, at most four and 32
+// bytes, as mem names things; "" with an error when the model gave none.
+func (a *sessionAgent) NameFor(ctx context.Context, sessionID, text string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	prompt := fmt.Sprintf("Name this note in two to four lowercase words joined by dashes, like port-env or staging-db; answer with the name alone:\n\n%s\n <think>\n\n</think>", text)
+	resp, _, err := a.askForName(ctx, sessionID, "name", namePrompt, prompt, 24)
+	if err != nil {
+		return "", err
+	}
+	answer := thinkTagRegex.ReplaceAllString(resp.Response.Content.Text(), "")
+	answer = orphanThinkTagRegex.ReplaceAllString(answer, "")
+	name := memName(answer)
+	if name == "" {
+		return "", errors.New("the small model answered with nothing that is a name")
+	}
+	return name, nil
+}
+
+// namePrompt is the system prompt for a name.
+var namePrompt = []byte("You name short notes for an index. Answer with the name only: two to four lowercase words joined by dashes, no quotes, no punctuation, no explanation.")
+
+// memName is answer as a mem name: lowercase words of letters and digits
+// joined by dashes, at most four words and 32 bytes, from the first line;
+// "" when the answer has none.
+func memName(answer string) string {
+	line := strings.TrimSpace(answer)
+	if i := strings.IndexByte(line, '\n'); i >= 0 {
+		line = line[:i]
+	}
+	line = strings.Trim(line, "`\"' .:")
+	var words []string
+	var w strings.Builder
+	flush := func() {
+		if w.Len() > 0 {
+			words = append(words, w.String())
+			w.Reset()
+		}
+	}
+	for _, r := range strings.ToLower(line) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			w.WriteRune(r)
+		default:
+			flush()
+		}
+	}
+	flush()
+	name := ""
+	for i, word := range words {
+		next := word
+		if name != "" {
+			next = name + "-" + word
+		}
+		if i == 4 || len(next) > 32 {
+			break
+		}
+		name = next
+	}
+	if name == "" || name[0] < 'a' || name[0] > 'z' {
+		return ""
+	}
+	return name
+}
+
 func (a *sessionAgent) askForName(ctx context.Context, sessionID, what string, systemPrompt []byte, prompt string, maxTokens int64) (*fantasy.AgentResult, Model, error) {
 	systemPromptPrefix := a.systemPromptPrefix.Get()
 	call := fantasy.AgentStreamCall{

@@ -1308,7 +1308,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	if c.gnovms != nil {
 		allTools = append(allTools,
 			wrap(gnovmtools.NewRunTool(c.gnovms, c.cfg.WorkingDir(), gnovmtools.OnMemGoals(c.memGoals), gnovmtools.BoundGoal(c.goals.boundName), gnovmtools.OnMemErased(c.memErased), gnovmtools.OnMemRules(c.memRules),
-				gnovmtools.MemStack(c.frames.stack), gnovmtools.OnMemFrames(c.frames.events))),
+				gnovmtools.MemStack(c.frames.stack), gnovmtools.OnMemFrames(c.frames.events), gnovmtools.Namer(c.nameFor))),
 			wrap(gnovmtools.NewNewTool(c.gnovms, c.cfg.WorkingDir())),
 			wrap(gnovmtools.NewListTool(c.gnovms, c.cfg.WorkingDir())),
 			wrap(gnovmtools.NewDropTool(c.gnovms, c.cfg.WorkingDir(), c.permissions)),
@@ -2056,6 +2056,22 @@ func (c *coordinator) ContextUsage(ctx context.Context, sessionID string) (Conte
 		messages:     msgs,
 		compactAt:    at,
 	}), nil
+}
+
+// nameFor is the name the small model gives a text the agent keeps in mem
+// without naming it (gnovmtools.Namer); "" when there is no agent or no
+// answer, and mem names it from the words.
+func (c *coordinator) nameFor(ctx context.Context, sessionID, text string) string {
+	agent := c.currentAgent()
+	if agent == nil {
+		return ""
+	}
+	name, err := agent.NameFor(ctx, sessionID, text)
+	if err != nil {
+		slog.Debug("No name from the small model; mem names it from the words", "error", err)
+		return ""
+	}
+	return name
 }
 
 // GenerateTitle generates a session title using the current agent.

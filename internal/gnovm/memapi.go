@@ -35,7 +35,7 @@ var memAPI = readMemAPI()
 // memNotCalls are exported for gnosh, not for the model: Bind is /goal's,
 // Apply the journal's, Check the tests', Has gnosh mem's, NextHint the
 // receipt's, and String prints.
-var memNotCalls = map[string]bool{"Bind": true, "Apply": true, "Check": true, "Has": true, "NextHint": true, "String": true}
+var memNotCalls = map[string]bool{"Bind": true, "Apply": true, "Check": true, "Has": true, "NextHint": true, "String": true, "Name": true, "Kind": true, "Says": true, "Ref": true, "NextTodo": true}
 
 func readMemAPI() memCalls {
 	var api memCalls
