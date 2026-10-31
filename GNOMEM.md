@@ -188,13 +188,16 @@ facts with its first prompt. So in a real run the second session answered a
 question put in other words without a single call to mem, in three seconds:
 "Push with `make ship ENV=prod` (`cmd/ship`). **Lin Wei** has to check it
 first — she does QA sign-off on every release." These are the calls the first
-session made, and what each showed it:
+session made, and what each showed it; the last is how an older fact, no
+longer among the newest, is found by its words:
 
 ```go mem
 mem.Fact("cmd/ship", "make ship ENV=prod")
 mem.Fact("qa", "Lin Wei does QA sign-off on every release")
 // fact `cmd/ship` is new
 // fact `qa` is new
+mem.Find("sign-off")
+// fact `qa` = Lin Wei does QA sign-off on every release
 ```
 
 A fact you only mention is kept as well, beside the work you asked for:
@@ -211,20 +214,9 @@ In a real run the agent fixed the typo and kept
 its words and answered "**staging2.acme.test** — per `server/staging` in mem,
 it moved there the week of 2026-10-26."
 
-An older fact, no longer among the newest, is found by its words:
-
-```go mem
-mem.Fact("cmd/ship", "make ship ENV=prod")
-mem.Fact("qa", "Lin Wei does QA sign-off on every release")
-// fact `cmd/ship` is new
-// fact `qa` is new
-mem.Find("sign-off")
-// fact `qa` = Lin Wei does QA sign-off on every release
-```
-
 A fact that changes is set again under the name it already has, rather than
 added a second time to disagree with the first. What the agent finds while it
-works is kept on the item it was working on, as notes, and a question for you
+works is kept on the item it was working on, as thoughts, and a question for you
 is a step of its own (`mem.Ask`), which holds its goal until you answer.
 
 ### Found by meaning, if you want it
