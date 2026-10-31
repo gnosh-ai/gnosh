@@ -400,7 +400,17 @@ func (m *Mem) nothingToPush() string {
 			return true
 		})
 		if newest != "" {
-			return "nothing to push at the root: " + ref(newest, m.get(newest).Title) + " is open: mem.PushFrame(mem.Frame(" + quote(newest) + ")) enters it; or make a goal: mem.NewFrame(\"…\", \"…\")."
+			g := m.get(newest)
+			if g.Doing != "" && g.Doing != caller() {
+				// A goal another session holds, ended or not, is not entered;
+				// its free steps are, by id.
+				msg := "nothing to push at the root: " + ref(newest, g.Title) + " is held by " + who(g.Doing)
+				if nt := m.nextTodo(newest); nt != nil {
+					return msg + "; its step " + ref(nt.Id, nt.Purpose) + " is free: mem.PushFrame(mem.Frame(" + quote(nt.Id) + ")) enters it; or make a goal: mem.NewFrame(\"…\", \"…\")."
+				}
+				return msg + ", and nothing in it can be done now: make a goal, mem.NewFrame(\"…\", \"…\")."
+			}
+			return "nothing to push at the root: " + ref(newest, g.Title) + " is open: mem.PushFrame(mem.Frame(" + quote(newest) + ")) enters it; or make a goal: mem.NewFrame(\"…\", \"…\")."
 		}
 		return "nothing to push at the root: no goal is open: make one, mem.NewFrame(\"…\", \"…\")."
 	}
@@ -432,9 +442,15 @@ func (m *Mem) holdsOf(id string) string {
 	return joinList(parts)
 }
 
-// heldText refuses a call on a frame another session holds.
+// heldText refuses a call on a frame another session holds; when the frame
+// has a step this session could enter, it says so, since a goal another
+// session holds, ended or not, does not hold its free steps.
 func (m *Mem) heldText(id string, it *Todo) string {
-	return "`" + id + "` is held by " + who(it.Doing) + ": only it can pop, close or drop it (resume that session if it has ended)"
+	msg := "`" + id + "` is held by " + who(it.Doing) + ": only it can pop, close or drop it (resume that session if it has ended)"
+	if nt := m.nextTodo(id); nt != nil {
+		msg += "; its step " + ref(nt.Id, nt.Purpose) + " is free: mem.PushFrame(mem.Frame(" + quote(nt.Id) + ")) enters it"
+	}
+	return msg
 }
 
 // refuseHeld refuses to close, drop, forget or start item id while another

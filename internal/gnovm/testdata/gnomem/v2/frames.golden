@@ -164,10 +164,14 @@ error: `fix-flaky/rename-port-flag` is held by session s2: only it can pop, clos
 error: `fix-flaky` is held by session s1: only it can pop, close or drop it (resume that session if it has ended)
 > s3: mem.PushFrame(mem.Frame("fix-flaky"))
 error: `fix-flaky` is held by session s1: only it can pop, close or drop it (resume that session if it has ended)
+> s3: mem.PushFrame(mem.Frame().NextTodo())
+nothing to push at the root: `fix-flaky` "fix the flaky test" is held by session s1, and nothing in it can be done now: make a goal, mem.NewFrame("…", "…").
 > s2: mem.PopFrame("the flag is --port now")
 done `fix-flaky/rename-port-flag` "rename the port flag" → the flag is --port now
 next: mem.Done("fix-flaky", "…") once it holds
   [pop `fix-flaky/rename-port-flag` → the flag is --port now]
+> s3: mem.PushFrame(mem.Frame().NextTodo())
+nothing to push at the root: `fix-flaky` "fix the flaky test" is held by session s1, and nothing in it can be done now: make a goal, mem.NewFrame("…", "…").
 > s1: mem.PopFrame("the suite passes 20 of 20 with the free port")
 done `fix-flaky` "fix the flaky test" → the suite passes 20 of 20 with the free port
   [pop `fix-flaky` → the suite passes 20 of 20 with the free port]
@@ -185,7 +189,7 @@ nothing to push at the root: `side` "a side quest made at the root" is open: mem
 > s1: println(mem.Show("fix-flaky/rerun"))
 [-] `fix-flaky/rerun` "rerun the suite 20 times" (a step of `fix-flaky` "fix the flaky test") (2/2 done)
   dropped → twenty runs were enough
-  made by this session, changed 15m ago
+  made by this session, changed 17m ago
   thought `flake-rate`: 3 of 20 runs failed before the fix (now the step `fix-flaky/rerun/flake-rate`)
   [x] `fix-flaky/rerun/flake-rate` "measure it again after the fix" → 0 of 50 after the fix
   [x] `fix-flaky/rerun/twenty` "twenty runs" → 20 of 20 passed
