@@ -200,7 +200,7 @@ mem.Pop("Median in stats.go:17; tests in stats_test.go; go test ./... → ok")
 
 The agent looked at mem, planned the goal with the condition as a step of its
 own, entered the goal and its first step as frames, and popped the step with
-what came of it; the fifth call is a look at mem midway. Each pop removes the
+what came of it; the `mem.Show()` midway is a look at where it stands. Each pop removes the
 step's work from the model's context and keeps its result; the goal is popped
 last, with the evidence that it holds. A goal popped while one of its steps is
 open is refused, naming the step, and nothing from the call is kept.
@@ -215,9 +215,9 @@ The facts, across their three sessions:
 
 ```go mem
 mem.Fact("staging-db", "The staging database is db-stg-7.")
-mem.Fact("on-call", "The on-call engineer is Sam Okafor.")
+mem.Fact("The on-call engineer is Sam Okafor.")
 // fact `staging-db` is new
-// fact `on-call` is new
+// fact `on-call-engineer-sam-okafor` is new
 mem.Fact("staging-db", "The staging database is db-stg-9.")
 // fact `staging-db` changed (was "The staging database is db-stg-7.")
 ```
@@ -225,7 +225,9 @@ mem.Fact("staging-db", "The staging database is db-stg-9.")
 Setting a fact again replaces it, so mem holds one staging database, the
 current one. Everything in mem has a name, printed in backticks, which the
 agent types back exactly: a goal's name comes from its title, its steps are
-named under it, and a fact's name is any path the agent gives it. A new
+named under it, and a fact's name is any path the agent gives it, or is made
+when it gives only the text: by the session's small model, or from the words
+as in this replay. A new
 session is told, with its first prompt, what mem holds: the rules you gave,
 what is due, what is open and next, and the newest facts.
 

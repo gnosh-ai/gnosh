@@ -115,7 +115,7 @@ func goalName(title string) string {
 // nameOf makes a name from text, as goalName does; fallback names it when
 // the text has no words to use ("goal", "step", "note").
 func nameOf(title, fallback string) string {
-	all := words(title)
+	all := nameWords(title)
 	var kept []string
 	for _, w := range all {
 		if !filler[w] && !keyLike(w) {
@@ -147,6 +147,42 @@ func nameOf(title, fallback string) string {
 		return fallback + "-" + name
 	}
 	return name
+}
+
+// nameWords are a title's words for a name: words(), except that a
+// hyphenated word of letters ("on-call", "re-plan") stays one word, so its
+// filler half is not dropped and "the on-call engineer" names on-call-engineer.
+func nameWords(title string) []string {
+	var out []string
+	for _, tok := range strings.Fields(title) {
+		if c := compound(tok); c != "" {
+			out = append(out, c)
+			continue
+		}
+		out = append(out, words(tok)...)
+	}
+	return out
+}
+
+// compound is tok lowercased when it is letters joined by hyphens, any
+// punctuation around it dropped, and "" otherwise.
+func compound(tok string) string {
+	tok = strings.ToLower(strings.Trim(tok, "()[]{}<>\"'`.,;:!?"))
+	parts := strings.Split(tok, "-")
+	if len(parts) < 2 {
+		return ""
+	}
+	for _, p := range parts {
+		if p == "" {
+			return ""
+		}
+		for _, r := range p {
+			if r < 'a' || r > 'z' {
+				return ""
+			}
+		}
+	}
+	return strings.Join(parts, "-")
 }
 
 // keyLike reports whether w looks like a key or a hash: over 20 bytes, or
