@@ -339,6 +339,7 @@ func (m *Mem) addStep(parent, id, title string) {
 // says what to do instead.
 func (m *Mem) PushFrame(f *Frame) {
 	if f == nil {
+		pushed("", "")
 		println(m.nothingToPush())
 		return
 	}

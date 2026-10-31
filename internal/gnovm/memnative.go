@@ -42,6 +42,9 @@ type memContext struct {
 	// stands.
 	stack  []string
 	frames *[]MemFrame
+	// nilPush is how many events the call had made when it last pushed
+	// nil; -1 for never. A pop that a nil push followed gets no hint.
+	nilPush *int
 	// limit bounds the call (memrealm.go).
 	limit memLimit
 	// find and holding answer from mem's index and journal; nil finds
@@ -93,6 +96,10 @@ func memNative(name gno.Name) func(*gno.Machine) {
 	case "pushed":
 		return func(m *gno.Machine) {
 			ctx := memCallContext(m, "pushed")
+			if id := memArg(m, 0); id == "" {
+				*ctx.nilPush = len(*ctx.frames)
+				return
+			}
 			*ctx.frames = append(*ctx.frames, MemFrame{Kind: "push", Id: memArg(m, 0), Purpose: memArg(m, 1), Session: ctx.caller})
 		}
 	case "popped":
@@ -185,7 +192,7 @@ func memPush[T any](m *gno.Machine, v T) {
 
 func memCallContext(m *gno.Machine, native string) memContext {
 	ctx, ok := m.Context.(memContext)
-	if !ok || ctx.ops == nil || ctx.frames == nil || m.Realm == nil || m.Realm.Path != memRealmPath {
+	if !ok || ctx.ops == nil || ctx.frames == nil || ctx.nilPush == nil || m.Realm == nil || m.Realm.Path != memRealmPath {
 		panic(native + ": only mem's own Mem, in a mem call, may change mem")
 	}
 	return ctx

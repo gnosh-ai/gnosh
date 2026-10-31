@@ -13,6 +13,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"github.com/charmbracelet/crush/internal/gnovm"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -154,7 +155,21 @@ func TestDocExamplesRun(t *testing.T) {
 		for _, block := range blocks {
 			t.Run(fmt.Sprintf("%s:%d", doc, block[0].line), func(t *testing.T) {
 				l := newLazy(t)
-				run := NewRunTool(l, "/proj")
+				// The agent's stack of frames, as the agent derives it from
+				// its rows: the block's pushes without their pops.
+				var stack []string
+				run := NewRunTool(l, "/proj",
+					MemStack(func(context.Context, string) []string { return stack }),
+					OnMemFrames(func(_ context.Context, _, _ string, events []gnovm.MemFrame) string {
+						for _, e := range events {
+							if e.Kind == "push" {
+								stack = append(stack, e.Id)
+							} else if n := len(stack); n > 0 && stack[n-1] == e.Id {
+								stack = stack[:n-1]
+							}
+						}
+						return ""
+					}))
 				titles := docTitles(block)
 				for _, c := range block {
 					switch c.kind {

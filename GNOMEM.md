@@ -11,19 +11,28 @@ Each project has one mem, shared by its worktrees and its sessions
 ([klash/gnomem/v2](internal/gnovm/klashlibs/klash/gnomem/v2/gnomem.gno)):
 
 ```
-gnovm_run {"name": "mem", "code": "mem.Goal(\"release v2\").Steps(\"bump the version\", \"tag v2.0.0\", \"CI is green\")"}
+gnovm_run {"name": "mem", "code": "mem.Goal(\"release v2\").Steps(\"bump the version\", \"tag: tag v2.0.0\", \"CI is green\")"}
   added goal `release-v2` "release v2"
-  added `release-v2/1` "bump the version", `release-v2/2` "tag v2.0.0", `release-v2/3` "CI is green"; next: `release-v2/1` "bump the version"
-gnovm_run {"name": "mem", "code": "mem.Done(\"release-v2/1\", \"now 2.0.0\")"}
-  done `release-v2/1` "bump the version" → now 2.0.0; next: `release-v2/2` "tag v2.0.0"
+  added `release-v2/bump-version` "bump the version", `release-v2/tag` "tag v2.0.0", `release-v2/ci-green` "CI is green"; next: `release-v2/bump-version` "bump the version"
+gnovm_run {"name": "mem", "code": "mem.PushFrame(mem.Frame(\"release-v2\"))\nmem.PushFrame(mem.Frame().NextTodo())"}
+  in `release-v2` "release v2": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  in `release-v2/bump-version` "bump the version": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+gnovm_run {"name": "mem", "code": "mem.PopFrame(\"now 2.0.0\")\nmem.PushFrame(mem.Frame().NextTodo())"}
+  done `release-v2/bump-version` "bump the version" → now 2.0.0
+  in `release-v2/tag` "tag v2.0.0": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
 gnovm_run {"name": "mem", "code": "mem.Show()"}
   mem: 1 goal open
   goals:
-    [ ] `release-v2` "release v2" (1/3 done · this session · just now)
-      [x] `release-v2/1` "bump the version" → now 2.0.0
-      [ ] `release-v2/2` "tag v2.0.0"  ← next
-      [ ] `release-v2/3` "CI is green"
+    [ ] `release-v2` "release v2" (1/3 done · this session · just now · held by this session, just now)
+      [x] `release-v2/bump-version` "bump the version" → now 2.0.0
+      [ ] `release-v2/tag` "tag v2.0.0" (held by this session, just now)  ← next
+      [ ] `release-v2/ci-green` "CI is green"
 ```
+
+The step the agent is in is a *frame*: when it pops the frame with its
+result, gnosh removes everything since the push from the model's context,
+and the result stays. A long task is done one frame at a time, the context
+never filling with finished work ([Frames](#frames)).
 
 ## Why this matters
 
@@ -59,27 +68,33 @@ step and adds the one that replaces it, so mem shows the plan as it now
 stands, and why it changed:
 
 ```
-gnovm_run {"name": "mem", "code": "mem.Goal(\"build greet\").Steps(\"go.mod for module greet\", \"greet.go with Hello\", \"greet_test.go\", \"make test runs the tests\")"}
+gnovm_run {"name": "mem", "code": "mem.Goal(\"build greet\").Steps(\"go-mod: go.mod for module greet\", \"hello: greet.go with Hello\", \"test: greet_test.go\", \"make-test: make test runs the tests\")"}
   added goal `build-greet` "build greet"
-  added `build-greet/1` "go.mod for module greet", `build-greet/2` "greet.go with Hello", `build-greet/3` "greet_test.go", `build-greet/4` "make test runs the tests"; next: `build-greet/1` "go.mod for module greet"
-gnovm_run {"name": "mem", "code": "mem.Done(\"build-greet/1\", \"module greet, go 1.22\")"}
-  done `build-greet/1` "go.mod for module greet" → module greet, go 1.22; next: `build-greet/2` "greet.go with Hello"
-gnovm_run {"name": "mem", "code": "mem.Note(\"build-greet/4\", \"make is not installed here\")\nmem.Drop(\"build-greet/4\", \"no make on this machine\")\nmem.Steps(\"build-greet\", \"test.sh runs go test ./...\")"}
-  noted on `build-greet/4` "make test runs the tests"
-  dropped `build-greet/4` "make test runs the tests"; next: `build-greet/2` "greet.go with Hello"
-  added `build-greet/5` "test.sh runs go test ./..."; next: `build-greet/2` "greet.go with Hello"
+  added `build-greet/go-mod` "go.mod for module greet", `build-greet/hello` "greet.go with Hello", `build-greet/test` "greet_test.go", `build-greet/make-test` "make test runs the tests"; next: `build-greet/go-mod` "go.mod for module greet"
+gnovm_run {"name": "mem", "code": "mem.PushFrame(mem.Frame(\"build-greet\"))\nmem.PushFrame(mem.Frame().NextTodo())"}
+  in `build-greet` "build greet": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  in `build-greet/go-mod` "go.mod for module greet": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+gnovm_run {"name": "mem", "code": "mem.PopFrame(\"module greet, go 1.22\")"}
+  done `build-greet/go-mod` "go.mod for module greet" → module greet, go 1.22
+  next: `build-greet/hello` "greet.go with Hello": mem.PushFrame(mem.Frame().NextTodo())
+gnovm_run {"name": "mem", "code": "mem.Note(\"build-greet/make-test\", \"make is not installed here\")\nmem.Drop(\"build-greet/make-test\", \"no make on this machine\")\nmem.Steps(\"build-greet\", \"test-sh: test.sh runs go test ./...\")"}
+  noted on `build-greet/make-test` "make test runs the tests" as thought `make-not-installed-here`
+  dropped `build-greet/make-test` "make test runs the tests"; next: `build-greet/hello` "greet.go with Hello"
+  added `build-greet/test-sh` "test.sh runs go test ./..."; next: `build-greet/hello` "greet.go with Hello"
 gnovm_run {"name": "mem", "code": "mem.Show(\"build-greet\")"}
   [ ] `build-greet` "build greet" (1/4 done)
+    held by this session
     made by this session, changed just now
-    [x] `build-greet/1` "go.mod for module greet" → module greet, go 1.22
-    [ ] `build-greet/2` "greet.go with Hello"  ← next
-    [ ] `build-greet/3` "greet_test.go"
-    [-] `build-greet/4` "make test runs the tests" → no make on this machine
-    [ ] `build-greet/5` "test.sh runs go test ./..."
+    [x] `build-greet/go-mod` "go.mod for module greet" → module greet, go 1.22
+    [ ] `build-greet/hello` "greet.go with Hello"  ← next
+    [ ] `build-greet/test` "greet_test.go"
+    [-] `build-greet/make-test` "make test runs the tests" → no make on this machine
+    [ ] `build-greet/test-sh` "test.sh runs go test ./..."
 ```
 
 Tomorrow's session is told, with your first message, what mem has open and
-what is next, so it knows where the goal stands without being told.
+what is next, so it knows where the goal stands without being told; a
+session that stopped inside a frame stands in it again when it resumes.
 
 A goal the agent closes is not taken at its word. As the turn ends, a
 separate judge checks it against what mem shows of it and the end of the
@@ -100,6 +115,52 @@ a real run closed the release and printed `Goal met: release 1.3.0 (on the
 user's word: The user explicitly stated 'Lin signed off on 1.3.0 this
 morning, so we're done with that release,' confirming the goal is
 complete.)`.
+
+### Frames
+
+A step of a plan is a *frame*: the agent enters it, works, and leaves it with
+a result, and everything between the push and the pop, the files it read, the
+commands it ran, what you said to it in between, is removed from the model's
+context. The result stays, in the context and in mem; its file changes and
+mem changes are not undone. A long task is the plan's steps done one frame
+at a time: the context holds the plan, the results so far and the present
+step's work, however long the task runs, and compaction becomes a backstop.
+
+```
+gnovm_run {"name": "mem", "code": "mem.Goal(\"fix the flaky test\", \"fix-flaky\").Steps(\"find-cause: find why TestFlaky fails\", \"rerun: rerun the suite 20 times\")\nmem.PushFrame(mem.Frame(\"fix-flaky\"))\nmem.PushFrame(mem.Frame().NextTodo())"}
+  added goal `fix-flaky` "fix the flaky test"
+  added `fix-flaky/find-cause` "find why TestFlaky fails", `fix-flaky/rerun` "rerun the suite 20 times"; next: `fix-flaky/find-cause` "find why TestFlaky fails"
+  in `fix-flaky` "fix the flaky test": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  in `fix-flaky/find-cause` "find why TestFlaky fails": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+gnovm_run {"name": "mem", "code": "mem.Think(\"port\", \"the user says the shared port is 8080\")"}
+  thought `port` kept on `fix-flaky/find-cause`
+gnovm_run {"name": "mem", "code": "mem.PopFrame(\"TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)\")\nmem.PushFrame(mem.Frame().NextTodo())"}
+  done `fix-flaky/find-cause` "find why TestFlaky fails" → TestFlaky races on the shared port; fixed by picking a free port in setup (internal/net/listen_test.go:41)
+  in `fix-flaky/rerun` "rerun the suite 20 times": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+```
+
+To that result gnosh adds what the pop did: "Everything since you entered
+`fix-flaky/find-cause` was removed from your context: this result stays,
+and its 1 thought is in mem (mem.Show("fix-flaky/find-cause") lists them
+when you need them); the user still sees all of it. In it you edited
+internal/net/listen_test.go. Your reads inside it are forgotten: view a
+file before you edit it."
+
+What a frame should remember beyond its result it keeps as a *thought*: a
+labelled line on the frame, `mem.Think("port", "the user says the shared
+port is 8080")`, which costs nothing and removes nothing, and stays in mem
+under the frame after its pop: `mem.Thought("port")` reads it by name from
+any frame below on the stack, `mem.Recall("shared port")` finds thoughts,
+frames and facts by meaning, and `mem.PushThought(mem.Thought("port"))`
+turns a thought that needs real work into a step of the same name and
+enters it. You see every pop in the chat as the tool's result (the removed
+rows stay there and in `/export`; only the model's view loses them), the
+frame the agent is in where the sidebar shows its work, `/mem log` lists
+each push and pop, and `gnosh run` prints what a pop took out of the
+context. A frame a session holds is its own: no other session, and not
+`/mem`, closes, drops or takes it; the session pops it, resumed by id if it
+has ended. The design, with its reasons, is FRAMES.md in the gnosh
+repository's notes.
 
 ### A knowledge base
 
@@ -308,26 +369,26 @@ pasted, then changed the database to the wrong one. Its calls come first;
 the notice is what the next session starts with; the rest is you:
 
 ```
-gnovm_run {"name": "mem", "code": "mem.Goal(\"release v2\").Steps(\"bump the version\", \"tag v2.0.0\").Ask(\"which day suits you for the release?\")"}
+gnovm_run {"name": "mem", "code": "mem.Goal(\"release v2\").Steps(\"bump the version\", \"tag: tag v2.0.0\").Ask(\"which day suits you for the release?\")"}
   added goal `release-v2` "release v2"
-  added `release-v2/1` "bump the version", `release-v2/2` "tag v2.0.0"; next: `release-v2/1` "bump the version"
-  asked `release-v2/3` "which day suits you for the release?" (for the user); `release-v2` waits on it; next: `release-v2/1` "bump the version"
+  added `release-v2/bump-version` "bump the version", `release-v2/tag` "tag v2.0.0"; next: `release-v2/bump-version` "bump the version"
+  asked `release-v2/which-day-suits-you` "which day suits you for the release?" (for the user); `release-v2` waits on it; next: `release-v2/bump-version` "bump the version"
 gnovm_run {"name": "mem", "code": "mem.Fact(\"staging-db\", \"The staging database is db-stg-7.\")"}
   fact `staging-db` is new
 gnovm_run {"name": "mem", "code": "mem.Fact(\"deploy\", \"Deploy with the key sk-live-4f9a2c, then run make deploy.\")"}
   fact `deploy` is new
 gnovm_run {"name": "mem", "code": "mem.Fact(\"staging-db\", \"The staging database is db-stg-8.\")"}
   fact `staging-db` changed (was "The staging database is db-stg-7.")
-mem waiting on you: "which day suits you for the release?" (release-v2/3)
+mem waiting on you: "which day suits you for the release?" (release-v2/which-day-suits-you)
 /mem
   mem: 1 goal open, 1 question for the user · 2 facts
   questions for the user:
-    [?] `release-v2/3` "which day suits you for the release?"
+    [?] `release-v2/which-day-suits-you` "which day suits you for the release?"
   goals:
     [ ] `release-v2` "release v2" (0/3 done · session "Release v2" · just now · waits on the user)
-      [ ] `release-v2/1` "bump the version"  ← next
-      [ ] `release-v2/2` "tag v2.0.0"
-      [?] `release-v2/3` "which day suits you for the release?"
+      [ ] `release-v2/bump-version` "bump the version"  ← next
+      [ ] `release-v2/tag` "tag v2.0.0"
+      [?] `release-v2/which-day-suits-you` "which day suits you for the release?"
   facts, newest first:
     `staging-db` = The staging database is db-stg-8.
     `deploy` = Deploy with the key sk-live-4f9a2c, then run make deploy.
@@ -499,13 +560,17 @@ Gnosh's system prompt carries a short recipe, so the model needs no setup:
 - **When a task starts**: `mem.Show()`, and carry on from `← next`. When mem
   does not hold what it was asked, say so, and never build an answer out of
   the facts beside it.
-- **A task of two or more steps**: `mem.Goal("…").Steps("…", "…")`, then
-  `mem.Done(name, what came of it)` as each finishes; Done answers with what
-  is next. A goal cannot be done while a step of it is open, so a success
-  condition is a step ("go test ./... passes"), done only after its check has
-  run, and a goal it closes is judged before it counts as done. `.Start()` on
-  the end starts the first step in the same call.
-- **Findings**: `mem.Note(name, "the claim, then path:line")`. **A question
+- **A task of two or more steps**: `mem.Goal("…").Steps("name: purpose",
+  "…")`, then the steps as frames: `mem.PushFrame(mem.Frame("goal"))` enters
+  the goal, `mem.PushFrame(mem.Frame().NextTodo())` its first step, and
+  `mem.PopFrame("what came of it")` with the next push on the next line
+  moves on; a pop removes the step's work from the model's context and keeps
+  the result. A goal cannot be done while a step of it is open, so a success
+  condition is a step ("go test ./... passes"), popped only after its check
+  has run, and a goal it closes is judged before it counts as done.
+- **What should outlive a pop is a thought**: `mem.Think("port", "…")` on the
+  frame it stands in, found again by name, by meaning (`mem.Recall`), or in
+  the frame's outline, and dived into with `mem.PushThought`. **A question
   for you**: `mem.Ask(name, "…")`, answered with Done.
 - **Later, or when something happens**: `mem.Goal("…").Wait("2026-12-01")`,
   or `.Wait("PR #6399 merged")`.
@@ -534,16 +599,29 @@ call loads only what it touches, and mem has no size limit.
 
 ```go
 type Todo struct {
-	Title   string   // what to get done, or what is asked
+	Title   string   // what to get done, or what is asked: a frame's purpose
 	Status  string   // "" while open; "done", "dropped" or "forgotten"
 	Result  string   // what came of it: the outcome, your answer, or why it was dropped
 	Wait    string   // a day ("2026-12-01") or words ("PR #6399 merged"); "" none
 	For     string   // "user": a question or request for you
-	Doing   string   // the session that started it
-	Notes   []string // findings and attempts, oldest first
+	Doing   string   // the session that holds it
+	Steps   []string // its steps' names, in order
+	Notes   []note   // its thoughts, oldest first: name, text, the step made from it
 	// ...
 }
 
+type Frame struct { Id, Purpose, Result, State, Doing string; Todos []*Frame; Thoughts []Thought } // a Todo seen through the stack
+type Thought struct { Name, Text string; Frame *Frame }
+type Instantiation interface { Kind() string; Ref() string; Says() string } // *Frame, Thought and Fact
+
+func (m *Mem) Frame(id ...string) *Frame         // the present frame, or one by id; f.NextTodo() its first step to do
+func (m *Mem) NewFrame(name string, purpose ...string) *Frame
+func (m *Mem) PushFrame(f *Frame)                // enter it: from here the context will be cut
+func (m *Mem) PopFrame(result string)            // leave it done: everything since the push is removed
+func (m *Mem) Think(name, text string) Thought    // a labelled thought on the present frame
+func (m *Mem) Thought(name string) Thought
+func (m *Mem) Recall(words string) []Instantiation
+func (m *Mem) PushThought(t Thought, why ...string)
 func (m *Mem) Goal(title string, name ...string) Goal // .Steps(...), .Wait(...), .Ask(...), .Note(...), .Start()
 func (m *Mem) Steps(name string, titles ...string)
 func (m *Mem) Ask(name, question string)
@@ -564,10 +642,19 @@ func (m *Mem) Next(name string) string
 ```
 
 - **Names, not numbers.** Everything has a lowercase name, printed in
-  backticks: a goal's comes from its title (`release-v2`), its steps are
-  numbered under it (`release-v2/1`), and a fact's or a rule's is any path
-  (`cmd/test`). A name is never reused, and a wrong one is answered with
-  what it should have been.
+  backticks: a goal's comes from its title (`release-v2`) or is given, a
+  step's is given ("tag: tag v2.0.0", `mem.NewFrame("tag", …)`) or made from
+  its title's words (`release-v2/bump-version`), a thought's is given to
+  `mem.Think` or made from its words, and a fact's or a rule's is any path
+  (`cmd/test`). A goal's name is never reused, and a wrong name is answered
+  with what it should have been.
+- **The stack is gnosh's.** mem keeps the tree; which frames a session is
+  in is derived from the session's own pushes and pops, kept with each
+  `gnovm_run` result, so a /branch or a rewind copy starts at the root, and
+  a session resumed stands where it stopped. The realm is told the stack
+  with each call and reports each push and pop, which the journal keeps
+  beside the call's changes; nothing replays them, and undoing the entry
+  undoes the pop's Done.
 - **One function changes mem.** A call only decides which changes (Ops) to
   make; one function applies them, checking each against what is there, and
   Gnosh journals them. A failed call keeps nothing.

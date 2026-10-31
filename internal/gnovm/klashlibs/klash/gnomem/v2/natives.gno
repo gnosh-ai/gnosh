@@ -29,7 +29,8 @@ func bound() string
 // with this input's pushes and pops so far.
 func frames() []string
 
-// pushed tells gnosh this input entered frame id, titled purpose.
+// pushed tells gnosh this input entered frame id, titled purpose; with id
+// "", that a push found nothing to enter (PushFrame(nil)).
 func pushed(id, purpose string)
 
 // popped tells gnosh this input left frame id, titled purpose, with

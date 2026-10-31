@@ -192,18 +192,18 @@ func (h *memHost) call(ctx context.Context, q memRequest) (memResult, error) {
 	}
 	h.writeStatus(r, j)
 	res.Goals = h.touched(r, caller, call.Ops)
-	if hint := nextHint(r, caller, q.Goal, q.Frames, call.Frames); hint != "" {
+	if hint := nextHint(r, caller, q.Goal, q.Frames, call.Frames, call.NilPush); hint != "" {
 		res.Output += hint + "\n"
 	}
 	return res, nil
 }
 
 // nextHint is what a receipt ends with after a pop that no push followed
-// in the same input: what mem.NextHint says to do next, with the stack as
-// it stands after the call (FRAMES.md). "" when the call ended with no pop,
-// or the hint cannot be read.
-func nextHint(r *memRealm, caller, bound string, stack []string, events []MemFrame) string {
-	if len(events) == 0 || events[len(events)-1].Kind != "pop" {
+// in the same input, a push of nil included: what mem.NextHint says to do
+// next, with the stack as it stands after the call (FRAMES.md). "" when the
+// call ended with no pop, or the hint cannot be read.
+func nextHint(r *memRealm, caller, bound string, stack []string, events []MemFrame, nilPush int) string {
+	if len(events) == 0 || events[len(events)-1].Kind != "pop" || nilPush == len(events) {
 		return ""
 	}
 	last := events[len(events)-1]

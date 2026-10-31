@@ -147,7 +147,7 @@ you what mem holds. `/mem find` searches it, `/mem log` lists every change
 with who made it, `/mem undo` takes one back, and `/mem redact` takes a
 secret's exact text out of mem and out of its history. As a session starts,
 Gnosh itself tells you in one line what is due and what waits on you, as in
-`mem waiting on you: "which day suits you for the release?" (release-v2/3)`,
+`mem waiting on you: "which day suits you for the release?" (release-v2/which-day-suits-you)`,
 whether or not the model brings it up. And when a session sets, changes or
 removes a rule, which every later session follows as yours, Gnosh warns you
 and says how to undo it. From a terminal, `gnosh mem` (and `gnosh mem show`,
@@ -166,32 +166,41 @@ gnovm_run {"name": "mem", "code": "mem.Show()"}
   mem is empty: mem.Goal("what to get done").Steps("…", "…") plans a task, and mem.Fact("cmd/test", "…") keeps a fact
 gnovm_run {"name": "mem", "code": "mem.Goal(\"add Median to stats\").Steps(\"implement Median\", \"write tests\", \"go test ./... passes\")"}
   added goal `add-median-stats` "add Median to stats"
-  added `add-median-stats/1` "implement Median", `add-median-stats/2` "write tests", `add-median-stats/3` "go test ./... passes"; next: `add-median-stats/1` "implement Median"
-gnovm_run {"name": "mem", "code": "mem.Start(\"add-median-stats/1\")"}
-  started `add-median-stats/1` "implement Median"
-gnovm_run {"name": "mem", "code": "mem.Done(\"add-median-stats/1\", \"Median in stats.go:17; copies and sorts, no input mutation\")"}
-  done `add-median-stats/1` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation; next: `add-median-stats/2` "write tests"
+  added `add-median-stats/implement-median` "implement Median", `add-median-stats/write-tests` "write tests", `add-median-stats/go-test-passes` "go test ./... passes"; next: `add-median-stats/implement-median` "implement Median"
+gnovm_run {"name": "mem", "code": "mem.PushFrame(mem.Frame(\"add-median-stats\"))\nmem.PushFrame(mem.Frame().NextTodo())"}
+  in `add-median-stats` "add Median to stats": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+  in `add-median-stats/implement-median` "implement Median": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+gnovm_run {"name": "mem", "code": "mem.PopFrame(\"Median in stats.go:17; copies and sorts, no input mutation\")"}
+  done `add-median-stats/implement-median` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation
+  next: `add-median-stats/write-tests` "write tests": mem.PushFrame(mem.Frame().NextTodo())
 gnovm_run {"name": "mem", "code": "mem.Show()"}
   mem: 1 goal open
   goals:
-    [ ] `add-median-stats` "add Median to stats" (1/3 done · this session · just now)
-      [x] `add-median-stats/1` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation
-      [ ] `add-median-stats/2` "write tests"  ← next
-      [ ] `add-median-stats/3` "go test ./... passes"
-gnovm_run {"name": "mem", "code": "mem.Done(\"add-median-stats/2\", \"stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates\")"}
-  done `add-median-stats/2` "write tests" → stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates; next: `add-median-stats/3` "go test ./... passes"
-gnovm_run {"name": "mem", "code": "mem.Done(\"add-median-stats/3\", \"go test ./... → ok stats 0.006s\")"}
-  done `add-median-stats/3` "go test ./... passes" → go test ./... → ok stats 0.006s; next: `add-median-stats` itself: mem.Done("add-median-stats", "…") once it holds
-gnovm_run {"name": "mem", "code": "mem.Done(\"add-median-stats\", \"Median in stats.go:17; tests in stats_test.go; go test ./... → ok\")"}
+    [ ] `add-median-stats` "add Median to stats" (1/3 done · this session · just now · held by this session, just now)
+      [x] `add-median-stats/implement-median` "implement Median" → Median in stats.go:17; copies and sorts, no input mutation
+      [ ] `add-median-stats/write-tests` "write tests"  ← next
+      [ ] `add-median-stats/go-test-passes` "go test ./... passes"
+gnovm_run {"name": "mem", "code": "mem.PushFrame(mem.Frame().NextTodo())"}
+  in `add-median-stats/write-tests` "write tests": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+gnovm_run {"name": "mem", "code": "mem.PopFrame(\"stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates\")\nmem.PushFrame(mem.Frame().NextTodo())"}
+  done `add-median-stats/write-tests` "write tests" → stats_test.go: TestMedian covers empty, single, two, odd, even, negatives, duplicates
+  in `add-median-stats/go-test-passes` "go test ./... passes": when it is done, pop it with what came of it and what the next step needs. Everything from here until the pop is removed from your context then, what you were told included; what matters after, keep as a thought first. Your result stays, and nothing you did is undone.
+gnovm_run {"name": "mem", "code": "mem.PopFrame(\"go test ./... → ok stats 0.006s\")\nmem.PushFrame(mem.Frame().NextTodo())"}
+  done `add-median-stats/go-test-passes` "go test ./... passes" → go test ./... → ok stats 0.006s
+  nothing to push: `add-median-stats` has no open step: pop it with its result.
+gnovm_run {"name": "mem", "code": "mem.PopFrame(\"Median in stats.go:17; tests in stats_test.go; go test ./... → ok\")"}
   done `add-median-stats` "add Median to stats" → Median in stats.go:17; tests in stats_test.go; go test ./... → ok
 ```
 
 The first session looked at mem, planned the goal with the condition as a step
-of its own, and finished the first step. The fifth call is the second
-session's first look at mem; the first line of what it shows is what that
-session had already been given with your first message. The goal closed last:
-called while one of its steps was open, `mem.Done` on the goal is refused,
-naming the step, and nothing from the call is kept.
+of its own, entered the goal and its first step as frames, and popped the step
+with what came of it. The fifth call is the second session's first look at
+mem; the first line of what it shows is what that session had already been
+given with your first message, and the session stands in the goal where the
+first one left it. Each pop removes the step's work from the model's context
+and keeps its result; the goal is popped last, with the evidence that it
+holds. A goal popped while one of its steps is open is refused, naming the
+step, and nothing from the call is kept.
 
 The facts, across their three sessions:
 

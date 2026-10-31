@@ -49,7 +49,7 @@ func TestMemGoalIsTheSessionsTodos(t *testing.T) {
 		todo("tag", session.TodoStatusPending),
 	}, setter.todos["session-1"])
 
-	call(t, run, `{"name": "mem", "code": "mem.Done(\"ship/1\", \"built\")\nmem.Drop(\"ship/3\", \"no tag this time\")"}`)
+	call(t, run, `{"name": "mem", "code": "mem.Done(\"ship/build\", \"built\")\nmem.Drop(\"ship/tag\", \"no tag this time\")"}`)
 	require.Equal(t, []session.Todo{
 		todo("build", session.TodoStatusCompleted),
 		todo("test", session.TodoStatusInProgress),
@@ -59,7 +59,7 @@ func TestMemGoalIsTheSessionsTodos(t *testing.T) {
 	call(t, run, `{"name": "mem", "code": "mem.Show()"}`)
 	require.Empty(t, setter.todos, "a read changes nothing")
 
-	call(t, run, `{"name": "mem", "code": "mem.Done(\"ship/2\", \"ok\")\nmem.Done(\"ship\", \"shipped\")"}`)
+	call(t, run, `{"name": "mem", "code": "mem.Done(\"ship/test\", \"ok\")\nmem.Done(\"ship\", \"shipped\")"}`)
 	require.Equal(t, []session.Todo{
 		todo("build", session.TodoStatusCompleted),
 		todo("test", session.TodoStatusCompleted),

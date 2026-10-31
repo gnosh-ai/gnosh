@@ -177,8 +177,11 @@ func (b *base) preprocessMemRealm() (err error) {
 type memCall struct {
 	Output string
 	Ops    []memOp
-	// Frames is the frames the input pushed and popped, in order.
-	Frames []MemFrame
+	// Frames is the frames the input pushed and popped, in order; NilPush
+	// is how many of them had come when it last pushed nil, -1 for never
+	// (the hint after a pop is left out when a nil push followed it).
+	Frames  []MemFrame
+	NilPush int
 	// At is the call's time, which its Ops share.
 	At int64
 	// batch is what the call wrote, held back from the store until commit;
@@ -299,6 +302,8 @@ func (r *memRealm) call(code string, ctx memContext) (call memCall, err error) {
 	ctx.OriginCaller = memRunAddr.Bech32()
 	ctx.ops = &call.Ops
 	ctx.frames = &call.Frames
+	call.NilPush = -1
+	ctx.nilPush = &call.NilPush
 	if ctx.today == "" {
 		ctx.today = now.Format(time.DateOnly)
 	}
