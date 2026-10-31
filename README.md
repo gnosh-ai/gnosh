@@ -11,7 +11,7 @@
 </p>
 
 <p align="center"><strong>An AI harness that thinks, plans, and remembers in Gno.</strong><br>
-Gnosh runs the <a href="https://github.com/gnolang/gno">Gno</a> VM in the AI harness. The agent keeps its goals, what it found and the facts you gave it in <code>mem</code>, kept in Gno on your disk, and a new session starts with what is still open and the newest facts, so it picks up where the last one stopped.</p>
+Gnosh runs the <a href="https://github.com/gnolang/gno">Gno</a> VM in the AI harness. The agent keeps its goals, what it found and the facts you gave it in <code>mem</code>, kept in Gno on your disk, and works a long task one step at a time: each step is a frame that leaves the model's context when it is done, its result kept. A new session starts with what is still open and the newest facts, so it picks up where the last one stopped.</p>
 
 <p align="center">Security-first underneath: a fork of Charm's <a href="https://github.com/charmbracelet/crush">Crush</a> that closes the doors a coding agent usually leaves open.</p>
 
@@ -52,6 +52,10 @@ from a hosted API to one running on your own machine. On top of that:
   separate judge against the conversation, and reopened if it does not hold.
   `/goal <condition>` keeps it at work until the condition holds:
   [goals that outlive the session](#goals-that-outlive-the-session).
+- **Plans in frames.** The agent works a goal one step at a time, and a
+  step done is cut from the model's context with its result kept, so a long
+  task never fills the window and compaction becomes a backstop:
+  [frames](GNOMEM.md#frames).
 - **Remembers in Gno.** What it tried and found, what waits on you and the
   facts you told it stay in `mem`, kept in Gno on your disk. A new session
   starts with what is open and the newest facts, a reminder you asked for
@@ -88,7 +92,10 @@ the agent asks it questions instead of re-reading it. [GNOMEM](GNOMEM.md) has th
 > carry on in another session.
 
 The agent puts the goal in mem with the condition as a step of its own,
-and checks the steps off as it goes. A goal cannot be marked done while one of
+and works it one step at a time. Each step is a frame: the agent enters it,
+works, and leaves it with a result, and what it read, ran and was told in
+between leaves the model's context with it; the result stays, in the context
+and in mem. A goal cannot be marked done while one of
 its steps is open, so "the tests pass" is something it has to reach, not
 something it can claim. When an approach fails, it notes why and re-plans:
 it drops that step and adds another.
