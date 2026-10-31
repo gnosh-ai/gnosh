@@ -42,25 +42,19 @@ Gnosh is a fork of Charm's [Crush](https://github.com/charmbracelet/crush):
 the same terminal UI, sessions, LSP and MCP support, and any model you like,
 from a hosted API to one running on your own machine. On top of that:
 
-- **Thinks in Gno.** The Gno VM runs inside Gnosh: named machines with
-  memory caps, gas (1 gas is about 1 ns) and optional persistence, in a worker
-  process of their own. The agent works an answer out in one instead of
-  estimating it: [the machines underneath](#thinks-in-gno-the-machines-underneath).
-- **Plans in Gno.** The agent plans a task as a goal in `mem`, with its
-  steps, and a goal cannot be marked done while a step of it is open, so "the
-  tests pass" is something it has to reach. A goal it closes is checked by a
-  separate judge against the conversation, and reopened if it does not hold.
-  `/goal <condition>` keeps it at work until the condition holds:
-  [goals that outlive the session](#goals-that-outlive-the-session).
-- **Plans in frames.** The agent works a goal one step at a time, and a
-  step done is cut from the model's context with its result kept, so a long
-  task never fills the window and compaction becomes a backstop:
+- **Thinks in Gno.** The Gno VM runs inside Gnosh, and the agent works an
+  answer out in a machine instead of estimating it:
+  [the machines underneath](#thinks-in-gno-the-machines-underneath).
+- **Plans in Gno.** A task is a goal in `mem` with its steps. A goal cannot
+  be closed while a step of it is open, so "the tests pass" is reached, not
+  claimed, and a separate judge checks each closed goal against the
+  conversation: [goals that outlive the session](#goals-that-outlive-the-session).
+- **Plans in frames.** A step done is cut from the model's context with its
+  result kept, so a long task never fills the window:
   [frames](GNOMEM.md#frames).
-- **Remembers in Gno.** What it tried and found, what waits on you and the
-  facts you told it stay in `mem`, kept in Gno on your disk. A new session
-  starts with what is open and the newest facts, a reminder you asked for
-  comes back when you next check in, and `/mem` shows you all of it, with
-  every change and who made it: [memory that runs](#memory-that-runs).
+- **Remembers in Gno.** What it found, what waits on you and the facts you
+  told it stay in `mem` on your disk, and a new session starts with them:
+  [memory that runs](#memory-that-runs).
 - **Nothing phones home.** No usage metrics, no provider catalog fetch, no
   update check, unless you turn them on.
 - **Tool text can't pose as the conversation.** A model's control tokens in a
