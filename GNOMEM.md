@@ -32,7 +32,7 @@ mem.Show()
 ```
 
 The step the agent is in is a *frame*: when it pops the frame with its
-result, gnosh removes everything since the push from the model's context,
+result, Gnosh removes everything since the push from the model's context,
 and the result stays. While it is in a frame, the frame is held by its
 session, as the outline says, and no other session takes it. A long task is
 done one frame at a time, the context never filling with finished work
@@ -149,7 +149,7 @@ mem.Push()
 // in `fix-flaky/rerun` "rerun the suite 20 times": when it is done, pop it with what came of it and what the next step needs. …
 ```
 
-To that result gnosh adds what the pop did: "Everything since you entered
+To that result Gnosh adds what the pop did: "Everything since you entered
 `fix-flaky/find-cause` was removed from your context: this result stays,
 and its 1 thought is in mem (mem.Show("fix-flaky/find-cause") lists them
 when you need them); the user still sees all of it. In it you edited
@@ -366,7 +366,7 @@ and points at `/mem log` and `/mem undo`.
 ### Yours to see and change
 
 mem is yours too. Type `/mem` in the editor, or pick "mem" in the command
-palette, to see what it holds and to change it. As a session starts, gnosh
+palette, to see what it holds and to change it. As a session starts, Gnosh
 itself tells you in one line what is due and what waits on you, whether or
 not the model brings it up.
 
@@ -449,7 +449,7 @@ in a script on a machine with only Gnosh's data. It only reads: `undo`,
 a name mem does not hold (`gnosh mem show no-such-item`), and a `find` with no
 words. A `find` that matches nothing is an answer, and exits 0.
 
-The notice sits in the TUI's status bar as gnosh starts, and comes again with
+The notice sits in the TUI's status bar as Gnosh starts, and comes again with
 the first prompt of each new session you open in it and with the first
 prompt of a new day, so a TUI left open overnight tells you when you are
 back. `gnosh run` prints it on stderr before it starts work. It names only what is due and
@@ -658,7 +658,7 @@ func (m *Mem) Next(name string) string
   four words, falls back to the text's own words, and adds -2, -3 when the
   name is taken. A goal's name is never reused, and a wrong name is answered
   with what it should have been.
-- **The stack is gnosh's.** mem keeps the tree; which frames a session is
+- **The stack is Gnosh's.** mem keeps the tree; which frames a session is
   in is derived from the session's own pushes and pops, kept with each
   `gnovm_run` result, so a /branch or a rewind copy starts at the root, and
   a session resumed stands where it stopped. The realm is told the stack
