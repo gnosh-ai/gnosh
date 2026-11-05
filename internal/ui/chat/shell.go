@@ -53,13 +53,23 @@ var (
 
 // NewShellItem creates a new ShellItem for displaying bang-mode results.
 func NewShellItem(sty *styles.Styles, command, output string, exitCode int) MessageItem {
+	return newShellItem(sty, fmt.Sprintf("shell-%d-%s", shellSeq.Add(1), command), command, output, exitCode)
+}
+
+// ShellItemID is the id of the item that shows the shell command in
+// Parts[part] of the row rowID.
+func ShellItemID(rowID string, part int) string {
+	return fmt.Sprintf("%s:shell-%d", rowID, part)
+}
+
+func newShellItem(sty *styles.Styles, id, command, output string, exitCode int) *ShellItem {
 	v := list.NewVersioned()
 	s := &ShellItem{
 		Versioned:                v,
 		highlightableMessageItem: defaultHighlighter(sty, v),
 		cachedMessageItem:        &cachedMessageItem{},
 		focusableMessageItem:     newFocusableMessageItem(v),
-		id:                       fmt.Sprintf("shell-%d-%s", shellSeq.Add(1), command),
+		id:                       id,
 		command:                  command,
 		exitCode:                 exitCode,
 		sty:                      sty,

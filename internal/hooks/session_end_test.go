@@ -131,13 +131,12 @@ func TestRunSessionEndCannotStopAnything(t *testing.T) {
 // wherever a hook can; a SessionEnd hook cannot, and the app goes ahead
 // whatever the result says.
 func TestRunSessionEndFailedHookIsLogged(t *testing.T) {
-	t.Parallel()
-
-	logSwapMu.Lock()
+	// Not parallel: the parallel tests' hooks log through the default
+	// logger, which would write into buf as this test reads it.
 	var buf strings.Builder
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	t.Cleanup(func() { slog.SetDefault(prev); logSwapMu.Unlock() })
+	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	result, err := sessionEndRunner(t, "", `./hooks/does-not-exist.sh`).RunSessionEnd(context.Background(), "sess", SessionEndReasonClear)
 	require.NoError(t, err)

@@ -309,7 +309,7 @@ func roundPops(msgs []message.Message, at int, sessionID string) bool {
 			if !calls[r.ToolCallID] {
 				continue
 			}
-			for _, ev := range frameEvents(r) {
+			for _, ev := range FrameEvents(r) {
 				if ev.Session == sessionID && ev.Kind == "pop" {
 					return true
 				}
@@ -387,7 +387,7 @@ func callCode(m message.Message, callID string) string {
 func lastFrameEvent(msgs []message.Message, sessionID string) int {
 	for i := len(msgs) - 1; i >= 0; i-- {
 		for _, r := range msgs[i].ToolResults() {
-			for _, ev := range frameEvents(r) {
+			for _, ev := range FrameEvents(r) {
 				if ev.Session == sessionID {
 					return i
 				}
@@ -712,15 +712,9 @@ func closePrompt(cl gnovm.MemClose, w closeWindow, workingDir string) string {
 	if w.prompt != "" {
 		fmt.Fprintf(&b, "What the user asked in this turn: %s\n\n", clip(w.prompt, 2_000))
 	}
-	calls := map[string]message.ToolCall{}
-	for _, row := range w.rows {
-		for _, c := range row.ToolCalls() {
-			calls[c.ID] = c
-		}
-	}
-	edited := editedFiles(w.rows, calls, workingDir)
+	edited := EditedFiles(w.rows, workingDir)
 	fmt.Fprintf(&b, "Files the agent's edits and writes changed in the todo: %s\n", cmp.Or(strings.Join(edited, ", "), "none"))
-	if ran := commandsRun(w.rows, calls); len(ran) > 0 {
+	if ran := commandsRun(w.rows, callsOf(w.rows)); len(ran) > 0 {
 		fmt.Fprintf(&b, "Commands it ran in the todo: %s\n", strings.Join(ran, "; "))
 	} else {
 		b.WriteString("Commands it ran in the todo: none\n")

@@ -127,7 +127,7 @@ func (f *frameStacks) record(ctx context.Context, sessionID string) *sessionFram
 			continue
 		}
 		for _, result := range msg.ToolResults() {
-			for _, ev := range frameEvents(result) {
+			for _, ev := range FrameEvents(result) {
 				if ev.Session == sessionID {
 					rec.apply(ev, result.ToolCallID, tokens)
 				}
@@ -150,6 +150,14 @@ func slideMarkOf(r poppedRange) string {
 	return "slide:" + r.frame + ":" + r.pushCallID + ":" + r.popCallID
 }
 
+// SlidFrame is the frame whose rounds the slide that marked a row with
+// mark took out of the model's context, "" for the rounds before the first
+// frame; false for a mark no slide made.
+func SlidFrame(mark string) (string, bool) {
+	r, ok := slideMark(mark)
+	return r.frame, ok
+}
+
 func slideMark(mark string) (poppedRange, bool) {
 	rest, ok := strings.CutPrefix(mark, "slide:")
 	if !ok {
@@ -162,8 +170,9 @@ func slideMark(mark string) (poppedRange, bool) {
 	return poppedRange{frame: parts[0], pushCallID: parts[1], popCallID: parts[2]}, true
 }
 
-// frameEvents is the frames a gnovm_run result's metadata carries.
-func frameEvents(result message.ToolResult) []gnovm.MemFrame {
+// FrameEvents is the frames a gnovm_run result's metadata carries, every
+// session's; none for a result that failed.
+func FrameEvents(result message.ToolResult) []gnovm.MemFrame {
 	if result.Name != gnovmtools.RunToolName || result.IsError || result.Metadata == "" {
 		return nil
 	}
@@ -474,7 +483,7 @@ func (f *frameStacks) pop(ctx context.Context, sessionID string, rec *sessionFra
 	if len(rows) == 0 {
 		return "nothing came between, so nothing was removed from your context."
 	}
-	calls, reads, removed := f.remove(ctx, sessionID, rec, rows, ev.Id, behindSummary(msgs))
+	reads, removed := f.remove(ctx, sessionID, rec, rows, ev.Id, behindSummary(msgs))
 	if f.notify != nil {
 		f.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 			SessionID: sessionID,
@@ -482,7 +491,7 @@ func (f *frameStacks) pop(ctx context.Context, sessionID string, rec *sessionFra
 			Message:   fmt.Sprintf("popped `%s`: about %s tokens out of the model's context", ev.Id, roughCount(removed)),
 		})
 	}
-	return popClauses(ev, rows, calls, f.workingDir, len(reads) > 0, spared > 0)
+	return popClauses(ev, rows, f.workingDir, len(reads) > 0, spared > 0)
 }
 
 // remove takes rows out of the model's context, for a pop or a slide: the
@@ -490,9 +499,8 @@ func (f *frameStacks) pop(ctx context.Context, sessionID string, rec *sessionFra
 // touched and the views they were given are forgotten, and what they held
 // is estimated against the session's counts, rows behind the summary
 // (stale, see behindSummary) not counted, since the model was not sent
-// them. It returns the rows' tool calls by id, the paths they read, and
-// about how many tokens left.
-func (f *frameStacks) remove(ctx context.Context, sessionID string, rec *sessionFrames, rows []message.Message, mark string, stale map[string]bool) (calls map[string]message.ToolCall, reads []string, removed int64) {
+// them. It returns the paths they read, and about how many tokens left.
+func (f *frameStacks) remove(ctx context.Context, sessionID string, rec *sessionFrames, rows []message.Message, mark string, stale map[string]bool) (reads []string, removed int64) {
 	ids := make([]string, len(rows))
 	for i, row := range rows {
 		ids[i] = row.ID
@@ -500,15 +508,9 @@ func (f *frameStacks) remove(ctx context.Context, sessionID string, rec *session
 	if err := f.messages.SetPopped(ctx, ids, mark); err != nil {
 		slog.Warn("Could not mark the rows removed from the model's context", "session_id", sessionID, "mark", mark, "error", err)
 	}
-	calls = map[string]message.ToolCall{}
-	for _, row := range rows {
-		for _, call := range row.ToolCalls() {
-			calls[call.ID] = call
-		}
-	}
 	// The reads made inside the frame are forgotten, by path: the model no
 	// longer has what it read, so an edit of the file waits for a view.
-	reads = readPaths(rows, calls, f.workingDir)
+	reads = readPaths(rows, callsOf(rows), f.workingDir)
 	if f.files != nil && len(reads) > 0 {
 		if err := f.files.ForgetReads(ctx, sessionID, reads); err != nil {
 			slog.Warn("Could not forget the reads made inside a removed frame", "session_id", sessionID, "error", err)
@@ -521,11 +523,22 @@ func (f *frameStacks) remove(ctx context.Context, sessionID string, rec *session
 	// are rows behind the summary: they are marked, not counted.
 	for _, row := range rows {
 		if row.Popped == "" && !stale[row.ID] {
-			removed += estimateMessageTokens(row.ToAIMessage())
+			removed += RowTokens(row)
 		}
 	}
 	rec.estimate += removed
-	return calls, reads, removed
+	return reads, removed
+}
+
+// callsOf is the tool calls rows make, by id.
+func callsOf(rows []message.Message) map[string]message.ToolCall {
+	calls := map[string]message.ToolCall{}
+	for _, row := range rows {
+		for _, call := range row.ToolCalls() {
+			calls[call.ID] = call
+		}
+	}
+	return calls
 }
 
 // behindSummary is the rows at and before the last summary among msgs, by
@@ -585,7 +598,7 @@ func (f *frameStacks) slide(ctx context.Context, sessionID string, need int64, p
 	if !ok {
 		return "", 0, false
 	}
-	_, _, removed := f.remove(ctx, sessionID, rec, rows, slideMarkOf(r), stale)
+	_, removed := f.remove(ctx, sessionID, rec, rows, slideMarkOf(r), stale)
 	rec.pops = append(rec.pops, r)
 	if !slices.Contains(rec.slid, r.frame) {
 		rec.slid = append(rec.slid, r.frame)
@@ -624,7 +637,7 @@ func slideRange(msgs []message.Message, stack []*stackFrame, need int64, promptI
 		for _, row := range rows {
 			if row.Popped == "" && !stale[row.ID] {
 				out = append(out, row)
-				tokens += estimateMessageTokens(row.ToAIMessage())
+				tokens += RowTokens(row)
 			}
 		}
 		return out, tokens
@@ -738,6 +751,34 @@ func poppedRows(msgs []message.Message, pushCallID, popCallID string) []message.
 	if end < 0 {
 		return nil
 	}
+	return rowsBefore(msgs, pushCallID, end)
+}
+
+// FrameRows is the rows a frame holds in the model's context: those its
+// pop, the call popCallID, removed, as pop finds them (poppedRows, less
+// turnRows' prompts); or, for a frame still open (popCallID ""), those a
+// pop now would remove, up to the last row. It reads no row past the
+// pop's, so msgs may run on to the session's end.
+func FrameRows(msgs []message.Message, pushCallID, popCallID string) []message.Message {
+	end := len(msgs)
+	if popCallID != "" {
+		end = slices.IndexFunc(msgs, func(m message.Message) bool { return m.Role == message.Assistant && hasToolCall(m, popCallID) })
+		if end < 0 {
+			return nil
+		}
+	}
+	rows, _ := withoutTurn(rowsBefore(msgs, pushCallID, end), msgs[turnStartAt(msgs, end):end])
+	return rows
+}
+
+// RowTokens is about how many tokens row holds in the model's context, as
+// a pop or a slide counts what it takes out.
+func RowTokens(row message.Message) int64 {
+	return estimateMessageTokens(row.ToAIMessage())
+}
+
+// rowsBefore is poppedRows for a pop at the row end.
+func rowsBefore(msgs []message.Message, pushCallID string, end int) []message.Message {
 	start := -1
 	if pushCallID != "" {
 		if push := slices.IndexFunc(msgs, func(m message.Message) bool { return m.Role == message.Assistant && hasToolCall(m, pushCallID) }); push >= 0 {
@@ -843,12 +884,20 @@ func turnRows(msgs, between []message.Message, popCallID string) (rows []message
 	if start < 0 {
 		return between, 0
 	}
-	at := make(map[string]int, len(msgs))
-	for i, m := range msgs {
-		at[m.ID] = i
+	return withoutTurn(between, msgs[start:])
+}
+
+// withoutTurn is between without the user rows of turn, the rows from a
+// turn's first on, and how many those were.
+func withoutTurn(between, turn []message.Message) (rows []message.Message, spared int) {
+	prompts := map[string]bool{}
+	for _, m := range turn {
+		if m.Role == message.User {
+			prompts[m.ID] = true
+		}
 	}
 	for _, r := range between {
-		if r.Role == message.User && at[r.ID] >= start {
+		if prompts[r.ID] {
 			spared++
 			continue
 		}
@@ -903,7 +952,7 @@ func readPaths(rows []message.Message, calls map[string]message.ToolCall, workin
 // line: that everything since the push was removed, where the frame's
 // thoughts are, the files its rounds edited, the other calls to mem in
 // them, and that their reads are forgotten.
-func popClauses(ev gnovm.MemFrame, rows []message.Message, calls map[string]message.ToolCall, workingDir string, reads, keptUser bool) string {
+func popClauses(ev gnovm.MemFrame, rows []message.Message, workingDir string, reads, keptUser bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Everything since you entered `%s` was removed from your context", ev.Id)
 	if keptUser {
@@ -918,7 +967,7 @@ func popClauses(ev gnovm.MemFrame, rows []message.Message, calls map[string]mess
 		fmt.Fprintf(&b, ", and so do its %d thoughts, listed above and kept in mem", ev.Thoughts)
 	}
 	b.WriteString("; the user still sees all of it.")
-	if edited := editedFiles(rows, calls, workingDir); len(edited) > 0 {
+	if edited := EditedFiles(rows, workingDir); len(edited) > 0 {
 		b.WriteString(" In it you edited " + strings.Join(edited, ", ") + ".")
 	}
 	if changes := memChanges(rows); len(changes) > 0 {
@@ -930,10 +979,11 @@ func popClauses(ev gnovm.MemFrame, rows []message.Message, calls map[string]mess
 	return b.String()
 }
 
-// editedFiles is the files the file tools changed in rows, as /rewind
+// EditedFiles is the files the file tools changed in rows, as /rewind
 // finds them (tools.ChangedFiles), each once, relative to the working
 // directory where under it.
-func editedFiles(rows []message.Message, calls map[string]message.ToolCall, workingDir string) []string {
+func EditedFiles(rows []message.Message, workingDir string) []string {
+	calls := callsOf(rows)
 	var files []string
 	seen := map[string]bool{}
 	for _, row := range rows {
@@ -1280,9 +1330,16 @@ func slidLine(slid []string, stack []stackFrame) string {
 // compaction check was not.
 const largeStep = "this step is large: pop it with what you have, or split it into sub-steps"
 
+// LargeStepAt is how many tokens the work of the frame a session is in
+// may take in, for a session that compacts or slides at point, before the
+// model is told its step is large: half of point.
+func LargeStepAt(point int64) int64 {
+	return point / 2
+}
+
 // largeLine is largeStep for the frame on top of the session's stack when
-// the session's running total, tokens, has grown past half of point since
-// the push, given once per frame; "" otherwise.
+// the session's running total, tokens, has grown past LargeStepAt(point)
+// since the push, given once per frame; "" otherwise.
 func (f *frameStacks) largeLine(ctx context.Context, sessionID string, tokens, point int64) string {
 	if f == nil || sessionID == "" || point <= 0 {
 		return ""
@@ -1294,7 +1351,7 @@ func (f *frameStacks) largeLine(ctx context.Context, sessionID string, tokens, p
 		return ""
 	}
 	top := rec.stack[len(rec.stack)-1]
-	if top.warned || tokens-top.tokens <= point/2 {
+	if top.warned || tokens-top.tokens <= LargeStepAt(point) {
 		return ""
 	}
 	top.warned = true

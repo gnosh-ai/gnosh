@@ -212,7 +212,9 @@ option reset <list-key>    # clear a list option back to empty
 - **UI settings**: `option ui compact BOOL`, `option ui diff unified|split`,
   `option ui transparent BOOL`, `option ui mouse BOOL` (default `true`;
   disable to let the terminal/tmux handle selection, copy/paste, and
-  scrolling), `option ui scrollbar default|always|never`,
+  scrolling), `option ui reduce-motion BOOL` (default `false`; no shimmer,
+  flash or count-up on mem's frames; the rest of the TUI still moves),
+  `option ui scrollbar default|always|never`,
   `option ui exit-banner default|compact|none`,
   `option ui completions-max-depth N`, `option ui completions-max-items N`.
 - **List keys** (singular, one value per call, repeatable): `context-path`,

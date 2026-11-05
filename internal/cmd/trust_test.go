@@ -64,7 +64,10 @@ func standInGlobalProject(t *testing.T, projectJSON, gnoshrc string) string {
 		"models": {"large": {"model": "stand-in", "provider": "standin"}, "small": {"model": "stand-in", "provider": "standin"}}}`
 	require.NoError(t, os.MkdirAll(global, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(global, "gnosh.json"), []byte(cfg), 0o600))
-	proj := t.TempDir()
+	// Trust names the folder with its links resolved, and its files from
+	// there; macOS's temp dir runs through a link (/var is /private/var).
+	proj, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(proj, "gnosh.json"), []byte(projectJSON), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(proj, ".gnoshrc"), []byte(gnoshrc), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(proj, "a.txt"), []byte("alpha\n"), 0o644))
@@ -138,9 +141,7 @@ func TestTrustCommand(t *testing.T) {
 	require.Contains(t, out, "  - run .gnoshrc, a shell script, as gnosh starts\n")
 	require.Contains(t, out, "  - start 1 MCP server: helper\n")
 	require.Contains(t, out, "What could go wrong:\n  - Its gnoshrc and MCP server would run as you: ")
-	real, err := filepath.EvalSymlinks(proj)
-	require.NoError(t, err)
-	require.Contains(t, out, "If you did not write them and have not read them: "+config.ForgetCommand(real)+"\n")
+	require.Contains(t, out, "If you did not write them and have not read them: "+config.ForgetCommand(proj)+"\n")
 	require.True(t, config.FolderTrusted(proj))
 
 	out, err = runTrust(t, "--list")

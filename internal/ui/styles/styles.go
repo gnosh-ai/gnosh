@@ -306,6 +306,12 @@ type Styles struct {
 		DefaultDescFg   color.Color    // Default description color when opt is zero
 	}
 
+	// Explorer is the frame explorer's.
+	Explorer struct {
+		// Selected is the selected frame's row.
+		Selected lipgloss.Style
+	}
+
 	// Files
 	Files struct {
 		Path           lipgloss.Style

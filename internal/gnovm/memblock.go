@@ -280,6 +280,62 @@ func MemNotice(dir, project string) string {
 // MemNotice is MemNotice for this Lazy's directory.
 func (l *Lazy) MemNotice(project string) string { return MemNotice(l.opts.Dir, project) }
 
+// MemPulse is what mem's status.json says goes on in a project: the
+// questions waiting on the user, and the open goals.
+type MemPulse struct {
+	// At is when mem last changed, in Unix seconds.
+	At    int64          `json:"at"`
+	Asks  []MemPulseItem `json:"asks"`
+	Goals []MemPulseGoal `json:"goals"`
+}
+
+// MemPulseItem is an item of mem.
+type MemPulseItem struct {
+	Name  string `json:"name"`
+	Title string `json:"title"`
+}
+
+// MemPulseGoal is an open goal: the session working on it, "" for none;
+// how many of its steps are open and done; the step Next() hands out
+// next; and the steps it holds back.
+type MemPulseGoal struct {
+	Name      string         `json:"name"`
+	Title     string         `json:"title"`
+	Doing     string         `json:"doing"`
+	StepsOpen int            `json:"steps_open"`
+	StepsDone int            `json:"steps_done"`
+	Next      string         `json:"next"`
+	NextTitle string         `json:"next_title"`
+	Held      []MemPulseHeld `json:"held"`
+}
+
+// MemPulseHeld is a step held back, and why: "user" for one that is the
+// user's, "session" for one session Doing started, "day" for one that
+// waits until the day Wait, else one that waits for the words Wait.
+type MemPulseHeld struct {
+	Name  string `json:"name"`
+	Title string `json:"title"`
+	Why   string `json:"why"`
+	Wait  string `json:"wait"`
+	Doing string `json:"doing"`
+}
+
+// ReadMemPulse is project's MemPulse under dir, from the status.json that
+// mem last wrote; empty when there is none. It reads a file, and starts
+// nothing.
+func ReadMemPulse(dir, project string) MemPulse {
+	var p MemPulse
+	st, ok := readMemStatus(memDir(dir, project))
+	if !ok || json.Unmarshal(st.Mem, &p) != nil {
+		return MemPulse{}
+	}
+	p.At = st.At
+	return p
+}
+
+// MemPulse is ReadMemPulse for this Lazy's directory.
+func (l *Lazy) MemPulse(project string) MemPulse { return ReadMemPulse(l.opts.Dir, project) }
+
 func memNotice(st memStatus, now time.Time) string {
 	var m memJSON
 	if json.Unmarshal(st.Mem, &m) != nil {

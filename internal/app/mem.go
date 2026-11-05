@@ -82,3 +82,13 @@ func (a *App) MemNotice() string {
 	}
 	return a.gnovms.MemNotice(a.config.WorkingDir())
 }
+
+// MemPulse is what the project's mem says goes on: the questions waiting
+// on the user, and the open goals. It reads a file mem keeps, and starts
+// no worker.
+func (a *App) MemPulse() gnovm.MemPulse {
+	if a.gnovms == nil {
+		return gnovm.MemPulse{}
+	}
+	return a.gnovms.MemPulse(a.config.WorkingDir())
+}

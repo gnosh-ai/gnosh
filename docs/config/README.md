@@ -579,6 +579,11 @@ Available Keys:
                                 selection, and scrolling in the TUI (default
                                 true); disable to let the terminal emulator
                                 or tmux handle text selection and copy/paste
+  reduce-motion bool            keep mem's frames still in the sidebar's
+                                Stack, compact mode and the frame explorer:
+                                no shimmer, no flash or count-up when one
+                                pops; spinners and the rest of the TUI still
+                                move (default false)
   scrollbar string              control chat scrollbar visibility: default,
                                 always, or never
   exit-banner default|compact|none
@@ -594,6 +599,7 @@ option ui compact true
 option ui diff unified
 option ui transparent true
 option ui mouse false
+option ui reduce-motion true
 option ui scrollbar always
 option ui exit-banner compact
 option ui completions-max-depth 4

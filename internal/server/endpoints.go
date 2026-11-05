@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/charmbracelet/crush/internal/apigen"
+	"github.com/charmbracelet/crush/internal/gnovm"
 	"github.com/charmbracelet/crush/internal/proto"
 )
 
@@ -499,6 +500,15 @@ func (c *controllerV1) endpoints() []apigen.Endpoint {
 			Responds(proto.MemText{}).
 			Fails(404, 500).
 			Handle(c.handleGetWorkspaceMemNotice),
+
+		apigen.Get("/v1/workspaces/{id}/mem/pulse").
+			Summary("Mem pulse").
+			Description("What the workspace's mem says goes on: the questions waiting on the user, and the open goals with the session working on each, its next step and the steps it holds back.").
+			Tags("workspaces").
+			PathParam("id", "Workspace ID").
+			Responds(gnovm.MemPulse{}).
+			Fails(404, 500).
+			Handle(c.handleGetWorkspaceMemPulse),
 
 		apigen.Get("/v1/workspaces/{id}/agent/context").
 			Summary("Context usage").

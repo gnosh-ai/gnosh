@@ -54,6 +54,13 @@ func compactAt(cw, window int64, overrides bool) int64 {
 	return at
 }
 
+// CompactAt is the running token total at which a session on a model with
+// context window cw compacts, or slides while it stands in frames, with
+// the auto_compact_window option window and the variables read.
+func CompactAt(cw, window int64) int64 {
+	return compactAt(cw, window, true)
+}
+
 // optionAutoCompactWindow is the auto_compact_window option, raised to
 // 100k or lowered to 1M as Claude Code takes its setting.
 func optionAutoCompactWindow(window int64) int64 {

@@ -91,6 +91,12 @@ type Chat struct {
 	com      *common.Common
 	list     *list.List
 	idInxMap map[string]int // Map of message IDs to their indices in the list
+	// popped is the mark of each item that shows a row out of the
+	// model's context, by item id (see MarkPopped).
+	popped map[string]string
+	// framed is the items of the frame the explorer shows in the chat,
+	// marked with a gutter (see ShowFrame).
+	framed map[string]bool
 
 	// animRunning is true while the shared animation clock has a tick
 	// outstanding. The clock stops itself when no visible item is spinning
@@ -194,6 +200,9 @@ func NewChat(com *common.Common, scrollbarMode string) *Chat {
 	l.SetGap(1)
 	l.RegisterRenderCallback(c.applyHighlightRange)
 	l.RegisterRenderCallback(list.FocusedRenderCallback(l))
+	l.RegisterRenderCallback(c.dimPopped)
+	l.RegisterRenderCallback(c.frameGutter)
+	l.SetGapLabel(c.poppedLabel)
 	c.list = l
 	c.mouseDownItem = -1
 	c.mouseDragItem = -1
@@ -437,6 +446,8 @@ func (m *Chat) InvalidateVisibleRenderCaches() {
 // SetMessages sets the chat messages to the provided list of message items.
 func (m *Chat) SetMessages(msgs ...chat.MessageItem) tea.Cmd {
 	m.idInxMap = make(map[string]int)
+	m.popped = nil
+	m.framed = nil
 	m.resetScrollbar() // Reset scrollbar visibility on new session load
 
 	items := make([]list.Item, len(msgs))
@@ -961,6 +972,8 @@ func (m *Chat) SelectNearestInView(scrolledUp bool) {
 // ClearMessages removes all messages from the chat list.
 func (m *Chat) ClearMessages() {
 	m.idInxMap = make(map[string]int)
+	m.popped = nil
+	m.framed = nil
 	m.resetScrollbar()
 	m.list.SetItems()
 	m.ClearMouse()

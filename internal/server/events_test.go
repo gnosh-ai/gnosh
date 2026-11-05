@@ -347,3 +347,15 @@ func TestMessageToProtoKeepsANotice(t *testing.T) {
 	}})
 	require.Equal(t, []proto.ContentPart{proto.TextContent{Text: "Background command", Hidden: true, Notice: true}}, got.Parts)
 }
+
+// A row a frame's pop removed reaches a client still marked, so a
+// client/server TUI dims it and leaves it out of what the model sees.
+func TestMessageToProtoKeepsThePop(t *testing.T) {
+	t.Parallel()
+
+	data, err := json.Marshal(messageToProto(message.Message{ID: "m1", Role: message.Tool, Popped: "fix-flaky/find-cause"}))
+	require.NoError(t, err)
+	var got proto.Message
+	require.NoError(t, json.Unmarshal(data, &got))
+	require.Equal(t, "fix-flaky/find-cause", got.Popped)
+}

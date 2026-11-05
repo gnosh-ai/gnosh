@@ -45,6 +45,7 @@ func TestPostMem(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, do(http.MethodPost, "/v1/workspaces/"+uuid.New().String()+"/mem", body).StatusCode)
 	require.Equal(t, http.StatusBadRequest, do(http.MethodPost, "/v1/workspaces/"+wsID+"/mem", "{"+secret).StatusCode, "a body that is not JSON")
 	require.Equal(t, http.StatusBadRequest, do(http.MethodGet, "/v1/workspaces/"+wsID+"/mem/notice", "").StatusCode)
+	require.Equal(t, http.StatusBadRequest, do(http.MethodGet, "/v1/workspaces/"+wsID+"/mem/pulse", "").StatusCode)
 	require.NotEmpty(t, logs.String())
 	require.NotContains(t, logs.String(), secret)
 }

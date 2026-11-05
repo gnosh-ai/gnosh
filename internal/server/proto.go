@@ -808,6 +808,17 @@ func (c *controllerV1) handleGetWorkspaceMemNotice(w http.ResponseWriter, r *htt
 	jsonEncode(w, proto.MemText{Text: text})
 }
 
+// handleGetWorkspaceMemPulse reports what the workspace's mem says goes
+// on.
+func (c *controllerV1) handleGetWorkspaceMemPulse(w http.ResponseWriter, r *http.Request) {
+	pulse, err := c.backend.MemPulse(r.PathValue("id"))
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
+	jsonEncode(w, pulse)
+}
+
 // handleGetWorkspaceAgentContext reports what fills a session's context
 // window.
 func (c *controllerV1) handleGetWorkspaceAgentContext(w http.ResponseWriter, r *http.Request) {

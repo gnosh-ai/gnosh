@@ -488,6 +488,12 @@ func TestPeersDemonstration(t *testing.T) {
 				require.GreaterOrEqual(t, e.At, rootPush, "%d peers: %s ended while work was left", n, e.Session)
 			}
 		}
+		require.GreaterOrEqual(t, len(sessions), min(n, 3), "the work was shared")
+		if raceEnabled {
+			// The race detector slows the peers unevenly, so their times
+			// say nothing about the schedule.
+			continue
+		}
 		require.Less(t, o.wall, bound, "%d peers", n)
 		if roles[0] == "root" {
 			// The run keeps to its rule's own schedule: no needless wait,
@@ -495,7 +501,6 @@ func TestPeersDemonstration(t *testing.T) {
 			require.Less(t, o.wall, sim*115/100+300*time.Millisecond, "%d peers keep to their rule's schedule", n)
 		}
 		require.Greater(t, speedup, 1.6, "%d peers are faster than one", n)
-		require.GreaterOrEqual(t, len(sessions), min(n, 3), "the work was shared")
 	}
 }
 

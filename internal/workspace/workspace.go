@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/gnovm"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
@@ -161,6 +162,9 @@ type Workspace interface {
 	// MemNotice is what the user is told of mem as a session starts: what
 	// is due and what waits on them, in one line; "" when nothing is.
 	MemNotice(ctx context.Context) (string, error)
+	// MemPulse is what mem says goes on: the questions waiting on the
+	// user, and the open goals.
+	MemPulse(ctx context.Context) (gnovm.MemPulse, error)
 	// ContextReport is what fills the session's context window ("" for a
 	// new session), the Markdown Claude Code's /context prints.
 	ContextReport(ctx context.Context, sessionID string) (string, error)

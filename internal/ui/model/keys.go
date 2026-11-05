@@ -71,6 +71,36 @@ type KeyMap struct {
 		ScrollRight    key.Binding
 		FocusSidebar   key.Binding
 		FocusChat      key.Binding
+		Frames         key.Binding
+	}
+
+	// Explorer is the frame explorer's keys, while it has focus.
+	Explorer struct {
+		Close   key.Binding
+		Size    key.Binding
+		Full    key.Binding
+		Half    key.Binding
+		Tabs    key.Binding
+		PrevTab key.Binding
+		NextTab key.Binding
+		Tree    key.Binding
+		Pulse   key.Binding
+		Context key.Binding
+		Move    key.Binding
+		Up      key.Binding
+		Down    key.Binding
+		Fold    key.Binding
+		Unfold  key.Binding
+		Folding key.Binding
+		Follow  key.Binding
+		Show    key.Binding
+		Search  key.Binding
+		Focus   key.Binding
+		// Lanes, Open and Answer are the Pulse tab's help for Fold and
+		// Unfold, and for Show on a frame and on what waits on the user.
+		Lanes  key.Binding
+		Open   key.Binding
+		Answer key.Binding
 	}
 
 	// Global key maps
@@ -311,6 +341,37 @@ func DefaultKeyMap() KeyMap {
 		key.WithKeys("h", "left"),
 		key.WithHelp("h/←", "focus chat"),
 	)
+	km.Chat.Frames = key.NewBinding(
+		key.WithKeys("ctrl+x"),
+		key.WithHelp("ctrl+x", "frames"),
+	)
+
+	km.Explorer.Close = key.NewBinding(
+		key.WithKeys("esc", "alt+esc"),
+		key.WithHelp("esc", "close"),
+	)
+	km.Explorer.Full = key.NewBinding(key.WithKeys("+", "="))
+	km.Explorer.Half = key.NewBinding(key.WithKeys("-", "_"))
+	km.Explorer.Size = key.NewBinding(key.WithKeys("+", "-"), key.WithHelp("+/-", "full/half"))
+	km.Explorer.PrevTab = key.NewBinding(key.WithKeys("["))
+	km.Explorer.NextTab = key.NewBinding(key.WithKeys("]"))
+	km.Explorer.Tabs = key.NewBinding(key.WithKeys("[", "]"), key.WithHelp("[/]", "tabs"))
+	km.Explorer.Tree = key.NewBinding(key.WithKeys("1"))
+	km.Explorer.Pulse = key.NewBinding(key.WithKeys("2"))
+	km.Explorer.Context = key.NewBinding(key.WithKeys("3"))
+	km.Explorer.Up = key.NewBinding(key.WithKeys("up", "k"))
+	km.Explorer.Down = key.NewBinding(key.WithKeys("down", "j"))
+	km.Explorer.Move = key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑↓/jk", "move"))
+	km.Explorer.Fold = key.NewBinding(key.WithKeys("left", "h"))
+	km.Explorer.Unfold = key.NewBinding(key.WithKeys("right", "l"))
+	km.Explorer.Folding = key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←→/hl", "fold"))
+	km.Explorer.Follow = key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "follow"))
+	km.Explorer.Show = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "show in chat"))
+	km.Explorer.Search = key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search"))
+	km.Explorer.Focus = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "focus editor"))
+	km.Explorer.Lanes = key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←→/hl", "lanes"))
+	km.Explorer.Open = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open in tree"))
+	km.Explorer.Answer = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "answer"))
 
 	return km
 }

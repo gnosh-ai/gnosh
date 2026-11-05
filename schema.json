@@ -1035,6 +1035,11 @@
           ],
           "description": "Exit banner style after quitting Gnosh",
           "default": "default"
+        },
+        "reduce_motion": {
+          "type": "boolean",
+          "description": "Keep the frames' views still: no shimmer on the frame at work, no flash or count-up on a pop. Their clocks, the spinners and the rest of the TUI still move",
+          "default": false
         }
       },
       "additionalProperties": false,

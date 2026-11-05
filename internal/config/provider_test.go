@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
@@ -310,7 +311,7 @@ func TestCachePathFor(t *testing.T) {
 			if tt.expected != "" {
 				require.Equal(t, tt.expected, filepath.ToSlash(result))
 			} else {
-				require.Regexp(t, `gnosh|cr[au]sh`, result, "under the program's data directory, by any of its names")
+				require.Regexp(t, strings.Join(appNames, "|"), result, "under the program's data directory, by any of its names")
 				require.Contains(t, result, "providers.json")
 			}
 		})

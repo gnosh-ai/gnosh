@@ -449,9 +449,9 @@ func ExtractMessageItems(sty *styles.Styles, msg *message.Message, toolResults m
 		}
 		// Reconstruct shell command items from ShellCommand parts.
 		var items []MessageItem
-		for _, part := range msg.Parts {
+		for i, part := range msg.Parts {
 			if sc, ok := part.(message.ShellCommand); ok {
-				items = append(items, NewShellItem(sty, sc.Command, sc.Output, sc.ExitCode))
+				items = append(items, newShellItem(sty, ShellItemID(msg.ID, i), sc.Command, sc.Output, sc.ExitCode))
 			}
 		}
 		if len(items) > 0 {

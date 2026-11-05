@@ -215,11 +215,11 @@ var memShowRe = regexp.MustCompile(`mem\.Show\((?:"([^"]*)")?\)`)
 // /mem was typed in, as this session, and the others by their titles.
 func memSessions(out, session string, titles map[string]string) string {
 	if session != "" {
-		out = strings.ReplaceAll(out, "session "+memShortID(session), "this session")
+		out = strings.ReplaceAll(out, "session "+MemShortID(session), "this session")
 	}
 	for id, title := range titles {
 		if title != "" && id != session {
-			out = strings.ReplaceAll(out, "session "+memShortID(id), "session "+strconv.Quote(memLine(title, 60)))
+			out = strings.ReplaceAll(out, "session "+MemShortID(id), "session "+strconv.Quote(memLine(title, 60)))
 		}
 	}
 	return out
@@ -296,7 +296,7 @@ func memWho(e memEntry, titles map[string]string) string {
 	case titles[e.Session] != "":
 		return "the agent in " + strconv.Quote(memLine(titles[e.Session], 60))
 	}
-	return "the agent in session " + memShortID(e.Session)
+	return "the agent in session " + MemShortID(e.Session)
 }
 
 // memOpText is an Op as /mem log shows it.

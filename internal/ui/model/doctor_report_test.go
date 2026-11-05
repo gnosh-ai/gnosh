@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -27,17 +28,19 @@ func (w *doctorWorkspace) Config() *config.Config {
 	return &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}
 }
 
-// messagesOf runs cmd and the commands of any batch it returns, and gives
-// every message they produce.
+// messagesOf runs cmd and the commands of any batch or sequence it
+// returns, and gives every message they produce, in order.
 func messagesOf(cmd tea.Cmd) []tea.Msg {
 	if cmd == nil {
 		return nil
 	}
 	msg := cmd()
-	if batch, ok := msg.(tea.BatchMsg); ok {
+	// A batch is a tea.BatchMsg; a sequence, a slice of commands of a type
+	// tea does not export.
+	if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeFor[tea.Cmd]() {
 		var msgs []tea.Msg
-		for _, c := range batch {
-			msgs = append(msgs, messagesOf(c)...)
+		for i := range v.Len() {
+			msgs = append(msgs, messagesOf(v.Index(i).Interface().(tea.Cmd))...)
 		}
 		return msgs
 	}

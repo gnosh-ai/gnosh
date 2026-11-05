@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/doctor"
+	"github.com/charmbracelet/crush/internal/gnovm"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
@@ -294,6 +295,19 @@ func (b *Backend) MemNotice(workspaceID string) (string, error) {
 		return "", ErrAgentNotInitialized
 	}
 	return ws.MemNotice(), nil
+}
+
+// MemPulse is what the workspace's mem says goes on; see
+// app.App.MemPulse.
+func (b *Backend) MemPulse(workspaceID string) (gnovm.MemPulse, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return gnovm.MemPulse{}, err
+	}
+	if ws.App == nil {
+		return gnovm.MemPulse{}, ErrAgentNotInitialized
+	}
+	return ws.MemPulse(), nil
 }
 
 // ContextReport is what fills a session's context window ("" for a new

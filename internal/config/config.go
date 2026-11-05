@@ -401,14 +401,15 @@ type LSPConfig struct {
 }
 
 type TUIOptions struct {
-	CompactMode bool        `json:"compact_mode,omitempty" jsonschema:"description=Enable compact mode for the TUI interface,default=false"`
-	DiffMode    string      `json:"diff_mode,omitempty" jsonschema:"description=Diff mode for the TUI interface,enum=unified,enum=split"`
-	ActiveTheme string      `json:"active_theme,omitempty" jsonschema:"description=Name of the currently active theme,default=gnosh-cosmos,example=gnosh-cosmos,example=charmtone-panther,example=gruvbox-dark"`
-	Completions Completions `json:"completions,omitzero" jsonschema:"description=Completions UI options"`
-	Transparent *bool       `json:"transparent,omitempty" jsonschema:"description=Enable transparent background for the TUI interface,default=false"`
-	Scrollbar   string      `json:"scrollbar,omitempty" jsonschema:"description=Chat scrollbar visibility,enum=default,enum=always,enum=never,default=default"`
-	Mouse       *bool       `json:"mouse,omitempty" jsonschema:"description=Enable terminal mouse capture for selection\\, clicks\\, and scrolling in the TUI. Disable to let the terminal emulator or tmux handle text selection and copy/paste,default=true"`
-	ExitBanner  ExitBanner  `json:"exit_banner,omitempty" jsonschema:"description=Exit banner style after quitting Gnosh,enum=default,enum=compact,enum=none,default=default"`
+	CompactMode  bool        `json:"compact_mode,omitempty" jsonschema:"description=Enable compact mode for the TUI interface,default=false"`
+	DiffMode     string      `json:"diff_mode,omitempty" jsonschema:"description=Diff mode for the TUI interface,enum=unified,enum=split"`
+	ActiveTheme  string      `json:"active_theme,omitempty" jsonschema:"description=Name of the currently active theme,default=gnosh-cosmos,example=gnosh-cosmos,example=charmtone-panther,example=gruvbox-dark"`
+	Completions  Completions `json:"completions,omitzero" jsonschema:"description=Completions UI options"`
+	Transparent  *bool       `json:"transparent,omitempty" jsonschema:"description=Enable transparent background for the TUI interface,default=false"`
+	Scrollbar    string      `json:"scrollbar,omitempty" jsonschema:"description=Chat scrollbar visibility,enum=default,enum=always,enum=never,default=default"`
+	Mouse        *bool       `json:"mouse,omitempty" jsonschema:"description=Enable terminal mouse capture for selection\\, clicks\\, and scrolling in the TUI. Disable to let the terminal emulator or tmux handle text selection and copy/paste,default=true"`
+	ExitBanner   ExitBanner  `json:"exit_banner,omitempty" jsonschema:"description=Exit banner style after quitting Gnosh,enum=default,enum=compact,enum=none,default=default"`
+	ReduceMotion bool        `json:"reduce_motion,omitempty" jsonschema:"description=Keep the frames' views still: no shimmer on the frame at work\\, no flash or count-up on a pop. Their clocks\\, the spinners and the rest of the TUI still move,default=false"`
 }
 
 // IsTransparent reports whether the TUI draws a transparent background. The

@@ -431,6 +431,27 @@ func (m *multiLineItem) Render(_ int) string {
 
 func (m *multiLineItem) Finished() bool { return true }
 
+// A gap row can carry a label, the line between two items; it stays a
+// gap, so no position in it belongs to an item.
+func TestList_GapLabel(t *testing.T) {
+	t.Parallel()
+
+	l := NewList(newTrackedItem("a", "item-a", true), newTrackedItem("b", "item-b", true), newTrackedItem("c", "item-c", true))
+	l.SetSize(40, 20)
+	l.SetGap(1)
+	l.SetGapLabel(func(after int) string {
+		if after == 0 {
+			return "between a and b"
+		}
+		return ""
+	})
+
+	lines := strings.Split(l.Render(), "\n")
+	require.Equal(t, []string{"item-a:w=40", "between a and b", "item-b:w=40", "", "item-c:w=40"}, lines[:5])
+	idx, _ := l.ItemIndexAtPosition(0, 1)
+	require.Equal(t, -1, idx, "the label's row is still the gap")
+}
+
 // expectedRender computes what list.Render *should* produce from
 // first principles given the item heights, viewport, offsetIdx,
 // offsetLine, gap, and reverse settings. It mirrors the pre-F7

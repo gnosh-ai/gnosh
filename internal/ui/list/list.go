@@ -16,6 +16,9 @@ type List struct {
 
 	// Gap between items (0 or less means no gap)
 	gap int
+	// gapLabel is what the first row of the gap after an item holds; nil
+	// leaves every gap blank.
+	gapLabel func(after int) string
 
 	// show list in reverse order
 	reverse bool
@@ -112,6 +115,21 @@ func (l *List) SetSize(width, height int) {
 // SetGap sets the gap between items.
 func (l *List) SetGap(gap int) {
 	l.gap = gap
+}
+
+// SetGapLabel sets what the first row of the gap after each item holds:
+// label(idx) for the gap after item idx, a blank row for "". The rows
+// stay the gap's: no position in them belongs to an item.
+func (l *List) SetGapLabel(label func(after int) string) {
+	l.gapLabel = label
+}
+
+// gapRow is row row of the gap after item idx.
+func (l *List) gapRow(idx, row int) string {
+	if row != 0 || l.gapLabel == nil {
+		return ""
+	}
+	return l.gapLabel(idx)
 }
 
 // Gap returns the gap between items.
@@ -461,7 +479,8 @@ func (l *List) EndSelectionDrag() {
 	}
 }
 
-// ScrollToIndex scrolls the list to the given item index.
+// ScrollToIndex scrolls the list to the given item index, or to the
+// bottom where too little follows the item to fill the viewport.
 func (l *List) ScrollToIndex(index int) {
 	if index < 0 {
 		index = 0
@@ -471,6 +490,10 @@ func (l *List) ScrollToIndex(index int) {
 	}
 	l.offsetIdx = index
 	l.offsetLine = 0
+	if lastOffsetIdx, lastOffsetLine, _ := l.lastOffsetItem(); l.offsetIdx > lastOffsetIdx {
+		l.offsetIdx = lastOffsetIdx
+		l.offsetLine = lastOffsetLine
+	}
 }
 
 // ScrollBy scrolls the list by the given number of lines.
@@ -616,8 +639,8 @@ func (l *List) Render() string {
 			// trailing gap can't push past the viewport.
 			if l.gap > 0 {
 				gapBudget := min(budget-len(lines), l.gap)
-				for range gapBudget {
-					lines = append(lines, "")
+				for row := range gapBudget {
+					lines = append(lines, l.gapRow(currentIdx, row))
 				}
 			}
 		} else {
@@ -626,8 +649,8 @@ func (l *List) Render() string {
 			gapRemaining := l.gap - gapOffset
 			if gapRemaining > 0 {
 				gapBudget := min(budget-len(lines), gapRemaining)
-				for range gapBudget {
-					lines = append(lines, "")
+				for row := range gapBudget {
+					lines = append(lines, l.gapRow(currentIdx, gapOffset+row))
 				}
 			}
 		}

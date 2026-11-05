@@ -67,6 +67,7 @@ func TestShellConfigOptionUI(t *testing.T) {
 option ui diff split
 option ui transparent false
 option ui mouse false
+option ui reduce-motion true
 option ui scrollbar always
 option ui completions-max-depth 4
 option ui completions-max-items 200`)
@@ -79,6 +80,7 @@ option ui completions-max-items 200`)
 	require.False(t, *ui.Transparent)
 	require.NotNil(t, ui.Mouse)
 	require.False(t, *ui.Mouse)
+	require.True(t, ui.ReduceMotion)
 	require.Equal(t, "always", ui.Scrollbar)
 	require.NotNil(t, ui.Completions.MaxDepth)
 	require.Equal(t, 4, *ui.Completions.MaxDepth)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -31,10 +32,14 @@ import (
 // the model's notification waits can be driven without an app.
 type notificationTestWorkspace struct {
 	workspace.Workspace
-	cfg        *config.Config
-	dir        string
-	grants     int
-	denials    int
+	cfg     *config.Config
+	dir     string
+	grants  int
+	denials int
+
+	// mu guards runPrompts: AgentRun appends to it from the goroutine
+	// that runs the send command.
+	mu         sync.Mutex
 	runPrompts []string
 }
 
@@ -54,8 +59,17 @@ func (w *notificationTestWorkspace) AgentQueuedPromptsList(string) []string {
 }
 
 func (w *notificationTestWorkspace) AgentRun(_ context.Context, sessionID, prompt string, _ ...message.Attachment) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.runPrompts = append(w.runPrompts, sessionID+": "+prompt)
 	return nil
+}
+
+// sentPrompts is what AgentRun was given so far, as "session: prompt".
+func (w *notificationTestWorkspace) sentPrompts() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return slices.Clone(w.runPrompts)
 }
 
 func (w *notificationTestWorkspace) PermissionGrant(permission.PermissionRequest) bool {
@@ -442,7 +456,7 @@ func TestIdleNotificationNewPromptFiresNothing(t *testing.T) {
 	require.NotNil(t, out)
 	runOut(t, out)
 	require.Eventually(t, func() bool {
-		return len(ws.runPrompts) == 1 && ws.runPrompts[0] == "sess-1: hi"
+		return slices.Equal(ws.sentPrompts(), []string{"sess-1: hi"})
 	}, 2*time.Second, time.Millisecond, "the prompt was sent")
 
 	_, out = u.Update(waitForTick(t, ch))

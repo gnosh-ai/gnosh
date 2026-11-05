@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/gnovm"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
@@ -712,6 +713,27 @@ func (c *Client) MemNotice(ctx context.Context, id string) (string, error) {
 		return "", fmt.Errorf("failed to get mem's notice: %w", err)
 	}
 	return decodeMemText(rsp, "mem's notice")
+}
+
+// MemPulse is what the workspace's mem says goes on: the questions
+// waiting on the user, and the open goals.
+func (c *Client) MemPulse(ctx context.Context, id string) (gnovm.MemPulse, error) {
+	rsp, err := c.get(ctx, fmt.Sprintf("/workspaces/%s/mem/pulse", id), nil, nil)
+	if err != nil {
+		return gnovm.MemPulse{}, fmt.Errorf("failed to get mem's pulse: %w", err)
+	}
+	defer rsp.Body.Close()
+	if rsp.StatusCode != http.StatusOK {
+		if msg := decodeErrorMessage(rsp.Body); msg != "" {
+			return gnovm.MemPulse{}, errors.New(msg)
+		}
+		return gnovm.MemPulse{}, fmt.Errorf("mem's pulse: status code %d", rsp.StatusCode)
+	}
+	var pulse gnovm.MemPulse
+	if err := json.NewDecoder(rsp.Body).Decode(&pulse); err != nil {
+		return gnovm.MemPulse{}, fmt.Errorf("failed to decode mem's pulse: %w", err)
+	}
+	return pulse, nil
 }
 
 // decodeMemText reads what mem answered, or the error the server sent.

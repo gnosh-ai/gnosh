@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/gnovm"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
@@ -15,8 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// memWorkspace answers /mem with what it was asked, and mem's notice with
-// notice.
+// memWorkspace answers /mem with what it was asked, mem's notice with
+// notice, and mem's pulse with nothing.
 type memWorkspace struct {
 	workspace.Workspace
 	args, notice string
@@ -30,13 +31,17 @@ func (w *memWorkspace) MemCommand(_ context.Context, _, args string) (string, er
 
 func (w *memWorkspace) MemNotice(context.Context) (string, error) { return w.notice, w.err }
 
+func (w *memWorkspace) MemPulse(context.Context) (gnovm.MemPulse, error) {
+	return gnovm.MemPulse{}, nil
+}
+
 func (w *memWorkspace) Config() *config.Config {
 	return &config.Config{Options: &config.Options{TUI: &config.TUIOptions{}}}
 }
 
 // /mem, typed or chosen in the palette, with what follows it, asks the
-// workspace and shows mem's text as it is, not as Markdown; a failure is
-// reported.
+// workspace and shows mem's text as it is, not as Markdown, then reads
+// mem's pulse again; a failure is reported.
 func TestMemCommandOpensTheDialog(t *testing.T) {
 	t.Parallel()
 
@@ -46,9 +51,9 @@ func TestMemCommandOpensTheDialog(t *testing.T) {
 	u.com.Workspace = ws
 	want := reportMsg{title: "Mem", report: "mem: 1 goal open\ngoals:\n  [ ] `ship` \"ship it\"", plain: true}
 
-	require.Equal(t, want, u.sendMessage("/mem")())
+	require.Equal(t, []tea.Msg{want, memPulseMsg{}}, messagesOf(u.sendMessage("/mem")))
 	require.Empty(t, ws.args)
-	require.Equal(t, want, u.sendMessage("/mem log 5")())
+	require.Equal(t, []tea.Msg{want, memPulseMsg{}}, messagesOf(u.sendMessage("/mem log 5")))
 	require.Equal(t, "log 5", ws.args)
 
 	c, err := dialog.NewCommands(u.com, "", false, false, false, nil, nil)
@@ -65,7 +70,7 @@ func TestMemCommandOpensTheDialog(t *testing.T) {
 	require.True(t, u.dialog.ContainsDialog(dialog.ReportID))
 
 	ws.err = errors.New("mem is in use by another gnosh process; try again shortly")
-	info, ok := u.memCommand("")().(util.InfoMsg)
+	info, ok := messagesOf(u.memCommand(""))[0].(util.InfoMsg)
 	require.True(t, ok)
 	require.Equal(t, util.InfoTypeError, info.Type)
 }

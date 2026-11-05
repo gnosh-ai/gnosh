@@ -34,6 +34,9 @@ type Message struct {
 	CreatedAt               int64         `json:"created_at"`
 	UpdatedAt               int64         `json:"updated_at"`
 	IsSummaryMessage        bool          `json:"is_summary_message,omitempty"`
+	// Popped is the frame whose pop removed the message from the model's
+	// context, "" for none.
+	Popped string `json:"popped,omitempty"`
 }
 
 // MessageRole represents the role of a message sender.

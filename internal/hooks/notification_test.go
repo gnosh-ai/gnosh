@@ -7,18 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 )
-
-// logSwapMu keeps two tests that capture the default logger from
-// running at once: each restores the logger it found, and two at once
-// would each restore the other's, so a failure would land in the wrong
-// buffer.
-var logSwapMu sync.Mutex
 
 // notificationRunner builds a Runner holding only Notification hooks,
 // each with the given matcher.
@@ -81,13 +74,12 @@ func TestRunNotification(t *testing.T) {
 // notification: a hook that fails is logged, and the result does not
 // hold the notification back.
 func TestRunNotificationFailingHookIsLoggedAndIgnored(t *testing.T) {
-	t.Parallel()
-
-	logSwapMu.Lock()
+	// Not parallel: the parallel tests' hooks log through the default
+	// logger, which would write into buf as this test reads it.
 	var buf strings.Builder
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	t.Cleanup(func() { slog.SetDefault(prev); logSwapMu.Unlock() })
+	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	r := notificationRunner(t, "", `echo "check the path" >&2; exit 1`)
 	result, err := r.RunNotification(context.Background(), "sess", NotificationTypePermissionPrompt, "m", "t")

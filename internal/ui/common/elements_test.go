@@ -33,3 +33,19 @@ func TestFormatTokensAndCostOmitsEstimatedPrefix(t *testing.T) {
 	require.Contains(t, actual, "12%")
 	require.NotContains(t, actual, "~12%")
 }
+
+// A section counts one row per status line, so a name longer than the
+// section is cut to its width, never left to wrap.
+func TestStatusStaysWithinItsWidth(t *testing.T) {
+	t.Parallel()
+
+	sty := styles.CharmtonePantera()
+
+	for _, width := range []int{10, 15, 22} {
+		got := Status(&sty, StatusOpts{Icon: "●", Title: "authoring-language-pack", Description: "ready"}, width)
+		require.LessOrEqual(t, ansi.StringWidth(got), width, "%q at %d columns", ansi.Strip(got), width)
+		require.True(t, strings.HasPrefix(ansi.Strip(got), "● author"), "%q", ansi.Strip(got))
+	}
+	short := ansi.Strip(Status(&sty, StatusOpts{Icon: "●", Title: "jq"}, 15))
+	require.Equal(t, "● jq", short)
+}

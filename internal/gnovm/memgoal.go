@@ -276,7 +276,7 @@ func goalHolds(g memGoalJSON, now time.Time) string {
 		case "user":
 			parts = append(parts, item+" is for the user")
 		case "session":
-			parts = append(parts, item+" was started by session "+memShortID(h.Doing)+", "+memAgo(now, h.Changed))
+			parts = append(parts, item+" was started by session "+MemShortID(h.Doing)+", "+memAgo(now, h.Changed))
 		case "day":
 			parts = append(parts, item+" waits until "+h.Wait)
 		default:
@@ -290,8 +290,8 @@ func goalHolds(g memGoalJSON, now time.Time) string {
 // the frame.
 var memHeldRe = regexp.MustCompile("^`([^`]+)` is held by ")
 
-// memShortID is a session's id as the user reads it: its first 8 bytes.
-func memShortID(id string) string {
+// MemShortID is a session's id as the user reads it: its first 8 bytes.
+func MemShortID(id string) string {
 	if len(id) > 8 {
 		return id[:8]
 	}

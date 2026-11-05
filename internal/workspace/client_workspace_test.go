@@ -91,6 +91,15 @@ func TestProtoToMessagePrismModel(t *testing.T) {
 
 func protoPtrFloat(v float64) *float64 { return &v }
 
+// A row a frame's pop removed keeps its mark on the client, in an event
+// and in a loaded session alike, since both go through protoToMessage.
+func TestProtoToMessageKeepsThePop(t *testing.T) {
+	t.Parallel()
+
+	got := protoToMessage(proto.Message{ID: "m1", Role: proto.Tool, Popped: "fix-flaky/find-cause"})
+	require.Equal(t, "fix-flaky/find-cause", got.Popped)
+}
+
 // TestClientWorkspace_PermissionGrantMapping verifies that
 // PermissionGrant on the ClientWorkspace serializes a one-time grant
 // (proto.PermissionAllow) and PermissionGrantPersistent serializes a

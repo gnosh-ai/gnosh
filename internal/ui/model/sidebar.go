@@ -1,8 +1,10 @@
 package model
 
 import (
+	"fmt"
 	"image"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	mcp "github.com/charmbracelet/crush/internal/agent/tools/mcp"
@@ -11,6 +13,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/logo"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/ultraviolet/layout"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // modelInfo renders the current model information including reasoning
@@ -46,6 +49,45 @@ func (m *UI) modelInfo(width int) string {
 		modelName = model.CatwalkCfg.Name
 	}
 	return common.ModelInfo(m.com.Styles, modelName, providerName, reasoningInfo, modelContext, width, m.hyperCredits)
+}
+
+// modelSees is how much of its window the model holds (modelHolds), as a
+// gauge width wide, in the warning's color past the slide point; "" where
+// the window or the count is unknown.
+func (m *UI) modelSees(width int) string {
+	window, slideAt := m.contextLimits()
+	if window <= 0 || m.countedTokens() <= 0 {
+		return ""
+	}
+	holds := m.modelHolds()
+	t := m.com.Styles
+	fill, _ := m.chartColors()
+	if slideAt > 0 && holds >= slideAt {
+		fill = t.LSP.WarningDiagnostic
+	}
+	label, count := "  model sees ", " "+shortTokens(holds)
+	cells := max(width-len(label)-len(count)-2, 4)
+	return t.Files.EmptyMessage.Render(label) + gauge(fill, t.Files.TruncationHint, holds, window, cells) + t.Files.ArtifactLabel.Render(count)
+}
+
+// waitsLines is, for the sidebar width wide, how many things in mem wait
+// on the user and the first one, in two lines at most; nil when nothing
+// does.
+func (m *UI) waitsLines(width int) []string {
+	waits := m.waitsOnUser()
+	if len(waits) == 0 {
+		return nil
+	}
+	t := m.com.Styles
+	lines := []string{t.LSP.WarningDiagnostic.Bold(true).Render(fmt.Sprintf("▲ %d waits on you", len(waits)))}
+	said := wrapText(t.Files.EmptyMessage, waits[0].Title, width-2)
+	if len(said) > 2 {
+		said = []string{said[0], ansi.Truncate(said[1]+" "+said[2], width-2, "…")}
+	}
+	for _, line := range said {
+		lines = append(lines, "  "+line)
+	}
+	return lines
 }
 
 // updateSidebarScrollState renders the sidebar content and computes scroll
@@ -95,7 +137,22 @@ func (m *UI) updateSidebarScrollState() {
 		cwd,
 		"",
 		m.modelInfo(contentWidth),
-		"",
+	}
+	if sees := m.modelSees(contentWidth); sees != "" {
+		parts = append(parts, sees)
+	}
+	parts = append(parts, "")
+	m.sidebarWaits = lineSpan{}
+	if waits := m.waitsLines(contentWidth); len(waits) > 0 {
+		m.sidebarWaits = lineSpan{first: lipgloss.Height(lipgloss.JoinVertical(lipgloss.Left, parts...)), n: len(waits)}
+		parts = append(append(parts, waits...), "")
+	}
+	m.sidebarStack = stackLines{}
+	if stack, keys := stackSectionLines(t, m.sessionFrames, m.session.Todos, contentWidth, m.stackLook()); stack != "" {
+		// Where each line of the Stack lands in the content, for a click to
+		// find.
+		m.sidebarStack = stackLines{first: lipgloss.Height(lipgloss.JoinVertical(lipgloss.Left, parts...)), keys: keys}
+		parts = append(parts, stack, "")
 	}
 	m.sidebarArtifacts = m.sidebarArtifacts[:0]
 	if len(m.sessionArtifacts) > 0 {
@@ -193,6 +250,13 @@ func (m *UI) drawSidebar(scr uv.Screen, area uv.Rectangle) {
 			uv.NewStyledString(scrollbar).Draw(scr, scrollbarArea)
 		}
 	}
+}
+
+// sidebarAnimating reports whether anything in the sidebar, or in the
+// Stack's trail and column that stand in for it in compact mode, moves at
+// now, which keeps the shared animation clock running.
+func (m *UI) sidebarAnimating(now time.Time) bool {
+	return m.hasPendingArtifact() || m.session != nil && m.sessionFrames.animating(now, m.isAgentBusy())
 }
 
 // sidebarRects splits the sidebar's area into the fixed logo at its top

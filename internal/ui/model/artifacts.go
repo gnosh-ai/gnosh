@@ -301,18 +301,28 @@ func wrapArtifact(s string, width int) []string {
 // machine it runs on.
 var copyToClipboard = common.CopyToClipboard
 
-// artifactAt is the artifact the sidebar shows at the screen point x, y,
-// if any. The content scrolls under the fixed logo, so the point's row is
-// a line of the content, counted from where it is scrolled to.
-func (m *UI) artifactAt(x, y int) (SessionArtifact, bool) {
-	if m.session == nil || m.isCompact {
-		return SessionArtifact{}, false
+// sidebarLineAt is the line of the sidebar's content at the screen point
+// x, y, if the point is on it. The content scrolls under the fixed logo,
+// so the point's row is a line of the content, counted from where it is
+// scrolled to.
+func (m *UI) sidebarLineAt(x, y int) (int, bool) {
+	if m.session == nil || m.isCompact || m.explorerBeside() {
+		return 0, false
 	}
 	_, content := sidebarRects(m.layout.sidebar, m.sidebarDrawLogo)
 	if !image.Pt(x, y).In(content) {
+		return 0, false
+	}
+	return m.sidebarOffset + y - content.Min.Y, true
+}
+
+// artifactAt is the artifact the sidebar shows at the screen point x, y,
+// if any.
+func (m *UI) artifactAt(x, y int) (SessionArtifact, bool) {
+	line, ok := m.sidebarLineAt(x, y)
+	if !ok {
 		return SessionArtifact{}, false
 	}
-	line := m.sidebarOffset + y - content.Min.Y
 	for _, r := range m.sidebarArtifacts {
 		if line >= r.first && line <= r.last {
 			return r.artifact, true

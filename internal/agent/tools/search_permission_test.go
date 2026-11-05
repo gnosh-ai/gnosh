@@ -32,7 +32,10 @@ func (p *askedPermissions) Request(_ context.Context, req permission.CreatePermi
 func TestGrepAndGlobAskBeforeSearchingOutside(t *testing.T) {
 	t.Parallel()
 
-	parent := t.TempDir()
+	// The tools ask about a path with its links resolved, and macOS's temp
+	// dir runs through one (/var is /private/var).
+	parent, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
 	project := filepath.Join(parent, "proj")
 	mkfiles(t, project, "a.go")
 	mkfiles(t, parent, "secret/key.txt")
