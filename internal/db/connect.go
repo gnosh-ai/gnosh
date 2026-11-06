@@ -62,8 +62,9 @@ type connEntry struct {
 	path string
 	file os.FileInfo
 	// warned is the last warning logged, so a new one is logged once.
-	warned    string
-	stopWatch func()
+	warned       string
+	stopWatch    func()
+	restoredHook func()
 }
 
 var (
@@ -81,9 +82,10 @@ type ConnectOption func(*connectOptions)
 
 // connectOptions holds the resolved configuration for a Connect call.
 type connectOptions struct {
-	lockDataDir bool
-	restore     bool
-	checkEvery  time.Duration
+	lockDataDir  bool
+	restore      bool
+	checkEvery   time.Duration
+	restoredHook func()
 }
 
 // WithDataDirLock toggles acquisition of the per-data-directory lock
@@ -107,6 +109,12 @@ func WithRestore(enable bool) ConnectOption {
 // withFileCheckInterval sets how often a restoring pool checks its file.
 func withFileCheckInterval(every time.Duration) ConnectOption {
 	return func(o *connectOptions) { o.checkEvery = every }
+}
+
+// withRestoredHook has a restoring pool call fn each time a restore has put
+// the database back at its path, before the pool holds the restored file.
+func withRestoredHook(fn func()) ConnectOption {
+	return func(o *connectOptions) { o.restoredHook = fn }
 }
 
 // Connect opens a SQLite database connection for the given data
@@ -155,7 +163,22 @@ func Connect(ctx context.Context, dataDir string, opts ...ConnectOption) (*sql.D
 	}
 
 	dbPath := FileName(dataDir)
-	conn, err := openDB(dbPath)
+	// A restoring pool never creates its file, made here for a new
+	// database: a connection that did, opened while the file is removed,
+	// would leave an empty database the check takes for another file.
+	if cfg.restore {
+		f, err := os.OpenFile(dbPath, os.O_RDONLY|os.O_CREATE, 0o644)
+		if err == nil {
+			err = f.Close()
+		}
+		if err != nil {
+			if lock != nil {
+				lock.release()
+			}
+			return nil, fmt.Errorf("failed to create database: %w", err)
+		}
+	}
+	conn, err := openDB(dbPath, cfg.restore)
 	if err != nil {
 		if lock != nil {
 			lock.release()
@@ -204,7 +227,7 @@ func Connect(ctx context.Context, dataDir string, opts ...ConnectOption) (*sql.D
 			releaseLock()
 			return nil, fmt.Errorf("failed to stat database: %w", err)
 		}
-		entry.path, entry.file = dbPath, info
+		entry.path, entry.file, entry.restoredHook = dbPath, info, cfg.restoredHook
 		watchCtx, cancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
 		go entry.watchFile(watchCtx, cfg.checkEvery, done)
@@ -273,14 +296,6 @@ func (e *connEntry) restore(ctx context.Context) {
 		e.lock = lock
 	}
 	e.warned = ""
-	// A connection holds the restored file, as one held the removed file,
-	// so a second removal leaves it open to restore again. A read, not a
-	// ping: a connection whose first read comes after its files are
-	// unlinked cannot read them.
-	if err := e.db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema").Scan(new(int)); err != nil {
-		slog.Warn("Failed to read the restored database", "path", e.path, "error", err)
-	}
-
 	if err := crushlog.ReopenFile(); err != nil {
 		slog.Warn("Failed to reopen the removed log file", "error", err)
 	}
@@ -321,7 +336,7 @@ func (e *connEntry) restoreFile(ctx context.Context) (*dataDirLock, error) {
 }
 
 // copyFile copies the database open on conn to its path in dataDir, then
-// drops conn so the next query opens the copy.
+// moves the pool onto the copy.
 func (e *connEntry) copyFile(ctx context.Context, conn *sql.Conn, dataDir string) error {
 	if err := WriteGitIgnore(dataDir); err != nil {
 		slog.Warn("Failed to restore the data directory's .gitignore", "error", err)
@@ -348,11 +363,51 @@ func (e *connEntry) copyFile(ctx context.Context, conn *sql.Conn, dataDir string
 	if err != nil {
 		return err
 	}
+	if e.restoredHook != nil {
+		e.restoredHook()
+	}
+	if err := e.moveOnto(ctx, conn, info); err != nil {
+		return err
+	}
 	e.file = info
-	// database/sql closes a connection that reports ErrBadConn instead of
-	// pooling it, so the next query opens the restored file.
-	_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 	return nil
+}
+
+// moveOnto moves the pool from conn, open on the removed file, onto the
+// restored file at info. It lets conn go only once another connection has
+// read the restored file, since a connection whose first read comes after
+// its files are unlinked cannot read them; on an error the pool keeps conn.
+func (e *connEntry) moveOnto(ctx context.Context, conn *sql.Conn, info os.FileInfo) error {
+	// As for the copy, a Release meanwhile waits for the move to finish.
+	ctx = context.WithoutCancel(ctx)
+	e.db.SetMaxOpenConns(2)
+	restored, err := e.db.Conn(ctx)
+	if err != nil {
+		// The failed open let a waiting query open a connection; handed
+		// back at 1 with that one open, conn would be closed.
+		_ = conn.Close()
+		e.db.SetMaxOpenConns(1)
+		return err
+	}
+	// Lowered while both are held: at 2, a connection let go would let a
+	// waiting query open another, and conn, handed back after it, be closed.
+	e.db.SetMaxOpenConns(1)
+	err = restored.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema").Scan(new(int))
+	var now os.FileInfo
+	if err == nil {
+		now, err = os.Stat(e.path)
+	}
+	if err == nil && !os.SameFile(now, info) {
+		err = errors.New("another file took the restored database's path")
+	}
+	// database/sql closes a connection that reports ErrBadConn instead of
+	// pooling it.
+	if err != nil {
+		_ = restored.Raw(func(any) error { return driver.ErrBadConn })
+		return err
+	}
+	_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+	return restored.Close()
 }
 
 func (e *connEntry) warnOnce(msg string, args ...any) {

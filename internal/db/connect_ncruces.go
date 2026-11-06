@@ -20,11 +20,14 @@ func openDBReadOnly(dbPath string) (*sql.DB, error) {
 	return db, nil
 }
 
-func openDB(dbPath string) (*sql.DB, error) {
+func openDB(dbPath string, mustExist bool) (*sql.DB, error) {
 	// Use BEGIN IMMEDIATE so writers acquire the reserved lock up front,
 	// preventing deferred-to-writer upgrade deadlocks. The "file:" prefix
 	// is required for the ncruces driver to parse query parameters.
 	dsn := fmt.Sprintf("file:%s?_txlock=immediate", dbPath)
+	if mustExist {
+		dsn += "&mode=rw"
+	}
 	db, err := driver.Open(dsn, func(c *sqlite3.Conn) error {
 		// Set pragmas for better performance via _pragma query params.
 		// Format: PRAGMA name = value;

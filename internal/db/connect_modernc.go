@@ -25,7 +25,7 @@ func openDBReadOnly(dbPath string) (*sql.DB, error) {
 	return db, nil
 }
 
-func openDB(dbPath string) (*sql.DB, error) {
+func openDB(dbPath string, mustExist bool) (*sql.DB, error) {
 	// Set pragmas for better performance via _pragma query params.
 	// Format: _pragma=name(value)
 	params := url.Values{}
@@ -35,6 +35,9 @@ func openDB(dbPath string) (*sql.DB, error) {
 	// Use BEGIN IMMEDIATE so writers acquire the reserved lock up front,
 	// preventing deferred-to-writer upgrade deadlocks.
 	params.Set("_txlock", "immediate")
+	if mustExist {
+		params.Set("mode", "rw")
+	}
 
 	dsn := fmt.Sprintf("file:%s?%s", dbPath, params.Encode())
 	db, err := sql.Open("sqlite", dsn)
