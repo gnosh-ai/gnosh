@@ -150,11 +150,26 @@ func RunAndCapture(ctx context.Context, opts RunOptions) (CaptureResult, error) 
 		}
 		output += stderr.String()
 	}
+	output = withRunError(output, runErr)
 
 	return CaptureResult{
 		Output:   output,
 		ExitCode: exitCode,
 	}, nil
+}
+
+// withRunError appends to output why the shell could not run the command
+// at all, a syntax error say. No command ran to write that to stderr, so
+// without it the caller sees exit code 1 and nothing else. A command's own
+// exit status and an interrupt add nothing.
+func withRunError(output string, err error) string {
+	if err == nil || IsExitStatus(err) || IsInterrupt(err) {
+		return output
+	}
+	if output != "" && !strings.HasSuffix(output, "\n") {
+		output += "\n"
+	}
+	return output + err.Error()
 }
 
 // ptyColorEnvVars force color output for programs running inside a

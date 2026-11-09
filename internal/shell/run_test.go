@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestRun_Echo(t *testing.T) {
@@ -492,4 +494,34 @@ func TestRun_DiscardsNilWriters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
 	}
+}
+
+// A bang command the shell cannot parse never runs, so nothing writes to
+// its stderr: the reason has to come from the error, or the user and the
+// model see exit code 1 and no output at all.
+func TestRunAndCapture_ParseErrorIsInOutput(t *testing.T) {
+	t.Parallel()
+	opts := RunOptions{Command: "echo 'unterminated", Cwd: t.TempDir()}
+
+	result, err := RunAndCapture(t.Context(), opts)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.ExitCode)
+	require.Contains(t, result.Output, "could not parse command")
+
+	var streamed strings.Builder
+	result, err = RunAndCaptureStream(t.Context(), opts, func(s string) { streamed.WriteString(s) })
+	require.NoError(t, err)
+	require.Equal(t, 1, result.ExitCode)
+	require.Contains(t, result.Output, "could not parse command")
+	require.Contains(t, streamed.String(), "could not parse command")
+}
+
+// A command's own non-zero exit is not an error to report: its output
+// stays as it wrote it.
+func TestRunAndCapture_ExitStatusAddsNothing(t *testing.T) {
+	t.Parallel()
+	result, err := RunAndCapture(t.Context(), RunOptions{Command: "echo hi; exit 3", Cwd: t.TempDir()})
+	require.NoError(t, err)
+	require.Equal(t, 3, result.ExitCode)
+	require.Equal(t, "hi\n", result.Output)
 }

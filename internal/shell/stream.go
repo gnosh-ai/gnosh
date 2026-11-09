@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -43,6 +44,12 @@ func RunAndCaptureStream(ctx context.Context, opts RunOptions, onProgress func(s
 	exitCode := 0
 	if runErr != nil {
 		exitCode = ExitCode(runErr)
+	}
+	buf.mu.Lock()
+	output := buf.buf.String()
+	buf.mu.Unlock()
+	if note := strings.TrimPrefix(withRunError(output, runErr), output); note != "" {
+		buf.Write([]byte(note)) //nolint:errcheck
 	}
 
 	return CaptureResult{
