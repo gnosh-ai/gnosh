@@ -107,6 +107,18 @@ func TestTruncateForPersist_KeepsTailWhenLinesAreFewButLong(t *testing.T) {
 	require.Contains(t, got, "-199", "tail must survive")
 }
 
+func TestTruncateForPersist_KeepsTailOfHugeLineEndingInNewline(t *testing.T) {
+	// A command printing one long line, such as minified JSON, ends its
+	// output with a newline. The end of that line must survive, not only
+	// its start.
+	full := "START" + strings.Repeat("x", 2*maxPersistedBytes) + "END\n"
+
+	got := TruncateForPersist(full, t.TempDir())
+	require.True(t, strings.HasPrefix(got, "START"), "head must survive")
+	require.True(t, strings.Contains(got, "END"),
+		"tail must survive, output ends with %q", got[len(got)-80:])
+}
+
 func TestSpillOutput_EnforcesDirectoryLimit(t *testing.T) {
 	dataDir := t.TempDir()
 	spillDir := filepath.Join(dataDir, spillSubdir)
