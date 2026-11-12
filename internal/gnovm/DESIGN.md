@@ -47,6 +47,12 @@ favour (§14).
 
 ## 3. Architecture
 
+The worker protocol (framing, handshake, messages, heartbeats, crash and
+Kept semantics) is recorded in [PROTOCOL.md](PROTOCOL.md). The types and
+framing live in `internal/gnovm/api`, which does not import the Gno
+interpreter.
+
+
 ```
 gnosh process ── refcounted process-wide client (lazy spawn) ─────────┐
    │   holds .clients/<client>.lock for its life                      │ fds 3/4 (ExtraFiles):

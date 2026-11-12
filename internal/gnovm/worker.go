@@ -321,11 +321,3 @@ func (o *workerOut) heartbeats(id uint64, waiting *atomic.Bool) (stop func()) {
 	}()
 	return func() { close(quit); <-stopped }
 }
-
-func mustJSON(v any) json.RawMessage {
-	b, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	return b
-}

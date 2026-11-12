@@ -71,7 +71,6 @@ func readMemJournal(path string) (j *journal, entries []memEntry, torn bool, err
 
 // The words erased text becomes in the journal, as in the store.
 const (
-	memRedacted  = "(redacted)"
 	memForgotten = "(forgotten)"
 )
 
@@ -410,13 +409,6 @@ func goalPart(name string) string {
 func memItemOf(name string) string {
 	item, _, _ := strings.Cut(name, "#")
 	return item
-}
-
-// quotedInner is s as it sits inside a Go-quoted string: strconv.Quote
-// without the quotes.
-func quotedInner(s string) string {
-	q := strconv.Quote(s)
-	return q[1 : len(q)-1]
 }
 
 // memNameForm is s in a name's form, as gnomem makes names (names.gno):

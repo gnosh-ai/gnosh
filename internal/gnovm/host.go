@@ -37,10 +37,6 @@ import (
 )
 
 const (
-	// MemVM is the name the tools give mem, the agent's memory: not a VM
-	// but a realm on disk (memhost.go), made when first used.
-	MemVM = "mem"
-
 	scratchPrefix = "scratch-"
 	// maxNamedVMs is how many named VMs a project may have; scratch VMs
 	// do not count.
@@ -107,16 +103,6 @@ func NewClientID() string {
 	var b [4]byte
 	_, _ = rand.Read(b[:])
 	return strconv.Itoa(os.Getpid()) + "-" + hex.EncodeToString(b[:])
-}
-
-// VMOptions are a VM's settings, kept in its machine.json.
-type VMOptions struct {
-	MemoryMB    int     `json:"memory_mb"`
-	Gas         int64   `json:"gas"`
-	NsPerGas    float64 `json:"ns_per_gas"`
-	Persist     bool    `json:"persist"`
-	Pinned      bool    `json:"pinned,omitempty"`
-	Description string  `json:"description,omitempty"`
 }
 
 type machineFile struct {
@@ -674,92 +660,8 @@ func wallLimit(gas int64, nsPerGas float64) time.Duration {
 	return min(max(d, 5*time.Second), 10*time.Minute)
 }
 
-// RunRequest is one gnovm_run call.
-type RunRequest struct {
-	// Project is the project's directory; VMs belong to a project.
-	Project string
-	// Session is the calling session's id, for its scratch VM.
-	Session string
-	// Name is the VM; "" means the session's scratch VM, or, for code
-	// with a package clause, a fresh VM for just this call.
-	Name string
-	Code string
-	// Gas is the call's gas limit; 0 means the VM's.
-	Gas int64
-	// Reset starts a memory-only VM over before running.
-	Reset bool
-	// Req identifies the call, so its outcome can be asked about later.
-	Req string
-	// Goal is the goal in mem the user's /goal binds the session to, which
-	// the session's own mem calls may not drop or forget.
-	Goal string `json:",omitempty"`
-	// Frames is the session's stack of frames in mem, bottom to top: the
-	// frames it has pushed and not popped (FRAMES.md), which the agent
-	// derives from its own rows.
-	Frames []string `json:",omitempty"`
-	// Fresh is the frame on top of Frames when the agent's round that
-	// entered it was its last: nothing came between that round and this
-	// call's. mem refuses to pop it then, for the model never did it.
-	Fresh string `json:",omitempty"`
-	// Names are names made for the texts the call keeps without naming
-	// them (mem.Think(text), mem.Fact(text)), by text: the agent asks its
-	// small model before the call; the realm falls back to the words.
-	Names map[string]string `json:",omitempty"`
-	// WaitPipe is the wake pipe the client made, pending in mem's
-	// waiters/, for an input whose Next may wait for working sessions;
-	// SubAgent marks a sub-agent's session, which never waits (PARALLEL.md).
-	WaitPipe string `json:",omitempty"`
-	SubAgent bool   `json:",omitempty"`
-	// CheckCloses has mem keep nothing of an input that closes a todo with
-	// nothing under it as done, and hand the close to the agent in
-	// RunResult.Closes, unless Checked names it (MemClose.Checked): the
-	// agent checks it against what was done in the todo, then runs the
-	// input again with it in Checked, or refuses it (CLOSE-CHECK.md).
-	CheckCloses bool     `json:",omitempty"`
-	Checked     []string `json:",omitempty"`
-}
-
-// RunResult is what a call did.
-type RunResult struct {
-	VM        string
-	Value     string
-	Output    string
-	Gas       int64
-	GasLimit  int64
-	NsPerGas  float64
-	Wall      time.Duration
-	MemUsed   int64
-	MemCap    int64
-	Journaled bool
-	Seq       int64
-	// Program is set when the code ran as a program in a fresh VM that
-	// was thrown away after.
-	Program bool
-	Notes   []string
-	// MemGoals are the goals a call to mem changed, as its session sees
-	// them, for the session's task list.
-	MemGoals []MemGoal `json:",omitempty"`
-	// Erased is what a call to mem erased, for gnosh's own copies of mem's
-	// text (gnovm_run hands it to OnMemErased).
-	Erased *MemErasure `json:",omitempty"`
-	// Rules are the rules a call to mem set, changed or removed, which the
-	// user is told of (gnovm_run hands them to OnMemRules): every session
-	// is given them as the user's own words.
-	Rules []MemRule `json:",omitempty"`
-	// Frames are the frames a call to mem pushed and popped, in order
-	// (gnovm_run keeps them with its result and hands them to OnMemFrames).
-	Frames []MemFrame `json:",omitempty"`
-	// Waits is what the input's Next waits for: the client waits on its
-	// pipe until mem changes or a holder's turn ends, then runs mem.Next()
-	// again (memwait.go).
-	Waits []MemWait `json:",omitempty"`
-	// Closes are the closes the agent is to check before the input is kept
-	// (RunRequest.CheckCloses); with them, Err is set and nothing was kept.
-	Closes []MemClose `json:",omitempty"`
-	// Err is the run's failure; nothing from the call was kept. (The wire
-	// carries it apart, keeping its kind; see wireRun.)
-	Err error `json:"-"`
-}
+// RunRequest, RunResult and the other wire types live in package api,
+// re-exported by api_alias.go.
 
 // Run runs code in a VM. The error is for calls that could not be run at
 // all (a refusal, a busy or broken VM); a failure of the code itself is in
@@ -1109,37 +1011,6 @@ func (h *Host) defaultOptions() VMOptions {
 	return VMOptions{MemoryMB: h.opts.DefaultMemoryMB, Gas: h.opts.DefaultGas, NsPerGas: h.opts.NsPerGas}
 }
 
-// NewRequest makes a VM, or changes one. Nil fields are left as they are, or
-// take the defaults for a new VM.
-type NewRequest struct {
-	Project string
-	// Session is the calling session: it may name its own scratch VM, as
-	// "scratch" or by its full name, to change its settings.
-	Session     string
-	Name        string
-	MemoryMB    *int
-	Gas         *int64
-	NsPerGas    *float64
-	Persist     *bool
-	Pinned      *bool
-	Description *string
-}
-
-// VMInfo describes a VM.
-type VMInfo struct {
-	Name        string
-	Options     VMOptions
-	Scratch     bool
-	Resident    bool
-	MemUsed     int64
-	Charge      int64
-	Entries     int64
-	LifetimeGas int64
-	JournalSize int64
-	LastUsed    time.Time
-	Broken      string
-}
-
 // New makes a VM, or changes the settings of one: memory_mb may only grow
 // (a smaller cap could not rebuild state that fit the larger one), and a VM
 // may become persistent but not stop being so.
@@ -1352,16 +1223,6 @@ func (h *Host) deleteVM(s *vmState) error {
 		return err
 	}
 	return syncDir(filepath.Dir(s.dir))
-}
-
-// ListResult is the state of the host and of a project's VMs.
-type ListResult struct {
-	Memory    HostMemory
-	ProbeErr  string
-	Budget    int64
-	Used      int64
-	BaseBytes int64
-	VMs       []VMInfo
 }
 
 // List describes the host's memory and a project's VMs: its persistent ones

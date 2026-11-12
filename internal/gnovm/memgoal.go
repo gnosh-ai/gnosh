@@ -28,26 +28,6 @@ import (
 // reads the goal and says what comes next: the agent goes on, the turn
 // ends, or the judge is asked whether the goal, closed as done, holds.
 
-// GoalBinding is a session's binding to a goal in its project's mem.
-type GoalBinding struct {
-	// Condition is what the user typed after /goal.
-	Condition string `json:"condition"`
-	// Instance is the id of the mem the goal is in; a mem made anew has
-	// another.
-	Instance string `json:"instance"`
-	Name     string `json:"name"`
-	Title    string `json:"title"`
-	// Added says that binding added the goal, which unbinding then drops.
-	Added bool `json:"added,omitempty"`
-	// Checks is how many times the judge was asked, and Verdict what it
-	// last said.
-	Checks  int    `json:"checks,omitempty"`
-	Verdict string `json:"verdict,omitempty"`
-	// Asked is what held the goal back when a turn last ended on the
-	// checkpoint question: the same at the next turn's end ends the turn.
-	Asked string `json:"asked,omitempty"`
-}
-
 // maxGoalTitle is the most of a condition's first line a goal's title
 // takes, cut at a word: within mem's own cap, so the same condition always
 // makes the same title, and so binds the same goal.
@@ -139,25 +119,6 @@ func lastGoalJSON(out string) (memGoalJSON, error) {
 		return memGoalJSON{}, fmt.Errorf("mem's answer about a goal could not be read: %q", memLine(out, 200))
 	}
 	return j.Goals[0], nil
-}
-
-// GoalTurn is what gnosh does with a session's goal as a turn ends.
-type GoalTurn struct {
-	// Do is one of:
-	//   - "continue": send Prompt, hidden, and go on;
-	//   - "checkpoint": send Prompt, which asks whether there is a real
-	//     reason to stop, and go on;
-	//   - "end": end the turn, the goal still bound; Notice says why;
-	//   - "judge": the goal is closed as done: ask the judge whether the
-	//     condition holds, showing it Show;
-	//   - "rebind": mem was made anew; bind the condition again;
-	//   - "clear": unbind; Notice says why.
-	Do     string `json:"do"`
-	Prompt string `json:"prompt,omitempty"`
-	Notice string `json:"notice,omitempty"`
-	// Show is mem.Show(name): the goal's steps, results and notes, the
-	// agent's own claims, for the judge.
-	Show string `json:"show,omitempty"`
 }
 
 // goalTurnEnd reads session's goal b as the session's turn ends, and says
@@ -311,20 +272,6 @@ func (h *memHost) goalReopen(ctx context.Context, b GoalBinding, reason string) 
 		strconv.Quote("the check found it not met: "+memLine(reason, 300)) + ")"
 	_, err := h.call(ctx, memRequest{Code: code})
 	return err
-}
-
-// ClosedGoal is a goal a session closed as done, for the judge: every goal
-// is judged before it counts as done (Jae, 2026-10-30), not only the one
-// /goal binds.
-type ClosedGoal struct {
-	Name  string `json:"name"`
-	Title string `json:"title"`
-	// Seq is the journal entry that closed it: closed again after it was
-	// reopened, it is judged again.
-	Seq int64 `json:"seq"`
-	// Show is mem.Show(name): its steps, results and notes, the agent's
-	// own claims.
-	Show string `json:"show"`
 }
 
 // closedGoals are the goals session's own calls closed as done at since

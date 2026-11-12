@@ -29,12 +29,6 @@ import (
 // rings the pipes that wake waiting Nexts on every change; the client does
 // the waiting (memwait.go).
 
-// MemWait is a todo a waiting Next waits for, and the session holding it.
-type MemWait struct {
-	Id      string `json:"id"`
-	Session string `json:"session"`
-}
-
 // sessionKey is a session id as a file name: its hash, since a sub-agent's
 // id holds the provider's tool-call id.
 func sessionKey(session string) string {

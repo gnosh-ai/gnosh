@@ -18,14 +18,6 @@ import (
 	"strings"
 )
 
-// HostMemory is what the host gnosh runs on can give it.
-type HostMemory struct {
-	Total       uint64 // bytes; 0 when unknown
-	Available   uint64 // bytes obtainable without swapping; 0 when unknown
-	CgroupLimit uint64 // tightest cgroup memory.max, in bytes; 0 when none
-	Source      string // how Available was found, shown by gnovm_list
-}
-
 // parseMeminfo reads MemTotal and MemAvailable (in bytes) from the contents
 // of /proc/meminfo. ok is false if MemAvailable is missing.
 func parseMeminfo(data []byte) (total, available uint64, ok bool) {

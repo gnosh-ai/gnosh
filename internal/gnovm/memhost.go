@@ -143,71 +143,6 @@ type memResult struct {
 	Waits []MemWait
 }
 
-// MemGoal is a goal a mem call changed, as a session's task list shows it:
-// its steps, and what is next.
-// MemFrame is a push or a pop of a frame by a call to mem: the model
-// entering a piece of work, or leaving it with its result. The agent keeps
-// them with the call's tool result, derives a session's stack of frames
-// from them, and on a pop removes from the model's context everything since
-// the push (FRAMES.md).
-type MemFrame struct {
-	// Kind is "push" or "pop".
-	Kind string `json:"kind"`
-	// Id is the frame: `fix-flaky`, `fix-flaky/find-cause`.
-	Id string `json:"id"`
-	// Purpose is the frame's purpose, for the stack line and the sidebar.
-	Purpose string `json:"purpose,omitempty"`
-	// Result is a pop's result.
-	Result string `json:"result,omitempty"`
-	// Thoughts is how many thoughts the frame holds when it is popped.
-	Thoughts int `json:"thoughts,omitempty"`
-	// Session is the session that made it.
-	Session string `json:"session"`
-}
-
-// MemClose is a close of a todo with nothing under it, as done, that mem
-// asks gnosh to check before it keeps the input making it
-// (RunRequest.CheckCloses, CLOSE-CHECK.md).
-type MemClose struct {
-	// Id is the todo, Title its task, Result what the input closes it
-	// with ("" when it gives none: Done of a todo not on the stack), and
-	// Thoughts the thoughts kept on it, one a line.
-	Id       string `json:"id"`
-	Title    string `json:"title,omitempty"`
-	Result   string `json:"result,omitempty"`
-	Thoughts string `json:"thoughts,omitempty"`
-	// Entered is set when the input itself entered the todo, which was not
-	// on the session's stack before it; Worked, when the input changed mem
-	// after entering it, beyond entering and closing it.
-	Entered bool `json:"entered,omitempty"`
-	Worked  bool `json:"worked,omitempty"`
-}
-
-// Checked is how RunRequest.Checked names a close gnosh approved; AnyResult,
-// a todo approved whatever it is closed with in the rest of the call (a
-// result made of the time differs on every run).
-func (c MemClose) Checked() string   { return c.Id + "\x00" + c.Result }
-func (c MemClose) AnyResult() string { return c.Id + "\x00*" }
-
-type MemGoal struct {
-	Name   string    `json:"name"`
-	Title  string    `json:"title"`
-	Status string    `json:"status"`
-	Next   string    `json:"next"`
-	Steps  []MemStep `json:"steps"`
-}
-
-// MemStep is a step of a MemGoal.
-type MemStep struct {
-	Name   string `json:"name"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
-	// For is "user" for a question or a request for the user; Doing is the
-	// session that started the step.
-	For   string `json:"for"`
-	Doing string `json:"doing"`
-}
-
 // call runs one input against mem, under mem's lock, and keeps what it
 // changed: first as a journal entry, which is the commit point, then in the
 // store. A failed input keeps nothing.
@@ -909,14 +844,6 @@ func (h *memHost) openIndex(j *journal) (*memIndex, error) {
 		return nil, err
 	}
 	return x, nil
-}
-
-// MemRule is a rule a call to mem set (Was ""), changed, or removed (Text
-// "").
-type MemRule struct {
-	Name string `json:"name"`
-	Text string `json:"text,omitempty"`
-	Was  string `json:"was,omitempty"`
 }
 
 // memRules is the rules ops set, changed or removed.
