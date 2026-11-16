@@ -116,6 +116,23 @@ from inside the one before; mem's receipts now say when a push stands on an
 open todo and where a pop comes back to, and the session's settings files are
 taken in while it runs (item 55), found in the same session's log.
 
+16 November 2026, about gnosh.ai's speed claims, which were the earlier
+gnosh's:
+
+> do it all but 4. and then prompt me, and then work on making the speed claims true.
+
+He then chose to rent an H200 for the measurement, as no H100 was to be had
+that night.
+
+Set: the claims measured again on this gnosh (`bench/README.md`, "Several
+sessions on one plan"). Claude's part: three sessions on one plan were
+slower than one, because nothing told a session that others worked it;
+`mem.Show()` and `mem.Next()` now say how many other sessions work the plan,
+and a person's session joins the plan's peers when its turn begins
+(`8aca3c4`, `2f6e839`). With that, three sessions were 1.8× faster than
+one; six sessions with a planner lost to one on llama.cpp and were 1.6×
+faster than one on vLLM.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

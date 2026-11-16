@@ -404,13 +404,6 @@ func (r *round) ask(c *callState) Decision {
 	return dec
 }
 
-// hasDuplicateKey reports whether a JSON value names a key twice in one of
-// its objects.
-func hasDuplicateKey(raw json.RawMessage) bool {
-	_, dup := duplicateKey(raw)
-	return dup
-}
-
 // duplicateKey returns a key that one object of a JSON value names twice.
 // Two parsers handed such an object may each keep a different one of the
 // two values, which is how a guard is shown one thing and a tool does

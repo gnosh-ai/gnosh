@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -120,6 +121,14 @@ func TestStatusLineWorktree(t *testing.T) {
 	runs := w.Home + "/sl-runs"
 	script := w.Script(w.Home+"/bin/sl.sh", "{ cat; echo; } >> "+runs+"\necho status")
 	w.Settings(`{"statusLine": {"type": "command", "command": "` + script + `"}}`)
+	// The repository's origin, read from its own config through the work
+	// tree's .git file.
+	f, err := os.OpenFile(w.Dir+"/.git/config", os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Fprint(f, "[remote \"origin\"]\n\turl = git@github.com:gnosh-ai/gnosh.git\n")
+	f.Close()
 	s := sit(t, w, "--trust-folder", "--worktree", "feat")
 	s.see("Type a prompt and Enter.")
 	var got map[string]any
@@ -143,6 +152,11 @@ func TestStatusLineWorktree(t *testing.T) {
 	}
 	if ws, _ := got["workspace"].(map[string]any); ws["git_worktree"] != "feat" || ws["current_dir"] != tree {
 		t.Errorf("the workspace it was given: %v", got["workspace"])
+	}
+	if ws, _ := got["workspace"].(map[string]any); ws != nil {
+		if repo, _ := ws["repo"].(map[string]any); repo["host"] != "github.com" || repo["owner"] != "gnosh-ai" || repo["name"] != "gnosh" {
+			t.Errorf("the repo it was given: %v", ws["repo"])
+		}
 	}
 	s.typeLine("/exit")
 	s.exit()
@@ -202,4 +216,44 @@ func TestStatusLineVimMode(t *testing.T) {
 		return 0
 	})
 	r.wantCode(t, 0)
+}
+
+// The status line is told the kind of agent the session runs as, and the
+// thinking level of a model that has levels beyond on and off, as Claude
+// Code's agent.name and effort.level.
+func TestStatusLineAgentAndEffort(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Looked."})
+	runs := w.Home + "/sl-runs"
+	script := w.Script(w.Home+"/bin/sl.sh", "{ cat; echo; } >> "+runs+"\necho status")
+	w.Settings(`{"models": {"local/test-model": {"thinkingLevels": ["low", "high"]}}, "statusLine": {"type": "command", "command": "` + script + `"}}`)
+	s := sit(t, w, "--agent", "Explore", "--effort", "high")
+	s.see("Type a prompt and Enter.")
+	// (The model, with its levels, is settled by the first request.)
+	s.typeLine("look around")
+	s.see("Looked.")
+	var got map[string]any
+	for deadline := time.Now().Add(15 * time.Second); got == nil; {
+		data, _ := os.ReadFile(runs)
+		for _, line := range strings.Split(string(data), "\n") {
+			var in map[string]any
+			if json.Unmarshal([]byte(line), &in) == nil && in["effort"] != nil {
+				got = in
+			}
+		}
+		if got == nil && time.Now().After(deadline) {
+			t.Fatalf("the status line command was never told the effort: %s", data)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if e, _ := got["effort"].(map[string]any); e["level"] != "high" {
+		t.Errorf("the effort it was given: %v", got["effort"])
+	}
+	if a, _ := got["agent"].(map[string]any); a["name"] != "Explore" {
+		t.Errorf("the agent it was given: %v", got["agent"])
+	}
+	if id, _ := got["prompt_id"].(string); id == "" {
+		t.Errorf("no prompt_id after a prompt: %v", got)
+	}
+	s.typeLine("/exit")
+	s.exit()
 }

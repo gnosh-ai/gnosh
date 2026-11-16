@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/shellquote"
 )
 
 func TestReaches(t *testing.T) {
@@ -399,9 +400,9 @@ func TestShellQuote(t *testing.T) {
 		"tab\there", "semi; colon && and | pipe > out", "!history", "#comment", "~", "*?[a-z]", "{a,b}", "\\", "\\'", "%s %d", "-n", "- -- ---",
 		"h\u00e9llo \ud55c\uae00",
 	} {
-		out, err := exec.Command("/bin/sh", "-c", "printf %s "+shellQuote(text)).Output()
+		out, err := exec.Command("/bin/sh", "-c", "printf %s "+shellquote.Quote(text)).Output()
 		if err != nil || string(out) != text {
-			t.Errorf("a shell read %s as %q (%v), want %q", shellQuote(text), out, err, text)
+			t.Errorf("a shell read %s as %q (%v), want %q", shellquote.Quote(text), out, err, text)
 		}
 	}
 }

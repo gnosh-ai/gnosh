@@ -157,8 +157,8 @@ then decides freshness as a session does.
 
 The bridge cannot know whether a host cuts. A host that does not use
 `view` must not give its model the push and pop calls of mem, since mem's
-receipts would tell the model something untrue (§1). What the bridge does
-about it is an open question for Jae (§10).
+receipts would tell the model something untrue (§1). In version 1 the
+bridge serves them to every host, and keeping this rule is the host's.
 
 ## 7. `view`: what the model is sent
 
@@ -257,23 +257,3 @@ A failure the model should see is not an error: it is `ok: true` with
 - Not stable: the wording of the tools, the receipts and the notes (it is
   gnosh's to improve), and the shape of a view beyond what `frames.md`
   promises. A host must not parse them.
-
-## 10. Open questions for Jae
-
-1. Is the bridge the way other harnesses are to use mem and frames, and is
-   P2 its place?
-2. May the session entry format and `ViewInfo.Sources` be treated as a
-   contract for other programs, as §9 says?
-3. A host that never asks for the view (§6.4): should the bridge refuse
-   mem's push and pop until it has seen one, or serve them with receipts
-   that do not claim a cut, or leave it to the host?
-4. Licence: the bridge is gnosh's, under the GNO Network GPL. Is a host's
-   extension that only speaks this protocol over pipes a separate program
-   that may carry its own licence, and what attribution is owed in that
-   host's interface?
-5. **Later** requests: `prompt_lines` and `before_request` (the lines a
-   session gives its model about mem), `turn_end` (the close check and
-   `/goal` sending the model back), entries kept by the bridge so that a
-   host sends only what is new. Which of these are wanted, and should the
-   join (`internal/memjoin`) be split so a bridge can run them without an
-   `app.Session`?

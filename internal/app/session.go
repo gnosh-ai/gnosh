@@ -237,6 +237,25 @@ type live struct {
 	// configNow is what /config put in force in this session, by option.
 	configMu  sync.Mutex
 	configNow map[string]json.RawMessage
+	// newBuildSaid says the person was told of a newer gnosh installed
+	// (restart.go).
+	newBuildSaid atomic.Bool
+	// notif is the notification channel /config set while the session
+	// runs; "" is the configuration's.
+	notifMu sync.Mutex
+	notif   string
+	// showPast says the session was opened again long enough after it
+	// was last written to that the interface shows where it left off.
+	showPast bool
+	// promptID is the id of the last prompt the person sent, for the
+	// status line.
+	promptMu sync.Mutex
+	promptID string
+	// color is the colour of the session's prompt mark (colorcmd.go),
+	// read from its file once (colorRead).
+	colorMu   sync.Mutex
+	color     string
+	colorRead bool
 	// bgEver says the session has had work in the background, and
 	// bgUntold that the ends of that work are no longer told to the model
 	// (the run has stopped waiting for it).
@@ -548,6 +567,9 @@ func (l *live) openTranscript(ctx context.Context) error {
 			return fmt.Errorf("the session %s could not be opened again: %w", l.reopen, err)
 		}
 		l.ts = ts
+		// (/resume opens a session whose conversation is not on the
+		// screen; a rewind's and a branch's is.)
+		l.showPast = l.source == "resume"
 		if l.source != "fork" {
 			l.source = "resume"
 		}
@@ -616,7 +638,12 @@ func (l *live) openTranscript(ctx context.Context) error {
 		var locked *transcript.LockedError
 		switch {
 		case errors.As(err, &locked):
-			return fmt.Errorf("the session %s is open in another gnosh, and one session has one writer. Close that one, or add --fork-session to go on in a copy", locked.ID)
+			why := fmt.Sprintf("the session %s is open in another gnosh, and one session has one writer. Close that one, or add --fork-session to go on in a copy", locked.ID)
+			if log := strings.TrimSuffix(locked.Path, ".jsonl") + ".background.log"; fileExists(log) {
+				// (A run /background or /fork started, most likely.)
+				why += fmt.Sprintf(". If it is a run in the background, it lets go of the session when it is done; what it prints is in %s", log)
+			}
+			return errors.New(why)
 		case errors.Is(err, transcript.ErrNotFound):
 			return fmt.Errorf("no session matches %q (sessions are kept under %s), so nothing was started", firstOf(id, path), l.store.Dir)
 		}
@@ -632,6 +659,9 @@ func (l *live) openTranscript(ctx context.Context) error {
 		ts, l.source = copied, "fork"
 	}
 	l.ts = ts
+	// (Not for a gnosh /restart started: the session it opens is on the
+	// screen already.)
+	l.showPast = l.source == "resume" && !l.p.restarted
 	return l.nameSession()
 }
 
@@ -1115,25 +1145,29 @@ func (l *live) onPanic(what string, v any, stack []byte) {
 func (l *live) info() SessionInfo {
 	m := l.agent.Model()
 	info := SessionInfo{
-		ID:          l.ts.ID(),
-		Path:        l.ts.Path(),
-		Cwd:         l.cfg.Paths.Cwd,
-		Model:       m.Info.ID,
-		Address:     m.Address,
-		Thinking:    m.Level,
-		Tools:       l.toolNames(),
-		MCPServers:  l.mcpStatus(),
-		Mode:        string(l.engine.Mode()),
-		Commands:    l.slash.names(),
-		CommandList: l.slash.list(),
-		Skills:      append(l.typedSkills(), l.mcpPromptInfos()...),
-		Version:     l.p.o.BuildID,
-		Interactive: l.interactive,
-		SidePanel:   l.cfg.Options.SidePanel.V,
-		Verbose:     l.cfg.Options.Verbose.V,
-		Vim:         l.cfg.Options.EditorMode.V == "vim",
-		OutputStyle: l.styleNow(),
-		Resume:      "gnosh -r " + l.ts.ID(),
+		ID:           l.ts.ID(),
+		Path:         l.ts.Path(),
+		Cwd:          l.cfg.Paths.Cwd,
+		Model:        m.Info.ID,
+		Address:      m.Address,
+		Thinking:     m.Level,
+		Tools:        l.toolNames(),
+		MCPServers:   l.mcpStatus(),
+		Mode:         string(l.engine.Mode()),
+		Commands:     l.slash.names(),
+		CommandList:  l.slash.list(),
+		Skills:       append(l.typedSkills(), l.mcpPromptInfos()...),
+		Version:      l.p.o.BuildID,
+		Interactive:  l.interactive,
+		SidePanel:    l.cfg.Options.SidePanel.V,
+		Verbose:      l.cfg.Options.Verbose.V,
+		Vim:          l.cfg.Options.EditorMode.V == "vim",
+		OutputStyle:  l.styleNow(),
+		Color:        l.sessionColor(),
+		Keybindings:  l.keybindingsPath(),
+		ShowPast:     l.showPast,
+		NotifChannel: l.notifChannel(),
+		Resume:       "gnosh -r " + l.ts.ID(),
 	}
 	for _, it := range l.cfg.Options.VimInsertModeRemaps {
 		info.VimRemaps = append(info.VimRemaps, it.V)
@@ -1446,18 +1480,8 @@ func (c *controls) Deliverables() []Deliverable { return c.cur().deliverables() 
 // had any.
 func (c *controls) BackgroundWork() (running []string, ever bool) {
 	l := c.cur()
-	if l.shell != nil {
-		for _, t := range l.shell.Tasks() {
-			ever = true
-			if t.Running {
-				running = append(running, t.ID+" ("+oneLine(firstOf(t.Description, firstLine(t.Command)), 80)+")")
-			}
-		}
-	}
-	for _, b := range l.backgroundAgents() {
-		running = append(running, b.id+" ("+oneLine(b.desc, 80)+")")
-	}
-	return running, ever || len(running) > 0 || l.bgEver.Load()
+	running = l.runningWork()
+	return running, l.shell != nil && len(l.shell.Tasks()) > 0 || len(running) > 0 || l.bgEver.Load()
 }
 
 // CheckBackground hands the model a checkpoint in a run that has waited
@@ -1679,4 +1703,18 @@ func (p *program) sessionCommand(ctx context.Context, inv cli.Invocation) (code 
 		}
 	}
 	return code
+}
+
+// notifChannel is the notification channel in force: what /config set
+// while the session runs, else the configuration's.
+func (l *live) notifChannel() string {
+	l.notifMu.Lock()
+	defer l.notifMu.Unlock()
+	if l.notif != "" {
+		return l.notif
+	}
+	if l.cfg == nil {
+		return "auto"
+	}
+	return firstOf(l.cfg.Options.PreferredNotifChannel.V, "auto")
 }

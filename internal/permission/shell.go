@@ -139,7 +139,10 @@ type script struct {
 	// What the line holds anywhere, nested or not.
 	subst      bool // a command or process substitution
 	subshell   bool // ( ... )
-	compound   bool // a loop, if, case, group or function
+	cond       bool // an if, a while, an until or a case
+	forLoop    bool // a for loop over a list of words
+	group      bool // a { ...; } group
+	compound   bool // a for loop, a function, (( )) and the other forms not read through
 	background bool // a command followed by &
 	piped      bool // a | anywhere
 	setsVar    bool // a ${name:=value} expansion or a {name}> redirection, which assign
@@ -752,6 +755,7 @@ func (p *parser) command() {
 		// redirection after it is opened before any cd in it has run,
 		// and so is not read that way: such a group asks.
 		p.pos++
+		p.sc.group = true
 		p.body("}")
 		p.expect("}")
 		mark := len(p.sc.cmds)
@@ -762,7 +766,7 @@ func (p *parser) command() {
 		return
 	case "if":
 		p.pos += 2
-		p.sc.compound = true
+		p.sc.cond = true
 		p.body("then")
 		p.expect("then")
 		p.body("elif", "else", "fi")
@@ -779,16 +783,23 @@ func (p *parser) command() {
 		p.expect("fi")
 	case "while", "until":
 		p.pos += 5
-		p.sc.compound = true
+		p.sc.cond = true
 		p.body("do")
 		p.expect("do")
 		p.body("done")
 		p.expect("done")
 	case "for":
 		p.pos += 3
-		p.sc.compound = true
 		loops := len(p.sc.loops)
 		p.forHead()
+		if len(p.sc.loops) > loops && !p.sc.loops[loops].args {
+			// A loop over a list of words: its body is judged once for
+			// each value (decideShell).
+			p.sc.forLoop = true
+		} else {
+			// for ((...)), and a loop over the words a script was handed.
+			p.sc.compound = true
+		}
 		p.expect("do")
 		from := len(p.sc.cmds)
 		p.body("done")
@@ -798,7 +809,7 @@ func (p *parser) command() {
 		p.expect("done")
 	case "case":
 		p.pos += 4
-		p.sc.compound = true
+		p.sc.cond = true
 		p.caseBody()
 	case "[[":
 		p.testCommand()

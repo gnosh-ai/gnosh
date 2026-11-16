@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/shellquote"
 )
 
 // Hook is one configured hook: a command gnosh runs when Event happens.
@@ -118,19 +120,7 @@ func (h Hook) CommandLine() string {
 	if h.Args == nil {
 		return h.Command
 	}
-	words := []string{shellWord(h.Command)}
-	for _, a := range h.Args {
-		words = append(words, shellWord(a))
-	}
-	return strings.Join(words, " ")
-}
-
-// shellWord writes s so that a shell would read it as one word.
-func shellWord(s string) string {
-	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./=:,+@%") == "" {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return shellquote.Words(append([]string{h.Command}, h.Args...))
 }
 
 // Spec is a hook as a caller that has already read the settings hands it

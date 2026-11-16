@@ -18,6 +18,9 @@ func TestContextAndRename(t *testing.T) {
 	w.Write("AGENTS.md", "Always answer in one sentence.\n")
 	s := sit(t, w, "--trust-folder")
 	s.see("Type a prompt and Enter.")
+	// Before the first request there is nothing counted yet.
+	s.typeLine("/context")
+	s.see("Nothing has been sent to")
 	s.typeLine("/rename")
 	s.see("This session has no name yet.")
 	s.typeLine("why is the test flaky?")

@@ -49,6 +49,29 @@ type Palette struct {
 	// brand's two it is light: on a white background it is faint, and
 	// nothing but a mark is drawn in it.
 	Aqua text.Color
+
+	// Prompt is the text of the person's prompts, in the box and in the
+	// conversation, and Reply the prose of the model's answers (not its
+	// thinking, not code). Jae chose them (16 November 2026: "let gnosh my
+	// prompt be mmm... white, sure, and the response (not thinking) be
+	// sorta green, neo"): white, and a phosphor green. They are for a dark
+	// background, as the brand's are; on a terminal that says its
+	// background is light, OnLight gives them back the terminal's own
+	// colour and a green dark enough to read there. Default is the
+	// terminal's own colour.
+	Prompt, Reply text.Color
+}
+
+// OnLight is the palette for a terminal whose background is light: the
+// person's prompts in the terminal's own colour, and the answers in a
+// green that reads on white.
+func (pal Palette) OnLight(p text.Profile) Palette {
+	pal.Prompt = text.Default
+	pal.Reply = text.RGB(0x15, 0x80, 0x3D)
+	if p == text.ANSI16 {
+		pal.Reply = text.Green
+	}
+	return pal
 }
 
 // DefaultPalette returns gnosh's own colours for the profile p. With
@@ -61,6 +84,7 @@ func DefaultPalette(p text.Profile) Palette {
 			Purple: text.Magenta, Pink: text.BrightMagenta, Lilac: text.Cyan,
 			Green: text.Green, Gold: text.Yellow, Rose: text.Red, Grey: text.Default,
 			Mint: text.Green, Sun: text.Yellow, Aqua: text.BrightCyan,
+			Prompt: text.BrightWhite, Reply: text.BrightGreen,
 		}
 	}
 	return Palette{
@@ -74,6 +98,8 @@ func DefaultPalette(p text.Profile) Palette {
 		Mint:   text.RGB(0x00, 0xFF, 0xB2),
 		Sun:    text.RGB(0xFB, 0xD2, 0x37),
 		Aqua:   text.RGB(0x68, 0xFF, 0xD6),
+		Prompt: text.RGB(0xFF, 0xFF, 0xFF),
+		Reply:  text.RGB(0x4A, 0xDE, 0x80),
 	}
 }
 
@@ -234,7 +260,7 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 		PendingMark: "✧",
 
 		Prompt:     plain.Fg(pal.Aqua).Bold(),
-		PromptText: plain,
+		PromptText: plain.Fg(pal.Prompt),
 		Tool:       plain.Fg(pal.Purple),
 		ToolName:   plain.Bold(),
 		ToolArg:    plain,
@@ -287,7 +313,7 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 		PromptStyle:  plain.Fg(pal.Aqua).Bold(),
 		ShellStyle:   plain.Fg(pal.Gold).Bold(),
 		CommandStyle: plain.Fg(pal.Green).Bold(),
-		Text:         plain,
+		Text:         plain.Fg(pal.Prompt),
 		Placeholder:  quiet,
 		Paste:        plain.Fg(pal.Purple),
 		Control:      plain.Fg(pal.Gold),
@@ -328,6 +354,7 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 	}
 
 	md := markdown.DefaultTheme()
+	md.Text = plain.Fg(pal.Reply)
 	md.Heading = plain.Fg(pal.Pink).Bold()
 	md.HeadingMark = plain.Fg(pal.Purple)
 	md.Code = plain.Fg(pal.Lilac)
@@ -377,4 +404,35 @@ func (th Theme) wordmark() string {
 		i++
 	}
 	return out
+}
+
+// promptColors are the colours a session's prompt mark may take (/color,
+// app.PromptColors), by Claude Code's names: with full colour, middle
+// tones that read on a dark and on a light background; with sixteen, the
+// terminal's own.
+var promptColors = map[string][2]text.Color{
+	"red":    {text.RGB(0xE0, 0x4A, 0x4A), text.Red},
+	"blue":   {text.RGB(0x4A, 0x8A, 0xF0), text.Blue},
+	"green":  {text.RGB(0x2E, 0xB0, 0x60), text.Green},
+	"yellow": {text.RGB(0xD9, 0xB0, 0x20), text.Yellow},
+	"purple": {text.RGB(0x9D, 0x5C, 0xFF), text.Magenta},
+	"orange": {text.RGB(0xF0, 0x84, 0x20), text.BrightRed},
+	"pink":   {text.RGB(0xF0, 0x25, 0x7F), text.BrightMagenta},
+	"cyan":   {text.RGB(0x20, 0xB8, 0xD0), text.Cyan},
+}
+
+// tintPrompt gives the prompt mark, in the box and before each prompt
+// sent from now on, the colour of that name; "" or a name it does not know
+// is the theme's own blue-green.
+func (th *Theme) tintPrompt(name string) {
+	c := th.Palette.Aqua
+	if pc, ok := promptColors[name]; ok {
+		c = pc[0]
+		if th.Profile == text.ANSI16 {
+			c = pc[1]
+		}
+	}
+	style := text.Style{}.In(th.Profile).Fg(c).Bold()
+	th.Prompt = style
+	th.Editor.PromptStyle = style
 }

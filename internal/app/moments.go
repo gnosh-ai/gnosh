@@ -657,6 +657,7 @@ func (l *live) turnEnded(ctx context.Context, res agent.TurnResult) {
 			c.c.TurnEnded(ctx, res)
 		}
 	}
+	l.tellNewBuild()
 }
 
 // sessionEnd is what happens when the session closes, in the order the

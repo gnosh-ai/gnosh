@@ -306,8 +306,7 @@ func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core
 		}
 		if !pe.Retryable() {
 			return rep, &failure{
-				msg: fmt.Sprintf("%s %s. The turn has ended; the conversation is kept, and what you queued still runs.",
-					m.label(), whatHappened(pe)),
+				msg:  fmt.Sprintf("%s %s.%s", m.label(), whatHappened(pe), a.turnEndedWords()),
 				kind: errorKind(pe.Kind), status: pe.Status, cause: pe,
 			}
 		}
@@ -319,13 +318,17 @@ func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core
 			a.rs = retryState{}
 			msg := fmt.Sprintf("%s did not come back within %s: it %s.", m.label(), span(waited), whatHappened(pe))
 			if step.notRunning {
-				msg = fmt.Sprintf("%s is not running: it has not answered once in %s, and it %s. Start it, or pick another model with /model.",
-					m.label(), span(waited), whatHappened(pe))
+				other := "pick another model with /model"
+				if !a.opts.Interactive {
+					other = "choose another model with -m"
+				}
+				msg = fmt.Sprintf("%s is not running: it has not answered once in %s, and it %s. Start it, or %s.",
+					m.label(), span(waited), whatHappened(pe), other)
 			} else if step.trouble == troubleOther {
 				msg = fmt.Sprintf("%s kept failing for %s: it %s.", m.label(), span(waited), whatHappened(pe))
 			}
 			return rep, &failure{
-				msg:  msg + " The turn has ended; the conversation is kept, and what you queued still runs.",
+				msg:  msg + a.turnEndedWords(),
 				kind: errorKind(pe.Kind), status: pe.Status, cause: pe,
 			}
 		}
@@ -341,7 +344,10 @@ func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core
 		default:
 			msg += "."
 		}
-		msg += " Esc stops the wait."
+		if a.opts.Interactive {
+			// (A run has nobody at a keyboard to press it.)
+			msg += " Esc stops the wait."
+		}
 		a.emit(&RetryEvent{
 			Purpose: purpose, Attempt: a.rs.n, Wait: step.wait, Until: step.until,
 			Kind: pe.Kind, Status: pe.Status, Message: msg, Discarded: !rep.empty(),
@@ -808,4 +814,13 @@ func (a *Agent) Usage() Totals {
 		out.Side.ByPurpose[k] = v
 	}
 	return out
+}
+
+// turnEndedWords end the words of a turn that failed: what is kept, and
+// for a person, that what they queued still runs.
+func (a *Agent) turnEndedWords() string {
+	if !a.opts.Interactive {
+		return " The turn has ended; the conversation is kept."
+	}
+	return " The turn has ended; the conversation is kept, and what you queued still runs."
 }

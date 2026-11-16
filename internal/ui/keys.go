@@ -125,6 +125,9 @@ func (s *session) input(ev term.Event) {
 		}
 		s.dirty = true
 	case term.Key, term.Mouse, term.Paste:
+		if k, ok := ev.(term.Key); ok && s.rebound(k) {
+			return
+		}
 		if s.view != nil {
 			// The transcript view takes every key while it is open.
 			if _, paste := ev.(term.Paste); !paste {
@@ -464,6 +467,7 @@ var ownCommands = []struct {
 	}},
 	{exportWords, func(s *session, line string) bool { return s.q == nil && s.chooseExport(line) }},
 	{memoryWords, func(s *session, line string) bool { return s.q == nil && s.chooseMemory(line) }},
+	{keybindingsWords, func(s *session, line string) bool { return s.q == nil && s.openKeybindings(line) }},
 	{mcpWords, func(s *session, line string) bool { return s.q == nil && s.chooseMCP(line) }},
 	{permissionsWords, func(s *session, line string) bool { return s.q == nil && s.choosePermissions(line) }},
 	{skillsWords, func(s *session, line string) bool { return s.q == nil && s.chooseSkills(line) }},
@@ -608,6 +612,9 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 			s.reportVim()
 		}
 		if res.Quit {
+			// (/restart and /background: the session goes on in another
+			// gnosh at once, which says itself how to come back to it.)
+			s.restarting = res.Name == "restart" || res.Name == "background"
 			s.leave(0, "prompt_input_exit")
 			return
 		}
@@ -625,6 +632,8 @@ func (s *session) ran(line string, res app.CommandResult, err error) {
 			s.lock()
 		}
 		s.refresh()
+		// (/resume: the session opened shows where it left off.)
+		s.recap()
 		// A command may have put another session behind the controls,
 		// with a task list of its own or none, and deliverables of its
 		// own or none.

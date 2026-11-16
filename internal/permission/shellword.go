@@ -1344,7 +1344,14 @@ func (p *parser) ansiC() (string, bool) {
 			out.WriteByte(11)
 		case 'e', 'E':
 			out.WriteByte(27)
-		case '\\', '\'', '"', '?':
+		case '\'':
+			// A shell with no $'...' (dash, sh on Debian and Ubuntu) reads
+			// $ and then a plain '...', which ends at this quote: the rest
+			// of the line is commands to it and quoted text to bash (oracle
+			// seed 111). Everywhere else the two end the quote together.
+			p.fail("a $'...' string with \\' in it, which a shell without $'...' (dash) ends at that quote")
+			return "", false
+		case '\\', '"', '?':
 			out.WriteByte(n)
 		case 'x':
 			v, k := readDigits(p.src[p.pos:], 16, 2)

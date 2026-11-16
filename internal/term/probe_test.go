@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -239,5 +240,31 @@ func TestDesktopNote(t *testing.T) {
 		if got := DesktopNote(tc.kind, tc.text); got != tc.want {
 			t.Errorf("DesktopNote(%q, %q) = %q, want %q", tc.kind, tc.text, got, tc.want)
 		}
+	}
+}
+
+// A terminal that tells its background colour (OSC 11) says whether it is
+// light; one that does not, or says it in a form gnosh cannot read, leaves
+// it unknown.
+func TestProbeBackground(t *testing.T) {
+	for spec, want := range map[string][2]bool{
+		"rgb:ffff/ffff/ffff": {true, true},
+		"rgb:f0/f0/f0":       {true, true},
+		"rgb:1e1e/1e1e/1e1e": {true, false},
+		"rgb:0/0/0":          {true, false},
+		"rgb:ffff/ffff":      {false, false},
+		"rgb:zz/00/00":       {false, false},
+		"#ffffff":            {false, false},
+	} {
+		var c Capabilities
+		if !c.Note(Reply{Kind: ReplyString, Intro: ']', Text: "11;" + spec}) {
+			t.Errorf("%s: the answer was not taken as one", spec)
+		}
+		if got := [2]bool{c.BackgroundKnown, c.LightBackground}; got != want {
+			t.Errorf("%s: known, light = %v, want %v", spec, got, want)
+		}
+	}
+	if !strings.Contains(probeQuery, QueryBackground) || !strings.HasSuffix(probeQuery, QueryDeviceAttributes) {
+		t.Errorf("the probe asks %q", probeQuery)
 	}
 }

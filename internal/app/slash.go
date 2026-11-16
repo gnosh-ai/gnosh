@@ -158,7 +158,7 @@ func (s *slashSet) run(ctx context.Context, line string) (res CommandResult, err
 		err = cmd.Run(ctx, c)
 	}()
 	res.Text = strings.TrimRight(out.String(), "\n")
-	res.Quit = err == nil && cmd.Name == "exit"
+	res.Quit = err == nil && (cmd.Name == "exit" || cmd.Name == "restart" || cmd.Name == "background")
 	s.l.flog.logf("turn", "slash command /%s (%d bytes of arguments): %v", cmd.Name, len(args), err)
 	return res, err
 }
@@ -170,6 +170,10 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "help", Summary: "List the commands.", InRun: true, Run: s.help},
 		{Name: "exit", Aliases: []string{"quit"}, Summary: "End the session. It is kept, and can be resumed.",
 			Run: func(context.Context, *SlashContext) error { return nil }},
+		{Name: "background", Aliases: []string{"bg"}, Args: "<prompt>", Summary: "Let the session go on without this terminal: it ends here and works on the prompt as a run of its own (gnosh -p), and gnosh -r opens it again once that is done.",
+			Run: l.slashBackground},
+		{Name: "restart", Aliases: []string{"update"}, Summary: "Start gnosh again in this session, with the same flags: a newer gnosh installed since this one started is the one that runs.",
+			Run: l.slashRestart},
 		{Name: "clear", Aliases: []string{"new", "reset"}, Args: "[name]", Summary: "Start a fresh session. The one before is kept, under the name given, if one is.",
 			Run: l.slashClear},
 		{Name: "compact", Args: "[instructions]", Summary: "Summarize the conversation now, to make room.", InRun: true, Run: l.slashCompact},
@@ -203,7 +207,10 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "statusline", Args: "[what it shows]", Summary: "Have the model write a status line command from your words, try it, and add it to your gnosh.json.", InRun: true, Run: l.slashStatusLine},
 		{Name: "recap", Summary: "The session in one line: what it has done and where it stands. Nothing of it is kept.", InRun: true, Run: l.slashRecap},
 		{Name: "rename", Args: "[name]", Summary: "Name this session, or show its name.", InRun: true, Run: l.slashRename},
+		{Name: "keybindings", Summary: "Your keyboard shortcuts file, as Claude Code's keybindings.json: typed alone in the full interface, it opens in your editor.", InRun: true, Run: l.slashKeybindings},
+		{Name: "color", Args: "[" + strings.Join(PromptColors, "|") + "|default]", Summary: "Give this session's prompt mark a colour, to tell it from other sessions; with none named, one at random. It is kept with the session.", InRun: true, Run: l.slashColor},
 		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id or name]", Summary: "Open another session of this folder in place of this one, which is kept.", Run: l.slashResume},
+		{Name: "fork", Args: "<prompt>", Summary: "Copy the conversation into a new session that works on the prompt in the background, as a run of its own, while this one goes on here.", Run: l.slashFork},
 		{Name: "branch", Args: "[name]", Summary: "Copy the conversation into a new session and go on in the copy. The original is kept.", Run: l.slashBranch},
 		{Name: "rewind", Aliases: []string{"checkpoint", "undo"}, Args: "[number [all|files]]", Summary: "Take the conversation back to before one of your prompts; with all, the files Write and Edit changed too; with files, the files alone.", Run: l.slashRewind},
 		{Name: "plan", Args: "[task]", Summary: "Switch to plan mode: the model looks and plans, and changes nothing. With a task after it, starts on it.", Run: l.slashPlan},
@@ -223,6 +230,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "review", Args: "[what to look at]", Summary: "Have the model review the changes on this branch for bugs, changing nothing.", InRun: true, Run: l.slashReview},
 		{Name: "security-review", Args: "[what to look at]", Summary: "Have the model review the changes on this branch for security vulnerabilities, changing nothing.", InRun: true, Run: l.slashSecurityReview},
 		{Name: "init", Summary: "Have the model look through the project and write its GNOSH.md, or improve the one there is.", Run: l.slashInit},
+		{Name: "debug", Args: "[what is wrong]", Summary: "Turn debug logging on for the rest of the session, and have the model find out from gnosh's log what is going wrong.", InRun: true, Run: l.slashDebug},
 		{Name: "doctor", Args: "[hosts]", Summary: "Check that a turn can run: config, providers, models, hooks. With hosts after it, each declared host is logged in to as well.", InRun: true,
 			Run: func(ctx context.Context, c *SlashContext) error {
 				// The declared hosts are listed, and reached only when the
@@ -649,6 +657,9 @@ func (l *live) slashStatus(ctx context.Context, c *SlashContext) error {
 		c.Say("small model  %s at %s (the short side jobs)", l.small.ref, l.small.model.Address)
 	}
 	c.Say("permissions  mode %s", l.engine.Mode())
+	if color := l.sessionColor(); color != "" {
+		c.Say("color        %s (/color)", color)
+	}
 	// The machines commands run on: this one as results name it, and the
 	// declared hosts.
 	c.Say("machine      %s (%s)", shelltool.LocalName, firstOf(l.p.whoAndWhere(), "its name is not known"))

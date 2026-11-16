@@ -43,6 +43,98 @@ type lineState struct {
 	linked bool
 }
 
+// judgeLooped judges the command at index i of the line, a command in the
+// body of a for loop that names the loop's variable once for each value
+// the list gives it (filledArgs), every one of them having to pass. A
+// command whose redirection names the variable, or whose words cannot be
+// filled in, is not judged that way and asks.
+func (e *Engine) judgeLooped(v *bashView, i int, c *simpleCmd, st *lineState) partVerdict {
+	var names []string
+	for _, l := range v.sc.loops {
+		if !l.args && l.from <= i && i < l.to && usesVar(c.words, l.name) {
+			for _, w := range l.words {
+				if !w.plain() && !(w.static() && !w.glob && !w.brace && !w.tilde) {
+					// A pattern in the list is file names, any of which may
+					// begin with a dash and be a flag where the body puts
+					// it ("for f in *; do cp a.txt "$f"x; done" ran cp
+					// a.txt -Rx: oracle). Only words as written are
+					// filled in.
+					return partVerdict{why: "the loop's variable $" + l.name + " takes values that are file names a pattern stands for, or are computed"}
+				}
+			}
+			names = append(names, l.name)
+		}
+	}
+	if len(names) == 0 {
+		return e.judgePart(c, st)
+	}
+	for _, r := range c.redirs {
+		for _, n := range names {
+			if usesVar([]word{r.target}, n) {
+				return partVerdict{why: "a redirection names a file by the loop's variable $" + n}
+			}
+		}
+	}
+	alts, _ := e.filledArgs(v, c.words)
+	if len(alts) == 0 {
+		return partVerdict{why: "the loop's variable $" + names[0] + " is given values gnosh cannot tell"}
+	}
+	var first partVerdict
+	for k, alt := range alts {
+		one := *c
+		one.words = alt
+		pv := e.judgePart(&one, st)
+		if !pv.ok {
+			// (A rule for the command as written could not cover what it
+			// becomes for each value: no rule is offered.)
+			pv.exact, pv.prefix = "", ""
+			return pv
+		}
+		if k == 0 {
+			first = pv
+		}
+	}
+	return first
+}
+
+// usesVar reports whether a word of ws names the variable name.
+func usesVar(ws []word, name string) bool {
+	for _, w := range ws {
+		for _, p := range w.parts {
+			if p.kind == partVar && p.name == name {
+				return true
+			}
+			if p.body != nil && usesVar([]word{*p.body}, name) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// changesDir reports whether a command of the line may change the shell's
+// directory: cd, pushd or popd, by name or behind builtin or command, or a
+// program whose name is computed when the line runs.
+func changesDir(v *bashView) bool {
+	for _, c := range v.sc.cmds {
+		ws := c.words
+		for len(ws) > 1 && ws[0].static() && (ws[0].joined() == "builtin" || ws[0].joined() == "command") {
+			ws = ws[1:]
+		}
+		if len(ws) == 0 {
+			continue
+		}
+		if !ws[0].static() {
+			return true
+		}
+		switch baseName(ws[0].joined()) {
+		case "cd", "pushd", "popd":
+			return true
+		}
+	}
+	return false
+}
+
 // copyPlace is a copy of where the line stands, for putting it back.
 func (st *lineState) copyPlace() lineState {
 	return lineState{
@@ -1716,7 +1808,12 @@ func (e *Engine) decideShell(req *request) Decision {
 	case v.sc.compound:
 		// (A subshell is read as the commands in it, with its own
 		// directory: see the spans below.)
-		return ask("The command holds a loop, a group or another compound form, and gnosh asks about those.")
+		return ask("The command holds a for loop, a function or another compound form, and gnosh asks about those.")
+	case (v.sc.cond || v.sc.forLoop) && changesDir(v):
+		// An if, a while or a case is read straight through, every branch
+		// judged, which holds as long as where a command runs does not
+		// hang on which branch ran.
+		return ask("The command holds an if, a loop or a case, and changes directory, so where its commands run hangs on which of them ran, and how often; gnosh asks about those.")
 	case v.sc.background:
 		return ask("The command starts a background job with &, and gnosh asks about those.")
 	case v.sc.exotic:
@@ -1755,7 +1852,7 @@ func (e *Engine) decideShell(req *request) Decision {
 			saved = append(saved, st.copyPlace())
 		}
 		st.enter(c)
-		pv := e.judgePart(c, st)
+		pv := e.judgeLooped(v, i, c, st)
 		if pv.ok && pv.state != "" && parts > 1 {
 			whys = append(whys, pv.state+" changes the shell that runs the rest of the line, so the rest cannot be judged ahead of time")
 			coverable = false

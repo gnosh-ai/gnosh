@@ -1167,3 +1167,54 @@ func TestResultPreviewHasNoBlankRows(t *testing.T) {
 		t.Errorf("the result's lines, without its blank ones, are not under the call:\n%s", all)
 	}
 }
+
+// The channel the person chose (preferredNotifChannel) is the one the
+// notes go by; notifications_disabled sends none.
+func TestNotificationChannel(t *testing.T) {
+	off := newRig(t, 80, 24, text.NoColor, func(c *controls) { c.info.NotifChannel = "notifications_disabled" })
+	off.takesNotes = true
+	off.keys(`"go" <Enter>`).start().ev(turnEnd(agent.EndCompleted), idle())
+	off.wait(61 * time.Second)
+	off.s.tick()
+	if len(off.notes) != 0 {
+		t.Errorf("with notifications off the desktop was told %q", off.notes)
+	}
+}
+
+// What each channel writes, in tmux and out of it.
+func TestNoteSeq(t *testing.T) {
+	plain := func(string) string { return "" }
+	tmux := func(k string) string {
+		if k == "TMUX" {
+			return "/tmp/tmux-0/default,1,0"
+		}
+		return ""
+	}
+	iterm := func(k string) string {
+		if k == "TERM_PROGRAM" {
+			return "iTerm.app"
+		}
+		return ""
+	}
+	for _, c := range []struct {
+		channel string
+		env     func(string) string
+		want    string
+	}{
+		{"auto", plain, ""},
+		{"auto", iterm, "\x1b]9;done\x1b\\"},
+		{"auto", tmux, ""},
+		{"terminal_bell", plain, "\a"},
+		{"terminal_bell", tmux, "\a"},
+		{"iterm2", plain, "\x1b]9;done\x1b\\"},
+		{"iterm2", tmux, "\x1bPtmux;\x1b\x1b]9;done\x1b\x1b\\\x1b\\"},
+		{"iterm2_with_bell", plain, "\x1b]9;done\x1b\\\a"},
+		{"kitty", plain, "\x1b]99;;done\x1b\\"},
+		{"ghostty", plain, "\x1b]9;done\x1b\\"},
+		{"notifications_disabled", iterm, ""},
+	} {
+		if got := noteSeq(c.channel, "done", c.env); got != c.want {
+			t.Errorf("%s: %q, want %q", c.channel, got, c.want)
+		}
+	}
+}

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -234,16 +233,6 @@ func jsonLines(t *testing.T, out string) []map[string]any {
 		lines = append(lines, v)
 	}
 	return lines
-}
-
-// sessionEntries reads a session file as its lines, decoded.
-func sessionEntries(t *testing.T, path string) []map[string]any {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return jsonLines(t, string(data))
 }
 
 // lastRequestText returns the body of the model's request number n, as

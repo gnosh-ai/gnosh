@@ -305,8 +305,29 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 		}
 	}
 
-	// 5. Tools.
+	// 5. Tools, and the servers the options give them. A server is only
+	// connected to, as a provider's is, and is sent nothing: an embedding
+	// server holds a model, which nothing of doctor's may disturb.
 	add("tools", Fine, "file search (Glob, Grep) is gnosh's own and needs no outside program.")
+	for _, s := range []struct {
+		name, down string
+		v          Value[string]
+	}{
+		{"WebSearch's search server", "every search fails until it does", cfg.Options.WebSearchURL},
+		{"mem's embedding server", "mem's searches match words only until it does", cfg.Options.MemEmbeddingsURL},
+	} {
+		if s.v.V == "" {
+			continue
+		}
+		at := displayURL(s.v.V)
+		if pr.Connect == nil {
+			add("tools", Note, "%s is %s (%s). Whether it answers was not checked.", s.name, at, s.v.Origin)
+		} else if err := pr.Connect(ctx, s.v.V); err != nil {
+			add("tools", Note, "%s at %s did not answer (%v): %s. (%s)", s.name, at, err, s.down, s.v.Origin)
+		} else {
+			add("tools", Fine, "%s at %s answers. (%s)", s.name, at, s.v.Origin)
+		}
+	}
 
 	// 6. Hosts. A host that was not tried is never called fine: nothing
 	// reads as checked that was not.

@@ -221,9 +221,14 @@ func (j *join) ready(a *agent.Agent) {
 // busy is Contribution.Busy: a prompt has made the idle session busy. The
 // session's turn lock is held until it goes idle again, so that other
 // sessions working the same plan see this one working. A sub-agent's
-// session holds its own.
+// session holds its own. A person's session that can run mem also joins
+// the plan's peers (gnovm.Lazy.JoinPeers), so that sessions started
+// together are each told of the others from their first look at the plan.
 func (j *join) busy(ctx context.Context) func() {
 	release := j.vms.HoldTurn(ctx, j.id)
+	if j.main && j.run {
+		j.vms.JoinPeers(j.project, j.id)
+	}
 	j.mu.Lock()
 	j.turn.began = j.now()
 	j.mu.Unlock()

@@ -93,6 +93,24 @@ func TestShellAttacks(t *testing.T) {
 		{"a group's cd holds for what follows it", "", rules{deny: []string{"Read(./src/.env)"}}, "{ cd src; } && cat .env", Deny},
 		{"a redirection after a group asks", "", none, "{ ls; } > out.txt", Ask},
 		{"a removal in a group asks", "", none, "ls || { rm -rf x; }", Ask},
+		// An if, a while or a case is read straight through, every branch
+		// judged, unless the line changes directory.
+		{"a cd in an if hangs on the branch", "", none, "if true; then cd src; fi && cat ../x", Ask},
+		{"a cd before an if is no different", "", none, "cd src; if [ -f a ]; then cat ../x; fi", Ask},
+		{"a removal in a branch asks", "", none, "if [ -f a ]; then rm -rf x; fi", Ask},
+		{"a read a deny rule names, in a branch", "", rules{deny: []string{"Read(./.env)"}}, "if [ -f .env ]; then cat .env; else echo none; fi", Deny},
+		{"a while that fetches", "", none, "while true; do curl http://203.0.113.1/x; done", Ask},
+		{"a case that writes", "", none, "case a in a) touch x;; esac", Ask},
+		// A for loop's body is judged once for each value of its list.
+		{"a value of the list outside the folder", "", none, "for f in a.go /etc/passwd; do cat $f; done", Ask},
+		{"a value of the list a deny rule names", "", rules{deny: []string{"Read(./.env)"}}, "for f in a.go .env; do cat $f; done", Deny},
+		{"a removal in a loop", "", none, "for f in a b; do rm $f; done", Ask},
+		{"a cd in a loop", "", none, "for d in src; do cd $d; ls; done", Ask},
+		{"a redirection named by the loop's variable", "", none, "for f in a; do cat a.go > $f; done", Ask},
+		{"a list a command makes", "", none, "for f in $(ls); do cat $f; done", Ask},
+		{"a pattern's names may be flags where the body puts them", "", none, "for f in * .*; do cat \"$f\"x; done", Ask},
+		{"a loop over the words a script was handed", "", none, "for f; do cat $f; done", Ask},
+		{"the variable after its loop", "", none, "for f in a.go; do echo $f; done; cat $f", Ask},
 		// The read-only programs, with the flags that make them more.
 		{"gofmt -w writes the files", "", none, "gofmt -w a.go", Ask},
 		{"gofmt -cpuprofile writes a profile", "", none, "gofmt -cpuprofile x.prof .", Ask},
@@ -234,6 +252,10 @@ func TestShellAttacks(t *testing.T) {
 		{"xargs runs git status --porcelain=...", "", attackRealistic, "echo --prefix | xargs git status", Ask},
 		// A line the reader cannot follow is never waved past a guard.
 		{"the reader stops at the quotes; the shell runs rm y", ModeBypass, attackGuards, "echo ${x:-\"a\"}; $'\\x72m' y", Ask},
+		// dash has no $'...': to it $'\' is $ and a plain '\', so what
+		// bash reads as quoted text after it runs (oracle seed 111).
+		{"dash runs tee pwned", "", none, "ss -falsetln $'\\'; tee pwned; echo $'\\'''", Ask},
+		{"dash runs rm y", ModeBypass, attackGuards, "echo $'\\'; rm y; echo $'\\'''", Ask},
 		{"the name is r plus a default of m", ModeBypass, attackGuards, "r${x:-\"m\"} -rf y", Ask},
 		{"the reader stops at the quotes; the shell reads .env", "", rules{allow: []string{"Bash"}, deny: []string{"Read(./.env)"}}, "echo ${x:-\"a\"}; cat .env", Deny},
 		// Commands that change the shell the rest of the line runs in.
@@ -1371,7 +1393,7 @@ func TestOrdinaryLinesStillRun(t *testing.T) {
 		"cat a.txt | grep foo | wc -l", "git status | head -20", "ls -la | grep go", "git diff | head -100", "git log --oneline | wc -l",
 		"grep -rn foo . | sort | uniq -c | sort -rn | head", "find . -name '*.go' | wc -l", "cat go.mod | head -5",
 		"cd src && ls", "cd src && go test ./...", "pwd && ls", "ls && git status", "git status && git diff", "ls; pwd",
-		"echo hello", "echo \"hello world\"", "echo done", "true", "date", "date +%s", "which go", "command -v go",
+		"echo hello", "echo \"hello world\"", "echo done", "echo $'a\\\\' $'tab\\there'", "true", "date", "date +%s", "which go", "command -v go",
 		"test -f go.mod", "[ -d src ]", "[[ -f go.mod ]]", "[[ -f go.mod ]] && echo yes", "[[ -d src && -f go.mod ]]", "[[ -d src && ! -e b ]]",
 		"stat go.mod", "du -sh .", "file README.md", "diff a.txt b.txt", "sort names.txt | uniq", "cut -d: -f1 names.txt",
 		"sed -n '1,20p' main.go", "sed -n 5p main.go", "basename /x/y.go .go", "dirname /x/y", "nl main.go", "uname -a", "whoami",
@@ -1395,6 +1417,9 @@ func TestOrdinaryLinesStillRun(t *testing.T) {
 		// Subshells (box 1 and box 2, 16 November).
 		"(go test ./... 2>&1 || true)", "(cd src && ls)", "ls && (cd src; cat c.go)", "(cd src && ls) && cat a.go", "(ls; (cd src && ls))",
 		"go test ./... || { echo failed; }", "{ ls; pwd; }", "{ cd src; } && cat c.go",
+		"if [ -f go.mod ]; then cat go.mod; fi", "if git diff --quiet; then echo clean; else git status; fi",
+		"while false; do ls; done", "case a in a) ls;; *) pwd;; esac", "if [ -d src ]; then ls src; elif [ -d a ]; then ls a; fi",
+		"for d in src; do ls $d; done", "for f in a.go b.go; do wc -l $f; done", "for x in 1 2 3; do echo $x; done", "for f in a.go; do echo \"== $f\"; head -1 \"$f\"; done",
 		// Read-only programs Qwen ran on box 1 and box 2 that asked (16
 		// November).
 		"strings -n 8 a.go | head", "strings a.go | grep -i version", "gofmt -l .", "gofmt -d a.go", "gofmt -s -d src",

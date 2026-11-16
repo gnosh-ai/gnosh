@@ -811,13 +811,6 @@ func (p DropParams) check() error {
 	return nil
 }
 
-// DeleteRefused is what the model read, in the earlier gnosh, when the user
-// did not allow a VM to be deleted. The harness that asks now words its own
-// refusals; this is here for one that wants the old words.
-func DeleteRefused(name string) string {
-	return "the user did not allow deleting VM " + name
-}
-
 // Run evicts the VM from memory, or deletes it. Whether a delete may run
 // was settled before the call came here.
 func (t dropTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (core.ToolResult, error) {

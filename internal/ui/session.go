@@ -42,7 +42,7 @@ type host interface {
 	title(text string) error
 	// desktop raises a desktop notification through the terminal, when it
 	// takes one; it reports whether it does.
-	desktop(text string) bool
+	desktop(channel, text string) bool
 	// openPanel takes the terminal's whole screen for the side panel
 	// (panel.go), for a terminal of cols by rows, and openView for the
 	// transcript view (transcript.go).
@@ -202,6 +202,13 @@ type session struct {
 	sending []sent
 	// lastInput is when a key was last pressed.
 	lastInput time.Time
+	// keys is the keybindings file as it was last read (keybindings.go),
+	// nil before the first key.
+	keys *keyFile
+	// keyHeld is the first key of a chord of the keybindings, held for
+	// the second since keyHeldAt.
+	keyHeld   *term.Key
+	keyHeldAt time.Time
 	// chord says Ctrl+X was pressed and the key after it is awaited.
 	chord bool
 	// stopArmed is when Ctrl+X Ctrl+K was pressed once, waiting for the
@@ -255,7 +262,12 @@ type session struct {
 	cmdStop context.CancelFunc
 
 	// What the status line says.
-	info   app.SessionInfo
+	info app.SessionInfo
+	// recapped is the id of the session whose recap was shown (recap.go).
+	recapped string
+	// color is the colour of the prompt mark the session asked for
+	// (/color), "" for the theme's own.
+	color  string
 	mode   string
 	ctxs   agent.ContextStatus
 	branch string
@@ -290,10 +302,12 @@ type session struct {
 	idleTold  bool
 
 	// done says the session is over; code is the exit code and why the
-	// reason, in the SessionEnd hooks' words.
-	done bool
-	code int
-	why  string
+	// reason, in the SessionEnd hooks' words. restarting says it ends for
+	// /restart.
+	done       bool
+	restarting bool
+	code       int
+	why        string
 }
 
 // newSession makes a session. Nothing is drawn until start.
@@ -325,6 +339,9 @@ func (s *session) start() {
 	s.tasks = s.c.Tasks()
 	s.readDeliverables()
 	s.header()
+	// (What in the keybindings file cannot be used is said at once.)
+	s.keysNow()
+	s.recap()
 	if h, ok := s.c.(historian); ok {
 		var drafts []editor.Draft
 		for _, p := range h.History() {
@@ -348,6 +365,12 @@ func (s *session) refresh() {
 	}
 	if s.branchOf != nil && s.cwd != "" {
 		s.branch = s.branchOf(s.cwd)
+	}
+	if s.info.Color != s.color {
+		// (/color, or a session opened again that had one.)
+		s.color = s.info.Color
+		s.th.tintPrompt(s.color)
+		s.ed.SetTheme(s.th.Editor)
 	}
 	s.dirty = true
 }
@@ -566,6 +589,7 @@ func (s *session) relayout(cols int) {
 // is still busy, so that the screen never says it is when it is not.
 func (s *session) tick() {
 	now := s.now()
+	s.chordTimedOut()
 	if s.q != nil && s.q.guarded && !now.Before(s.q.quiet) {
 		s.q.guarded = false
 		s.dirty = true
@@ -620,7 +644,7 @@ func (s *session) wake() time.Time {
 		// The spinner takes its next step.
 		soon(now.Add(s.th.SpinEvery))
 	}
-	if s.info.NotifyHooks || s.host.desktop("") {
+	if s.info.NotifyHooks || s.host.desktop(s.info.NotifChannel, "") {
 		if q := s.q; q != nil && !q.notified {
 			soon(later(q.opened, s.lastInput).Add(askNotifyAfter))
 		}
@@ -644,7 +668,7 @@ const (
 // pressed, or that a turn ended a while ago and nothing was typed since:
 // the person seems to be away.
 func (s *session) notify(now time.Time) {
-	hooks, desk := s.info.NotifyHooks, s.host.desktop("")
+	hooks, desk := s.info.NotifyHooks, s.host.desktop(s.info.NotifChannel, "")
 	if !hooks && !desk {
 		return
 	}
@@ -653,7 +677,7 @@ func (s *session) notify(now time.Time) {
 			s.c.Notify(kind, title, message)
 		}
 		if desk {
-			s.host.desktop(message)
+			s.host.desktop(s.info.NotifChannel, message)
 		}
 	}
 	if q := s.q; q != nil && !q.notified && !now.Before(later(q.opened, s.lastInput).Add(askNotifyAfter)) {

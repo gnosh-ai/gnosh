@@ -13,7 +13,9 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime/debug"
 	"syscall"
 
@@ -52,6 +54,7 @@ func main() {
 
 	cwd, _ := os.Getwd() // empty when it is not known; the program says so
 	info, _ := debug.ReadBuildInfo()
+	self := selfPath()
 	os.Exit(app.Main(context.Background(), app.Options{
 		Args:             os.Args[1:],
 		Stdin:            os.Stdin,
@@ -72,7 +75,29 @@ func main() {
 		Exit:         os.Exit,
 		Build:        cli.BuildFromInfo(info).WithLinkedTime(buildinfo.BuildTime),
 		BuildID:      buildinfo.BuildID,
+		Executable:   self,
+		Relaunch: func(args, env []string) error {
+			return syscall.Exec(self, append([]string{os.Args[0]}, args...), env)
+		},
+		Detach: func(args, env []string, log string) (int, error) {
+			return detach(self, args, env, log)
+		},
 	}))
+}
+
+// selfPath is the program file gnosh runs from, as it was started: the
+// name it was run by, looked up on the PATH as the shell looked it up, so
+// that a gnosh installed in its place, by rename or behind a link, is the
+// one /restart starts. Failing that, it is the file the system says this
+// process runs.
+func selfPath() string {
+	if p, err := exec.LookPath(os.Args[0]); err == nil {
+		if abs, err := filepath.Abs(p); err == nil {
+			return abs
+		}
+	}
+	p, _ := os.Executable()
+	return p
 }
 
 // sshHelp reports whether the words after gnosh ssh ask for gnosh's help

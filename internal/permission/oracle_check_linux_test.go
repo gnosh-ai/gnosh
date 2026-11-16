@@ -1128,7 +1128,10 @@ func (lc *lineCheck) disagreement(r shellRun, rcs []ranCmd) string {
 		// an error that ends the line.
 		return ""
 	}
-	if sc.subst || sc.subshell || sc.compound || sc.background || strings.HasPrefix(strings.TrimLeft(lc.line, " \t\n"), "-") {
+	// (Every branch of an if, a case or a loop is read, and a group's
+	// commands are read whatever runs before them; which of them run is
+	// for the shell to say.)
+	if sc.subst || sc.subshell || sc.compound || sc.cond || sc.forLoop || sc.group || sc.background || strings.HasPrefix(strings.TrimLeft(lc.line, " \t\n"), "-") {
 		// (The shell tool hands the line to eval as it is, and eval takes
 		// a line that starts with a dash for an option: nothing runs.)
 		return ""

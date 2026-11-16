@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/shellquote"
 )
 
 // The command that copies a file is plain steps with the path written out
@@ -84,7 +86,7 @@ func TestCopyFromHost(t *testing.T) {
 	// What ssh was given: its usual arguments, and the copy command as the
 	// one line the other machine runs.
 	call := box.lastCall(3)
-	if got, want := call.Args[len(call.Args)-1], script(shellQuote(CopyCommand(filepath.Join(box.home, "renders", "ad.mp4"), 1<<20))); got != want {
+	if got, want := call.Args[len(call.Args)-1], script(shellquote.Quote(CopyCommand(filepath.Join(box.home, "renders", "ad.mp4"), 1<<20))); got != want {
 		t.Errorf("ssh was given\n%s\nwant\n%s", got, want)
 	}
 	if got := strings.Join(call.Args[:len(call.Args)-1], " "); got != "-T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -- root@203.0.113.7" {

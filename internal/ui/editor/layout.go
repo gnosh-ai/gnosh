@@ -266,11 +266,6 @@ func (e *Editor) rowsBefore(i int) int {
 	return n
 }
 
-// totalRows is how many rows the whole text takes.
-func (e *Editor) totalRows() int {
-	return e.rowsBefore(len(e.lines))
-}
-
 // cursorRow returns the row the cursor is on: counted from the first row
 // of the text, and as a row of its own line.
 func (e *Editor) cursorRow() (global, inLine int) {

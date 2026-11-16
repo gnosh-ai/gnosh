@@ -28,9 +28,14 @@ Built:
   the run's own, and `--agent` to run the session as one. It waits for the
   background commands its turns start and lets the model answer how they
   ended.
-- **A session** in the terminal's own scrollback.
+- **A session** in the terminal's own scrollback. Opened again (`-r`,
+  `-c`, `/resume`), it shows where it left off: its last prompt and the
+  model's last answer. It can go on without the terminal (`/background`,
+  `/fork`), and `gnosh session list` marks the sessions open now.
 - **Tools:** the file and shell tools, WebFetch (a page read by the small
-  model with the model's request, from the open web only), commands on
+  model with the model's request, from the open web only), WebSearch on a
+  SearXNG server of your own (`"options": {"webSearchUrl": "http://..."}`,
+  with SearXNG's JSON format on; no tool without it), commands on
   declared hosts over ssh, and MCP servers, those gnosh starts itself and
   those at a URL (from `~/.config/gnosh/mcp.json`, a trusted project's
   `.mcp.json`, and `--mcp-config` for one run, in Claude Code's shape; their
@@ -73,33 +78,45 @@ Built:
   at once. NORMAL, INSERT and VISUAL modes, motions, operators with counts,
   text objects, `.` and undo by changes; the mode is on the status line,
   and `"vimInsertModeRemaps": ["jj"]` makes a pair stand for Esc.
+- **Being told it waits**, as Claude Code's `preferredNotifChannel`: a
+  desktop note in a terminal known to take one, or, with `"options":
+  {"preferredNotifChannel": "terminal_bell"}` (or `/config
+  preferredNotifChannel=terminal_bell`), the terminal's bell, which reaches
+  a terminal on the other side of ssh or tmux too. Your prompts are white
+  and the model's answers green; on a terminal that says its background is
+  light, both take colours that read there.
 
 In a session, Claude Code's commands work as there: `/help`, `/clear`,
-`/compact`, `/resume`, `/branch`, `/rewind` (the conversation, the files Write
-and Edit changed, or both), `/model`, `/effort`, `/config`, `/plan`, `/permissions`,
-`/add-dir`, `/status`, `/context`, `/btw` (a side question, also while the
-model works; nothing of it is kept), `/recap`, `/cost`, `/tasks`, `/diff`,
-`/export`,
-`/copy`, `/init`, `/memory`, `/agents`, `/mcp` (with reconnect, enable and
-disable), `/skills`, `/reload-skills`, `/hooks`, `/statusline` and `/doctor`, with gnosh's
-own `/mem`, `/goal`, `/loop` and `/deliverables` beside them. Shift+Tab goes through the
-permission modes, Esc stops a turn and Esc twice goes back to an earlier
-prompt, Ctrl+O shows the whole transcript (every thought, call and result)
-on the whole screen, Ctrl+B moves a running command
-to the background, `@path` in a prompt brings that file (or a directory's
-listing) along with it, and a line that begins with `!` is a command of your own.
-With nothing after them, `/model`, `/effort`, `/config`, `/export`, `/memory`,
-`/mcp`, `/permissions` and `/skills` open pickers, as Claude Code's do
-(`/permissions allow`, `ask`, `deny` or `remove` and a rule changes the rules
-at once, and `/skills <name> off` and the like set Claude Code's
-`skillOverrides`);
-Alt+T turns thinking on or off,
-Alt+P switches the model, and Ctrl+X Ctrl+K twice stops the sub-agents in the
-background.
-`/panel` (or the `sidePanel` option) draws the session on the whole screen
-beside a side panel of the files it changed and its deliverables, with their
-addresses; `/panel` again gives the screen back, with all that was said in
-the scrollback.
+`/restart` (gnosh starts again in the same session, the newer one once a new
+build is installed, which the session says), `/background` (the session goes
+on without the terminal, as a run of its own on the prompt given), `/fork` (a
+copy of the conversation works on the prompt in the background while this
+session goes on), `/compact`, `/resume`, `/branch`, `/rewind` (the
+conversation, the files Write and Edit changed, or both), `/model`, `/effort`,
+`/config`, `/plan`, `/permissions`, `/add-dir`, `/status`, `/context`, `/btw`
+(a side question, also while the model works; nothing of it is kept),
+`/recap`, `/color` (this session's prompt mark in a colour of its own, kept
+with the session), `/keybindings` (Claude Code's keybindings.json: a key bound
+to an action, null to take one away, command:<name> to run one), `/cost`,
+`/tasks`, `/diff`, `/export`, `/copy`, `/init`, `/memory`, `/agents`, `/mcp`
+(with reconnect, enable and disable), `/skills`, `/reload-skills`, `/hooks`,
+`/statusline`, `/debug` (debug logging on, and the model finds out from
+gnosh's log what went wrong) and `/doctor`, with gnosh's own `/mem`, `/goal`,
+`/loop` and `/deliverables` beside them. Shift+Tab goes through the permission
+modes, Esc stops a turn and Esc twice goes back to an earlier prompt, Ctrl+O
+shows the whole transcript (every thought, call and result) on the whole
+screen, Ctrl+B moves a running command to the background, `@path` in a prompt
+brings that file (or a directory's listing) along with it, and a line that
+begins with `!` is a command of your own. With nothing after them, `/model`,
+`/effort`, `/config`, `/export`, `/memory`, `/mcp`, `/permissions` and
+`/skills` open pickers, as Claude Code's do (`/permissions allow`, `ask`,
+`deny` or `remove` and a rule changes the rules at once, and `/skills <name>
+off` and the like set Claude Code's `skillOverrides`); Alt+T turns thinking on
+or off, Alt+P switches the model, and Ctrl+X Ctrl+K twice stops the sub-agents
+in the background. `/panel` (or the `sidePanel` option) draws the session on
+the whole screen beside a side panel of the files it changed and its
+deliverables, with their addresses; `/panel` again gives the screen back, with
+all that was said in the scrollback.
 
 Not built yet: signing in to an MCP server by OAuth (a key goes in its
 `headers`), and a WebSearch tool of gnosh's own (a search engine's MCP
