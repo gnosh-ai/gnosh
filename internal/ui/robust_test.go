@@ -658,3 +658,37 @@ func randomStep(g *rig, r *rand.Rand) {
 	}
 	g.frame()
 }
+
+// Jae's colours: his prompts in white and the model's prose in a phosphor
+// green on a dark background, as he asked; on a terminal that says its
+// background is light, the terminal's own colour and a green that reads
+// on white.
+func TestPromptAndReplyColours(t *testing.T) {
+	th := DefaultTheme(text.TrueColor)
+	if seq := th.PromptText.Sequence(); !strings.Contains(seq, "38;2;255;255;255") {
+		t.Errorf("a prompt's text is %q, not white", seq)
+	}
+	if seq := th.Editor.Text.Sequence(); !strings.Contains(seq, "38;2;255;255;255") {
+		t.Errorf("the box's text is %q, not white", seq)
+	}
+	if seq := th.Markdown.Text.Sequence(); !strings.Contains(seq, "38;2;74;222;128") {
+		t.Errorf("an answer's prose is %q, not the green", seq)
+	}
+	if th.Thinking == th.Markdown.Text {
+		t.Error("thinking is drawn as the answer is")
+	}
+	light := NewTheme(text.TrueColor, DefaultPalette(text.TrueColor).OnLight(text.TrueColor))
+	if seq := light.PromptText.Sequence(); strings.Contains(seq, "38;2") {
+		t.Errorf("on a light background a prompt's text is %q", seq)
+	}
+	if seq := light.Markdown.Text.Sequence(); !strings.Contains(seq, "38;2;21;128;61") {
+		t.Errorf("on a light background an answer's prose is %q", seq)
+	}
+	sixteen := DefaultTheme(text.ANSI16)
+	if seq := sixteen.PromptText.Sequence(); !strings.Contains(seq, "97") {
+		t.Errorf("with sixteen colours a prompt's text is %q, not bright white", seq)
+	}
+	if seq := sixteen.Markdown.Text.Sequence(); !strings.Contains(seq, "92") {
+		t.Errorf("with sixteen colours an answer's prose is %q, not bright green", seq)
+	}
+}

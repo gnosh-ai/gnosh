@@ -444,6 +444,13 @@ func TestOneWriter(t *testing.T) {
 		t.Errorf("the error does not say what to do: %q", msg)
 	}
 
+	if !InUse(s.Path()) {
+		t.Error("a session open for writing is not in use")
+	}
+	if InUse(s.Path() + ".none") {
+		t.Error("a file that is not there is in use")
+	}
+
 	// It can be opened read-only meanwhile, and branched.
 	ro, err := st.OpenReadOnly(ctx, s.ID())
 	if err != nil {
@@ -468,6 +475,9 @@ func TestOneWriter(t *testing.T) {
 
 	// Once the writer closes, another may open it.
 	s.Close()
+	if InUse(s.Path()) {
+		t.Error("a session nobody writes is in use")
+	}
 	s2, err := st.Open(ctx, s.ID())
 	if err != nil {
 		t.Fatalf("after the writer closed: %v", err)

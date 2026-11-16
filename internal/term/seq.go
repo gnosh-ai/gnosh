@@ -89,6 +89,10 @@ const (
 	// a ReplyCursorPosition; tell the decoder to expect it (see
 	// Decoder.ExpectCursorPosition and Terminal.QueryCursorPosition).
 	QueryCursorPosition = "\x1b[6n"
+	// QueryBackground asks the terminal for its background colour (OSC
+	// 11). A terminal that tells answers with a ReplyString "11;rgb:...".
+	QueryBackground = "\x1b]11;?\x1b\\"
+
 	// QueryDeviceAttributes asks the terminal what it is (DA1). Every
 	// terminal answers it, which makes it the way to tell "no" from
 	// "not yet" for the questions sent before it.
@@ -137,6 +141,13 @@ func DesktopNote(kind, text string) string {
 		return "\x1b]99;;" + text + "\x1b\\"
 	}
 	return ""
+}
+
+// TmuxWrap wraps a sequence for tmux to pass on to the terminal it is
+// shown in (tmux's passthrough, which it takes with allow-passthrough on):
+// every ESC in it doubled, inside DCS tmux; … ST.
+func TmuxWrap(seq string) string {
+	return "\x1bPtmux;" + strings.ReplaceAll(seq, "\x1b", "\x1b\x1b") + "\x1b\\"
 }
 
 // TitlePush and TitlePop keep the terminal's title on its own stack and

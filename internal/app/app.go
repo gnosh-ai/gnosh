@@ -61,6 +61,24 @@ type Options struct {
 	Build   cli.Build
 	BuildID string
 
+	// Executable is the path of the program file gnosh was started from.
+	// A file there that is not the one gnosh started from is a newer
+	// gnosh, installed since, and the session says so once (/restart).
+	Executable string
+	// Relaunch, when not nil, puts gnosh started anew in place of this
+	// process: the program file at Executable, with these arguments after
+	// its name, in the same folder and environment. It is /restart's last
+	// step, taken once the session is closed, and it returns only when it
+	// could not be done, in the environment env. Nil means gnosh cannot
+	// start itself again.
+	Relaunch func(args, env []string) error
+	// Detach, when not nil, starts the program file at Executable with
+	// these arguments as a process of its own, which goes on when this
+	// one and its terminal are gone, writing what it prints to the file at
+	// log; it returns the process's id. It is /background's last step,
+	// taken once the session is closed. Nil means gnosh cannot do that.
+	Detach func(args, env []string, log string) (int, error)
+
 	// Now is the clock. Nil means time.Now.
 	Now func() time.Time
 
@@ -111,6 +129,20 @@ type program struct {
 	// started to stop. It is what a second signal does on its way out.
 	lastMu   sync.Mutex
 	lastStop func()
+
+	// started is the program file as gnosh started from it (nil when it
+	// is not known), and restart the command line /restart asked to start
+	// again with, once the session is closed. restarted says this gnosh is
+	// one that /restart started (restartedEnv): the session it opens is
+	// still on the screen.
+	restarted bool
+	started   os.FileInfo
+	restartMu sync.Mutex
+	restart   []string
+	// detached is what /background asked to go on with, once the session
+	// is closed, instead of a restart: the run's log, its prompt and the
+	// session it resumes.
+	detached *detachPlan
 }
 
 // lockedWriter lets several goroutines write whole lines to one stream.
@@ -143,7 +175,16 @@ func Main(ctx context.Context, o Options) (code int) {
 			code = p.crashed("", v, debug.Stack())
 		}
 	}()
-	return p.run(ctx)
+	code = p.run(ctx)
+	if args := p.restartArgs(); args != nil && code == cli.ExitOK {
+		// Everything of the session is closed: gnosh starts again in it,
+		// here or on its own.
+		if d := p.detachedPlan(); d != nil {
+			return p.detach(args, d)
+		}
+		return p.relaunch(args)
+	}
+	return code
 }
 
 // newProgram fills in what Options leaves out.
@@ -175,6 +216,16 @@ func newProgram(o Options) *program {
 		}
 	}
 	p.home = p.env["HOME"]
+	if p.env[restartedEnv] != "" {
+		// /restart's word to the gnosh it starts, and no one else's: it
+		// is gone before anything reads the environment.
+		p.restarted = p.env[restartedEnv] == "1"
+		delete(p.env, restartedEnv)
+		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, restartedEnv+"=") })
+	}
+	if o.Executable != "" {
+		p.started, _ = os.Stat(o.Executable)
+	}
 	return p
 }
 

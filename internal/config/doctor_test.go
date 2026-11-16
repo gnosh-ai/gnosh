@@ -318,6 +318,31 @@ func TestDoctorTheRest(t *testing.T) {
 		}
 	}
 
+	// The servers the options name for tools are connected to, and sent
+	// nothing; one that does not answer is a note, and stops no turn.
+	m := &fakeMachine{models: map[string][]string{"qwen": {"qwen3.8-27b"}}}
+	in = withConfig("{" + box + `, "options": {"webSearchUrl": "http://203.0.113.20:8888/?token=s3cret", "memEmbeddingsUrl": "http://203.0.113.21:8090"}}`)
+	findings = doctor(t, in, m)
+	wantFinding(t, findings, "tools", Fine, "WebSearch's search server at http://203.0.113.20:8888/?… answers.", userJSON)
+	wantFinding(t, findings, "tools", Fine, "mem's embedding server at http://203.0.113.21:8090 answers.")
+	if !slices.Contains(m.requests, "connect http://203.0.113.21:8090") || slices.ContainsFunc(m.requests, func(r string) bool { return strings.HasPrefix(r, "GET http://203.0.113.2") }) {
+		t.Errorf("the tools' servers are only connected to: %q", m.requests)
+	}
+	m.down = []string{"203.0.113.20", "203.0.113.21"}
+	findings = doctor(t, in, m)
+	wantFinding(t, findings, "tools", Note, "WebSearch's search server at http://203.0.113.20:8888/?… did not answer (connection refused): every search fails until it does.")
+	wantFinding(t, findings, "tools", Note, "mem's embedding server at http://203.0.113.21:8090 did not answer", "mem's searches match words only until it does.")
+	if !CanRun(findings) {
+		t.Errorf("a tool's server that does not answer stops a turn:\n%s", showFindings(findings))
+	}
+	for _, f := range findings {
+		if strings.Contains(f.Text, "s3cret") {
+			t.Errorf("the address's query is shown: %s", f)
+		}
+	}
+	findings = Doctor(context.Background(), mustLoad(t, in), nil, Probes{})
+	wantFinding(t, findings, "tools", Note, "WebSearch's search server is http://203.0.113.20:8888/?…", "Whether it answers was not checked.")
+
 	// A configuration that does not load is printed with its mistakes,
 	// and a turn cannot run.
 	findings = doctor(t, withConfig("{\n\"provders\": {},\n\"options\": {\"nope\": 1}}"), &fakeMachine{})

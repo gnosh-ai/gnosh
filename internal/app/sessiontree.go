@@ -204,10 +204,11 @@ func (st *startup) treeEnv() *core.WorkTree {
 // leaveTree ends --worktree's work tree as the session ends. One left as it was
 // made, that nobody named and that was not there before, goes with its
 // branch; any other is kept, and a line says how to come back to it and
-// how to take it away.
+// how to take it away. Under /restart it is kept as it is.
 func (st *startup) leaveTree() {
 	t := st.tree
-	if t == nil {
+	if t == nil || st.p.restartArgs() != nil {
+		// (/restart: the session goes on in it, under the name it has.)
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)

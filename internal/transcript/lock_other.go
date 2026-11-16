@@ -9,3 +9,6 @@ import "os"
 func lockFile(f *os.File) (bool, error) {
 	return true, nil
 }
+
+// InUse cannot be told without flock: it reports false.
+func InUse(path string) bool { return false }

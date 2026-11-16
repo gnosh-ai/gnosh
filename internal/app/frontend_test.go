@@ -347,3 +347,34 @@ func TestCriticalQuestionHasADeadline(t *testing.T) {
 	has(t, "the question", q.Text, "A dangerous removal cannot be ruled out")
 	has(t, "what the model read", toolResult(t, w, 1, "c1"), "the user refused it, and said: leave it")
 }
+
+// A session opened again shows where it left off (SessionInfo.ShowPast),
+// except in a gnosh /restart started, whose session is on the screen
+// already; GNOSH_RESTARTED says so, and nothing the session runs sees it.
+func TestShowPastOnResume(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Hi."}, apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo restarted=${GNOSH_RESTARTED:-unset}"}`}}}, apptest.Reply{Text: "Done."})
+	run(t, w, "-p", "say hi").wantCode(t, 0)
+	shows := func(env []string, args ...string) bool {
+		t.Helper()
+		var got bool
+		attach(t, w, func(o *Options) { o.Environ = append(o.Environ, env...) }, func(ctx context.Context, c SessionControls, f *scripted) int {
+			got = c.Info().ShowPast
+			c.Quit("prompt_input_exit")
+			return 0
+		}, args...)
+		return got
+	}
+	if !shows(nil, "-c") {
+		t.Error("a session opened again with -c shows nothing of where it left off")
+	}
+	if shows([]string{"GNOSH_RESTARTED=1"}, "-c") {
+		t.Error("a session /restart opened again shows where it left off, which is on the screen already")
+	}
+	if shows(nil) {
+		t.Error("a new session shows a past")
+	}
+	// The word is /restart's alone: it stops nothing, and no command sees it.
+	r := run(t, w, "-c", "-p", "-y", "run it")
+	r.wantCode(t, 0)
+	has(t, "a command run in a session opened with -c", toolResult(t, w, len(w.Model.Requests())-1, "c1"), "restarted=unset")
+}

@@ -806,7 +806,82 @@ or kept with the reason said (27).
     shell's settings makes any line of more than one part ask. Brace
     groups (since the next commit) are read straight through, as what
     runs in the shell itself, unless a redirection follows the group,
-    which is opened before any cd in it; loops, if and case still ask.
+    which is opened before any cd in it. if, while, until and case
+    (since the commit after that) are read straight through as well,
+    every branch judged, in a line that changes no directory: where a
+    command runs then does not hang on which branch ran, and with a cd,
+    pushd, popd or a computed program in the line they still ask. A for
+    loop over a list of words written out is read too, its body judged
+    once for each value (filledArgs); a list that holds a pattern or
+    anything computed still asks, since a pattern's file names may begin
+    with a dash and be flags where the body puts them (the oracle's
+    attack lines found "for f in *; do cp a.txt "$f"x; done" running
+    cp a.txt -Rx on the first try). Functions, for ((...)), a loop over
+    a script's words and (( )) still ask.
     Replaying the 2,180 commands
     Qwen ran on the boxes, 36 asks were these forms, the commonest
     "(go test ./... 2>&1 || true)" and "(cd dir && ...)".
+59. **WebSearch asks a SearXNG server the person names, or is not there.**
+    Claude Code's WebSearch runs on Anthropic's backend; gnosh keeps the
+    tool's name and inputs (query, allowed_domains, blocked_domains, mode)
+    and asks the server the webSearchUrl option names, with its JSON
+    format (/search?q=...&format=json). A self-hosted SearXNG keeps the
+    queries on the person's own machines, and needs no key and no
+    scraping of a search engine's pages. Without the option the session
+    has no WebSearch tool; a rule may still name it. It asks before it
+    runs, as Claude Code's does, and lists titles, addresses and a line of
+    each result; pages are read with WebFetch.
+60. **/restart starts gnosh again in the session, from the program file
+    there is now** (Claude Code's /restart, also /update). gnosh is
+    installed by rename while sessions run, and a long session kept the
+    build it started with. The session closes as /exit closes it, and the
+    process becomes gnosh started anew (exec) with its own flags written
+    out whole, --resume=<the session> in place of -c, -r, --session-id,
+    --fork-session and -n, no prompt words, and the permission mode, the
+    model and the thinking level as they stand; a work tree is kept and
+    named. It waits while a turn or background work runs, since closing
+    would stop them. A changed program file (another file, time or size
+    than gnosh started from) is said once, as a turn ends. The program
+    file is the name gnosh was run by, found on the PATH, so that an
+    install behind a link counts.
+61. **keybindings.json, as Claude Code's, for the contexts gnosh has.** The
+    file is ~/.config/gnosh/keybindings.json, in Claude Code's form. A key
+    bound to an action is taken as the key gnosh already knows that action
+    by, and goes to the handler that takes that key; null takes a key
+    away; command:<name> runs /<name>. The contexts are Global, Chat (Task
+    too) and Transcript, with 21 actions, and chords of two keys: the
+    first is held up to 3 s for the second, and goes through as itself
+    when the pair is no chord of the person's. The other contexts and
+    keys that always do what they do (Ctrl+C, Ctrl+D) are said and left
+    out. While a question is open no key is changed, so an answer is given
+    with the keys the question shows. The file is looked at again at most
+    once a second as keys come; /keybindings opens it in the editor, made
+    with nothing bound when it is not there.
+62. **/background (also /bg) hands the session to a run of its own.**
+    Claude Code's detaches a live session to its agent view; gnosh has no
+    such server, and two processes may not write one session. So the
+    session ends here as /exit ends it, and gnosh starts, in a process
+    of its own (setsid) that outlives the terminal, as gnosh -p
+    --resume=<the session> with the session's flags as they stand and the
+    prompt given after --. The run asks nobody, as every run, and its
+    output goes to <session>.background.log beside the session's file;
+    gnosh -r opens the session again once it is done. A prompt is
+    needed, and it waits while a turn or background work runs, as
+    /restart does.
+63. **/fork <prompt> starts a copy of the conversation as a run of its
+    own, and this session goes on.** The copy is /branch's (a new session
+    of the folder, named "<title> (fork)"), started at once as /background
+    starts a run: in a process of its own, with this session's flags as
+    they stand, on the prompt. Claude Code's fork may make itself a work
+    tree; gnosh's works in the same folder, and says so, since a fresh
+    tree would hold none of the changes the conversation remembers making.
+64. **A session opened again shows where it left off.** Claude Code draws
+    a resumed session's conversation; gnosh's interface drew only its
+    header, so a session that a /background or /fork run had worked on
+    showed nothing of what it did. Now its last prompt and the model's
+    last answer to it are drawn (at most 30 lines of the answer; Ctrl+O
+    shows everything), under a quiet line saying so: on -r and -c and on
+    /resume. Not after a rewind or /branch, nor in the gnosh /restart
+    starts, whose conversation is still on the screen: /restart says so
+    with GNOSH_RESTARTED=1, which gnosh takes out of its environment as it
+    starts.

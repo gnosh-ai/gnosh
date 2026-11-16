@@ -143,6 +143,18 @@ func TestRetryPolicy(t *testing.T) {
 	})
 }
 
+// A run has nobody at a keyboard: a failure that ends its turn says
+// nothing of what a person queued.
+func TestProviderFailureWordsInARun(t *testing.T) {
+	_, res := endsWith(t, func(o *Options) { o.Interactive = false }, broken(core.ErrAuth, 401))
+	if res.Err == nil {
+		t.Fatalf("result = %+v", res)
+	}
+	if msg := res.Err.Error(); !strings.Contains(msg, "The turn has ended; the conversation is kept.") || strings.Contains(msg, "what you queued") {
+		t.Errorf("a run's failure says %q", msg)
+	}
+}
+
 // endsWith runs one prompt against a script and returns how it ended.
 func endsWith(t *testing.T, mod func(o *Options), steps ...step) (*rig, TurnResult) {
 	t.Helper()

@@ -803,3 +803,29 @@ func TestLateEvents(t *testing.T) {
 		t.Error("the terminal was written to after the interface left it")
 	}
 }
+
+// /restart ends the interface without the line that says how to resume:
+// gnosh starts again in the session at once, and says it itself if it
+// cannot.
+func TestLoopRestart(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "session.jsonl")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l := startLoop(t, 80, 24, vtest.AllAnswers, func(c *controls) {
+		c.info.Path = file
+		c.info.Commands = append(c.info.Commands, "restart")
+		c.command = func(ctx context.Context, line string) (app.CommandResult, error) {
+			return app.CommandResult{Handled: true, Name: "restart", Text: "gnosh starts again, in this session.", Quit: true}, nil
+		}
+	})
+	l.has("GNOSH test-build")
+	l.keys(`"/restart" <Enter>`)
+	if code := l.end(); code != 0 {
+		t.Fatalf("exit code %d", code)
+	}
+	text := l.ft.text()
+	if !strings.Contains(text, "gnosh starts again, in this session.") || strings.Contains(text, "To resume this session") {
+		t.Errorf("after /restart the terminal holds:\n%s", text)
+	}
+}

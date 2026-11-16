@@ -26,3 +26,27 @@ func lockFile(f *os.File) (bool, error) {
 		}
 	}
 }
+
+// InUse reports whether a gnosh holds the session file at path open for
+// writing now: a session, a run or a sub-agent. It takes and lets go of a
+// shared lock, which the writer's lock refuses; it reports false when the
+// file cannot be read.
+func InUse(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB)
+		switch {
+		case err == nil:
+			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+			return false
+		case errors.Is(err, syscall.EINTR):
+			continue
+		default:
+			return errors.Is(err, syscall.EWOULDBLOCK)
+		}
+	}
+}

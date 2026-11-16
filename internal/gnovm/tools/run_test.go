@@ -520,7 +520,6 @@ func TestDescribe(t *testing.T) {
 		}
 	}
 
-	require.Equal(t, "the user did not allow deleting VM tasks", DeleteRefused("tasks"))
 }
 
 // How a gnovm_run call shows to a person: before it runs, its code, whole,

@@ -77,7 +77,7 @@ type startup struct {
 func ownTools() []string {
 	d := fstools.Defaults()
 	return []string{d.ReadName, d.WriteName, d.EditName, d.GlobName, d.GrepName, shelltool.BashName, shelltool.StopName, shelltool.MonitorName,
-		webFetchName, agentToolName, sendMessageName, askToolName, enterPlanName, exitPlanName, skillToolName}
+		webFetchName, webSearchName, agentToolName, sendMessageName, askToolName, enterPlanName, exitPlanName, skillToolName}
 }
 
 // toolNames returns the one list of tool names of this program: gnosh's

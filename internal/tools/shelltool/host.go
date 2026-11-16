@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/shellquote"
 )
 
 // Commands on other machines.
@@ -59,15 +60,7 @@ func remoteLead() string {
 // remoteScript is the one argument ssh is given after the destination: what
 // the login shell of the other machine runs.
 func remoteScript(command string) string {
-	return remoteLead() + shellQuote(command)
-}
-
-// shellQuote puts s in single quotes for a shell that reads sh, so that the
-// shell takes it as one word and reads nothing in it. A single quote inside
-// is written as four characters: one that ends the quotes, a backslash and
-// a quote, and one that opens them again.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return remoteLead() + shellquote.Quote(command)
 }
 
 // sshArgs is what ssh is run with for a command on h.

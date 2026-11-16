@@ -119,6 +119,8 @@
 //	                           about mem the model is given
 //	  memReviewCloses          review a todo when it is closed
 //	  memEmbeddingsUrl         the embedding server for mem
+//	  webSearchUrl             the SearXNG server the WebSearch tool asks;
+//	                           unset, there is no WebSearch tool
 //	  deliverablesServer       where the files the agent delivers are
 //	                           served, to this machine only: "127.0.0.1:7777",
 //	                           or "off"
@@ -131,6 +133,11 @@
 //	                           style of your own (/output-style)
 //	  editorMode               "normal" or "vim": how the box takes keys
 //	                           (not from a project's file)
+//	  preferredNotifChannel    how a person who seems away is told the
+//	                           session waits: "auto", "terminal_bell",
+//	                           "iterm2", "iterm2_with_bell", "kitty",
+//	                           "ghostty" or "notifications_disabled" (not
+//	                           from a project's file)
 //	  vimInsertModeRemaps      pairs typed in vim's INSERT mode that stand
 //	                           for Esc, as ["jj"] (not from a project's file)
 //

@@ -182,8 +182,8 @@ func (g *rig) edit(s string) (string, error) {
 	return g.editor(s)
 }
 
-func (g *rig) desktop(text string) bool {
-	if !g.takesNotes {
+func (g *rig) desktop(channel, text string) bool {
+	if !g.takesNotes || channel == "notifications_disabled" {
 		return false
 	}
 	if text != "" {

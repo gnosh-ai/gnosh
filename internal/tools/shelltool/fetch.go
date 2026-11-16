@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
+	"github.com/gnosh-ai/gnosh/internal/shellquote"
 )
 
 // Copying a file back from another machine.
@@ -93,7 +94,7 @@ func farPath(path string) string {
 // what a caller shows a person who is asked whether the copy may be made,
 // and what the permission rules are held against.
 func CopyCommand(path string, most int64) string {
-	p := shellQuote(farPath(path))
+	p := shellquote.Quote(farPath(path))
 	return "ls -ld " + p + " && test -f " + p + " && test -r " + p +
 		" && echo " + copyMarker +
 		" && wc -c < " + p +

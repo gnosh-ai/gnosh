@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -22,6 +24,9 @@ type Capabilities struct {
 	// SynchronizedOutput: the terminal knows mode 2026, so
 	// Renderer.SetSynchronized may be turned on.
 	SynchronizedOutput bool
+	// BackgroundKnown says the terminal told its background colour, and
+	// LightBackground that it is a light one.
+	BackgroundKnown, LightBackground bool
 	// Answered is true when the terminal answered the one question
 	// every terminal answers. When it is false the other answers may
 	// still be on their way (a slow connection); hand later Reply events
@@ -32,7 +37,7 @@ type Capabilities struct {
 // probeQuery is the questions Probe asks, in one write. The device
 // attributes question comes last: terminals answer in order, so its answer
 // means the others have been answered or never will be.
-const probeQuery = QueryKittyKeyboard + QuerySynchronizedOutput + QueryDeviceAttributes
+const probeQuery = QueryKittyKeyboard + QuerySynchronizedOutput + QueryBackground + QueryDeviceAttributes
 
 // Note takes in one event. It reports true when the event was one of the
 // answers Probe waits for, whether or not it changed anything.
@@ -48,12 +53,42 @@ func (c *Capabilities) Note(ev Event) bool {
 		// "Set" and "reset" both mean the mode is known. "Permanently
 		// reset" means it can never be turned on.
 		c.SynchronizedOutput = r.State == ModeSet || r.State == ModeReset
+	case r.Kind == ReplyString && r.Intro == ']' && strings.HasPrefix(r.Text, "11;"):
+		if light, ok := lightColour(strings.TrimPrefix(r.Text, "11;")); ok {
+			c.BackgroundKnown, c.LightBackground = true, light
+		}
 	case r.Kind == ReplyDeviceAttributes:
 		c.Answered = true
 	default:
 		return false
 	}
 	return true
+}
+
+// lightColour reads a colour as terminals give one ("rgb:RRRR/GGGG/BBBB",
+// each one to four hex digits) and says whether it is a light one: its
+// luminance over a half.
+func lightColour(spec string) (light, ok bool) {
+	body, found := strings.CutPrefix(spec, "rgb:")
+	if !found {
+		return false, false
+	}
+	parts := strings.Split(body, "/")
+	if len(parts) != 3 {
+		return false, false
+	}
+	var v [3]float64
+	for i, p := range parts {
+		if len(p) < 1 || len(p) > 4 {
+			return false, false
+		}
+		n, err := strconv.ParseUint(p, 16, 16)
+		if err != nil {
+			return false, false
+		}
+		v[i] = float64(n) / float64(uint64(1)<<(4*len(p))-1)
+	}
+	return 0.2126*v[0]+0.7152*v[1]+0.0722*v[2] > 0.5, true
 }
 
 // Probe asks the terminal what it supports. It writes three questions to

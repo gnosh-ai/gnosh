@@ -567,6 +567,54 @@ The rows (`results-aibox.jsonl`, with `rows.jsonl` and the tables made from
 it) and the run folders are on the AI box under `/home/crush/newgnosh-bench`;
 a copy of the rows and tables is in Jae's notes (`bench-2026-11-14/`).
 
+## Several sessions on one plan: a rented H200, 16 November 2026
+
+gnosh.ai's speed claims were the earlier gnosh's (`RESULTS.md`). On 16
+November 2026 the gnosh in this repository was measured the same two ways,
+on a rented NVIDIA H200 (141 GB, DigitalOcean `gpu-h200x1-141gb`), each run
+alone on the server. Every run below passed all of its checks.
+
+**Three sessions on a plan seeded in mem.** The scenario `peers-algos`
+(`internal/gnovm/testdata/scenarios`), run by the scenario harness with
+`GNOVM_SCENARIO_PEERS=1` and `3`: nine small Go packages in three groups,
+the plan seeded in mem, and the same bare prompt to every session ("Work
+through the plan in mem until nothing is left for you."). llama.cpp b11714
+served Qwen 3.8 27B, the home boxes' Q8 file with no draft model, in eight
+slots of 131,072 tokens, thinking on. Times are minutes and seconds.
+
+| gnosh | one session | three sessions |
+|---|---|---|
+| `e4f17ad` | 15:25, 26:23 | 18:09, 19:23 |
+| `716e557` | | 18:44 |
+| `f256e4c` (in main as `8aca3c4` and `2f6e839`) | 17:37 | 9:47, 9:49 |
+
+Before `f256e4c` nothing told a session that others worked the plan: each
+saw all of it free at first. In the first three-session run one session read
+every file and wrote all nine packages without taking a todo, while the
+other two found each next todo "already written". `f256e4c` has a person's
+session join the plan's peers when its turn begins, and ends an agent's
+`mem.Show()` and `mem.Next()` with how many other sessions work the plan
+now. With it, in its first run, all three took a todo within 27 seconds and
+each wrote only its own packages. Three sessions with it against one: 1.8×.
+
+**Six sessions with a planner.** `SWARM=6 run.sh gnosh-swarm algos`
+against `run.sh gnosh algos`, seconds:
+
+| server | gnosh | one session | six sessions | medians |
+|---|---|---|---|---|
+| llama.cpp as above | `e4f17ad` | 619, 900, 462 | 1,099, 781, 1,223 | 0.56× |
+| llama.cpp, the planner told one todo per package | `f256e4c` | (as above) | 896, 1,251 | 0.58× |
+| vLLM 0.33.0, Qwen 3.8 27B FP8, fp8 KV cache, effort medium from the proxy | `f256e4c` | 236, 198, 181, 148, 177 | 112, 153, 98, 65, 121 | 1.6× |
+
+On llama.cpp one stream wrote 70 tokens a second and six at once about 36
+each (170 in all), while six sessions wrote 1.5 to 2 times the tokens of
+one session, so six lost to one. In one run the planner put all nine
+packages in one step, and five sessions waited; in another, one session
+spent four minutes checking the others' packages after the plan was done.
+vLLM serves six at once far better: there six sessions were 1.6× faster
+than one (medians of five runs each, 181 and 112 seconds), as the earlier
+gnosh had been on vLLM. The runs' logs are kept outside this repository.
+
 ## The dry run
 
 `bench/dryrun.sh` proves the plumbing without a model. It builds gnosh from
@@ -649,8 +697,9 @@ the last one ends.
     SWARM=3 bench/run.sh gnosh-swarm algos 1
 
 The dry run starts a swarm of two and sees the second session wait for the
-first one's plan. That several sessions of the new gnosh finish a plan
-between them has not been tried.
+first one's plan. Six sessions of the new gnosh finishing algos between
+them were measured on 16 November 2026, under "Several sessions on one
+plan" above.
 
 ## Notes on the other harnesses
 

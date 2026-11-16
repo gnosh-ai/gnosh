@@ -44,15 +44,16 @@ func (s *session) chooseMemory(line string) bool {
 		if res.Cancelled || res.Index < 0 || res.Index >= len(files) {
 			return
 		}
-		s.openInEditor(files[res.Index].Path)
+		s.openInEditor(files[res.Index].Path, "the next session is given it")
 	}
 	s.openLocal(pick)
 	return true
 }
 
-// openInEditor opens a file in the person's editor. The side panel gives
-// the screen back first, and comes back after.
-func (s *session) openInEditor(path string) {
+// openInEditor opens a file in the person's editor, and then says it is
+// as they left it and what becomes of it (after). The side panel gives the
+// screen back first, and comes back after.
+func (s *session) openInEditor(path, after string) bool {
 	panel := s.panel != nil
 	s.closePanel()
 	s.frame()
@@ -63,7 +64,8 @@ func (s *session) openInEditor(path string) {
 	s.dirty = true
 	if err != nil {
 		s.flash(err.Error())
-		return
+		return false
 	}
-	s.flash(showPath(s.cwd, s.home, path) + " is as you left it; the next session is given it.")
+	s.flash(showPath(s.cwd, s.home, path) + " is as you left it; " + after + ".")
+	return true
 }

@@ -51,18 +51,21 @@ func (l *live) slashContext(ctx context.Context, c *SlashContext) error {
 	}
 	files := est(l.startInstructions())
 	defs := est(l.startAgentTypes()) + est(l.skillsLine())
-	window := "unknown"
-	if cs.Window > 0 {
-		window = thousands(cs.Window)
+	// The loop counts with each request; before the first there is no
+	// count, and the window is only what the configuration says, if it
+	// says.
+	switch configured := l.agent.Model().Info.ContextWindow; {
+	case cs.Window > 0:
+		window := thousands(cs.Window)
 		if !cs.Known {
 			window += " (assumed: the server did not say)"
 		}
-	}
-	c.Say("The model's window is %s tokens; room is made when the conversation reaches %s.", window, thousands(cs.Point))
-	if cs.Window > 0 {
+		c.Say("The model's window is %s tokens; room is made when the conversation reaches %s.", window, thousands(cs.Point))
 		c.Say("In use at the last count: about %s (%d%%), with about %s to go before room is made.", thousands(cs.Used), cs.Used*100/cs.Window, thousands(cs.Room()))
-	} else {
-		c.Say("In use at the last count: about %s.", thousands(cs.Used))
+	case configured > 0:
+		c.Say("The model's window is %s tokens, as configured. Nothing has been sent to it yet; the first request counts what is in it.", thousands(configured))
+	default:
+		c.Say("Nothing has been sent to the model yet: the first request asks its server how large its window is, and counts what is in it.")
 	}
 	c.Say("  gnosh's instructions to the model         %s", thousands(system))
 	c.Say("  what the model is told of its %d tools     %s", len(toolRows), thousands(tools))
@@ -209,7 +212,12 @@ func (l *live) resumeChoices() []SessionChoice {
 		if info.ID == l.ts.ID() || len(out) == 30 {
 			continue
 		}
-		out = append(out, SessionChoice{ID: info.ID, Title: firstOf(info.Title, info.FirstPrompt, "(no prompt yet)"), Modified: info.Modified, Prompts: info.Prompts})
+		title := firstOf(info.Title, info.FirstPrompt, "(no prompt yet)")
+		if transcript.InUse(info.Path) {
+			// (Another gnosh holds it, which opening it would be refused.)
+			title += " (open now)"
+		}
+		out = append(out, SessionChoice{ID: info.ID, Title: title, Modified: info.Modified, Prompts: info.Prompts})
 	}
 	return out
 }
@@ -548,10 +556,11 @@ func (p *program) sessionsCommand(ctx context.Context, inv cli.Invocation) int {
 				Modified    time.Time `json:"modified"`
 				Prompts     int       `json:"prompts"`
 				Path        string    `json:"path"`
+				Open        bool      `json:"open,omitempty"`
 			}
 			rows := []row{}
 			for _, info := range list {
-				rows = append(rows, row{info.ID, info.Title, info.FirstPrompt, info.Created, info.Modified, info.Prompts, info.Path})
+				rows = append(rows, row{info.ID, info.Title, info.FirstPrompt, info.Created, info.Modified, info.Prompts, info.Path, transcript.InUse(info.Path)})
 			}
 			enc := json.NewEncoder(p.stdout)
 			enc.SetIndent("", "  ")
@@ -563,7 +572,12 @@ func (p *program) sessionsCommand(ctx context.Context, inv cli.Invocation) int {
 			return cli.ExitOK
 		}
 		for _, info := range list {
-			fmt.Fprintf(p.stdout, "%s  %s  %3d prompt(s)  %s\n", info.ID, info.Modified.Local().Format("2006-01-02 15:04"), info.Prompts, oneLine(firstOf(info.Title, info.FirstPrompt, "(no prompt yet)"), 80))
+			open := ""
+			if transcript.InUse(info.Path) {
+				// (A session, or a run /background or /fork started.)
+				open = "  (open now)"
+			}
+			fmt.Fprintf(p.stdout, "%s  %s  %3d prompt(s)  %s%s\n", info.ID, info.Modified.Local().Format("2006-01-02 15:04"), info.Prompts, oneLine(firstOf(info.Title, info.FirstPrompt, "(no prompt yet)"), 80), open)
 		}
 		return cli.ExitOK
 	case cli.CmdSessionRename:

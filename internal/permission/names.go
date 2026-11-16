@@ -80,7 +80,7 @@ var builtinTools = map[string]toolInfo{
 	toolWrite:        {classFileEdit, "file_path", []string{"content"}},
 	toolNotebookEdit: {classFileEdit, "notebook_path", []string{"cell_id", "new_source", "cell_type", "edit_mode"}},
 	toolWebFetch:     {classFetch, "url", []string{"prompt", "offset"}},
-	toolWebSearch:    {classOther, "", []string{"query", "mode"}},
+	toolWebSearch:    {classOther, "", []string{"query", "mode", "allowed_domains", "blocked_domains"}},
 	toolAgent:        {classAgent, "", []string{"description", "prompt", "subagent_type", "model", "effort", "run_in_background", "name", "isolation"}},
 	toolSkill:        {classSkill, "", []string{"skill", "args"}},
 	toolAskUser:      {classPerson, "", nil},

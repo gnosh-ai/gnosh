@@ -447,6 +447,12 @@ func (u *UI) open() error {
 		caps, others, _ := term.Probe(context.Background(), t, events, 0)
 		u.caps, u.probed = caps, true
 		u.ahead = append(u.ahead, others...)
+		if caps.LightBackground && u.o.Theme == nil {
+			// The person's white and the answers' bright green are for a
+			// dark background (Palette.Prompt, Reply).
+			p := u.profile()
+			u.th = NewTheme(p, DefaultPalette(p).OnLight(p))
+		}
 	}
 	u.setModes()
 	cols, rows, err := t.Size()
@@ -889,7 +895,7 @@ func (u *UI) finish(c app.Controls, code int, why string) int {
 	s.closeView()
 	s.closePanel()
 	info := c.Info()
-	if _, err := os.Stat(info.Path); err == nil && info.Resume != "" {
+	if _, err := os.Stat(info.Path); err == nil && info.Resume != "" && !s.restarting {
 		s.begin(blkTurn)
 		s.put(wrap(u.m, u.th.wordmark()+" "+u.th.Quiet.Render("To resume this session: ")+oneLine(info.Resume), s.cols, "", "  ")...)
 	}
@@ -975,28 +981,60 @@ func (u *UI) title(text string) error {
 	return err
 }
 
-// desktop raises a desktop notification through a terminal that takes one
-// (iTerm2, WezTerm, Ghostty: OSC 9; kitty: OSC 99), as Claude Code does
-// when the person seems to be away. With text empty it only reports
-// whether the terminal takes them. Inside tmux the sequence would need
-// wrapping, and is not sent.
-func (u *UI) desktop(text string) bool {
-	kind := ""
-	switch {
-	case u.env("TMUX") != "":
-	case u.env("KITTY_WINDOW_ID") != "" || u.env("TERM") == "xterm-kitty":
-		kind = "osc99"
-	case u.env("TERM_PROGRAM") == "iTerm.app" || u.env("TERM_PROGRAM") == "WezTerm" ||
-		u.env("TERM_PROGRAM") == "ghostty" || u.env("TERM") == "xterm-ghostty":
-		kind = "osc9"
-	}
-	if kind == "" || u.t == nil {
+// desktop tells a person who seems to be away that the session waits for
+// them, by the channel they chose (the preferredNotifChannel option), as
+// Claude Code does. With text empty it only reports whether the channel
+// reaches anyone.
+func (u *UI) desktop(channel, text string) bool {
+	seq := noteSeq(channel, text, u.env)
+	if seq == "" || u.t == nil {
 		return false
 	}
 	if text != "" {
-		_, _ = io.WriteString(u.t, term.DesktopNote(kind, text))
+		_, _ = io.WriteString(u.t, seq)
 	}
 	return true
+}
+
+// noteSeq is what a channel writes to the terminal for a note, or "" when
+// it writes nothing. "auto" is a desktop note through a terminal that is
+// known to take one (iTerm2, WezTerm, Ghostty: OSC 9; kitty: OSC 99), not
+// inside tmux, where gnosh cannot see the terminal. A channel the person
+// named is sent through tmux too, wrapped for its passthrough; the bell
+// needs no wrapping. With text empty it says whether the channel writes
+// anything at all, as a bell.
+func noteSeq(channel, text string, env func(string) string) string {
+	kind := ""
+	switch channel {
+	case "notifications_disabled":
+		return ""
+	case "terminal_bell":
+		return term.Bell
+	case "iterm2", "ghostty", "iterm2_with_bell":
+		kind = "osc9"
+	case "kitty":
+		kind = "osc99"
+	default:
+		switch {
+		case env("TMUX") != "":
+			return ""
+		case env("KITTY_WINDOW_ID") != "" || env("TERM") == "xterm-kitty":
+			kind = "osc99"
+		case env("TERM_PROGRAM") == "iTerm.app" || env("TERM_PROGRAM") == "WezTerm" ||
+			env("TERM_PROGRAM") == "ghostty" || env("TERM") == "xterm-ghostty":
+			kind = "osc9"
+		default:
+			return ""
+		}
+	}
+	seq := term.DesktopNote(kind, firstNonEmpty(text, "gnosh"))
+	if env("TMUX") != "" {
+		seq = term.TmuxWrap(seq)
+	}
+	if channel == "iterm2_with_bell" {
+		seq += term.Bell
+	}
+	return seq
 }
 
 // copy puts text on the person's clipboard through the terminal (OSC 52):

@@ -13,13 +13,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 // The host's side of peers, many sessions working one plan in mem at once
@@ -54,19 +57,30 @@ func turnLockPath(dir, session string) string {
 // left, and what its Next waits for, on which pipe. The waits count only
 // while that pipe is active: a wait the client gave up (Esc, a failed
 // re-run) is over though no call has written the record since.
+//
+// Peer says a person's session joined the plan when its turn began
+// (JoinPeers, which writes the record before the session's first call, and
+// so outside mem's lock): while its turn lock is held, other sessions'
+// mem.Show() and mem.Next() count it among the sessions working the plan.
+// A sub-agent's record never has it.
 type memPeer struct {
 	Session string    `json:"session"`
 	Stack   []string  `json:"stack,omitempty"`
 	Waits   []MemWait `json:"waits,omitempty"`
 	Pipe    string    `json:"pipe,omitempty"`
+	Peer    bool      `json:"peer,omitempty"`
 }
 
-func (h *memHost) peerPath(session string) string {
-	return filepath.Join(h.dir, "peers", sessionKey(session)+".json")
+func peerPathIn(memdir, session string) string {
+	return filepath.Join(memdir, "peers", sessionKey(session)+".json")
 }
 
 func (h *memHost) readPeer(session string) (memPeer, bool) {
-	b, err := os.ReadFile(h.peerPath(session))
+	return readPeerIn(h.dir, session)
+}
+
+func readPeerIn(memdir, session string) (memPeer, bool) {
+	b, err := os.ReadFile(peerPathIn(memdir, session))
 	if err != nil {
 		return memPeer{}, false
 	}
@@ -78,7 +92,11 @@ func (h *memHost) readPeer(session string) (memPeer, bool) {
 }
 
 func (h *memHost) writePeer(p memPeer) error {
-	path := h.peerPath(p.Session)
+	return writePeerIn(h.dir, p)
+}
+
+func writePeerIn(memdir string, p memPeer) error {
+	path := peerPathIn(memdir, p.Session)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
@@ -247,6 +265,131 @@ func endsWithBareNext(code string) bool {
 	return nexts == 1
 }
 
+// JoinPeers marks session, a person's session whose turn begins in project,
+// as one of the sessions working the project's plan: its peers record says
+// so (Peer), keeping the stack it has, and while its turn lock is held the
+// other sessions' mem.Show() and mem.Next() count it (livePeers). Sessions
+// started together each call it before their first request, so each one's
+// first look at the plan already counts the others. A project with no mem
+// yet is left alone: a plan to share comes first.
+func (l *Lazy) JoinPeers(project, session string) {
+	if l == nil || l.opts.Dir == "" || session == "" {
+		return
+	}
+	joinPeers(memDir(l.opts.Dir, project), session)
+}
+
+func joinPeers(memdir, session string) {
+	if _, err := os.Stat(memdir); err != nil {
+		return
+	}
+	p, ok := readPeerIn(memdir, session)
+	if ok && p.Peer {
+		return
+	}
+	p.Session, p.Peer = session, true
+	if err := writePeerIn(memdir, p); err != nil {
+		slog.Debug("Could not mark the session as working the plan", "session_id", session, "error", err)
+	}
+}
+
+// livePeers is how many sessions besides me work this plan now: those whose
+// peers record says they joined it (JoinPeers) and whose turn lock is held.
+// 0 when the host cannot tell (no data directory, or no turn locks to read).
+//
+// It also clears the folder as it reads it: a record of a session that is in
+// no turn and has not written it for peerRecordKeep goes (staleRecord).
+func (h *memHost) livePeers(me string) int {
+	if h.data == "" || !turnLocksKnown {
+		return 0
+	}
+	dir := filepath.Join(h.dir, "peers")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, e := range entries {
+		path := filepath.Join(dir, e.Name())
+		stale := h.staleRecord(e)
+		if !strings.HasSuffix(e.Name(), ".json") {
+			// (A write that never finished leaves its .tmp behind.)
+			if stale && strings.HasSuffix(e.Name(), ".tmp") {
+				_ = os.Remove(path)
+			}
+			continue
+		}
+		b, err := os.ReadFile(path)
+		var p memPeer
+		if err != nil || json.Unmarshal(b, &p) != nil || p.Session == "" {
+			if stale && err == nil {
+				_ = os.Remove(path)
+			}
+			continue
+		}
+		if !p.Peer && !stale {
+			continue
+		}
+		held := turnHeld(h.data, p.Session)
+		if stale && !held && !turnHeld(h.data, p.Session) {
+			// (Looked at twice: a session takes its turn lock before it
+			// writes its record, so one that holds none writes none.)
+			_ = os.Remove(path)
+			continue
+		}
+		if held && p.Peer && p.Session != me {
+			n++
+		}
+	}
+	return n
+}
+
+// peerRecordKeep is how long the peers record of a session in no turn is
+// kept after it was last written. A session idle between turns still tells
+// the others what it last held through its record; one idle for longer
+// is gone, and its record would only be read again by every agent's Show
+// and Next after it. A session that comes back writes its record anew as
+// its turn begins (JoinPeers) and as its frames move (afterCall).
+const peerRecordKeep = 7 * 24 * time.Hour
+
+// staleRecord reports whether a file in the peers folder was last written
+// longer ago than peerRecordKeep.
+func (h *memHost) staleRecord(e os.DirEntry) bool {
+	info, err := e.Info()
+	return err == nil && h.now().Sub(info.ModTime()) > peerRecordKeep
+}
+
+// peersLine is what an agent's mem.Show() and mem.Next() end with while n
+// other sessions work the same plan. Sessions started together on one plan
+// each see all of it free at first, and without a word of the others each
+// tends to do all of it alone.
+func peersLine(n int) string {
+	if n == 1 {
+		return "1 other gnosh session is working this plan now: take one todo at a time with mem.Next() and do only the work of the todo you hold; it takes the others.\n"
+	}
+	return fmt.Sprintf("%d other gnosh sessions are working this plan now: take one todo at a time with mem.Next() and do only the work of the todo you hold; they take the others.\n", n)
+}
+
+// callsShowOrNext reports whether code calls mem.Show or mem.Next.
+func callsShowOrNext(code string) bool {
+	f, err := parser.ParseFile(token.NewFileSet(), "", "package p\nfunc _() {\n"+code+"\n}\n", 0)
+	if err != nil {
+		return false
+	}
+	found := false
+	ast.Inspect(f, func(n ast.Node) bool {
+		if c, ok := n.(*ast.CallExpr); ok && !found {
+			if sel, ok := c.Fun.(*ast.SelectorExpr); ok && (sel.Sel.Name == "Show" || sel.Sel.Name == "Next") {
+				if id, ok := sel.X.(*ast.Ident); ok && id.Name == "mem" {
+					found = true
+				}
+			}
+		}
+		return !found
+	})
+	return found
+}
+
 // isMemNext reports whether call calls mem.Next.
 func isMemNext(call *ast.CallExpr) bool {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
@@ -308,7 +451,7 @@ func (h *memHost) afterCall(r *memRealm, q memRequest, ctx memContext, call memC
 	}
 	res.Waits = waits
 	if agent && (moved || len(waits) > 0 || len(prev.Waits) > 0) {
-		p := memPeer{Session: q.Session, Stack: stack, Waits: waits}
+		p := memPeer{Session: q.Session, Stack: stack, Waits: waits, Peer: prev.Peer}
 		if len(waits) > 0 {
 			p.Pipe = q.Pipe
 		}

@@ -2,8 +2,9 @@ package config
 
 import (
 	"encoding/json"
-	"strings"
 	"time"
+
+	"github.com/gnosh-ai/gnosh/internal/shellquote"
 )
 
 // Config is everything gnosh's configuration says, after every file, the
@@ -360,19 +361,7 @@ func (h Hook) CommandLine() string {
 	if h.Args == nil {
 		return h.Command
 	}
-	words := []string{shellWord(h.Command)}
-	for _, a := range h.Args {
-		words = append(words, shellWord(a))
-	}
-	return strings.Join(words, " ")
-}
-
-// shellWord writes s so that a shell would read it as one word.
-func shellWord(s string) string {
-	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./=:,+@%") == "" {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return shellquote.Words(append([]string{h.Command}, h.Args...))
 }
 
 // Permissions are the permission settings.

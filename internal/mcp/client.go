@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -637,6 +636,3 @@ func (c *capped) String() string {
 	defer c.mu.Unlock()
 	return string(c.buf)
 }
-
-// Environ returns the process's environment, for Server.Environ.
-func Environ() []string { return os.Environ() }
