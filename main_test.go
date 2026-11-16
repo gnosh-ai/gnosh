@@ -333,7 +333,7 @@ func TestCommandLineHoldsOnlyWhatIsBuilt(t *testing.T) {
 	want := []string{
 		"gnosh", "gnosh doctor", "gnosh trust", "gnosh models",
 		"gnosh session", "gnosh session list", "gnosh session show", "gnosh session last", "gnosh session rename",
-		"gnosh mem", "gnosh logs", "gnosh dirs", "gnosh ssh",
+		"gnosh mem", "gnosh bridge", "gnosh logs", "gnosh dirs", "gnosh ssh",
 		"gnosh mcp", "gnosh mcp add", "gnosh mcp add-json", "gnosh mcp get", "gnosh mcp list", "gnosh mcp remove",
 		"gnosh help", "gnosh version",
 	}

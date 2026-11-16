@@ -1,0 +1,18 @@
+gnosh bridge
+
+  Serve the project's machines, mem and frames view to another harness,
+  without a model. Requests come as JSON lines on standard input and replies
+  go as JSON lines to standard output; spec/gnosh/bridge.md gives the
+  protocol. It ends when standard input ends.
+
+  Not built yet in this build of gnosh: typing it stops with a message that
+  says so.
+
+Usage
+  gnosh bridge [flags]
+
+Flags
+  --cwd <dir>
+      Work in this folder instead of the current one.
+  -h, --help
+      Show help: gnosh's, or after a command's name that command's.

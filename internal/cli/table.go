@@ -374,6 +374,11 @@ func Default() *Table {
 		summary: "Read the project's mem, without a model.",
 		about:   "The words after mem go to mem as they are: show, find and log read it. What changes mem is done with /mem inside a session."})
 
+	t.command(root, &command{name: "bridge", cmd: CmdBridge, pri: 2,
+		flags:   []*flag{cwd, help},
+		summary: "Serve the project's machines, mem and frames view to another harness, without a model.",
+		about:   "Requests come as JSON lines on standard input and replies go as JSON lines to standard output; spec/gnosh/bridge.md gives the protocol. It ends when standard input ends."})
+
 	t.command(root, &command{name: "logs", cmd: CmdLogs, pri: 1,
 		flags:   []*flag{logsFollow, logsTail, cwd, help},
 		summary: "Print the end of the project's log, or follow it."})
