@@ -76,18 +76,44 @@ func (s *session) completeAgent(typed string, start int) []editor.Candidate {
 // completeCommand offers the session's commands whose names begin with
 // what was typed, in the order /help lists them, and after them the
 // person's skills. When no name begins that way, the commands' other
-// names that do are offered.
+// names that do are offered. Enter on a command runs it, unless what
+// must follow its name is still to be typed: that one is taken with a
+// space after it. Whatever its Args says, unless it is empty or in
+// brackets ("[instructions]"), is taken to be needed: a skill's is the
+// hint its author wrote, such as "issue-number".
 func (s *session) completeCommand(typed string) []editor.Candidate {
 	want := strings.TrimPrefix(typed, "/")
+	needs := map[string]bool{}
+	for _, c := range s.info.CommandList {
+		if needsArgs(c.Args) {
+			needs[c.Name] = true
+			for _, alias := range c.Aliases {
+				needs[alias] = true
+			}
+		}
+	}
+	for _, sk := range s.info.Skills {
+		// A skill that has a command's name is not offered, and must not
+		// change how the command is.
+		if needsArgs(sk.Args) && !slices.Contains(s.info.Commands, sk.Name) {
+			needs[sk.Name] = true
+		}
+	}
+	command := func(name string) editor.Candidate {
+		if needs[name] {
+			return editor.Candidate{Text: "/" + name + " ", Start: 0}
+		}
+		return editor.Candidate{Text: "/" + name, Start: 0, Run: true}
+	}
 	var out []editor.Candidate
 	for _, name := range s.info.Commands {
 		if strings.HasPrefix(name, strings.ToLower(want)) {
-			out = append(out, editor.Candidate{Text: "/" + name, Start: 0})
+			out = append(out, command(name))
 		}
 	}
 	for _, sk := range s.info.Skills {
 		if strings.HasPrefix(sk.Name, want) && !slices.Contains(s.info.Commands, sk.Name) {
-			out = append(out, editor.Candidate{Text: "/" + sk.Name, Start: 0})
+			out = append(out, command(sk.Name))
 		}
 	}
 	if len(out) == 0 && want != "" {
@@ -97,12 +123,19 @@ func (s *session) completeCommand(typed string) []editor.Candidate {
 		for _, c := range s.info.CommandList {
 			for _, alias := range c.Aliases {
 				if strings.HasPrefix(alias, strings.ToLower(want)) {
-					out = append(out, editor.Candidate{Text: "/" + alias, Start: 0})
+					out = append(out, command(alias))
 				}
 			}
 		}
 	}
 	return out
+}
+
+// needsArgs says whether a command whose Args reads so cannot run with
+// nothing after its name.
+func needsArgs(args string) bool {
+	args = strings.TrimSpace(args)
+	return args != "" && !strings.HasPrefix(args, "[")
 }
 
 // completeFile offers the entries of the directory that partial names so

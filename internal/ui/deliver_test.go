@@ -337,6 +337,39 @@ func TestOtherNamesAreOfferedWhenNoNameFits(t *testing.T) {
 	g.keys(`<Backspace>*3 "/"`).liveLacks("/artifacts", "/quit")
 }
 
+// Enter on a command in the list runs it, as in Claude Code, unless what
+// must follow its name is still to be typed.
+func TestEnterRunsTheCommandChosen(t *testing.T) {
+	for _, tc := range []struct{ keys, ran, box string }{
+		{`"/comp" <Enter>`, "/compact", ""},
+		{`"/backg" <Enter>`, "", "/background "},
+		// A skill's hint is in its author's words.
+		{`"/fix-is" <Enter>`, "", "/fix-issue "},
+		{`"/tid" <Enter>`, "/tidy", ""},
+	} {
+		g := newRig(t, 80, 24, text.NoColor, func(c *controls) {
+			c.info.Commands = append(c.info.Commands, "background")
+			c.info.CommandList = []app.CommandInfo{
+				{Name: "compact", Args: "[instructions]"},
+				{Name: "background", Aliases: []string{"bg"}, Args: "<prompt>"},
+			}
+			c.info.Skills = []app.CommandInfo{
+				{Name: "fix-issue", Args: "issue-number"},
+				{Name: "tidy", Args: "[path]"},
+				// A skill that has a command's name changes nothing of it.
+				{Name: "compact", Args: "<pr>"},
+			}
+		})
+		g.keys(tc.keys)
+		if got := strings.Join(g.c.commands, " "); got != tc.ran {
+			t.Errorf("%s ran %q, want %q", tc.keys, got, tc.ran)
+		}
+		if got := g.box(); tc.ran == "" && got != tc.box {
+			t.Errorf("%s left %q in the box, want %q", tc.keys, got, tc.box)
+		}
+	}
+}
+
 // When another session comes to stand behind the controls, its
 // deliverables are the ones that count.
 func TestDeliverablesFollowTheSession(t *testing.T) {

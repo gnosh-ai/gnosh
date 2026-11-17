@@ -73,7 +73,9 @@
 // Enter sends the line instead of completing it. And what was typed is
 // never swapped unasked for something that only resembles it: Enter takes
 // a candidate that begins with what was typed, or one chosen with the
-// arrows, and otherwise sends the line as it stands.
+// arrows, and otherwise sends the line as it stands. A candidate marked
+// Run (a command that needs nothing more) is sent as soon as Enter takes
+// it.
 //
 // # Keys
 //
@@ -133,7 +135,7 @@
 //	  Up, Down, Ctrl+P, Ctrl+N     choose, going round (brief)
 //	  PgUp, PgDn                   choose a screenful away (own)
 //	  Tab                          take the candidate chosen (cc 3); if it is in the box already, letter for letter, go on to the next (brief)
-//	  Enter                        take the candidate chosen (cc 2.5); send instead, if it is typed in full already
+//	  Enter                        take the candidate chosen (cc 2.5), and send it if it runs; send instead, if it is typed in full already
 //	                               or does not begin with what was typed and was not chosen with the arrows (ui UI-30)
 //	  Esc                          close the list; it stays closed for that word (brief)
 //
