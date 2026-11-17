@@ -46,6 +46,10 @@ const (
 	// CmdMem reads the project's mem; Invocation.Args holds the words after
 	// `mem`, for mem itself to read.
 	CmdMem Command = "mem"
+	// CmdBridge serves the project's machine tools and the frames view to
+	// another harness, as JSON lines on standard input and output
+	// (spec/gnosh/bridge.md).
+	CmdBridge Command = "bridge"
 	// CmdLogs prints the project's log.
 	CmdLogs Command = "logs"
 	// CmdDirs says which config and data folders are in use.

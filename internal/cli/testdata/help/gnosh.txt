@@ -19,6 +19,8 @@ Commands
   session <command>       Look at and manage sessions. (Not built yet.)
   mem [show|find|log]     Read the project's mem, without a model. (Not built
                           yet.)
+  bridge                  Serve the project's machines, mem and frames view to
+                          another harness, without a model. (Not built yet.)
   logs                    Print the end of the project's log, or follow it.
                           (Not built yet.)
   dirs                    Say which config and data folders are in use. (Not

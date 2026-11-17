@@ -82,9 +82,10 @@ func New(o Options) app.Feature {
 			{Name: gnovmtools.ListToolName, Quiet: true},
 			{Name: gnovmtools.DropToolName, Quiet: true},
 		},
-		Built: []string{string(cli.CmdMem), "--goal"},
+		Built: []string{string(cli.CmdMem), string(cli.CmdBridge), "--goal"},
 		Commands: []app.Command{
 			{Command: cli.CmdMem, Run: p.memCommand},
+			{Command: cli.CmdBridge, Run: p.bridgeCommand},
 		},
 		Session:  p.session,
 		Shutdown: p.shutdown,
