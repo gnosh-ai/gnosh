@@ -76,16 +76,21 @@ func (e *Editor) menuKey(cmd command) (res Result, done bool) {
 		}
 	case cmdSubmit:
 		// Enter takes the candidate chosen when it completes what was
-		// typed or the person chose it with the arrows. Otherwise Enter
-		// means what it always means, and what is sent is what was
-		// typed: a command typed in full runs, and a candidate that
-		// only resembles the word never takes its place unasked.
+		// typed or the person chose it with the arrows, and a candidate
+		// that runs is then sent at once. Otherwise Enter means what it
+		// always means, and what is sent is what was typed: a command
+		// typed in full runs, and a candidate that only resembles the
+		// word never takes its place unasked.
 		cand := c.items[c.sel]
 		if c.typed(cand) || !c.moved && !c.extends(cand) {
 			e.comp = nil
 			return Result{}, false
 		}
 		e.accept(cand)
+		if cand.Run {
+			e.comp = nil
+			return Result{}, false
+		}
 	case cmdEscape:
 		e.comp = nil
 		e.dismissed, e.hasDismissed = e.wordStart(), true

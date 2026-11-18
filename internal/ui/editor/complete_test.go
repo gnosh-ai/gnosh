@@ -45,7 +45,7 @@ func (h *hook) complete(text string, cursor int) []Candidate {
 	case start == 0 && strings.HasPrefix(word, "/"):
 		for _, c := range hookCommands {
 			if strings.HasPrefix(c.name, word) {
-				out = append(out, Candidate{Text: c.name + " ", Start: start, End: end, Label: c.name, Detail: c.about})
+				out = append(out, Candidate{Text: c.name + " ", Start: start, End: end, Label: c.name, Detail: c.about, Run: true})
 			}
 		}
 	case strings.HasPrefix(word, "@"):
@@ -128,12 +128,16 @@ func TestCompletionAccept(t *testing.T) {
 	// It is one step of the undo history.
 	g.do(`<Ctrl+_>`).text("/mo")
 
+	// Enter takes a command and runs it; one that does not run is only
+	// taken, for what must follow it to be typed.
 	g, _ = completing(t, 60, Options{})
-	g.do(`"/mo" <Enter>`).action(ActionNone).text("/mode ").open(false)
-	g.do(`<Enter>`).submitted("/mode ", ModeCommand)
-
+	g.do(`"/mo" <Enter>`).submitted("/mode ", ModeCommand).open(false)
 	g, _ = completing(t, 60, Options{})
-	g.do(`"/mo" <Down> <Enter>`).text("/model ")
+	g.do(`"/mo" <Down> <Enter>`).submitted("/model ", ModeCommand)
+	g = newRig(t, 60, Options{Complete: func(text string, cursor int) []Candidate {
+		return []Candidate{{Text: "/background "}}
+	}})
+	g.do(`"/ba" <Enter>`).action(ActionNone).text("/background ")
 	g, _ = completing(t, 60, Options{})
 	g.do(`"/mo" <Down> <Down> <Tab>`).text("/mode ")
 	g, _ = completing(t, 60, Options{})
@@ -161,9 +165,9 @@ func TestCompletionEnterOnExactSends(t *testing.T) {
 	g, _ = completing(t, 60, Options{})
 	g.do(`"/model" <Enter>`).submitted("/model", ModeCommand)
 
-	// Choosing another candidate first takes that one instead.
+	// Choosing another candidate first runs that one instead.
 	g, _ = completing(t, 60, Options{})
-	g.do(`"/mode" <Down> <Enter>`).action(ActionNone).text("/model ")
+	g.do(`"/mode" <Down> <Enter>`).submitted("/model ", ModeCommand)
 
 	// A file named in full is sent with the prompt.
 	g, _ = completing(t, 60, Options{})

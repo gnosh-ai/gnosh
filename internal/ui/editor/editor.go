@@ -147,6 +147,9 @@ type Candidate struct {
 	Label string
 	// Detail is a few words about the candidate, shown beside it.
 	Detail string
+	// Run says that Enter, taking the candidate, also sends the line: a
+	// command that needs nothing more after its name.
+	Run bool
 }
 
 // View is what the editor looks like at one width: its rows, styled and
