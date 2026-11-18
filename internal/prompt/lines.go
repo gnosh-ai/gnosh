@@ -639,6 +639,12 @@ func (s *Set) StatusLine(wish, script, settings, sample string) string {
 	return s.fill(textStatusLine, values{"wish": oneLine(wish, maxQuote), "script": oneLine(script, maxName), "settings": oneLine(settings, maxName), "sample": sample})
 }
 
+// PrintWrapUp returns what a run (-p) with a time budget tells the model
+// once most of the budget is used: wrap up and end the turn.
+func (s *Set) PrintWrapUp(used, budget string) string {
+	return s.fill(textPrintWrapUp, values{"used": oneLine(used, maxName), "budget": oneLine(budget, maxName)})
+}
+
 // PrintWait returns the checkpoint of a run (-p) that has waited long for
 // background work it started: how long it has waited, and what still runs.
 func (s *Set) PrintWait(waited, work string) string {

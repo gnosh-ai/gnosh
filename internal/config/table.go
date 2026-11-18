@@ -351,6 +351,8 @@ var ownEnv = []envVar{
 	{"GNOSH_DATA_DIR", "reads", "the directory to use in place of the user's state directory", fromPlain + ", after GNOSH_CONFIG_DIR"},
 	{"GNOSH_SAFE_MODE", "reads", "the same as --safe-mode", fromClaudeCode + ": CLAUDE_CODE_SAFE_MODE"},
 	{"GNOSH_DEBUG_PAGE", "reads", "serve a debugging page on loopback", fromPlain},
+	{"GNOSH_PRINT_BG_CHECKPOINT_MS", "reads", "in -p, how long the idle wait for background work lasts before the model is asked whether to wait on (default ten minutes)", fromPlain},
+	{"GNOSH_PRINT_MAX_DURATION_MS", "reads", "in -p, the run's time budget: the model is told to wrap up once 80% of it is used", fromPlain},
 	// What gnosh sets for the commands and hooks it starts. A gnosh started
 	// from inside one of those inherits them. A hook's variables are named
 	// for the fields of Claude Code's hook input, in upper case behind
