@@ -335,7 +335,7 @@ session never frees up (`close-check.md` §6) and Next never waits.
 | 9.3 | **The flag** | `run --goal <condition>` binds before the prompt is composed, prints how the goal ended, exits non-zero while it is still set. | | P1 |
 | 9.4 | **The bound name on every mem call** (`RunRequest.Goal`). | | P1 |
 | 9.5 | **At each turn's end** of a main session, not in plan mode, after the close-check send-back: (a) judge every top-level todo the session closed as done this turn (`ClosedGoals`), except the bound one and those the review approved; (b) for the bound todo call `GoalTurnEnd` and act on `do`: continue, checkpoint, end, judge, rebind, clear. Every tenth continuation in a row send `GoalCheckpoint` instead. A reply that ends with the stop marker ends the turn, goal still set. Store the binding it returns, compare-and-set; if it changed meanwhile, leave it as the user left it. | `mem.md` §13 | P1 |
-| 9.6 | **The judge call** | Small model, no tools, thinking off, about 300 answer tokens; the condition, what mem shows, the last 24,000 characters of the **full** conversation; the JSON verdict with `basis`. Met: unbind, tell the user "Goal met: …". Not met: `GoalReopen`, tell the user, send the agent back. Unreachable: end the turn, goal set, tell the user. | `mem.md` §13 | P1 |
+| 9.6 | **The judge call** | Small model, no tools, thinking off, 1,500 answer tokens (asked once more with 6,000 when cut off); the condition, what mem shows, the last 24,000 characters of the **full** conversation; the JSON verdict with `basis`. Met: unbind, tell the user "Goal met: …". Not met: `GoalReopen`, tell the user, send the agent back. Unreachable: end the turn, goal set, tell the user. | `mem.md` §13 | P1 |
 | 9.7 | **After a turn that ended in an automatic summary** with nothing further queued, the goal driver still runs. | | P1 |
 | 9.8 | **Notices**: every outcome reaches the user (UI notice; stderr in a non-interactive run). | | P1 |
 
@@ -409,13 +409,16 @@ read **past any thinking tags**.
 |---|---|---|---|
 | the namer (§5.5) | ~24 tokens, or ~16 per name | the model's own | ~30 s + 10 s per text |
 | the close review (§8.3) | 1,500 | 0 | 3 min |
-| the goal judge (§9.6) | ~300 | the model's own | (unconfirmed) |
+| the goal judge (§9.6) | 1,500, and 6,000 once when cut off | the model's own | (unconfirmed) |
 
 On a local server each such call is a new prompt and may push a saved
 session out of the server's prompt cache; name sessions without a model call
 where possible, and keep these calls few. On a provider whose thinking
 switch the harness does not know, the judge thinks and may be cut off:
-that is why the review has headroom and fails open.
+that is why the review has headroom and fails open. The goal judge was given
+~300 and was cut off on long tasks (a FrontierHarness run with the
+provider forcing reasoning on), so its close stood unchecked; it now has
+the review's headroom and one retry with more.
 
 (P1)
 

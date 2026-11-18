@@ -46,6 +46,10 @@ type reviewState struct {
 	// judged once. A todo that is opened again and closed again has a
 	// new entry, and is judged again.
 	judged map[string]int64
+	// unchecked holds the top-level todos whose close the turn-end judge
+	// could not judge and that the agent was sent back for: it is sent
+	// back once a todo.
+	unchecked map[string]bool
 }
 
 // verdict is what a review came to.
