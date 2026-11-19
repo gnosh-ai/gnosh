@@ -335,6 +335,23 @@ A reply cut short by a kill or a crash has no end. When the session is next
 opened, every such reply is marked as interrupted before anything else
 happens, so it never shows as a turn still running (LOOP-6).
 
+### CLI-45 A run's pace on a budget (P1)
+
+Two variables for runs that are stopped from outside on a clock (a
+benchmark's 15-minute task, a CI job). Neither ends work on a clock: they
+only change when the model is told something.
+
+- `GNOSH_PRINT_BG_CHECKPOINT_MS`: how long the idle wait for background
+  work lasts before the model is asked whether to wait on. Unset, ten
+  minutes, as Claude Code waits. (A FrontierHarness run left a gRPC
+  server in the background and sat idle for 10 of its 15 minutes before
+  the model was asked.)
+- `GNOSH_PRINT_MAX_DURATION_MS`: the run's time budget. Once 80% of it is
+  used, the model is told once, with the turn's next request (or woken when
+  the run waits idle), how much is used, to finish, check quickly, leave the
+  files in their final state and end the turn. Unset, nothing is said. (On
+  that run 6 of 12 Gnosh tasks were cut off by the clock still mid-work.)
+
 ---
 
 ## 7. Client and server mode

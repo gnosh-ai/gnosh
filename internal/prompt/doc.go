@@ -304,6 +304,9 @@
 //   - print-wait (PrintWait) wakes the model in a run (-p) that has waited
 //     long for background work it started: what still runs and for how
 //     long; stop it with TaskStop, or end the turn to wait on.
+//   - print-wrap-up (PrintWrapUp) tells the model once, in a run (-p) with
+//     GNOSH_PRINT_MAX_DURATION_MS, that most of its time is used: finish,
+//     check quickly, and end the turn.
 //   - print-leftovers (PrintLeftovers) wakes the model once as a run (-p)
 //     is about to end with processes its commands left running, which the
 //     end stops: keep one with setsid, or end the turn.

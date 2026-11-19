@@ -1,0 +1,1 @@
+This run (gnosh -p) has used {{used}} of its {{budget}} time budget, and it is stopped from outside when that runs out. Wrap up now: finish the change you are making, check it with one quick command, leave the files in their final state, and end your turn. Start nothing long. This is news from gnosh, not a request from the user.

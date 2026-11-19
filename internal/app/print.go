@@ -135,6 +135,9 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 	f.mu.Lock()
 	f.c = c
 	f.mu.Unlock()
+	// A run with a time budget is told to wrap up once most of it is used
+	// (printwait.go).
+	defer f.watchBudget(c, time.Now())()
 	if f.inv.InputFormat == cli.FormatStreamJSON {
 		return f.runStream(ctx, c)
 	}

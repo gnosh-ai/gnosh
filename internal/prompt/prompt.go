@@ -79,6 +79,7 @@ const (
 	textNextPrompt       = "next-prompt"
 	textThinkingBudget   = "thinking-budget"
 	textPrintWait        = "print-wait"
+	textPrintWrapUp      = "print-wrap-up"
 	textPrintLeftovers   = "print-leftovers"
 	textStatusLine       = "statusline"
 	textMention          = "mention"
@@ -228,6 +229,8 @@ func specs() []spec {
 			when: "As the prompt of /statusline: write a status line script from the user's words, try it on the session's own JSON, and add it to their gnosh.json."},
 		{name: textPrintWait, kind: KindLine, need: []string{"waited", "work"},
 			when: "In a run (-p) that has waited long for background work it started, as a turn of its own: stop that work, or wait on."},
+		{name: textPrintWrapUp, kind: KindLine, need: []string{"used", "budget"},
+			when: "Once, in a run (-p) with GNOSH_PRINT_MAX_DURATION_MS, when most of that time is used: finish, check quickly, and end the turn."},
 		{name: textPrintLeftovers, kind: KindLine, need: []string{"left"},
 			when: "Once, as a run (-p) is about to end with processes its commands left running, which the end stops, as a turn of its own: keep one past the run with setsid, or end the turn."},
 		{name: textStructured, kind: KindLine, need: []string{"schema"}, may: []string{"problem"},

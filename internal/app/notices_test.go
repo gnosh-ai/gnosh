@@ -227,3 +227,44 @@ func TestRunWaitCeiling(t *testing.T) {
 		t.Errorf("the background command outlived the run")
 	}
 }
+
+// GNOSH_PRINT_BG_CHECKPOINT_MS makes the run ask the model sooner than
+// every ten minutes whether to wait on for its background work.
+func TestRunWaitCheckpointEvery(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"sleep 60","run_in_background":true}`}}},
+		apptest.Reply{Text: "Started."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "TaskStop", Args: `{"task_id":"bg1"}`}}},
+		apptest.Reply{Text: "Stopped it."})
+	o := testOptions(w, "-y", "-p", "start it")
+	o.Environ = append(o.Environ, "GNOSH_PRINT_BG_CHECKPOINT_MS=500")
+	began := time.Now()
+	runWith(t, context.Background(), o).wantCode(t, 0)
+	if took := time.Since(began); took > 30*time.Second {
+		t.Errorf("the run took %v", took)
+	}
+	has(t, "what the model read", requestText(t, w, 2), "This run (gnosh -p) has waited", "for background work that still runs")
+	w.Model.Done()
+}
+
+// GNOSH_PRINT_MAX_DURATION_MS gives the run a time budget: once most of it
+// is used, the model is told, with its next request, to wrap up.
+func TestRunTimeBudgetWrapUp(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"sleep 2"}`}}},
+		apptest.Reply{Text: "Done."})
+	o := testOptions(w, "-y", "-p", "work")
+	o.Environ = append(o.Environ, "GNOSH_PRINT_MAX_DURATION_MS=1000")
+	runWith(t, context.Background(), o).wantCode(t, 0)
+	has(t, "what the model read", requestText(t, w, 1), "This run (gnosh -p) has used", "time budget", "Wrap up now")
+	hasNot(t, "the first request", requestText(t, w, 0), "Wrap up now")
+	w.Model.Done()
+
+	// Without the budget, nothing is said.
+	w.Model.Add(
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"true"}`}}},
+		apptest.Reply{Text: "Done."})
+	run(t, w, "-y", "-p", "work").wantCode(t, 0)
+	hasNot(t, "a run with no budget", requestText(t, w, 3), "Wrap up now")
+	w.Model.Done()
+}

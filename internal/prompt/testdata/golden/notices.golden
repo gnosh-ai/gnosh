@@ -69,6 +69,9 @@ The page says:
 === a run that has waited long for its background work ===
 <gnosh>This run (gnosh -p) has waited 10m0s for background work that still runs: bg1 (npm run dev), bg2 (watch the logs). Nobody is watching the run. If what that work was for is done, or will not come, stop it with TaskStop and end your turn, and the run ends. Otherwise end your turn, and the run waits on. This is news from gnosh, not a request from the user.</gnosh>
 
+=== a run with a time budget, most of it used ===
+<gnosh>This run (gnosh -p) has used 24m of its 30m time budget, and it is stopped from outside when that runs out. Wrap up now: finish the change you are making, check it with one quick command, leave the files in their final state, and end your turn. Start nothing long. This is news from gnosh, not a request from the user.</gnosh>
+
 === a run about to end with processes its commands left running ===
 <gnosh>This run (gnosh -p) is about to end, and what your commands left running was stopped: process group 4242 (python3). If the task needs one of them to keep running after the run (a server it asked for), start it again so that it outlives the run, with setsid in front (setsid nohup <command> > <log> 2>&1 < /dev/null &), check that it answers, and end your turn. If none needs to, end your turn. This is news from gnosh, not a request from the user.</gnosh>
 

@@ -246,10 +246,13 @@
 //
 // # The environment
 //
-// gnosh reads four variables of its own: GNOSH_CONFIG_DIR and
+// gnosh reads six variables of its own: GNOSH_CONFIG_DIR and
 // GNOSH_DATA_DIR, which name the two directories above; GNOSH_SAFE_MODE,
-// which is --safe-mode; and GNOSH_DEBUG_PAGE, which serves a debugging
-// page on this machine. Any other variable whose name begins with GNOSH_
+// which is --safe-mode; GNOSH_DEBUG_PAGE, which serves a debugging page
+// on this machine; and, in a run (-p), GNOSH_PRINT_BG_CHECKPOINT_MS and
+// GNOSH_PRINT_MAX_DURATION_MS, which set how often an idle wait for
+// background work asks the model and the time budget after 80% of which
+// the model is told to wrap up. Any other variable whose name begins with GNOSH_
 // stops startup: it is most likely a misspelling, and would do nothing.
 // (The variables gnosh sets for the hooks and commands it runs are known
 // too, since a gnosh started from inside one inherits them.)

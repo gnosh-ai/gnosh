@@ -1751,6 +1751,22 @@ func (c *controls) CheckBackground(waited time.Duration, work []string) error {
 	})
 }
 
+// WrapUp tells the model, in a run with a time budget, that most of it is
+// used: a note that goes out with the turn's next request, or that wakes
+// the model when the run waits idle for background work.
+func (c *controls) WrapUp(used, budget time.Duration) {
+	l := c.cur()
+	if l.agent == nil || l.closing.Load() {
+		return
+	}
+	_ = l.agent.Tell(agent.Note{
+		Text:   l.texts.PrintWrapUp(roundTime(used), roundTime(budget)),
+		Source: "print-budget",
+		Notice: "The run has used " + roundTime(used) + " of its " + roundTime(budget) + " time budget; the model is told to wrap up.",
+		Wake:   !c.State().Busy,
+	})
+}
+
 // LeftRunning says what the session's end would stop of what its
 // commands left running (shelltool's Manager.LeftRunning): each process
 // group, as the commands' results named it.

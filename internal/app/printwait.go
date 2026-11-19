@@ -167,7 +167,7 @@ func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.Tur
 			f.stderr("the run waited %s for background work and stops it now (CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS): %s", roundTime(waited), strings.Join(work, ", "))
 			b.StopBackground()
 			return res, nil, st
-		case checkpoints && waited >= waitCheckpoint:
+		case checkpoints && waited >= f.checkpointEvery():
 			if err := b.CheckBackground(waited, work); err != nil {
 				// A turn started now would be stopped before its first
 				// request, and the next checkpoint would ask again: the
@@ -202,6 +202,57 @@ func (f *printer) waitCeiling() (ceiling time.Duration, checkpoints bool) {
 		return 0, true
 	}
 	return time.Duration(ms) * time.Millisecond, false
+}
+
+// checkpointEvery reads GNOSH_PRINT_BG_CHECKPOINT_MS: how long the idle
+// wait for background work lasts before the model is asked whether to
+// wait on. Unset (or not a positive number), it is waitCheckpoint, ten
+// minutes, as Claude Code waits. A run with a short budget (a benchmark's
+// 15 minutes) wants it shorter: a server left running in the background
+// otherwise holds the run idle for most of its time.
+func (f *printer) checkpointEvery() time.Duration {
+	ms, err := strconv.ParseInt(strings.TrimSpace(f.p.env["GNOSH_PRINT_BG_CHECKPOINT_MS"]), 10, 64)
+	if err != nil || ms <= 0 {
+		return waitCheckpoint
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
+// wrapUpShare is the part of a run's time budget after which the model is
+// told to wrap up.
+const wrapUpShare = 0.8
+
+// maxDuration reads GNOSH_PRINT_MAX_DURATION_MS: the run's time budget,
+// set by whoever stops it from outside when it runs out. Unset (or not a
+// positive number), the run has none.
+func (f *printer) maxDuration() time.Duration {
+	ms, err := strconv.ParseInt(strings.TrimSpace(f.p.env["GNOSH_PRINT_MAX_DURATION_MS"]), 10, 64)
+	if err != nil || ms <= 0 {
+		return 0
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
+// wrapUpper is what a session's controls may also be: able to tell the
+// model, once, that most of the run's time budget is used.
+type wrapUpper interface {
+	WrapUp(used, budget time.Duration)
+}
+
+// watchBudget tells the model to wrap up once wrapUpShare of the run's
+// time budget (maxDuration) is used, counted from began. It returns what
+// stops the watch.
+func (f *printer) watchBudget(c Controls, began time.Time) (stop func()) {
+	budget := f.maxDuration()
+	w, ok := c.(wrapUpper)
+	if budget <= 0 || !ok {
+		return func() {}
+	}
+	at := time.Duration(float64(budget) * wrapUpShare)
+	t := time.AfterFunc(at-time.Since(began), func() {
+		w.WrapUp(time.Since(began), budget)
+	})
+	return func() { t.Stop() }
 }
 
 // closeReply ends the reply of a turn in text output, so that the next
