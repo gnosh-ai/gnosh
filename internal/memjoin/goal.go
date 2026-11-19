@@ -442,8 +442,26 @@ func (j *join) judgeClosed(ctx context.Context, client *gnovm.Client, except str
 		j.review.judged[g.Name] = g.Seq
 		j.mu.Unlock()
 		switch {
-		case err != nil:
+		case err != nil && j.sentBackUnchecked(g.Name):
 			told = append(told, fmt.Sprintf("`%s` %q was closed as done, and the check of it could not run (%v), so it stands unchecked.", g.Name, g.Title, err))
+		case err != nil:
+			// A close nothing checked does not end the turn the first
+			// time: the agent is sent back once to show it with its
+			// tools, and the next close of it stands, checked or not, so
+			// a judge that cannot run never traps the turn.
+			reason := fmt.Sprintf("its check could not run (%v), so nothing has shown that it holds. Show it with your tools, running what proves it and reading what that returns", err)
+			notice := fmt.Sprintf("`%s` %q was closed as done, and the check of it could not run (%v). It is open again, and the agent goes back to show it.", g.Name, g.Title, err)
+			if rerr := client.GoalReopen(ctx, j.project, gnovm.GoalBinding{Name: g.Name, Title: g.Title}, reason); rerr != nil {
+				told = append(told, fmt.Sprintf("`%s` %q was closed as done, and the check of it could not run (%v), so it stands unchecked.", g.Name, g.Title, err))
+				continue
+			}
+			told = append(told, notice)
+			return agent.Verdict{
+				Action:    agent.Continue,
+				Prompt:    j.texts.GoalNotMet(g.Name, g.Title, reason),
+				Objection: fmt.Sprintf("the check of `%s` could not run: %v", g.Name, err),
+				Notice:    strings.Join(told, "\n"),
+			}, true
 		case v.ok:
 			told = append(told, fmt.Sprintf("Task done: %q (`%s`): %s", g.Title, g.Name, v.shown()))
 		default:
@@ -464,6 +482,22 @@ func (j *join) judgeClosed(ctx context.Context, client *gnovm.Client, except str
 		j.tell(agent.LevelWarning, "goal", line)
 	}
 	return agent.Verdict{}, false
+}
+
+// sentBackUnchecked reports whether the agent was already sent back once
+// for a close of the todo that its check could not judge, and records
+// that it now is.
+func (j *join) sentBackUnchecked(name string) bool {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.review.unchecked[name] {
+		return true
+	}
+	if j.review.unchecked == nil {
+		j.review.unchecked = map[string]bool{}
+	}
+	j.review.unchecked[name] = true
+	return false
 }
 
 // judgeGoal asks the judge about the bound goal, which the agent closed
@@ -514,6 +548,15 @@ func (v goalVerdict) shown() string {
 	return reason
 }
 
+// judgeTokens is the room the goal judge's answer is given, and
+// judgeRetryTokens the room it is given once more when that was cut off.
+// The answer is one line of JSON, but a model that thinks spends its
+// room on thinking first: 300 was cut off on long tasks.
+const (
+	judgeTokens      = 1500
+	judgeRetryTokens = 6000
+)
+
 // judge asks a model whether condition holds, showing it what mem says of
 // the todo and the end of the whole conversation, the work of popped
 // todos included: that is where the evidence is.
@@ -528,7 +571,13 @@ func (j *join) judge(ctx context.Context, condition, show string) (goalVerdict, 
 		Mem:          show,
 		Conversation: tail(written(events, clipLevels[0]), maxShown),
 	})
-	res, err := a.Side(ctx, agent.SideRequest{Purpose: "goal-judge", System: req.System, Prompt: req.Prompt, MaxTokens: 300})
+	res, err := a.Side(ctx, agent.SideRequest{Purpose: "goal-judge", System: req.System, Prompt: req.Prompt, MaxTokens: judgeTokens})
+	if errors.Is(err, agent.ErrCutOff) {
+		// A model that thinks before it answers, or a provider that makes
+		// it, can spend the room on thinking: asked once more with more
+		// room, the check runs instead of standing unchecked.
+		res, err = a.Side(ctx, agent.SideRequest{Purpose: "goal-judge", System: req.System, Prompt: req.Prompt, MaxTokens: judgeRetryTokens})
+	}
 	if err != nil {
 		return goalVerdict{}, err
 	}

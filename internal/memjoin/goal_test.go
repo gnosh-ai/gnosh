@@ -100,8 +100,8 @@ func TestGoalBoundJudgedSentBackAndMet(t *testing.T) {
 		"the agent called Edit: {\"file_path\":\"greet.txt\"",
 		"the tool returned: Edited ",
 		"Does the conversation show that the goal holds?")
-	if got := judges[0].JSON["max_tokens"]; got != float64(300) {
-		t.Errorf("the judge was given room for %v tokens, want 300", got)
+	if got := judges[0].JSON["max_tokens"]; got != float64(judgeTokens) {
+		t.Errorf("the judge was given room for %v tokens, want %d", got, judgeTokens)
 	}
 
 	// The session's file holds the binding, and then that it was cleared.
@@ -246,4 +246,51 @@ func TestRunGoalStillSet(t *testing.T) {
 	if regexp.MustCompile(`GNOSH_STOP`).MatchString(r.out) {
 		t.Errorf("the stop marker was shown to the person:\n%s", r.out)
 	}
+}
+
+// A task closed as done whose turn-end check is cut off at its length
+// limit: the judge is asked once more with more room; when that is cut off
+// too, the agent is sent back once to show the task holds, and the next
+// close of it stands unchecked, so a judge that cannot run never traps the
+// turn.
+func TestJudgeCutOffRetriedAndSentBackOnce(t *testing.T) {
+	const task = "read-notes"
+	w := newWorld(t,
+		reply(memCall("a1", `mem.Todo("read the notes", "read notes.txt").Push()`)),
+		reply(memCall("a2", `mem.Next()`)),
+		reply(call("a3", "Read", map[string]any{"file_path": "notes.txt"})),
+		reply(memCall("a4", `mem.Pop("notes.txt says hello")`)),
+		reply(memCall("a5", `mem.Pop("its todo is done: notes.txt says hello")`)),
+		says("Done."),
+		// Sent back because the check could not run.
+		reply(call("a6", "Read", map[string]any{"file_path": "notes.txt"})),
+		reply(memCall("a7", `mem.Done("`+task+`", "Read notes.txt → hello")`)),
+		says("Shown."),
+	)
+	w.Write("notes.txt", "hello\n")
+	w.script.onSide = func(kind string, r apptest.Request) *apptest.Reply {
+		if kind != sideJudge {
+			return nil
+		}
+		return &apptest.Reply{Text: `{"ok": tr`, Finish: "length"}
+	}
+	r := w.run("-y", "-p", "read the notes")
+	r.wantCode(t, 0)
+	w.script.done()
+
+	judges := w.script.sides(sideJudge)
+	if len(judges) != 4 {
+		t.Fatalf("the judge was asked %d times, want 4: twice for each close", len(judges))
+	}
+	for i, want := range []int{judgeTokens, judgeRetryTokens, judgeTokens, judgeRetryTokens} {
+		if got := judges[i].JSON["max_tokens"]; got != float64(want) {
+			t.Errorf("judge request %d was given room for %v tokens, want %d", i, got, want)
+		}
+	}
+	has(t, "stderr", r.err,
+		"`"+task+"` \"read the notes\" was closed as done, and the check of it could not run (",
+		"It is open again, and the agent goes back to show it.",
+		"so it stands unchecked.")
+	reqs := w.script.requests()
+	has(t, "the send-back", lastUser(t, reqs[6]), "The check of `"+task+"` found it not met: its check could not run (")
 }

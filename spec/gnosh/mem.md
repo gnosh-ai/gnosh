@@ -1203,7 +1203,11 @@ a phrase the model must write."
 **Every task is judged, not only the bound one.** As a main session's turn
 would end, every top-level todo its own calls closed as done during the turn
 is judged the same way, against its title. Met: the user is told. Not met:
-reopened, and the agent sent back. A todo with nothing under it whose close
+reopened, and the agent sent back. Check could not run (the judge cut off
+even with its retry, or unreadable): reopened, and the agent sent back
+once to show it with its tools; the next close of that todo in the session
+stands unchecked, and the user is told, so a judge that cannot run never
+traps the turn. A todo with nothing under it whose close
 the close review already approved is not judged again.
 
 **Other commands.** `/goal` alone shows the condition, the todo and the last
