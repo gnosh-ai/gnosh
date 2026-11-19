@@ -50,11 +50,15 @@ const hostMarker = "gnosh-host-cwd:"
 // prints arrives as one stream in the order written, and whatever comes
 // down ssh's standard error after the report is ssh's own word; and the
 // command is given the same few variables as a command here (fixedEnv), so
-// that a script there can also tell an AI agent is running it.
+// that a script there can also tell an AI agent is running it. In zsh, the
+// login shell of a Mac, a word that begins with "=" stands for a command's
+// path, so "[ a == b ]" and "echo ====" failed with "= not found"; that is
+// turned off first, as Claude Code 2.1.328 does, and the other shells pass
+// over it.
 //
 // It needs a login shell that reads sh: sh, bash, dash, ksh or zsh.
 func remoteLead() string {
-	return `printf '` + hostMarker + `%s\n' "$PWD" >&2; exec 2>&1; export ` + strings.Join(fixedEnv(), " ") + `; eval `
+	return `[ -n "${ZSH_VERSION-}" ] && setopt no_equals; printf '` + hostMarker + `%s\n' "$PWD" >&2; exec 2>&1; export ` + strings.Join(fixedEnv(), " ") + `; eval `
 }
 
 // remoteScript is the one argument ssh is given after the destination: what

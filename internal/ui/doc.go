@@ -89,25 +89,31 @@
 // has to read), the model is thinking, is writing, is writing a call;
 // running a command, by its own words, or several tools, by their names;
 // waiting for the person; waiting so many seconds to try a failed request
-// again; writing a summary; stopping. Its mark moves while gnosh works
-// (Jae, 14 November 2026: "i don't like that there's no spinner now"): it
-// is a fall (fall.go), sparkle marks that drop to the right across ten
-// cells as if gravity ran sideways, each starting nearly at rest and
-// gathering speed all the way, its tail stretching as it goes. The fall
-// says how long the model has been in one thought. At first, and whenever
-// the model is not thinking, one drop at a time falls slowly, in colours
-// so near one grey that they are hardly colours. From five seconds of one
-// unbroken thought on it deepens: first more of each mark's own colour,
-// then more drops under a stronger pull, until at forty seconds the strip
-// is a shower of the blue-green, the purple, the hot pink and the gold,
-// three drops at a time with glints among them, and the line's words are
-// "is deep in thought". When the thought is over the fall grows calm
-// again within a second and a half. (Jae, 18
-// November 2026: "start with more boring bland even colors first ...
-// dropping rightward, as if accelerating to the right, like gravity goes
-// sideways, and when 'deep in thought', more things drop faster with
-// higher acceleration".) With no colour, and while a question waits for
-// the person, the mark stands still.
+// again; writing a summary; stopping. With colour the line moves while
+// gnosh works (Jae, 14 November 2026: "i don't like that there's no
+// spinner now"), in two parts (fall.go). Before the words stands one mark,
+// a spark that swells and dwindles in its one cell. The words themselves
+// stand in a grey, and colour falls through them to the right as if
+// gravity ran sideways: a drop of it starts at the first letter, slowly,
+// gathers speed all the way along the line and leaves at its end, its
+// tail stretching as it goes; the letters stay the letters. The fall says
+// how long the model has been in one thought. At first, and whenever the
+// model is not thinking, one pale drop at a time crosses the words. From
+// three seconds of one unbroken thought on it deepens: first the drops
+// take colours of their own, then more of them fall under a stronger
+// pull, until at fifteen seconds three run through the line at once in
+// the blue-green, the purple, the hot pink and the gold, with glints
+// among them, and the line's words are "is deep in thought". When the
+// thought is over the fall grows calm again within a second and a half.
+// (Jae, 18 November 2026: "start with more boring bland even colors first
+// ... dropping rightward, as if accelerating to the right, like gravity
+// goes sideways, and when 'deep in thought', more things drop faster with
+// higher acceleration", and then: "the first part is like claude, i think
+// a single letter, and then the second part is the text that starts
+// non-white and the whole text is animated. the thing that moves rightward
+// is a different color of the text, but the text is always the same".)
+// With no colour, and while a question waits for the person, the plain
+// mark stands still before plain words.
 // It is there only while the session is busy: there is never a "working"
 // line with nothing in flight, and should the event that says the session
 // went idle ever be missed, the session's own word is asked. When it is

@@ -795,6 +795,64 @@ func TestModelFlags(t *testing.T) {
 	wantProblem(t, problems, Error, userJSON, 1, "the model chosen here, p/unlisted, is not one provider p lists", `"listModels": false`, `Register the model under "models", as "p/unlisted": {}`)
 }
 
+// "fallbackModel" names the models a turn goes on with when the session's
+// model cannot answer: one, or a list of up to three, and
+// --fallback-model outranks it.
+func TestFallbackModel(t *testing.T) {
+	const providers = `"providers": {"q": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:1"}, "g": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:2"}},
+  "models": {"q/qwen": {}, "g/oss": {}, "g/other": {}}`
+	file := func(fallback string) Inputs {
+		return withConfig("{" + providers + ",\n  \"model\": \"q/qwen\",\n  \"fallbackModel\": " + fallback + "\n}")
+	}
+	refs := func(cfg *Config) string {
+		var names []string
+		for _, r := range cfg.Fallback.V {
+			names = append(names, r.String())
+		}
+		return strings.Join(names, " ")
+	}
+	if cfg := mustLoad(t, file(`"g/oss"`)); refs(cfg) != "g/oss" || cfg.Fallback.Origin.File != userJSON || cfg.Fallback.Origin.Line != 4 {
+		t.Errorf("one model: %q from %+v", refs(cfg), cfg.Fallback.Origin)
+	}
+	if cfg := mustLoad(t, file(`["g/oss", "q/qwen", "g/oss", "g/other"]`)); refs(cfg) != "g/oss q/qwen g/other" {
+		t.Errorf("a list, with a name twice: %q", refs(cfg))
+	}
+	if cfg := mustLoad(t, file(`null`)); cfg.Fallback.Set && len(cfg.Fallback.V) != 0 {
+		t.Errorf("null: %+v", cfg.Fallback)
+	}
+	if cfg := mustLoad(t, withConfig("{"+providers+", \"model\": \"q/qwen\"}")); len(cfg.Fallback.V) != 0 {
+		t.Errorf("none named: %+v", cfg.Fallback)
+	}
+
+	_, problems := load(t, file(`["g/oss", "g/other", "q/qwen", "q/more"]`))
+	wantProblem(t, problems, Error, userJSON, 4, `"fallbackModel" names 4 models, and a turn falls back to 3 at most`)
+	_, problems = load(t, file(`{"id": "g/oss"}`))
+	wantProblem(t, problems, Error, userJSON, 4, `"fallbackModel" is one model as "<provider>/<model id>", or a list of up to three`)
+	_, problems = load(t, file(`["g/oss", 7]`))
+	wantProblem(t, problems, Error, userJSON, 4, "an item of it here is 7")
+	_, problems = load(t, file(`"oss"`))
+	wantProblem(t, problems, Error, userJSON, 4, `"oss" has no provider in front`)
+	_, problems = load(t, file(`"nobody/oss"`))
+	wantProblem(t, problems, Error, userJSON, 4, "the fallback model nobody/oss is on a provider that is not configured", "q, g")
+
+	// The flag outranks the file, takes bare names as -m does, and is held
+	// to three as well.
+	in := file(`"g/oss"`)
+	in.Flags.FallbackModel = "other, q/qwen"
+	cfg := mustLoad(t, in)
+	if refs(cfg) != "g/other q/qwen" || cfg.Fallback.Origin.Name != "--fallback-model" {
+		t.Errorf("--fallback-model: %q from %+v", refs(cfg), cfg.Fallback.Origin)
+	}
+	in.Flags.FallbackModel = "g/oss,g/other,q/qwen,q/x"
+	_, problems = load(t, in)
+	wantProblem(t, problems, Error, "--fallback-model", 0, "names 4 models")
+	in.Flags.FallbackModel = "g/oss,,q/qwen"
+	_, problems = load(t, in)
+	wantProblem(t, problems, Error, "--fallback-model", 0, "needs a model after it")
+	// (A project's fallback models wait for trust as its model does:
+	// untrustedProject names some.)
+}
+
 func TestPermissionFlags(t *testing.T) {
 	mode := func(change func(*Flags)) (Permissions, []Problem) {
 		in := inputs(newFS())
@@ -1021,6 +1079,7 @@ func untrustedProject() *memFS {
   "models": {"evil/m": {"contextWindow": 1000}, "mine/m": {"contextWindow": 5}, "evil/n": {}},
   "model": "evil/m",
   "smallModel": {"thinking": true},
+  "fallbackModel": "evil/m",
   "hosts": {"h": {"ssh": "a@203.0.113.6"}},
   "options": {
     "hiddenSkills": ["pdf"],
@@ -1052,6 +1111,7 @@ var heldByAnUntrustedFolder = []string{
 	"model: model evil/n",
 	"model: model: evil/m",
 	"model: smallModel: thinking on",
+	"model: fallbackModel: evil/m",
 	"host: host h → a@203.0.113.6",
 	"extra-path: options.userInstructionFiles: /outside/notes",
 	"address: options.memEmbeddingsUrl: https://203.0.113.5/embed",
@@ -1102,8 +1162,8 @@ func TestUntrustedFolderOnlyRestricts(t *testing.T) {
 	if len(cfg.Models) != 1 || cfg.Models[0].ContextWindow.V != 262144 {
 		t.Errorf("an untrusted folder added, changed or took away a model: %+v", cfg.Models)
 	}
-	if cfg.Large.Model.V.String() != "mine/m" || cfg.Large.Thinking.V != "off" || cfg.Small.Thinking.Set {
-		t.Errorf("an untrusted folder chose the model or how it is asked: %+v %+v", cfg.Large, cfg.Small)
+	if cfg.Large.Model.V.String() != "mine/m" || cfg.Large.Thinking.V != "off" || cfg.Small.Thinking.Set || cfg.Fallback.Set {
+		t.Errorf("an untrusted folder chose the model or how it is asked: %+v %+v %+v", cfg.Large, cfg.Small, cfg.Fallback)
 	}
 	if len(cfg.Hooks) != 1 || cfg.Hooks[0].Command != "/mine/gate.sh" || cfg.HooksOff != "" {
 		t.Errorf("an untrusted folder added a hook, or switched hooks off: %+v (off: %q)", cfg.Hooks, cfg.HooksOff)
@@ -1148,6 +1208,39 @@ func TestUntrustedFolderOnlyRestricts(t *testing.T) {
 	}
 }
 
+// claudeMdExcludes from the person's own file applies everywhere; from a
+// project's file it waits for the folder to be trusted, since it can leave
+// out the person's own instruction files. The entries of every file add
+// up.
+func TestClaudeMdExcludesWaitForTrust(t *testing.T) {
+	fsys := newFS().put(userJSON, `{"options": {"claudeMdExcludes": ["**/vendor/**/CLAUDE.md"]}}`).
+		put(projJSON, `{"options": {"claudeMdExcludes": ["GNOSH.md"]}}`)
+	excluded := func(cfg *Config) []string {
+		var out []string
+		for _, e := range cfg.Context.Exclude {
+			out = append(out, e.V)
+		}
+		return out
+	}
+	in := inputs(fsys)
+	in.Trusted = false
+	cfg := mustLoad(t, in)
+	if got := excluded(cfg); !slices.Equal(got, []string{"**/vendor/**/CLAUDE.md"}) {
+		t.Errorf("in an untrusted folder the files left out are %q", got)
+	}
+	held := false
+	for _, h := range cfg.Held {
+		held = held || h.Kind == KindRemoval && h.Text == "options.claudeMdExcludes: GNOSH.md"
+	}
+	if !held {
+		t.Errorf("the project's claudeMdExcludes is not held: %+v", cfg.Held)
+	}
+	in.Trusted = true
+	if got := excluded(mustLoad(t, in)); !slices.Equal(got, []string{"**/vendor/**/CLAUDE.md", "GNOSH.md"}) {
+		t.Errorf("in a trusted folder the files left out are %q", got)
+	}
+}
+
 // sameButRestrictions fails the test unless two configurations of one
 // untrusted folder are the same in everything but what an untrusted
 // folder's files may say: with is the load with the project's files there,
@@ -1176,6 +1269,12 @@ func sameButRestrictions(t *testing.T, without, with *Config, project []string) 
 		t.Errorf("an untrusted folder's file took a hidden skill off the list: %+v, was %+v", b.Options.HiddenSkills, a.Options.HiddenSkills)
 	}
 	b.Options.HiddenSkills = a.Options.HiddenSkills
+	// It may turn the bypass mode off, which only takes a mode away, and
+	// never back on.
+	if a.Permissions.BypassDisabled.V && !b.Permissions.BypassDisabled.V {
+		t.Errorf("an untrusted folder's file turned the bypass mode back on")
+	}
+	b.Permissions.BypassDisabled = a.Permissions.BypassDisabled
 	if !reflect.DeepEqual(a, b) {
 		t.Errorf("an untrusted folder's files changed more than they may.\nwithout them:\n%s\nwith them:\n%s", without, with)
 	}
@@ -1231,7 +1330,9 @@ func TestUntrustedFolderChangesNothingElse(t *testing.T) {
 		`{"options": {"memReviewCloses": false}}`,
 		`{"options": {"memEmbeddingsUrl": "https://203.0.113.5/embed"}}`,
 		`{"options": {"debug": true}}`,
-		`{"options": {"projectDataDir": "/outside"}}`,
+		// ({"options": {"projectDataDir": ...}} is no longer held: a
+		// project's file cannot set it at all, trusted or not, which
+		// TestProjectCannotMoveItsDataFolder checks.)
 		`{"options": {"hiddenSkills": null}}`,
 		`{"options": {"userInstructionFiles": null}}`,
 		`{"options": {"memEmbeddingsUrl": null}}`,
@@ -1239,7 +1340,8 @@ func TestUntrustedFolderChangesNothingElse(t *testing.T) {
 		`{"permissions": {"defaultMode": "dontAsk"}}`,
 		`{"permissions": {"defaultMode": "plan"}}`,
 		`{"permissions": {"additionalDirectories": ["/etc"]}}`,
-		`{"permissions": {"disableBypassPermissionsMode": "disable"}}`,
+		// (disableBypassPermissionsMode only takes a mode away, so it
+		// applies: TestUntrustedFolderKeepsItsRestrictions.)
 		`{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "./x.sh"}]}]}}`,
 		`{"env": {"PATH": "/evil"}}`,
 		`{"env": {"MINE": ""}}`,
@@ -1401,7 +1503,7 @@ func TestHeldIsTakenAwayAfterEveryMerge(t *testing.T) {
 	b.opts.ProjectInstructionFiles = nil
 	if len(b.providers) != 1 || b.providers[0].ListModels.Set || len(b.unset) != 0 || len(b.models) != 1 || b.models[0].ContextWindow.Set ||
 		b.models[0].MaxOutputTokens.Set || b.models[0].ThinkingLevels.Set || !reflect.DeepEqual(b.large, Slot{}) || !reflect.DeepEqual(b.small, Slot{}) ||
-		len(b.hosts) != 0 || len(b.hooks) != 1 || b.hooks[0].Command != "mine" || b.hooksOff.Set || b.mode.Set || b.bypassDisabled.Set || b.denyInstead.Set ||
+		len(b.hosts) != 0 || len(b.hooks) != 1 || b.hooks[0].Command != "mine" || b.hooksOff.Set || b.mode.Set || b.denyInstead.Set ||
 		len(b.dirs) != 1 || len(b.env) != 1 || !reflect.DeepEqual(b.opts, def) {
 		t.Errorf("something of the project's that is held is still in force: %+v", b)
 	}
@@ -1937,5 +2039,189 @@ func TestStatusLine(t *testing.T) {
 	}
 	if !slices.ContainsFunc(cfg.Held, func(h Held) bool { return h.Kind == KindStatusLine && strings.Contains(h.Text, "theirs") }) {
 		t.Errorf("the project's status line is not held: %+v", cfg.Held)
+	}
+}
+
+// fileSuggestion is Claude Code's: a command that offers the paths an @
+// mention completes to. A program to run, so a project's waits for trust,
+// and disableAllHooks and safe mode turn it off, as the status line's.
+func TestFileSuggestion(t *testing.T) {
+	cfg := mustLoad(t, withConfig(`{"fileSuggestion": {"type": "command", "command": "~/bin/files.sh"}}`))
+	if fs := cfg.FileSuggestion; fs == nil || fs.Command != "~/bin/files.sh" || fs.Origin.File != userJSON {
+		t.Errorf("FileSuggestion = %+v", cfg.FileSuggestion)
+	}
+
+	cfg = mustLoad(t, withConfig(`{"fileSuggestion": {"type": "command", "command": "x"}, "disableAllHooks": true}`))
+	if cfg.FileSuggestion != nil || !strings.Contains(cfg.FileSuggestionOff, "disableAllHooks") {
+		t.Errorf("with disableAllHooks: %+v, %q", cfg.FileSuggestion, cfg.FileSuggestionOff)
+	}
+
+	fs := newFS().
+		put(userJSON, `{"fileSuggestion": {"type": "command", "command": "mine"}}`).
+		put(projJSON, `{"fileSuggestion": {"type": "command", "command": "theirs"}}`)
+	in := inputs(fs)
+	if cfg := mustLoad(t, in); cfg.FileSuggestion == nil || cfg.FileSuggestion.Command != "theirs" {
+		t.Errorf("trusted: the project's file is the later one, and wins: %+v", cfg.FileSuggestion)
+	}
+	in.Trusted = false
+	cfg = mustLoad(t, in)
+	if cfg.FileSuggestion == nil || cfg.FileSuggestion.Command != "mine" {
+		t.Errorf("not trusted: the user's own stays: %+v", cfg.FileSuggestion)
+	}
+	if !slices.ContainsFunc(cfg.Held, func(h Held) bool { return h.Kind == KindFileSuggest && strings.Contains(h.Text, "theirs") }) {
+		t.Errorf("the project's file suggestion is not held: %+v", cfg.Held)
+	}
+}
+
+// attribution is Claude Code's: the lines the model signs its commits and
+// pull requests with. gnosh adds none of its own; false is none too, and
+// includeCoAuthoredBy, Claude Code's older word, is taken and changes
+// nothing.
+func TestAttribution(t *testing.T) {
+	cfg := mustLoad(t, withConfig(`{"attribution": {"commit": "Co-Authored-By: gnosh <bot@example.com>", "pr": "", "sessionUrl": false}, "includeCoAuthoredBy": true}`))
+	if a := cfg.Attribution; a.Commit != "Co-Authored-By: gnosh <bot@example.com>" || a.PR != "" || a.Origin.File != userJSON {
+		t.Errorf("Attribution = %+v", cfg.Attribution)
+	}
+	if a := mustLoad(t, withConfig(`{"attribution": false}`)).Attribution; a.Commit != "" || a.PR != "" {
+		t.Errorf("attribution false: %+v", a)
+	}
+	if a := mustLoad(t, withConfig(`{}`)).Attribution; a.Commit != "" || a.PR != "" {
+		t.Errorf("nothing set: %+v", a)
+	}
+}
+
+// A project's own file cannot move the project's data folder, where the
+// project's local settings are read from: the trust question was asked of
+// the folder's .gnosh/settings.local.json while a Yes put another file in
+// force, one the repository named (the config review of 2026-11-19).
+func TestProjectCannotMoveItsDataFolder(t *testing.T) {
+	for _, trusted := range []bool{true, false} {
+		in := inputs(newFS().
+			put(projJSON, `{"options": {"projectDataDir": "docs"}}`).
+			put("/work/proj/docs/settings.local.json", `{"permissions": {"allow": ["Bash"]}}`))
+		in.Trusted = trusted
+		cfg, probs := load(t, in)
+		if cfg == nil {
+			t.Fatalf("trusted %v:\n%s", trusted, showProblems(probs))
+		}
+		if cfg.Paths.DataDir != "/work/proj/.gnosh" || len(ruleTexts(cfg, "allow")) != 0 {
+			t.Errorf("trusted %v: the data folder is %s, allow %q", trusted, cfg.Paths.DataDir, ruleTexts(cfg, "allow"))
+		}
+		if trusted {
+			wantProblem(t, probs, Warning, projJSON, 1, `"options.projectDataDir" is not taken from a project's file`)
+		}
+	}
+	// The person's own file still names it.
+	in := inputs(newFS().put(userJSON, `{"options": {"projectDataDir": "notes"}}`))
+	if cfg := mustLoad(t, in); cfg.Paths.DataDir != "/work/proj/notes" {
+		t.Errorf("the person's own data folder: %s", cfg.Paths.DataDir)
+	}
+}
+
+// The folder's own settings file named with --settings by another
+// spelling of its path, through a link to the folder, is the same file:
+// compared by name, it was put in force as the command line's in a folder
+// that is not trusted (the config review of 2026-11-19).
+func TestSettingsFlagThroughALinkToTheFolder(t *testing.T) {
+	root := t.TempDir()
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		root = real
+	}
+	proj, link := filepath.Join(root, "proj"), filepath.Join(root, "link")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(proj, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, "gnosh.json"), []byte(`{"permissions": {"allow": ["Bash"]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(root, "home")
+	in := Inputs{
+		FS: OS{}, Environ: []string{"HOME=" + home, "GNOSH_CONFIG_DIR=" + filepath.Join(home, "cfg"), "GNOSH_DATA_DIR=" + filepath.Join(home, "data")},
+		Home: home, Cwd: proj, ProjectRoot: proj, Built: Everything(), Tools: testTools, KeepUntrusted: restricts,
+	}
+	in.Flags.Settings = filepath.Join(link, "gnosh.json")
+	cfg, probs := load(t, in)
+	if cfg != nil {
+		t.Fatalf("the folder's file was put in force through a link: allow %q", ruleTexts(cfg, "allow"))
+	}
+	wantProblem(t, probs, Error, "--settings", 0, "is one of this folder's own settings files", "the folder is not trusted")
+}
+
+// A skill's name in skillOverrides is shown made safe in a message: an
+// untrusted folder's file is read before any question, and its words went
+// to the terminal as they were, escapes and all (the config review of
+// 2026-11-19).
+func TestSkillOverridesNameIsShownSafely(t *testing.T) {
+	in := inputs(newFS().put(projJSON, "{\"skillOverrides\": {\"x\\u001b]52;c;cGF5bG9hZA==\\u0007\": \"bad\"}}"))
+	in.Trusted = false
+	_, probs := load(t, in)
+	for _, p := range probs {
+		if strings.ContainsAny(p.String(), "\x1b\x07") {
+			t.Errorf("a message holds a control character: %q", p.String())
+		}
+	}
+	if len(probs) == 0 {
+		t.Error("the bad value was not reported")
+	}
+}
+
+// An http hook's address is shown, and logged, without what can be its
+// secret: the user name (a token put there), the query, and the long
+// pieces of the path (a Slack or Discord webhook's token). It was shown
+// whole in /status, gnosh doctor and /hooks (the config review of
+// 2026-11-19).
+func TestHookAddressIsShownWithoutItsSecrets(t *testing.T) {
+	for raw, want := range map[string]string{
+		"https://ghp_abcdefghijklmnop@hooks.example.com/notify":                           "POST https://hooks.example.com/notify",
+		"https://hooks.example.com/services/T0123ABCD/B0123ABCD/abcdefghijklmnopqrstuvwx": "POST https://hooks.example.com/services/T0123ABCD/B0123ABCD/abcd…",
+		"https://example.com/hook?key=sekrit":                                             "POST https://example.com/hook?…",
+		"http://127.0.0.1:8080/h":                                                         "POST http://127.0.0.1:8080/h",
+	} {
+		if got := (Hook{URL: raw}).CommandLine(); got != want {
+			t.Errorf("%s is shown as %q, want %q", raw, got, want)
+		}
+	}
+}
+
+// A project's env block cannot move where gnosh and the programs it starts
+// keep their own files (HOME, TMPDIR, XDG_*, CLAUDE_CONFIG_DIR, gnosh's
+// own GNOSH_*_DIR), even in a trusted folder: spec/cc/settings.md 2 says
+// so, and a trusted project's could (the config review of 2026-11-19).
+// The person's own file can.
+func TestProjectEnvCannotMoveOwnDirs(t *testing.T) {
+	in := inputs(newFS().put(projJSON, `{"env": {"HOME": "/evil", "TMPDIR": "/evil", "XDG_CONFIG_HOME": "/evil", "CLAUDE_CONFIG_DIR": "/evil", "GNOSH_DATA_DIR": "/evil", "GNOSH_NOTE": "kept", "FOO": "bar"}}`))
+	cfg, probs := load(t, in)
+	if cfg == nil {
+		t.Fatalf("load:\n%s", showProblems(probs))
+	}
+	got := envOf(cfg)
+	slices.Sort(got)
+	if !slices.Equal(got, []string{"FOO=bar", "GNOSH_NOTE=kept"}) {
+		t.Errorf("the project's env in force: %q", got)
+	}
+	for _, name := range []string{"HOME", "TMPDIR", "XDG_CONFIG_HOME", "CLAUDE_CONFIG_DIR", "GNOSH_DATA_DIR"} {
+		wantProblem(t, probs, Warning, projJSON, 1, `"env.`+name+`" is not taken from a project's file`)
+	}
+	in = inputs(newFS().put(userJSON, `{"env": {"TMPDIR": "/mine"}}`))
+	if got := envOf(mustLoad(t, in)); !slices.Equal(got, []string{"TMPDIR=/mine"}) {
+		t.Errorf("the person's own env: %q", got)
+	}
+}
+
+// What only takes a power away applies in a folder that is not trusted, as
+// DECISIONS 2 says, disableBypassPermissionsMode among it: it was held as a
+// mode (the config review of 2026-11-19).
+func TestUntrustedFolderKeepsItsRestrictions(t *testing.T) {
+	in := inputs(newFS().put(projJSON, `{"permissions": {"disableBypassPermissionsMode": "disable"}}`))
+	in.Trusted = false
+	cfg, probs := load(t, in)
+	if cfg == nil {
+		t.Fatalf("load:\n%s", showProblems(probs))
+	}
+	if !cfg.Permissions.BypassDisabled.V || len(cfg.Held) != 0 {
+		t.Errorf("bypass disabled %v, held %+v", cfg.Permissions.BypassDisabled.V, cfg.Held)
 	}
 }

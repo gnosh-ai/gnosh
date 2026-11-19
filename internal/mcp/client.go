@@ -212,6 +212,10 @@ type message struct {
 	Params  json.RawMessage `json:"params,omitempty"`
 	Result  json.RawMessage `json:"result,omitempty"`
 	Error   *RPCError       `json:"error,omitempty"`
+
+	// failed is set by the transport, never sent: the answer to the
+	// request will not come, and why (Client.fail).
+	failed error
 }
 
 // Client is the connection to one server.
@@ -237,7 +241,15 @@ type Client struct {
 	// and the connection's end takes them all back. (An elicitation waits
 	// for the person.)
 	serving map[string]*served
+	// toolsRunning says OnToolsChanged runs now, and toolsAgain that a
+	// notice came while it ran: it runs once more, however many came.
+	toolsRunning, toolsAgain bool
 }
+
+// maxServing is how many of the server's own requests are answered at
+// once; one more is refused, so that a flood of them (pings) does not
+// grow without end.
+const maxServing = 32
 
 // served is a request of the server's that is being answered.
 type served struct{ cancel context.CancelFunc }
@@ -591,6 +603,9 @@ func (c *Client) request(ctx context.Context, method string, params any) (json.R
 		if !ok {
 			return nil, c.ended()
 		}
+		if m.failed != nil {
+			return nil, m.failed
+		}
 		if m.Error != nil {
 			return nil, m.Error
 		}
@@ -598,6 +613,34 @@ func (c *Client) request(ctx context.Context, method string, params any) (json.R
 	case <-ctx.Done():
 		return nil, giveUp()
 	}
+}
+
+// toolsChanged runs OnToolsChanged for a notice that the server's tools
+// changed: on one goroutine at a time, and once more after it if notices
+// came while it ran, however many. A server that sends a flood of them
+// costs one listing at a time, not a goroutine each.
+func (c *Client) toolsChanged() {
+	c.mu.Lock()
+	if c.toolsRunning {
+		c.toolsAgain = true
+		c.mu.Unlock()
+		return
+	}
+	c.toolsRunning = true
+	c.mu.Unlock()
+	go func() {
+		for {
+			c.opt.OnToolsChanged()
+			c.mu.Lock()
+			if !c.toolsAgain {
+				c.toolsRunning = false
+				c.mu.Unlock()
+				return
+			}
+			c.toolsAgain = false
+			c.mu.Unlock()
+		}
+	}()
 }
 
 // ended is why pending requests can no longer be answered.
@@ -628,6 +671,13 @@ func (c *Client) send(m message) error {
 func (c *Client) dispatch(m message) {
 	switch {
 	case m.Method != "" && len(m.ID) > 0:
+		c.mu.Lock()
+		busy := len(c.serving) >= maxServing
+		c.mu.Unlock()
+		if busy {
+			_ = c.send(message{JSONRPC: "2.0", ID: m.ID, Error: &RPCError{Code: -32000, Message: "gnosh is answering too many of the server's requests at once"}})
+			return
+		}
 		ctx, done := c.serve(m.ID)
 		go func() {
 			defer done()
@@ -636,15 +686,30 @@ func (c *Client) dispatch(m message) {
 	case m.Method != "":
 		c.notified(m)
 	case len(m.ID) > 0:
-		id := strings.Trim(string(m.ID), `"`)
+		// (Handed over under the lock, which lost holds as it closes the
+		// channels: an answer that comes as the connection ends is not
+		// sent on a closed one.)
 		c.mu.Lock()
-		ch := c.pending[id]
-		c.mu.Unlock()
-		if ch != nil {
+		if ch := c.pending[strings.Trim(string(m.ID), `"`)]; ch != nil {
 			select {
 			case ch <- m:
 			default:
 			}
+		}
+		c.mu.Unlock()
+	}
+}
+
+// fail ends the wait of the request with that id, if it still waits, with
+// err: the transport knows its answer will not come (a server at a URL
+// whose answer to it ended without it).
+func (c *Client) fail(id json.RawMessage, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if ch := c.pending[strings.Trim(string(id), `"`)]; ch != nil {
+		select {
+		case ch <- message{ID: id, failed: err}:
+		default:
 		}
 	}
 }
@@ -721,7 +786,7 @@ func (c *Client) notified(m message) {
 		c.changed = true
 		c.mu.Unlock()
 		if c.opt.OnToolsChanged != nil {
-			go c.opt.OnToolsChanged()
+			c.toolsChanged()
 		}
 	case "notifications/claude/channel":
 		if c.opt.OnChannel == nil || !c.channel.Load() {

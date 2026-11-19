@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
+	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/instructions"
@@ -184,6 +185,7 @@ func (l *live) moments() agent.Moments {
 	// that mem's line stays the last a prompt carries.)
 	m.PromptLines = append(m.PromptLines, l.firstPromptLines, l.mentionLines)
 	m.BeforeRequest = append(m.BeforeRequest, l.turnCap, l.settingsChanged)
+	m.MoreRounds = l.moreRounds
 	var busy []func(context.Context) func()
 	for _, c := range l.contribs {
 		m.PromptLines = append(m.PromptLines, c.c.PromptLines...)
@@ -256,19 +258,67 @@ func (l *live) turnCap(ctx context.Context, info agent.RequestInfo) ([]agent.Par
 		return nil, nil
 	}
 	l.capMu.Lock()
-	over := l.roundsBefore+info.Round > l.maxTurns
-	first := over && !l.capped
+	before, key := l.roundsBefore, ""
+	if l.inv.InputFormat == cli.FormatStreamJSON {
+		// Each message of a stream starts a turn with a fresh count, as in
+		// Claude Code: after one turn reached the cap, every later message
+		// was stopped before its first request.
+		before, key = 0, info.Turn
+	}
+	over := before+info.Round > l.maxTurns
+	first := over && (!l.capped || l.capKey != key)
 	if over {
-		l.capped = true
+		l.capped, l.capKey = true, key
 	}
 	l.capMu.Unlock()
 	if first {
-		l.deliver(&CapEvent{Turns: l.maxTurns})
+		l.deliver(&CapEvent{Turns: l.maxTurns, Turn: info.Turn})
 	}
 	if over {
 		l.agent.Interrupt()
 	}
 	return nil, nil
+}
+
+// turnsSpent reports whether the run has had the turns of the model that
+// --max-turns gave it, so that a turn started now would be stopped before
+// its first request. With stream-json input each turn has a fresh count,
+// and none is spent ahead of it.
+func (l *live) turnsSpent() bool {
+	if l.maxTurns <= 0 || l.inv.InputFormat == cli.FormatStreamJSON {
+		return false
+	}
+	l.capMu.Lock()
+	defer l.capMu.Unlock()
+	return l.capped || l.roundsBefore >= l.maxTurns
+}
+
+// moreRounds is turnCap asked after a round, before what the person queued
+// meanwhile is handed to the turn: a turn that has had its replies ends
+// there, and the queued words go out as a turn of their own (with stream-
+// json input, with a fresh count) instead of into a turn the cap stops.
+func (l *live) moreRounds(turn string, rounds int) (bool, string) {
+	if l.maxTurns <= 0 {
+		return true, ""
+	}
+	l.capMu.Lock()
+	before, key := l.roundsBefore, ""
+	if l.inv.InputFormat == cli.FormatStreamJSON {
+		before, key = 0, turn
+	}
+	over := before+rounds >= l.maxTurns
+	first := over && (!l.capped || l.capKey != key)
+	if over {
+		l.capped, l.capKey = true, key
+	}
+	l.capMu.Unlock()
+	if first {
+		l.deliver(&CapEvent{Turns: l.maxTurns, Turn: turn})
+	}
+	if over {
+		return false, fmt.Sprintf("the run has had its %d turns of the model (--max-turns)", l.maxTurns)
+	}
+	return true, ""
 }
 
 // sessionStart runs the SessionStart hooks, once, before the first prompt
@@ -283,7 +333,22 @@ func (l *live) sessionStart(ctx context.Context, info agent.StartInfo) ([]agent.
 		return nil, err
 	}
 	l.setWatched(out)
+	if out.EndTurn {
+		// "continue": false: the session takes no prompt (Claude Code:
+		// processing stops). What the hook said is the reason.
+		return hookParts(hooks.SessionStart, out), &agent.StopWork{Reason: hookHalt(hooks.SessionStart, "this session takes no prompt", out.StopReason)}
+	}
 	return hookParts(hooks.SessionStart, out), nil
+}
+
+// hookHalt is what a person and a model are told when a hook's
+// "continue": false stopped something.
+func hookHalt(event hooks.Event, what, said string) string {
+	text := fmt.Sprintf("A %s hook the user set up said to stop, so %s.", event, what)
+	if said = strings.TrimSpace(said); said != "" {
+		text += " It said: " + said
+	}
+	return text
 }
 
 // beforeModelSwitch runs the PreModelSwitch hooks before /model makes a
@@ -416,7 +481,7 @@ func (l *live) afterRound(ctx context.Context, done agent.RoundDone) (agent.Tool
 	if !l.hooks.has(hooks.PostToolBatch) {
 		return agent.ToolVerdict{}, nil
 	}
-	in := hooks.Input{Event: hooks.PostToolBatch, AgentID: done.AgentID, AgentType: done.AgentType}
+	in := hooks.Input{Event: hooks.PostToolBatch, Cwd: l.subStart(done.AgentID), AgentID: done.AgentID, AgentType: done.AgentType}
 	for _, c := range done.Calls {
 		in.ToolCalls = append(in.ToolCalls, hooks.BatchCall{ToolName: c.Call.Name, ToolUseID: c.Call.ID, ToolInput: c.Call.Input, ToolResponse: core.TextOf(c.Result.Content)})
 	}
@@ -501,6 +566,13 @@ func (l *live) afterToolWith(ctx context.Context, done agent.ToolDone, instr *in
 	return v, errors.Join(errs...)
 }
 
+// withheld is a call's result with its output withheld, for the reason
+// given.
+func withheld(res core.ToolResult, why string) *core.ToolResult {
+	res.Content = []core.Block{core.Text("[The output of this call is withheld: " + why + ".]")}
+	return &res
+}
+
 // postToolHooks runs the PostToolUse hooks on a call that succeeded, or
 // the PostToolUseFailure hooks on one that returned an error. The call has
 // run, so a block is feedback: its reason goes to the model after the
@@ -513,11 +585,16 @@ func (l *live) postToolHooks(ctx context.Context, done agent.ToolDone, env func(
 	if !l.hooks.has(event) {
 		return agent.ToolVerdict{}, nil
 	}
+	dir := l.cwd()
+	if e := env(); e != nil && e.Cwd != "" {
+		dir = e.Cwd
+	}
 	in := hooks.Input{
 		Event:     event,
+		Cwd:       dir,
 		ToolName:  done.Call.Name,
 		ToolUseID: done.Call.ID,
-		ToolInput: done.Call.Input,
+		ToolInput: hookToolInput(done.Call, dir, l.cfg.Paths.Home),
 		Duration:  done.Duration,
 		AgentID:   done.AgentID,
 		AgentType: done.AgentType,
@@ -564,12 +641,20 @@ func (l *live) postToolHooks(ctx context.Context, done agent.ToolDone, env func(
 
 	out, err := l.hooks.run(ctx, in)
 	if err != nil {
+		// The hooks did not finish: what the call returned is withheld,
+		// since one of them may have been there to hide part of it.
+		v := agent.ToolVerdict{Replace: withheld(done.Result, "the "+string(event)+" hooks the user set up were stopped before they finished, and one of them may have been there to hide part of it")}
 		if ctx.Err() != nil {
-			return agent.ToolVerdict{}, nil
+			return v, nil
 		}
-		return agent.ToolVerdict{}, err
+		return v, err
 	}
 	var v agent.ToolVerdict
+	if out.CutShort && out.UpdatedOutput == nil && !out.OutputClash {
+		// So with a hook that ran out of time or was killed: a slip of
+		// one that hides a key must not show the key.
+		v.Replace = withheld(done.Result, "a "+string(event)+" hook the user set up did not finish, and it may have been there to hide part of it")
+	}
 	if out.UpdatedOutput != nil || out.OutputClash {
 		// What the model reads in place of what the tool returned. One
 		// that cannot be read, or two that differ, withhold the output:
@@ -713,6 +798,12 @@ func (l *live) beforeSummary(ctx context.Context, info agent.SummaryInfo) (strin
 // "compact".
 func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agent.Part, error) {
 	var parts []agent.Part
+	// The model no longer sees any file it read: Edit and Write refuse to
+	// change one until Read has shown it again, as after a slide, so that
+	// no file is written from a copy the model can no longer see. The ones
+	// it read or changed last are read again and given back below.
+	recent := fstools.Recent(l.env(), backFiles)
+	fstools.ForgetAll(l.env())
 	if l.instr != nil {
 		// The files given along the way are forgotten, so that each is
 		// given again when the model next works where it applies; the
@@ -736,6 +827,16 @@ func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agen
 	} else {
 		parts = append(parts, pre...)
 	}
+	back, given := l.filesBack(ctx, recent, info.Window)
+	parts = append(parts, back...)
+	defer func() {
+		if ctx.Err() != nil {
+			// Stopped: what this gives back may not reach the model (a
+			// moment that does not finish in time is gone on without), so
+			// the files it read again do not count as read.
+			fstools.Forget(l.env(), given...)
+		}
+	}()
 	if l.shell != nil {
 		var running []string
 		for _, t := range l.shell.Tasks() {
@@ -761,18 +862,33 @@ func (l *live) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agen
 		}
 		parts = append(parts, more...)
 	}
+	var halt *agent.StopWork
 	if l.hooks.has(hooks.PostCompact) {
-		if _, err := l.hooks.run(ctx, hooks.Input{Event: hooks.PostCompact, Trigger: info.Trigger, CompactSummary: info.Summary}); err != nil {
+		out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.PostCompact, Trigger: info.Trigger, CompactSummary: info.Summary})
+		switch {
+		case err != nil:
 			errs = append(errs, err)
+		case out.EndTurn:
+			halt = &agent.StopWork{Reason: hookHalt(hooks.PostCompact, "the turn ended after the summary", out.StopReason)}
 		}
 	}
 	if l.hooks.has(hooks.SessionStart) {
 		out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.SessionStart, Source: "compact", Model: l.agent.Model().Info.ID, EnvFile: l.envFile()})
-		if err != nil {
+		switch {
+		case err != nil:
 			errs = append(errs, err)
-		} else {
+		default:
 			parts = append(parts, hookParts(hooks.SessionStart, out)...)
+			if out.EndTurn && halt == nil {
+				halt = &agent.StopWork{Reason: hookHalt(hooks.SessionStart, "the turn ended after the summary", out.StopReason)}
+			}
 		}
+	}
+	if halt != nil {
+		if err := errors.Join(errs...); err != nil {
+			l.notice(agent.LevelWarning, "summary", fmt.Sprintf("What the session is given back after a summary could not all be put together (%v).", err))
+		}
+		return parts, halt
 	}
 	return parts, errors.Join(errs...)
 }

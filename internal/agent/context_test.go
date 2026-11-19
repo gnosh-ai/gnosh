@@ -420,8 +420,11 @@ func TestSummaryCutShortIsAskedAgainWithLess(t *testing.T) {
 	if len(third.System) != 0 || len(third.Messages) >= len(asks[1].Messages) {
 		t.Errorf("the third asking does not leave out the earliest part")
 	}
-	if got := third.Messages[0].Text(); !strings.Contains(got, "earliest part of the conversation is left out") {
+	if got := third.Messages[0].Text(); !strings.Contains(got, "conversation is left out here") {
 		t.Errorf("the third asking does not say what was left out: %q", got)
+	}
+	if got := third.Messages[0].Text(); !strings.HasPrefix(got, "read twelve files") {
+		t.Errorf("the third asking does not keep the first message, the task as it was set: %q", got)
 	}
 	if third.Messages[1].Role != core.RoleAssistant {
 		t.Errorf("the cut is not at one of the model's own messages")
@@ -440,6 +443,54 @@ func TestSummaryCutShortIsAskedAgainWithLess(t *testing.T) {
 		if strings.Contains(core.TextOf(s.Blocks), "cut off in the mid") {
 			t.Error("a summary that was cut off was stored")
 		}
+	}
+	r.checkLog()
+}
+
+// A first message too big to keep in a shorter asking is left out with the
+// earliest part: a summary is still made, of what follows it.
+func TestSummaryLeavesOutAFirstMessageTooBigToKeep(t *testing.T) {
+	j := &job{want: 6}
+	j.summary = func(n int, req *core.Request) step {
+		if n < 3 {
+			return step{evs: []core.Event{{Type: core.EventTextDelta, Text: "SUMMARY cut off in the mid"}, usageEv(0, 0), stopEv(core.StopMaxTokens)}}
+		}
+		return say("SUMMARY whole")
+	}
+	r := newRig(t, func(o *Options) {
+		o.Model.Info.ContextWindow = 8000
+		o.Tools = []core.Tool{fileTool(600)}
+	})
+	r.model.honest = true
+	r.model.answer(j.respond)
+
+	paste := "read the files this log names\n" + strings.Repeat("a long pasted log line\n", 690)
+	if res := r.run(paste); res.Reason != EndCompleted {
+		t.Fatalf("result = %+v", res)
+	}
+	j.mu.Lock()
+	asks := j.summaries
+	j.mu.Unlock()
+	if len(asks) < 3 {
+		t.Fatalf("%d summary requests", len(asks))
+	}
+	for i, ask := range asks {
+		t.Logf("asking %d: %d tokens, %d messages", i+1, r.model.realTokens(ask), len(ask.Messages))
+	}
+	third := asks[2]
+	got := third.Messages[0].Text()
+	if strings.Contains(got, "a long pasted log line") {
+		t.Errorf("the third asking keeps a first message too big to keep")
+	}
+	if !strings.Contains(got, "conversation is left out here") {
+		t.Errorf("the third asking does not say what was left out: %q", got)
+	}
+	if err := checkView(third.Messages); err != nil {
+		t.Errorf("the third asking is not a valid conversation: %v", err)
+	}
+	sums := r.log.of(EntrySummary)
+	if len(sums) == 0 || !strings.Contains(core.TextOf(sums[0].Blocks), "SUMMARY whole") {
+		t.Fatalf("summary entries = %+v", sums)
 	}
 	r.checkLog()
 }

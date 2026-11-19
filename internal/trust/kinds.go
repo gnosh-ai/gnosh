@@ -8,31 +8,33 @@ package trust
 // not trusted. A word that is not in this list is treated as the most
 // dangerous kind: it is held, and the question mentions it.
 const (
-	KindProvider     = "provider"      // a model provider: its address, its key
-	KindModel        = "model"         // a model registered or chosen
-	KindHost         = "host"          // a machine to log in to
-	KindHook         = "hook"          // a command run at a named moment
-	KindHookOff      = "hook-off"      // switching all hooks off
-	KindMCPLocal     = "mcp-local"     // an MCP server started on this machine
-	KindMCPOnline    = "mcp-online"    // an MCP server at an address
-	KindLSP          = "lsp"           // a language server
-	KindAllowRule    = "allow-rule"    // a tool or command let run without asking
-	KindAskRule      = "ask-rule"      // a tool or command that always asks
-	KindDenyRule     = "deny-rule"     // a tool or command refused
-	KindMode         = "mode"          // the starting permission mode and its switches
-	KindAddDir       = "add-dir"       // another directory the file tools may read
-	KindEnv          = "env"           // a variable for commands
-	KindOption       = "option"        // any other option
-	KindExtraPath    = "extra-path"    // an extra context or skill path
-	KindAddress      = "address"       // an address for analytics, embeddings or deliverables
-	KindHiddenSkill  = "hidden-skill"  // a skill hidden from the model
-	KindDisabledTool = "disabled-tool" // a tool taken away from the model
-	KindRemoval      = "removal"       // taking away a provider, a model or a host
-	KindRunsCommand  = "runs-command"  // a value gnosh would expand by running something
-	KindGitProgram   = "git-program"   // a program the repository's own git settings name
-	KindSkillsLink   = "skills-link"   // a skills folder that is a link out of the folder
-	KindStoredState  = "stored-state"  // something the project's stored state would turn on
-	KindStatusLine   = "status-line"   // a command run to draw the status line
+	KindProvider     = "provider"        // a model provider: its address, its key
+	KindModel        = "model"           // a model registered or chosen
+	KindHost         = "host"            // a machine to log in to
+	KindHook         = "hook"            // a command run at a named moment
+	KindHookOff      = "hook-off"        // switching all hooks off
+	KindMCPLocal     = "mcp-local"       // an MCP server started on this machine
+	KindMCPOnline    = "mcp-online"      // an MCP server at an address
+	KindLSP          = "lsp"             // a language server
+	KindAllowRule    = "allow-rule"      // a tool or command let run without asking
+	KindAskRule      = "ask-rule"        // a tool or command that always asks
+	KindDenyRule     = "deny-rule"       // a tool or command refused
+	KindMode         = "mode"            // the starting permission mode and its switches
+	KindAddDir       = "add-dir"         // another directory the file tools may read
+	KindEnv          = "env"             // a variable for commands
+	KindOption       = "option"          // any other option
+	KindExtraPath    = "extra-path"      // an extra context or skill path
+	KindAddress      = "address"         // an address for analytics, embeddings or deliverables
+	KindHiddenSkill  = "hidden-skill"    // a skill hidden from the model
+	KindDisabledTool = "disabled-tool"   // a tool taken away from the model
+	KindRestriction  = "restriction"     // a setting that only takes a power away
+	KindRemoval      = "removal"         // taking away a provider, a model or a host
+	KindRunsCommand  = "runs-command"    // a value gnosh would expand by running something
+	KindGitProgram   = "git-program"     // a program the repository's own git settings name
+	KindSkillsLink   = "skills-link"     // a skills folder that is a link out of the folder
+	KindStoredState  = "stored-state"    // something the project's stored state would turn on
+	KindStatusLine   = "status-line"     // a command run to draw the status line
+	KindFileSuggest  = "file-suggestion" // a command run to offer paths for an @ mention
 )
 
 // Restricts reports whether a setting of this kind only takes something
@@ -44,7 +46,7 @@ const (
 // (config.Inputs.KeepUntrusted).
 func Restricts(kind string) bool {
 	switch kind {
-	case KindDenyRule, KindAskRule, KindDisabledTool, KindHiddenSkill:
+	case KindDenyRule, KindAskRule, KindDisabledTool, KindHiddenSkill, KindRestriction:
 		return true
 	}
 	return false
@@ -62,8 +64,8 @@ type risk struct {
 // order they are shown. Only the sentences whose kinds are present are
 // shown.
 var risks = []risk{
-	{[]string{KindHook, KindMCPLocal, KindLSP, KindStatusLine},
-		"Some of these run commands (hooks, servers started on this machine, a status line). They would run as you: a stranger's command could steal your SSH and wallet keys, wipe your files, or plant a program that stays."},
+	{[]string{KindHook, KindMCPLocal, KindLSP, KindStatusLine, KindFileSuggest},
+		"Some of these run commands (hooks, servers started on this machine, a status line, the paths offered after @). They would run as you: a stranger's command could steal your SSH and wallet keys, wipe your files, or plant a program that stays."},
 	{[]string{KindRunsCommand},
 		"A setting here is filled in by running something. Any command hidden in a setting runs as you."},
 	{[]string{KindGitProgram},

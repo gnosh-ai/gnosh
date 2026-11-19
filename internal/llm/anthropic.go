@@ -10,12 +10,30 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
 )
 
 // anthropic speaks Anthropic's Messages API.
-type anthropic struct{ *provider }
+type anthropic struct {
+	*provider
+	// listed is what the Models API last said of each model it listed.
+	listedMu sync.Mutex
+	listed   map[string]listedModel
+}
+
+// listedModel is what the Models API says of a model that requests go by.
+type listedModel struct {
+	// maxOutput is the most it writes in one answer: what a request with
+	// no cap of its own asks for at most.
+	maxOutput int
+	// off is how its thinking is turned off: "" for thinking
+	// {type: "disabled"} (or not listed), "between_tools" for a model
+	// that takes only that (Claude Sonnet 5.5), and "none" for one whose
+	// thinking cannot be turned off (Claude Opus 5.5, the Fable models).
+	off string
+}
 
 var (
 	_ core.Provider     = (*anthropic)(nil)
@@ -59,6 +77,12 @@ func (a *anthropic) encode(req *core.Request) ([]byte, error) {
 		// not be what makes the request invalid.
 		if t := req.Thinking; t.Mode != "off" && t.BudgetTokens >= limit {
 			limit += t.BudgetTokens
+		}
+		// Nor must a default above what the model writes in one answer
+		// (an older Claude's 32K or 8K): every request so capped was
+		// refused (the model client review of 2026-11-19).
+		if most := a.listedModel(req.Model).maxOutput; most > 0 && limit > most {
+			limit = most
 		}
 	}
 	body["max_tokens"] = limit
@@ -133,7 +157,17 @@ func (a *anthropic) messagesBody(req *core.Request, cache bool) (obj, error) {
 
 	switch t := req.Thinking; {
 	case t.Mode == "off":
-		body["thinking"] = obj{"type": "disabled"}
+		// A model that refuses thinking {type: "disabled"} refused every
+		// request that asked for no thinking (the model client review of
+		// 2026-11-19): it is asked its own way, or for its least effort.
+		switch a.listedModel(req.Model).off {
+		case "between_tools":
+			body["thinking"] = obj{"type": "between_tools"}
+		case "none":
+			body["output_config"] = obj{"effort": "low"}
+		default:
+			body["thinking"] = obj{"type": "disabled"}
+		}
 	case t.BudgetTokens > 0:
 		// (The API takes a budget of at least 1,024 tokens.)
 		body["thinking"] = obj{"type": "enabled", "budget_tokens": max(t.BudgetTokens, minThinkingBudget)}
@@ -557,6 +591,7 @@ func (d *claudeDecoder) stopReason() core.StopReason {
 // reports for them.
 func (a *anthropic) Models(ctx context.Context) ([]core.ModelInfo, error) {
 	var out []core.ModelInfo
+	listed := map[string]listedModel{}
 	after := ""
 	seen := make(map[string]bool) // the places the list has continued from
 	for {
@@ -570,9 +605,10 @@ func (a *anthropic) Models(ctx context.Context) ([]core.ModelInfo, error) {
 		}
 		var page struct {
 			Data []struct {
-				ID             string `json:"id"`
-				MaxInputTokens *num   `json:"max_input_tokens"`
-				MaxTokens      *num   `json:"max_tokens"`
+				ID             string        `json:"id"`
+				MaxInputTokens *num          `json:"max_input_tokens"`
+				MaxTokens      *num          `json:"max_tokens"`
+				Capabilities   *capabilities `json:"capabilities"`
 			} `json:"data"`
 			HasMore bool   `json:"has_more"`
 			LastID  string `json:"last_id"`
@@ -588,8 +624,12 @@ func (a *anthropic) Models(ctx context.Context) ([]core.ModelInfo, error) {
 				ContextWindow: countOf(m.MaxInputTokens),
 				MaxOutput:     countOf(m.MaxTokens),
 			})
+			listed[m.ID] = listedModel{maxOutput: countOf(m.MaxTokens), off: m.Capabilities.thinkingOff()}
 		}
 		if !page.HasMore {
+			a.listedMu.Lock()
+			a.listed = listed
+			a.listedMu.Unlock()
 			return out, nil
 		}
 		if page.LastID == "" || seen[page.LastID] || len(page.Data) == 0 {
@@ -602,6 +642,44 @@ func (a *anthropic) Models(ctx context.Context) ([]core.ModelInfo, error) {
 		seen[page.LastID] = true
 		after = page.LastID
 	}
+}
+
+// listedModel is what the Models API said of model when it was last
+// listed: nothing when it was not.
+func (a *anthropic) listedModel(model string) listedModel {
+	a.listedMu.Lock()
+	defer a.listedMu.Unlock()
+	return a.listed[model]
+}
+
+// capabilities is the part of a model's capabilities that requests go by.
+type capabilities struct {
+	Thinking *struct {
+		Types *struct {
+			Disabled     *supported `json:"disabled"`
+			BetweenTools *supported `json:"between_tools"`
+		} `json:"types"`
+	} `json:"thinking"`
+}
+
+type supported struct {
+	Supported *bool `json:"supported"`
+}
+
+// thinkingOff says how a model's thinking is turned off (listedModel.off).
+// A model that does not say is asked with "disabled", as before.
+func (c *capabilities) thinkingOff() string {
+	if c == nil || c.Thinking == nil || c.Thinking.Types == nil {
+		return ""
+	}
+	t := c.Thinking.Types
+	if t.Disabled == nil || t.Disabled.Supported == nil || *t.Disabled.Supported {
+		return ""
+	}
+	if t.BetweenTools != nil && t.BetweenTools.Supported != nil && *t.BetweenTools.Supported {
+		return "between_tools"
+	}
+	return "none"
 }
 
 // countFields are the fields the API's token-counting endpoint takes. It

@@ -138,17 +138,26 @@ func (t *httpTransport) post(ctx context.Context, data []byte) (*http.Response, 
 	return resp, done, token, nil
 }
 
-// answered takes the server's answer to the message m.
+// answered takes the server's answer to the message m. A request's answer
+// comes in it, as JSON or in a stream of events: the client opens no
+// stream of its own where a later one could come. So a request answered
+// with 202, with JSON that holds no answer to it, or with a stream that
+// ends before its answer, fails at once, as a server that could not be
+// reached does: whether the request did anything is not known.
 func (t *httpTransport) answered(m message, resp *http.Response, done func()) error {
 	if id := resp.Header.Get("Mcp-Session-Id"); id != "" && m.Method == "initialize" {
 		t.mu.Lock()
 		t.session = id
 		t.mu.Unlock()
 	}
+	request := m.Method != "" && len(m.ID) > 0
 	switch {
 	case resp.StatusCode == http.StatusAccepted:
 		resp.Body.Close()
 		done()
+		if request {
+			return fmt.Errorf("%w: it took the request (202 Accepted) and sent no answer to it", ErrUnreachable)
+		}
 		return nil
 	case resp.StatusCode == http.StatusNotFound && t.hasSession():
 		resp.Body.Close()
@@ -172,6 +181,11 @@ func (t *httpTransport) answered(m message, resp *http.Response, done func()) er
 			defer done()
 			defer resp.Body.Close()
 			t.events(resp.Body)
+			if request {
+				// (A no-op when the answer came: the request no longer
+				// waits.)
+				t.c.fail(m.ID, fmt.Errorf("%w: the stream its answer was to come in ended first", ErrUnreachable))
+			}
 		}()
 		return nil
 	}
@@ -181,7 +195,11 @@ func (t *httpTransport) answered(m message, resp *http.Response, done func()) er
 	if err != nil {
 		return fmt.Errorf("mcp: the server's answer could not be read: %w", err)
 	}
-	return t.take(body)
+	answered, err := t.take(body, m.ID)
+	if err == nil && request && !answered {
+		err = fmt.Errorf("%w: its answer held no answer to the request", ErrUnreachable)
+	}
+	return err
 }
 
 // header puts the configured headers, the session id and the protocol
@@ -213,39 +231,46 @@ func (t *httpTransport) hasSession() bool {
 	return t.session != ""
 }
 
-// take dispatches what a JSON answer holds: one message, or a list.
-func (t *httpTransport) take(body []byte) error {
+// take dispatches what a JSON answer holds: one message, or a list. It
+// reports whether the answer to the request with the id want was among
+// them.
+func (t *httpTransport) take(body []byte, want json.RawMessage) (bool, error) {
 	body = bytes.TrimSpace(body)
 	if len(body) == 0 {
-		return nil
+		return false, nil
 	}
+	var list []message
 	if body[0] == '[' {
-		var list []message
 		if err := json.Unmarshal(body, &list); err != nil {
-			return fmt.Errorf("mcp: the server's answer is not JSON-RPC: %w", err)
+			return false, fmt.Errorf("mcp: the server's answer is not JSON-RPC: %w", err)
 		}
-		for _, m := range list {
-			t.c.dispatch(m)
+	} else {
+		var m message
+		if err := json.Unmarshal(body, &m); err != nil {
+			return false, fmt.Errorf("mcp: the server's answer is not JSON-RPC: %w", err)
 		}
-		return nil
+		list = append(list, m)
 	}
-	var m message
-	if err := json.Unmarshal(body, &m); err != nil {
-		return fmt.Errorf("mcp: the server's answer is not JSON-RPC: %w", err)
+	got := false
+	for _, m := range list {
+		if len(want) > 0 && m.Method == "" && strings.Trim(string(m.ID), `"`) == strings.Trim(string(want), `"`) {
+			got = true
+		}
+		t.c.dispatch(m)
 	}
-	t.c.dispatch(m)
-	return nil
+	return got, nil
 }
 
 // events reads a stream of server-sent events, each event's data a
-// message.
+// message. An event larger than any answer may be ends the stream: what
+// waited on it fails.
 func (t *httpTransport) events(r io.Reader) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64<<10), maxHTTPMessage)
 	var data strings.Builder
 	flush := func() {
 		if data.Len() > 0 {
-			_ = t.take([]byte(data.String()))
+			_, _ = t.take([]byte(data.String()), nil)
 			data.Reset()
 		}
 	}
@@ -255,6 +280,9 @@ func (t *httpTransport) events(r io.Reader) {
 		case line == "":
 			flush()
 		case strings.HasPrefix(line, "data:"):
+			if data.Len()+len(line) > maxHTTPMessage {
+				return
+			}
 			if data.Len() > 0 {
 				data.WriteByte('\n')
 			}

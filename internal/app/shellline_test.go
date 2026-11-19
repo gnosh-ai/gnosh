@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -93,4 +94,37 @@ func TestShellOutputKeptAcrossARestart(t *testing.T) {
 	// The session's first prompt still carries what a first prompt does:
 	// the command's output alone in the file did not count as one.
 	has(t, "what the resumed session sent", strings.Join(userTexts(w.Model.Requests()[0]), "\n"), "$ echo kept for later", "what did my command print?", "the codeword is marmalade")
+}
+
+// A command of the person's that gives gnokey a password on its standard
+// input is refused before anything keeps it: not the session's file, not
+// the history Up brings back, not the model. (The shell tool review of
+// 2026-11-19: the refusal came after all three had the password.)
+func TestPersonsGnokeyPasswordIsNotKept(t *testing.T) {
+	w := apptest.NewWorld(t)
+	var shellErr error
+	var history []string
+	_, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
+		shellErr = c.Shell("echo hunter2 | gnokey maketx call -insecure-password-stdin key")
+		history = c.History()
+		c.Quit("prompt_input_exit")
+		return 0
+	})
+	r.wantCode(t, 0)
+	if shellErr == nil || !strings.Contains(shellErr.Error(), "it was not run, and not kept") {
+		t.Errorf("Shell: %v", shellErr)
+	}
+	for _, h := range history {
+		if strings.Contains(h, "hunter2") {
+			t.Errorf("the history holds the password: %q", h)
+		}
+	}
+	for _, s := range w.Sessions() {
+		if data, _ := os.ReadFile(s); strings.Contains(string(data), "hunter2") {
+			t.Errorf("the session's file holds the password: %s", s)
+		}
+	}
+	if n := len(w.Model.Requests()); n != 0 {
+		t.Errorf("the model was sent %d requests", n)
+	}
 }

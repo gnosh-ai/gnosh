@@ -27,16 +27,26 @@ type turn struct {
 	usage    core.Usage
 	denials  []Denial
 
-	last     *reply       // the last reply stored
-	open     []core.Block // tool calls of the last reply that have no stored result yet
-	newest   string       // the id of the turn's newest prompt, which a slide must keep
-	empties  int          // empty replies in a row
-	sentBack bool         // a driver has sent the model back
-	drv      []driverState
-	cp       *checkpoint // a checkpoint whose reply is awaited
-	chosen   *stopChoice // the model's choice to stop, made in reply to a checkpoint
-	guard    repeatGuard
-	ended    bool // its TurnEndEvent has been sent
+	last   *reply       // the last reply stored
+	open   []core.Block // tool calls of the last reply that have no stored result yet
+	newest string       // the id of the turn's newest prompt
+	// sent is the id of the newest prompt of the turn that came through the
+	// queue (the person's, or a /loop's), not one of gnosh's own: a slide
+	// keeps it and all after it.
+	sent    string
+	empties int // empty replies in a row
+	// textCalls counts replies in a row that were a tool call written out
+	// as text.
+	textCalls int
+	sentBack  bool // a driver has sent the model back
+	drv       []driverState
+	cp        *checkpoint // a checkpoint whose reply is awaited
+	chosen    *stopChoice // the model's choice to stop, made in reply to a checkpoint
+	guard     repeatGuard
+	ended     bool // its TurnEndEvent has been sent
+	// halt is why a moment ended the turn where it stood (a summary's end
+	// said stop, Halt).
+	halt string
 }
 
 // outcome is how a turn's body ended.
@@ -82,6 +92,7 @@ func (a *Agent) runTurn(ctx context.Context, t *turn) {
 		// before the next turn builds on it.
 		if p := recover(); p != nil {
 			a.panicked("the turn's end", p, debug.Stack())
+			a.fellBackEnds()
 			a.settled = false
 			res := TurnResult{
 				Turn: t.id, Reason: EndFailed, ErrorKind: "internal",
@@ -121,6 +132,7 @@ func (a *Agent) runTurn(ctx context.Context, t *turn) {
 
 	out := a.guarded(ctx, t)
 	res := a.finishTurn(t, out)
+	a.fellBackEnds()
 
 	a.turnNow.Store("")
 	a.mu.Lock()
@@ -176,10 +188,17 @@ func (a *Agent) body(ctx context.Context, t *turn) *outcome {
 	// Before the prompt goes out, the conversation is brought under what
 	// the model can hold. It matters after a switch to a model with a
 	// smaller window, and in a resumed session.
+	// What goes out with the prompt (an @-mentioned file, the
+	// environment) is worked out first and counted too: counted after, it
+	// made the first round's summary take the new prompt with the rest.
+	ready := a.preparePrompts(ctx, t, t.subs, false)
 	extra, typed := 0, false
-	for _, s := range t.subs {
-		extra += a.estBlocks(s.prompt.blocks(), true)
-		typed = typed || !s.prompt.Hidden
+	for _, r := range ready {
+		extra += a.estBlocks(r.s.prompt.blocks(), true)
+		for _, p := range r.parts {
+			extra += a.est(p.Text) + a.estBlocks(p.Images, true)
+		}
+		typed = typed || !r.s.prompt.Hidden
 	}
 	moment := RoomBeforeOwnPrompt
 	if typed {
@@ -189,7 +208,7 @@ func (a *Agent) body(ctx context.Context, t *turn) *outcome {
 
 	// The prompt is kept whatever happened: stopped here, it is a stopped
 	// turn, and a summary that failed sends it as it is.
-	if err := a.sendPrompts(ctx, t, t.subs, false); err != nil {
+	if err := a.appendPrompts(t, ready, false); err != nil {
 		return failedOutcome(err)
 	}
 	if ctx.Err() != nil {
@@ -197,6 +216,9 @@ func (a *Agent) body(ctx context.Context, t *turn) *outcome {
 	}
 	if fitErr != nil && !errors.Is(fitErr, errStopped) {
 		return failedOutcome(fitErr)
+	}
+	if t.halt != "" {
+		return &outcome{reason: EndHalted, detail: t.halt, driver: "after-summary"}
 	}
 
 	for {
@@ -217,6 +239,18 @@ func (a *Agent) body(ctx context.Context, t *turn) *outcome {
 				return stoppedOutcome()
 			case ro.halt != "":
 				return &outcome{reason: EndHalted, detail: ro.halt, driver: ro.haltBy}
+			}
+			if ctx.Err() != nil {
+				// Stopped as the round's tools ended: the turn ends as
+				// stopped, and what the person sent meanwhile stays in line
+				// for the next turn instead of going into this one (the
+				// agent loop review of 2026-11-19).
+				return stoppedOutcome()
+			}
+			if f := a.opts.Moments.MoreRounds; f != nil {
+				if more, why := f(t.id, t.requests); !more {
+					return &outcome{reason: EndHalted, detail: why, driver: "max-turns"}
+				}
 			}
 			// The model will be asked again, so this is where it is told
 			// that it repeats itself, and where what the person sent
@@ -239,6 +273,13 @@ func (a *Agent) body(ctx context.Context, t *turn) *outcome {
 			continue
 		}
 		t.empties = 0
+		if rep.callAsText() && rep.stop != core.StopMaxTokens && rep.stop != core.StopRefusal {
+			if err := a.nudgeTextCall(t); err != nil {
+				return failedOutcome(err)
+			}
+			continue
+		}
+		t.textCalls = 0
 		a.noteCutReply(rep)
 
 		if c := t.chosen; c != nil {
@@ -288,6 +329,8 @@ func (a *Agent) request(ctx context.Context, t *turn) (*reply, *outcome) {
 			return nil, stoppedOutcome()
 		case err != nil:
 			return nil, failedOutcome(err)
+		case t.halt != "":
+			return nil, &outcome{reason: EndHalted, detail: t.halt, driver: "after-summary"}
 		}
 
 		rep, err := a.exchange(ctx, t, "main", fr.req, fr.est, fr.su.model, true)
@@ -295,6 +338,10 @@ func (a *Agent) request(ctx context.Context, t *turn) (*reply, *outcome) {
 		switch {
 		case err == nil:
 			a.cacheSeen(fr.req, rep.usage, a.clock.Now())
+		case errors.Is(err, errFellBack):
+			// Asked again of the fallback model, for which the request is
+			// made afresh. What arrived of the failed try is not kept.
+			continue
 		case errors.Is(err, errStopped):
 			if serr := a.storePartial(t, rep, fr.su.model, core.StopCancelled); serr != nil {
 				return nil, failedOutcome(serr)
@@ -445,6 +492,20 @@ func (a *Agent) remind(ctx context.Context, t *turn) error {
 // lines, which are worked out now: a prompt that waited in the queue tells
 // of things as they stand when it goes out.
 func (a *Agent) sendPrompts(ctx context.Context, t *turn, subs []*submission, folded bool) error {
+	return a.appendPrompts(t, a.preparePrompts(ctx, t, subs, folded), folded)
+}
+
+// readyPrompt is a prompt with the hidden lines that go out with it.
+type readyPrompt struct {
+	s     *submission
+	parts []Part
+}
+
+// preparePrompts works out the hidden lines of prompts about to go out:
+// what the session's start added, what the prompt's check added, and the
+// lines of the moment (an @-mentioned file, the environment).
+func (a *Agent) preparePrompts(ctx context.Context, t *turn, subs []*submission, folded bool) []readyPrompt {
+	var out []readyPrompt
 	for _, s := range subs {
 		a.mu.Lock()
 		first := !a.sent
@@ -468,7 +529,15 @@ func (a *Agent) sendPrompts(ctx context.Context, t *turn, subs []*submission, fo
 			}
 			parts = append(parts, more...)
 		}
+		out = append(out, readyPrompt{s: s, parts: parts})
+	}
+	return out
+}
 
+// appendPrompts puts prompts made ready into the conversation.
+func (a *Agent) appendPrompts(t *turn, ready []readyPrompt, folded bool) error {
+	for _, r := range ready {
+		s, parts := r.s, r.parts
 		var entries []Entry
 		var sentParts []Part
 		note := func(p Part) {
@@ -498,7 +567,7 @@ func (a *Agent) sendPrompts(ctx context.Context, t *turn, subs []*submission, fo
 		a.mu.Lock()
 		a.sent = true
 		a.mu.Unlock()
-		t.newest = s.id
+		t.newest, t.sent = s.id, s.id
 		a.emit(&PromptEvent{ID: s.id, Prompt: s.prompt, Folded: folded, Parts: sentParts})
 		if s.prompt.Hidden && s.prompt.Notice != "" {
 			a.notice(LevelInfo, firstNonEmpty(s.prompt.Source, "loop"), s.prompt.Notice)
@@ -514,6 +583,12 @@ func (a *Agent) sendPrompts(ctx context.Context, t *turn, subs []*submission, fo
 func (a *Agent) foldQueued(ctx context.Context, t *turn) error {
 	a.waitAdmitting(ctx)
 	a.mu.Lock()
+	if ctx.Err() != nil {
+		// Stopped while it waited (Interrupt cancels under this lock): the
+		// queue is the next turn's.
+		a.mu.Unlock()
+		return nil
+	}
 	var take []*submission
 	keep := a.queue[:0:0]
 	for _, s := range a.queue {
@@ -588,6 +663,17 @@ func (a *Agent) nudgeEmpty(t *turn) error {
 		a.notice(LevelWarning, "empty-reply", fmt.Sprintf(a.texts.EmptyNotice, t.empties))
 	}
 	return a.ownPrompt(t, "nudge:empty", a.mark(a.texts.EmptyNudge))
+}
+
+// nudgeTextCall tells a model whose reply was a tool call written out as
+// text that nothing ran, and asks it again. As with an empty reply, no
+// count gives up: at every third in a row the person is told.
+func (a *Agent) nudgeTextCall(t *turn) error {
+	t.textCalls++
+	if t.textCalls%3 == 0 {
+		a.notice(LevelWarning, "text-call", fmt.Sprintf(a.texts.TextCallNotice, t.textCalls))
+	}
+	return a.ownPrompt(t, "nudge:text-call", a.mark(a.texts.TextCallNudge))
 }
 
 // storeReply puts a finished reply into the log and counts it.
@@ -764,18 +850,31 @@ func (a *Agent) finishTurn(t *turn, out *outcome) TurnResult {
 
 	a.emit(&TurnEndEvent{Result: res})
 	t.ended = true
+	// The moments after a turn ended run under a context of their own,
+	// which Esc and End cancel: a hook that hung there (a StopFailure
+	// webhook, ten minutes by default) held the next prompt, Esc did
+	// nothing, and /exit waited for it (the agent loop review of
+	// 2026-11-19).
+	mctx, mstop := context.WithCancel(a.root)
+	a.mu.Lock()
+	a.endStop = mstop
+	a.mu.Unlock()
 	if f := a.opts.Moments.TurnFailed; f != nil && res.Reason == EndFailed {
-		_, _, _ = await(a.root, a, "the turn-failed moment", func(ctx context.Context) (struct{}, error) {
+		_, _, _ = await(mctx, a, "the turn-failed moment", func(ctx context.Context) (struct{}, error) {
 			f(ctx, res)
 			return struct{}{}, nil
 		})
 	}
 	if f := a.opts.Moments.TurnEnded; f != nil {
-		_, _, _ = await(a.root, a, "the turn-ended moment", func(ctx context.Context) (struct{}, error) {
+		_, _, _ = await(mctx, a, "the turn-ended moment", func(ctx context.Context) (struct{}, error) {
 			f(ctx, res)
 			return struct{}{}, nil
 		})
 	}
+	a.mu.Lock()
+	a.endStop = nil
+	a.mu.Unlock()
+	mstop()
 	a.mu.Lock()
 	subs := slices.Clone(t.subs)
 	a.mu.Unlock()

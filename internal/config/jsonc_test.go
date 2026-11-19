@@ -342,3 +342,23 @@ func FuzzReader(f *testing.F) {
 		}
 	})
 }
+
+// DuplicateKey names the first key given twice in one object, with the
+// keys of the objects around it; keys alike in different objects are no
+// duplicate (the config review of 2026-11-19: gnosh's rewrite of the local
+// settings file read such a file last-wins, and lost the first).
+func TestDuplicateKey(t *testing.T) {
+	for text, want := range map[string]string{
+		`{"a": 1, "a": 2}`: "a",
+		`{"permissions": {"allow": ["A"], "deny": [], "allow": ["B"]}}`: "permissions.allow",
+		`{"a": [{"x": 1}, {"x": 2}], "b": {"x": 1}, "c": {"x": 2}}`:     "",
+		`{"a": [{"x": 1, "x": 2}]}`:                                     "a.x",
+		`{"a": {"b": {"c": 1}}, "a2": {"b": {"c": 1, "c": 1}}}`:         "a2.b.c",
+		`not json`: "",
+		`{}`:       "",
+	} {
+		if got := DuplicateKey([]byte(text)); got != want {
+			t.Errorf("DuplicateKey(%s) = %q, want %q", text, got, want)
+		}
+	}
+}

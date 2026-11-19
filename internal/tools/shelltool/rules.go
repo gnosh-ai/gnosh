@@ -197,6 +197,12 @@ func reaches(command string) string {
 // the one way gnokey takes a password without a terminal. Only gnosh's
 // gnokey tool uses it, for a password the user typed at its masked prompt
 // (spec/gnosh/harness-tools.md, TOOL-41).
+// GnokeyPassword reports whether a command gives gnokey a password on its
+// standard input (-insecure-password-stdin), which no command here may
+// do: for the person's own commands, which are kept in the session's file
+// and shown to the model, it is caught before either.
+func GnokeyPassword(command string) bool { return gnokeyPassword(command) }
+
 func gnokeyPassword(command string) bool {
 	plain := strings.NewReplacer(`'`, "", `"`, "", `\`, "").Replace(command)
 	return strings.Contains(plain, "insecure-password-stdin")

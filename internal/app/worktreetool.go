@@ -334,6 +334,7 @@ func (l *live) treeMoved() {
 	if _, err := l.agent.Submit(agent.Prompt{
 		Text:   "Go on with the task where you left off.",
 		Hidden: true,
+		Own:    true,
 		Source: "worktree",
 		Notice: "The session moved; the model goes on.",
 	}); err != nil {

@@ -52,10 +52,12 @@ func (e *Engine) protectedWhy(p string) string {
 	segs := splitPath(low)
 	// Inside a work tree gnosh made for a sub-agent, the path to the work
 	// tree (the folder of work trees and the work tree's own name) is not
-	// judged: the rest is a checkout of the project.
+	// judged: the rest is a checkout of the project. A work tree named as a
+	// protected folder (.git) is no such checkout: git would take it for a
+	// repository's state.
 	tree, trees := 0, ""
 	for _, w := range e.workTrees {
-		if n := len(splitPath(w)) + 1; inside(w, low) && len(segs) > n {
+		if n := len(splitPath(w)) + 1; inside(w, low) && len(segs) > n && !protectedDirs[segs[n-1]] {
 			tree, trees = n, w
 		}
 	}

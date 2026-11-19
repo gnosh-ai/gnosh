@@ -144,6 +144,10 @@ func (s *session) completeCommand(typed string, start int) []editor.Candidate {
 // anywhere in their paths follow (mention.go), as Claude Code's @ finds
 // them: "@focus" offers internal/ui/focus.go.
 func (s *session) completeFile(partial string, start int, sigil string) []editor.Candidate {
+	if fs, ok := s.c.(fileSuggester); ok && sigil == "@" && s.info.FileSuggestion {
+		// The person's own command offers the paths (filesuggest.go).
+		return s.suggestFiles(fs, partial, start, sigil)
+	}
 	out := s.completePath(partial, start, sigil, false)
 	if sigil == "@" && fuzzyWord(partial) && (len(out) == 0 || !strings.Contains(partial, "/")) {
 		out = append(out, s.fuzzyFiles(partial, start, sigil, out)...)

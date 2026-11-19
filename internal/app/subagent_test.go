@@ -391,7 +391,7 @@ if [ "$GNOSH_HOOK_EVENT_NAME" = SubagentStop ] && [ ! -e "$HOME/objected" ]; the
 	t.Run("not trusted: the project's kind is not loaded", func(t *testing.T) {
 		w := prep(t, delegate, apptest.Reply{Text: "There is no such kind here."})
 		r := run(t, w, "-y", "-p", "have the sum fixed").wantCode(t, 0)
-		has(t, "stderr", r.err, "1 kind(s) of sub-agent and 0 skill(s) of its own", "not trusted")
+		has(t, "stderr", r.err, "1 kind of sub-agent of its own", "not trusted")
 		has(t, "what the session read", toolResult(t, w, 1, "c1"), `there is no kind of sub-agent called "fixer"`, "general-purpose, Explore")
 		hasNot(t, "the session's first message", userTexts(w.Model.Requests()[0])[0], "fixer")
 		if got := w.Read("a.txt"); got != "two plus two\n" {
@@ -630,7 +630,8 @@ func TestSubAgentAsksThePersonAndTakesAModel(t *testing.T) {
 	s.typeLine("have the file made")
 	s.see("* Agent: make the file")
 	s.see("  * Bash: touch made.txt")
-	s.see("? Allow Bash?")
+	// (The question names the sub-agent that asks.)
+	s.see("? The sub-agent general-purpose asks: Allow Bash?")
 	s.see("$ touch made.txt")
 	if w.Exists("made.txt") {
 		t.Fatalf("the sub-agent's command ran before the person answered")

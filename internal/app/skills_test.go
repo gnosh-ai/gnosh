@@ -322,7 +322,7 @@ func TestDefinitionFolders(t *testing.T) {
 		"the sub-agent kind reviewer is defined in "+own,
 		"the sub-agent kind tester is defined in "+theirs,
 		"the skill ship is "+skillOwn,
-		"this folder defines 1 kind(s) of sub-agent and 2 skill(s) of its own, which are not read because the folder is not trusted")
+		"this folder defines 1 kind of sub-agent and 2 skills of its own, which are not read because the folder is not trusted")
 	hasNot(t, "doctor in a folder that is not trusted", r.out, "fixer", "deploy", "lint", "Claude Code's reviewer")
 
 	// Trusted for the one run, a session reads the project's own.
@@ -355,7 +355,7 @@ func TestDefinitionsOfAFolderThatIsNotTrusted(t *testing.T) {
 	w.Write(".gnosh/agents/fixer.md", "---\nname: fixer\ndescription: The project's fixer.\n---\nFix.\n")
 	w.Write(".claude/skills/deploy/SKILL.md", "Deploy the project.\n")
 	r := run(t, w, "-p", "hello").wantCode(t, 0)
-	has(t, "stderr", r.err, "This folder defines 1 kind(s) of sub-agent and 1 skill(s) of its own")
+	has(t, "stderr", r.err, "This folder defines 1 kind of sub-agent and 1 skill of its own")
 	said := strings.Join(userTexts(w.Model.Requests()[0]), "\n")
 	has(t, "the first prompt", said, "`reviewer`: The person's reviewer.", "- `ship`:")
 	hasNot(t, "the first prompt", said, "fixer", "deploy")

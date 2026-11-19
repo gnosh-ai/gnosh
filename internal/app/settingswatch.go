@@ -83,10 +83,12 @@ func (l *live) settingsPaths() []string {
 	if project := filepath.Join(l.st.inputs.Cwd, "gnosh.json"); project != p.UserSettings {
 		out = append(out, project)
 	}
-	if s := strings.TrimSpace(l.inv.Settings); s != "" && !strings.HasPrefix(s, "{") {
-		if !filepath.IsAbs(s) {
-			s = filepath.Join(l.st.inputs.Cwd, s)
-		}
+	// The --settings file as the loader read it (absFrom: a ~ filled in,
+	// a relative path taken from where gnosh was started). Made again from
+	// the flag, it missed both, and with --cwd named another file, so
+	// edits to the real one were never taken in (the config review of
+	// 2026-11-19).
+	if s := strings.TrimSpace(l.st.inputs.Flags.Settings); s != "" && !strings.HasPrefix(s, "{") {
 		out = append(out, s)
 	}
 	return out

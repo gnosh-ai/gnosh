@@ -1,0 +1,1 @@
+[[{{shown?}}Before the summary you read or changed the file {{path}}. What Read returns for it now follows, and it counts as read.]][[{{named?}}Read or changed before the summary, and not shown again: {{path}}. Read a file again before you change it.]]

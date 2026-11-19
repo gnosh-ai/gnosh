@@ -42,7 +42,7 @@ func (t looker) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, er
 // is not in the list at all.
 func (l *live) buildTools() error {
 	limits := l.cfg.Limits
-	fo := fstools.Options{HomeDir: l.cfg.Paths.Home, BeforeChange: l.keepFile}
+	fo := fstools.Options{HomeDir: l.cfg.Paths.Home, BeforeChange: l.keepFile, ReadDenied: l.engine.ReadDenied}
 	if limits.FileReadMaxTokens.V > 0 {
 		// The limit is given in tokens, and the file tools count bytes: a
 		// token is about four of them.
@@ -73,7 +73,7 @@ func (l *live) buildTools() error {
 		TimeoutToBackground: true,
 		NoBackground:        l.inv.Bare || l.p.env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] == "1",
 		MaxBackground:       l.cfg.Options.MaxBackgroundTasks.V,
-		MaxOutputChars:      limits.BashMaxOutput.V,
+		MaxOutputChars:      bashOutputChars(l.cfg),
 		NoOutputTool:        true,
 		// The machines the config declares, and this one as every result
 		// names it. A folder's own hosts are among them only once the
@@ -200,6 +200,16 @@ func (l *live) buildTools() error {
 	return nil
 }
 
+// bashOutputChars is how many characters of a command's output the model
+// reads: BASH_MAX_OUTPUT_LENGTH when it is set, as the environment
+// outranks the files, else the bashOutputMaxChars option.
+func bashOutputChars(cfg *config.Config) int {
+	if cfg.Limits.BashMaxOutput.Set {
+		return cfg.Limits.BashMaxOutput.V
+	}
+	return cfg.Options.BashOutputMaxChars.V
+}
+
 // shellHosts turns the hosts the configuration holds in force into the
 // shell tool's own form.
 func shellHosts(cfg *config.Config) []shelltool.Host {
@@ -250,11 +260,16 @@ func (l *live) toolNames() []string {
 // those of the MCP servers that are connected, as far as the rules let it
 // have them.
 func (l *live) offeredTools() []core.Tool {
-	out := append([]core.Tool(nil), l.tools...)
+	return append(append([]core.Tool(nil), l.tools...), l.allowedMCPTools()...)
+}
+
+// allowedMCPTools are the tools of the MCP servers connected now that the
+// session may offer, and its sub-agents with it: the session that runs as
+// an agent (--agent) has the MCP tools its definition lists, by name or by
+// server, and not the ones it takes away; its sub-agents have no others.
+func (l *live) allowedMCPTools() []core.Tool {
+	var out []core.Tool
 	for _, t := range l.mcpTools() {
-		// The session that runs as an agent (--agent) has the MCP tools
-		// its definition lists, by name or by server, and not the ones
-		// it takes away.
 		if def := l.asAgent; def != nil {
 			name := t.Spec().Name
 			if def.ToolsSet && strings.HasPrefix(name, "mcp__") && !toolListed(def.Tools, name, false) || toolListed(def.Disallowed, name, true) {
@@ -276,8 +291,18 @@ func (l *live) mcpTools() []core.Tool {
 	defer l.mcp.mu.Unlock()
 	var out []core.Tool
 	resources := false
+	// Two servers' tools can come to one name (servers "a.b" and "a_b",
+	// whose tools are both mcp__a_b__<tool>): the first server's is
+	// offered, since a name twice in the model's list would have every
+	// offer of tools refused.
+	seen := map[string]bool{}
 	for _, s := range l.mcp.servers {
 		for _, t := range s.tools {
+			if seen[t.name] {
+				l.flog.logf("mcp", "the tool %s of the MCP server %s has the name of another server's, which is offered in its place", t.tool.Name, s.cfg.Name)
+				continue
+			}
+			seen[t.name] = true
 			if l.engine.ToolEnabled(t.name) {
 				out = append(out, t)
 			}

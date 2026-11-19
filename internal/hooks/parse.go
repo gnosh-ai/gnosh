@@ -33,7 +33,8 @@ import (
 //   - an event name that is not exactly one of gnosh's;
 //   - a name written twice in one object (JSON readers keep only one of
 //     the two, so a list of hooks would vanish);
-//   - a hook type other than "command" (http, mcp_tool, prompt, agent);
+//   - a hook type other than "command", "http", "mcp_tool", "prompt" and
+//     "agent";
 //   - a shell other than bash, an "onFailure" other than "continue", an
 //     "if" that is not a string, "args" that are not a list of strings,
 //     "async" or "asyncRewake" that is not true or false;

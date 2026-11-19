@@ -88,6 +88,8 @@ type printer struct {
 	structuredErr string
 
 	capped bool
+	// cappedTurn is the turn that reached the cap.
+	cappedTurn string
 	// resultsOut says each turn's result line was written as its turn
 	// ended (stream-json output with background work, printwait.go): the
 	// last is not written again.
@@ -140,7 +142,11 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 		return f.runStream(ctx, c)
 	}
 
-	text, err := f.readPrompt(ctx)
+	var text string
+	var err error
+	if sig := f.guarded(ctx, c, func(ctx context.Context) { text, err = f.readPrompt(ctx) }); sig != nil {
+		return f.stoppedBySignal(c, "", sig, c.State())
+	}
 	first := agent.Prompt{Text: text}
 	if errors.Is(err, errNoPrompt) {
 		// Nothing was typed and nothing was piped in. A feature may still
@@ -155,7 +161,11 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 	}
 	id := ""
 	if strings.HasPrefix(strings.TrimSpace(text), "/") {
-		res, err := c.Command(ctx, strings.TrimSpace(text))
+		var res CommandResult
+		var err error
+		if sig := f.guarded(ctx, c, func(ctx context.Context) { res, err = c.Command(ctx, strings.TrimSpace(text)) }); sig != nil {
+			return f.stoppedBySignal(c, "", sig, c.State())
+		}
 		if (res.Handled && res.Prompt == "") || err != nil {
 			return f.reportCommand(c, res, err)
 		}
@@ -212,13 +222,49 @@ func (f *printer) Run(ctx context.Context, c Controls) int {
 		return cli.ExitFailure
 	}
 	if f.inv.JSONSchema != "" && (res.Reason == agent.EndCompleted || res.Reason == agent.EndModelStopped) {
-		f.structured, f.structuredErr = f.structuredOutput(ctx, c)
+		if sig := f.guarded(ctx, c, func(ctx context.Context) { f.structured, f.structuredErr = f.structuredOutput(ctx, c) }); sig != nil {
+			return f.stoppedBySignal(c, "", sig, c.State())
+		}
 	}
 	// The features are asked before anything is printed: what they have
 	// to say comes first, and they may raise the exit code.
 	code := c.RunEnd(res, f.exitCode(c, res))
 	f.report(c, res)
 	return code
+}
+
+// guarded runs a part of a run that does not read the signals itself
+// (reading what is piped in, a slash command given as the prompt, the
+// structured output): the first SIGINT, SIGTERM or SIGHUP cancels it and
+// is returned, so that the run ends as one a signal stopped does. Without
+// it a signal waited unread through the part (ten minutes and more), and
+// "producer | timeout 60 gnosh -p" could not be stopped short of SIGKILL.
+func (f *printer) guarded(ctx context.Context, c Controls, part func(ctx context.Context)) os.Signal {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	signals := c.Signals()
+	got := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	var watching sync.WaitGroup
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		select {
+		case s := <-signals:
+			got <- s
+			cancel()
+		case <-done:
+		}
+	}()
+	part(ctx)
+	close(done)
+	watching.Wait()
+	select {
+	case s := <-got:
+		return s
+	default:
+		return nil
+	}
 }
 
 // exitCode is the code a run ends with for how its last turn ended: 0
@@ -378,7 +424,8 @@ func (f *printer) stoppedBySignal(c Controls, id string, sig os.Signal, st agent
 	res := agent.TurnResult{Reason: agent.EndStopped}
 	wait := time.NewTimer(signalWait)
 	defer wait.Stop()
-	for waiting := true; waiting; {
+	// (With no turn of the run's own to wait for, no result can come.)
+	for waiting := id != ""; waiting; {
 		select {
 		case r := <-f.results:
 			if slices.Contains(r.Prompts, id) {
@@ -427,7 +474,11 @@ func (f *printer) Event(ev any) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.finished {
-		// The result is the last thing a run prints.
+		// The result is the last thing a run prints. A notice of its
+		// closing (a hook's, the memory's) still goes to standard error.
+		if ev, ok := ev.(*agent.NoticeEvent); ok {
+			f.stderr("%s", ev.Text)
+		}
 		return
 	}
 	switch ev := ev.(type) {
@@ -493,9 +544,11 @@ func (f *printer) Event(ev any) {
 			f.partialEnd(ev.StopReason, ev.Usage)
 		}
 	case *agent.RetryEvent:
-		if ev.Discarded {
+		if ev.Discarded && ev.Agent == "" && ev.Purpose == "main" {
 			// What had arrived of the reply is thrown away; the next try
-			// writes it afresh.
+			// writes it afresh. (A sub-agent's reply is not the one held
+			// here: its retry threw away the session's own reply, and its
+			// stream-json message, half written.)
 			f.buf.Reset()
 			f.safe.Reset()
 			f.inMessage = false
@@ -580,7 +633,7 @@ func (f *printer) Event(ev any) {
 			}
 		}
 	case *CapEvent:
-		f.capped = true
+		f.capped, f.cappedTurn = true, ev.Turn
 		f.stderr("the run has had its %d turns of the model (--max-turns) and stops here.", ev.Turns)
 	case *agent.TurnEndEvent:
 		f.offer(ev.Result)
@@ -1131,7 +1184,9 @@ func (f *printer) result(c Controls, res agent.TurnResult) resultObject {
 			reason = "aborted_tools"
 		}
 		fail("error_during_execution", reason, fmt.Sprintf("the run was stopped by %s after %d turns of the model", signalWord(f.signal), obj.NumTurns))
-	case f.capped:
+	case f.capped && (f.inv.InputFormat != cli.FormatStreamJSON || res.Turn == f.cappedTurn):
+		// (With stream-json input the cap is a turn's own: a later
+		// message's turn has a fresh count.)
 		fail("error_max_turns", "max_turns", fmt.Sprintf("the run stopped after its %d turns of the model (--max-turns)", f.inv.MaxTurns))
 	case (res.Reason == agent.EndCompleted || res.Reason == agent.EndModelStopped) && f.structuredErr != "":
 		fail("error_max_structured_output_retries", "structured_output_retry_exhausted", f.structuredErr)
@@ -1195,6 +1250,10 @@ func (f *printer) report(c Controls, res agent.TurnResult) int {
 			fmt.Fprintln(f.p.stdout)
 		}
 	}
+	// What the session's closing says after this goes to standard error
+	// alone: a stream-json line after the result was taken for part of a
+	// next one.
+	f.finished = true
 	return code
 }
 
@@ -1234,6 +1293,7 @@ func (f *printer) reportCommand(c Controls, res CommandResult, err error) int {
 		}
 		f.encode(obj)
 	}
+	f.finished = true
 	if err != nil {
 		return cli.ExitFailure
 	}

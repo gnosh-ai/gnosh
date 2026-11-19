@@ -272,8 +272,16 @@ func workTreeElsewhere(gitDir, dir string) string {
 // two.
 const maxSmall = 1 << 20
 
-// readSmall reads a small ordinary file.
+// readSmall reads a small ordinary file. What is not one is refused before
+// it is opened: opening a named pipe waits for a writer, and a repository
+// (an archive unpacked) can hold one where its git settings would be, so
+// starting gnosh there hung (the config review of 2026-11-19).
 func readSmall(path string) (string, error) {
+	if info, err := os.Stat(path); err != nil {
+		return "", err
+	} else if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("%s is not an ordinary file", path)
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return "", err

@@ -19,7 +19,7 @@ import (
 func TestFuzzyMention(t *testing.T) {
 	g := newRig(t, 100, 24, text.NoColor)
 	g.files["/home/jae/src/proj"] = []fileEntry{{name: "internal", dir: true}, {name: "main.go"}}
-	g.s.listProject = func(string) []string {
+	g.s.listProject = func(string, bool) []string {
 		return []string{"main.go", "internal/", "internal/ui/", "internal/app/", "internal/ui/focus.go", "internal/ui/focus_test.go",
 			"internal/app/frontend.go", ".github/focus.yml", "docs/a focus.md", "internal/ui/refocus.go"}
 	}
@@ -42,6 +42,7 @@ func TestFuzzyMention(t *testing.T) {
 
 // The project is listed by git in a repository, without what it ignores,
 // and by a walk by the ignore rules elsewhere; both give the folders too.
+// With the respectGitignore option off, both list what is ignored too.
 func TestListProject(t *testing.T) {
 	dir := t.TempDir()
 	for name, body := range map[string]string{
@@ -68,12 +69,21 @@ func TestListProject(t *testing.T) {
 			}
 		}
 	}
-	check("the walk", listProject(dir), "build/out.bin", "build/", ".hidden/x")
+	check("the walk", listProject(dir, false), "build/out.bin", "build/", ".hidden/x")
+	// With the respectGitignore option off, what is ignored is listed too
+	// (but not the dot folders).
+	check("the walk of all", listProject(dir, true), ".hidden/x")
+	if all := listProject(dir, true); !slices.Contains(all, "build/out.bin") {
+		t.Errorf("the walk of all left out build/out.bin: %v", all)
+	}
 	if _, err := exec.LookPath("git"); err != nil {
 		return
 	}
 	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v %s", err, out)
 	}
-	check("git", listProject(dir), "build/out.bin", "build/")
+	check("git", listProject(dir, false), "build/out.bin", "build/")
+	if all := listProject(dir, true); !slices.Contains(all, "build/out.bin") || !slices.Contains(all, "build/") {
+		t.Errorf("git's list of all left out build/out.bin: %v", all)
+	}
 }

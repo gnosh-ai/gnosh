@@ -583,6 +583,25 @@ func TestRetries(t *testing.T) {
 	})
 }
 
+// A turn that goes on with a fallback model says so once and waits for
+// nothing: no countdown, and no word later that the fallback "answers
+// again", since it never failed. What had arrived of the failed reply is
+// marked as cut off.
+func TestFallbackSwitch(t *testing.T) {
+	g := newRig(t, 100, 24, text.NoColor)
+	g.keys(`"go" <Enter>`).start()
+	msg := "local/qwen3.8-27b at http://203.0.113.7:8080 could not be reached (connection refused). This turn goes on with the fallback model box2 (qwen3.8-27b); the next turn asks local/qwen3.8-27b first again."
+	g.ev(request(1), said("half of a"), &agent.RetryEvent{Purpose: "main", Attempt: 1, Kind: core.ErrNetwork, Message: msg, Discarded: true, FellBack: "box2 (qwen3.8-27b)"})
+	g.once("warning: local/qwen3.8-27b at http://203.0.113.7:8080 could not be reached", "This turn goes on with the fallback model box2",
+		"The reply above was cut off when the request failed")
+	g.liveLacks("again in", "try 2")
+	g.ev(request(2), said("Hello from the fallback.\n"), replyEnd(core.StopEndTurn), turnEnd(agent.EndCompleted), idle())
+	g.once("Hello from the fallback.")
+	if strings.Contains(flat(g.scroll()), "answers again") {
+		t.Errorf("the fallback was said to answer again:\n%s", g.dump())
+	}
+}
+
 // Every way a turn can end is said in plain words.
 func TestTurnEnds(t *testing.T) {
 	g := newRig(t, 100, 40, text.NoColor)

@@ -135,9 +135,11 @@ type Theme struct {
 	// BusyMark stands before the line that says what gnosh is doing, where
 	// nothing moves: with no colour, and while a question waits.
 	BusyMark string
-	// Fall is the working mark that moves: sparkle marks that drop to the
-	// right, more of them, faster and in more colour the deeper the model
-	// is in a thought (fall.go). With no colour there is none.
+	// Fall is what moves in the line that says what gnosh is doing: one
+	// mark that turns before the words, and colour that falls to the
+	// right through the words themselves, more of it, faster and in more
+	// colours the deeper the model is in a thought (fall.go). With no
+	// colour there is none.
 	Fall Fall
 	// ThinkMark stands before the model's reasoning.
 	ThinkMark string
@@ -213,8 +215,8 @@ type Theme struct {
 // whatever is chosen; grey is for what is not the text itself. Nothing is
 // filled in, blurred or dimmed into a background. Two things have more
 // than one colour: the wordmark, once, at the top of a session, and the
-// working mark while gnosh works, which starts near grey and takes its
-// colours as the model thinks on.
+// line that says what gnosh is doing while it works, which starts grey
+// and pale and takes its colours as the model thinks on.
 func DefaultTheme(p text.Profile) Theme {
 	return NewTheme(p, DefaultPalette(p))
 }
@@ -289,17 +291,20 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 	}
 
 	if p != text.NoColor {
-		// The fall: drops of sparkle marks, near the grey while calm, and
-		// in a deep thought in the colours every fade of gnosh's runs
-		// through: the site's blue-green, the purple, the hot pink and the
-		// gold. A glint is toward the colour of the person's own words:
-		// white on a dark background.
+		// The fall: a spark that swells and dwindles before the words,
+		// the words in a grey lighter than the quiet one, and through
+		// them drops of colour: pale while calm (the colour of the
+		// person's own words, white on a dark background), and in a deep
+		// thought the colours every fade of gnosh's runs through: the
+		// site's blue-green, the purple, the hot pink and the gold. A
+		// glint is toward the pale colour again.
 		th.Fall = Fall{
-			Marks: []string{"✦", "✧", "⋆", "∙"},
-			Cells: 10,
+			Marks: []string{"∙", "⋆", "✧", "✦", "✧", "⋆"},
 			Every: 110 * time.Millisecond, EveryDeep: 60 * time.Millisecond,
 			Plain: plain,
-			Bland: pal.Grey,
+			Text:  text.Blend(pal.Grey, pal.Prompt, 0.4),
+			Quiet: pal.Grey,
+			Bland: pal.Prompt,
 			Hues:  []text.Color{pal.Aqua, pal.Purple, pal.Pink, pal.Sun},
 			Glint: pal.Prompt,
 		}

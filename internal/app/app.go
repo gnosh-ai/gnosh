@@ -307,7 +307,7 @@ var built = []string{
 	"session --json",
 	"prompt show", "prompt path", "prompt export", "prompt export --force",
 	"--fork-session", "--name", "--no-session-persistence", "--include-partial-messages",
-	"--reasoning-effort", "--small-model",
+	"--reasoning-effort", "--small-model", "--fallback-model",
 	"--permission-mode",
 	"--permission-mode=default", "--permission-mode=plan", "--permission-mode=acceptEdits",
 	"--permission-mode=dontAsk", "--permission-mode=bypassPermissions",
@@ -524,7 +524,10 @@ func (p *program) runEnded(code int) {
 	case code != cli.ExitOK:
 		how = fmt.Sprintf("%sit ended with exit status %d.", runFailed, code)
 	}
-	fmt.Fprintf(f, "gnosh: %s%s\n", p.now().UTC().Format(time.RFC3339), how)
+	// (To the millisecond: a session's status line counts the runs that
+	// ended since it last looked, which it may have done in the same
+	// second. readRunLog's RFC3339 reads the fraction.)
+	fmt.Fprintf(f, "gnosh: %s%s\n", p.now().UTC().Format("2006-01-02T15:04:05.000Z07:00"), how)
 }
 
 // signalExit is the exit code of a program that a signal stopped: 130 for

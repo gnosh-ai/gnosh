@@ -79,6 +79,13 @@ type Options struct {
 	// link alone.
 	RefuseLinkWrites bool
 
+	// ReadDenied, when set, reports whether a Read deny rule covers a file,
+	// given its absolute path as written or as reached. Glob and Grep leave
+	// out what it covers in a folder they walk: its name is not listed and
+	// its content is not searched. (The folder itself is judged by the gate,
+	// before the walk.)
+	ReadDenied func(path string) bool
+
 	// GlobMaxResults is the most files Glob lists. Default 100.
 	GlobMaxResults int
 
@@ -231,4 +238,17 @@ func New(opts Options) []core.Tool {
 		&globTool{opts: &o},
 		&grepTool{opts: &o},
 	}
+}
+
+// denied reports whether ReadDenied covers one of the paths of a file.
+func (o *Options) denied(paths ...string) bool {
+	if o.ReadDenied == nil {
+		return false
+	}
+	for _, p := range paths {
+		if p != "" && o.ReadDenied(p) {
+			return true
+		}
+	}
+	return false
 }

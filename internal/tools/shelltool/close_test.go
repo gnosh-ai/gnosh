@@ -648,6 +648,48 @@ func TestLeftoversThatEndedAreForgotten(t *testing.T) {
 	}
 }
 
+// A session on the books that looks empty once, as a look at it caught a
+// process that started a last one and ended, is not forgotten: it must
+// look empty twice, so that Close still stops what it left running.
+func TestBooksKeepASessionThatLookedEmptyOnce(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{})
+	server := []procInfo{{pid: 5002, pgid: 5002, start: 7, image: "server"}}
+	var mu sync.Mutex
+	looks := 0
+	m.procs = func(sid int) ([]procInfo, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if sid != 5000 {
+			return nil, nil
+		}
+		looks++
+		if looks == 1 {
+			return nil, nil // the launcher ended, its server not seen yet
+		}
+		return server, nil
+	}
+	m.mu.Lock()
+	m.detached[5000] = []procInfo{{pid: 5001, pgid: 5000, start: 3, image: "launcher"}}
+	m.mu.Unlock()
+	m.pruneDetached()
+	m.mu.Lock()
+	_, kept := m.detached[5000]
+	m.mu.Unlock()
+	if !kept {
+		t.Fatal("a session that looked empty once was forgotten, and Close would leave its server running")
+	}
+	// One that stays empty is forgotten.
+	m.procs = func(int) ([]procInfo, error) { return nil, nil }
+	m.pruneDetached()
+	m.mu.Lock()
+	_, kept = m.detached[5000]
+	m.mu.Unlock()
+	if kept {
+		t.Error("a session that stayed empty was kept")
+	}
+}
+
 // When nothing seen as a command ended is left in its session, the
 // session's id may belong to something else by then: only the processes
 // that carry the manager's mark are signalled.
@@ -830,5 +872,62 @@ func TestLingerAfterTheOutputClosed(t *testing.T) {
 	defer mu.Unlock()
 	if !slices.Contains(sent, -6001) {
 		t.Errorf("close did not stop what the command left: signalled %v", sent)
+	}
+}
+
+// What a command seems to leave running is looked at again before it is
+// said to be: a process that closed the output as it ended may still be
+// seen at the first look. One whose pid now has another start is another
+// process.
+func TestLeftRunningIsLookedAtTwice(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{})
+	first := []procInfo{{pid: 6001, pgid: 6000, start: 9, image: "bash"}, {pid: 6002, pgid: 6000, start: 9, image: "server"}}
+	m.procs = func(int) ([]procInfo, error) {
+		return []procInfo{{pid: 6002, pgid: 6000, start: 9, image: "server"}, {pid: 6003, pgid: 6000, start: 10, image: "new"}}, nil
+	}
+	got := m.stillThere(6000, first)
+	if len(got) != 1 || got[0].pid != 6002 {
+		t.Errorf("still there: %+v, want the server alone", got)
+	}
+	m.procs = func(int) ([]procInfo, error) {
+		return []procInfo{{pid: 6002, pgid: 6000, start: 11, image: "server"}}, nil
+	}
+	if got := m.stillThere(6000, first); len(got) != 0 {
+		t.Errorf("a pid that changed hands counted as still there: %+v", got)
+	}
+}
+
+// Of the background commands that ended, the last maxEndedTasks are kept:
+// an older one is let go of, and its output file with it. (The shell tool
+// review of 2026-11-19: a long session kept every ended one, in memory and
+// on disk, until it ended.)
+func TestEndedTasksAreLetGoOf(t *testing.T) {
+	defer func(was int) { maxEndedTasks = was }(maxEndedTasks)
+	maxEndedTasks = 2
+	m := newManager(t, Options{})
+	env := newEnv(t)
+	for i := range 3 {
+		run(t, t.Context(), m, BashName, env, args{argCommand: fmt.Sprintf("echo task %d", i), argBackground: true})
+		for deadline := time.Now().Add(20 * time.Second); ; {
+			tasks := m.Tasks()
+			if len(tasks) > 0 && !tasks[len(tasks)-1].Running {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("task %d did not end", i)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	tasks := m.Tasks()
+	if len(tasks) != 2 {
+		t.Fatalf("%d ended tasks kept, want 2: %+v", len(tasks), tasks)
+	}
+	files, _ := filepath.Glob(filepath.Join(filepath.Dir(tasks[0].OutputFile), "*"))
+	for _, f := range files {
+		if data, _ := os.ReadFile(f); strings.Contains(string(data), "task 0") {
+			t.Errorf("the output file of the task let go of is still there: %s", f)
+		}
 	}
 }

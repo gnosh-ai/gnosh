@@ -16,6 +16,8 @@ var fuzzSeeds = []string{
 	`{"providers": {"x": {"type": "anthropic", "apiKey": "${", "baseUrl": "${A B}", "headers": {"X": "${CLAUDE_PROJECT_DIR}"}}}}`,
 	`{"providers": {"p": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:1"}}, "models": {"p/m": {"name": "M", "contextWindow": 1, "maxOutputTokens": 2, "thinkingLevels": ["off", "on"]}, "p/n": {}, "p/o": null, "q/r": {}}, "model": {"id": "p/m", "thinking": "low", "temperature": 0.5}, "smallModel": "p/n"}`,
 	`{"model": null, "smallModel": {"id": null, "thinking": null, "temperature": null}}`, `{"model": {}, "smallModel": []}`, `{"model": "nope", "smallModel": {"thinking": true}}`,
+	`{"providers": {"p": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:1"}}, "model": "p/m", "fallbackModel": ["p/n", "q/r", "p/n"]}`,
+	`{"fallbackModel": null}`, `{"fallbackModel": []}`, `{"fallbackModel": "x"}`, `{"fallbackModel": [1, {}, "a/b", "c/d", "e/f", "g/h"]}`, `{"fallbackModel": {"id": "p/m"}}`,
 	`{"hosts": {"h": {"ssh": "a@203.0.113.10", "description": "d"}, "local": {"ssh": "x"}, "g": null, "bad name": {"ssh": "-o x"}}}`,
 	`{"options": {"requestTimeout": 900, "autoCompactEnabled": false, "autoCompactWindow": 200000, "loopMaxTurns": 3, "maxBackgroundTasks": 2, "userInstructionFiles": ["~/a", "b"], "projectInstructionFiles": ["c"], "hiddenSkills": ["x"], "memoryText": "full", "memReviewCloses": false, "memEmbeddingsUrl": "http://127.0.0.1:1", "deliverablesServer": "127.0.0.1:0", "debug": true, "projectDataDir": ".x"}}`,
 	`{"options": {"requestTimeout": null, "hiddenSkills": null, "debug": "yes", "nope": 1, "autoCompactWindow": 1e5, "memEmbeddingsUrl": "http://${X}", "deliverablesServer": "0.0.0.0:1"}}`,

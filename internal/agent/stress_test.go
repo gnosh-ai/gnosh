@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -57,6 +59,14 @@ func TestStress(t *testing.T) {
 	seed := uint64(time.Now().UnixNano())
 	if testing.Short() {
 		seed = 1
+	}
+	if v := os.Getenv("GNOSH_STRESS_SEED"); v != "" {
+		// (To play a failing run's seed again.)
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			t.Fatalf("GNOSH_STRESS_SEED: %v", err)
+		}
+		seed = n
 	}
 	t.Logf("seed %d", seed)
 	d := newDice(seed)

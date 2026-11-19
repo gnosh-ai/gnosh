@@ -8,6 +8,7 @@ import (
 	"io"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // This file is the reader of gnosh's config files. A config file is JSON
@@ -351,5 +352,67 @@ func (n *jnode) write(b *bytes.Buffer) {
 		b.WriteString(strconv.FormatBool(n.b))
 	default:
 		b.WriteString("null")
+	}
+}
+
+// DuplicateKey names the first key a JSON text gives twice in one object
+// ("permissions.allow"), or is "" when there is none, or when the text is
+// no JSON. A settings file that holds one is not loaded, and gnosh must
+// not rewrite it either: Go's reader keeps the last of the two, and the
+// first would be lost unseen (the config review of 2026-11-19).
+func DuplicateKey(data []byte) string {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	type level struct {
+		object  bool
+		seen    map[string]bool
+		key     string // the key whose value is being read
+		wantKey bool
+	}
+	var stack []*level
+	ended := func() { // a value ended: its object waits for a key again
+		if n := len(stack); n > 0 && stack[n-1].object {
+			stack[n-1].wantKey = true
+		}
+	}
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return ""
+		}
+		if n := len(stack); n > 0 && stack[n-1].object && stack[n-1].wantKey {
+			if d, ok := tok.(json.Delim); ok && d == '}' {
+				stack = stack[:n-1]
+				ended()
+				continue
+			}
+			k, _ := tok.(string)
+			top := stack[n-1]
+			if top.seen[k] {
+				var names []string
+				for _, l := range stack[:n-1] {
+					if l.object {
+						names = append(names, l.key)
+					}
+				}
+				return strings.Join(append(names, k), ".")
+			}
+			top.seen[k], top.key, top.wantKey = true, k, false
+			continue
+		}
+		switch t := tok.(type) {
+		case json.Delim:
+			switch t {
+			case '{':
+				stack = append(stack, &level{object: true, seen: map[string]bool{}, wantKey: true})
+			case '[':
+				stack = append(stack, &level{})
+			case ']':
+				stack = stack[:len(stack)-1]
+				ended()
+			}
+		default:
+			ended()
+		}
 	}
 }

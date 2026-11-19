@@ -53,7 +53,10 @@ func TestRestart(t *testing.T) {
 	}
 	s.typeLine("start a long job")
 	s.see("It sleeps.")
-	s.see("A newer gnosh has been installed since this one started: /restart runs it, in this session.")
+	// (It is said as a turn ends: on a busy machine the first turn's end
+	// was still under way when the newer build landed, and it was said
+	// there.)
+	s.seeAnywhere("A newer gnosh has been installed since this one started: /restart runs it, in this session.")
 
 	// What runs in the background would be stopped, so it waits.
 	s.typeLine("/restart")

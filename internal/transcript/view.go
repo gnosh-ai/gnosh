@@ -31,6 +31,11 @@ type ViewOptions struct {
 	// Trace asks for ViewInfo.Sources and for what each Cut took: its
 	// Removed, SparedEntries and Replies lists.
 	Trace bool
+	// SummaryLead is put in front of a summary's text when it becomes the
+	// first message of the view, in place of SummaryPrefix: the caller's
+	// own words, such as a line in its marks that says whose the summary
+	// is. Empty means SummaryPrefix.
+	SummaryLead string
 }
 
 // ViewInfo says what a view left out, and why.
@@ -502,6 +507,8 @@ type conv struct {
 	session string
 	// trace says the caller wants to know what each cut took.
 	trace bool
+	// lead is what stands before a summary's text (ViewOptions.SummaryLead).
+	lead string
 	// halts are the places, each as the number of rows before it, of
 	// replies that hold nothing and were cancelled or failed. Such a reply
 	// is not a row, since the model is not sent it, but it ended its turn.
@@ -528,7 +535,7 @@ type conv struct {
 
 // newConv lays the entries out as rows.
 func newConv(entries []Entry, opts ViewOptions, info *ViewInfo) *conv {
-	c := &conv{entries: entries, summary: -1, est: opts.Estimate, session: opts.Session, trace: opts.Trace}
+	c := &conv{entries: entries, summary: -1, est: opts.Estimate, session: opts.Session, trace: opts.Trace, lead: opts.SummaryLead}
 	if c.est == nil {
 		c.est = EstimateTokens
 	}
@@ -698,7 +705,11 @@ func (c *conv) total() int {
 
 // summaryMessage is the message the summary becomes.
 func (c *conv) summaryMessage() core.Message {
-	return core.UserText(SummaryPrefix + c.entries[c.summary].Summary)
+	lead := c.lead
+	if lead == "" {
+		lead = SummaryPrefix
+	}
+	return core.UserText(lead + c.entries[c.summary].Summary)
 }
 
 // piece is one message of the view before repair, with the entries it

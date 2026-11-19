@@ -238,8 +238,10 @@ func (l *live) slashResume(ctx context.Context, c *SlashContext) error {
 			return nil
 		}
 		c.Say("The other sessions of this folder, the one written to last first:")
+		l.resumeShown = l.resumeShown[:0]
 		for i, ch := range choices {
 			c.Say("  %d. %s  %s  %s", i+1, ch.ID[:min(8, len(ch.ID))], ch.Modified.Local().Format("2006-01-02 15:04"), oneLine(ch.Title, 80))
+			l.resumeShown = append(l.resumeShown, ch.ID)
 		}
 		c.Say("/resume N opens one in place of this session, which is kept. An id or a name works too, and so do words from a session's name or first prompt, which finds it among all of them.")
 		return nil
@@ -248,8 +250,16 @@ func (l *live) slashResume(ctx context.Context, c *SlashContext) error {
 		return errors.New("a turn is running. Stop it first, then open another session")
 	}
 	id := ""
-	if n, err := strconv.Atoi(word); err == nil && n >= 1 && n <= len(choices) {
-		id = choices[n-1].ID
+	// A number is the place in the list as it was shown, or, with none
+	// shown, as it stands.
+	shown := l.resumeShown
+	if len(shown) == 0 {
+		for _, ch := range choices {
+			shown = append(shown, ch.ID)
+		}
+	}
+	if n, err := strconv.Atoi(word); err == nil && n >= 1 && n <= len(shown) {
+		id = shown[n-1]
 	} else {
 		found, err := l.findSession(ctx, word)
 		if err != nil {

@@ -24,6 +24,11 @@ import (
 type Texts struct {
 	// EmptyNudge is sent when the model answered with nothing.
 	EmptyNudge string
+	// TextCallNudge is sent when the model's reply is a tool call written
+	// out as text, and TextCallNotice tells the person at every third in a
+	// row.
+	TextCallNudge  string
+	TextCallNotice string
 	// EmptyNotice tells the person about it at every third empty reply in
 	// a row. It is given the count.
 	EmptyNotice string
@@ -103,8 +108,9 @@ type Texts struct {
 	// after the summary and tells the model to carry on.
 	SummaryIntro string
 	SummaryAfter string
-	// TrimNote stands where the earliest part of a conversation was left
-	// out of a summary request because it would not fit.
+	// TrimNote stands where part of a conversation was left out of a
+	// summary request because it would not fit: after its first message,
+	// or at its start.
 	TrimNote string
 
 	// LoopContinue is /loop's "keep going" prompt. LoopQuestion questions
@@ -127,6 +133,9 @@ const (
 var defaultTexts = Texts{
 	EmptyNudge: "Your last reply was empty: it held no text and no tool call. " +
 		"If there is more to do, go on and do it now. If you are done, say what you did or found.",
+	TextCallNudge: "Your last reply held a tool call written out as text, which runs nothing. " +
+		"To use a tool, call it; otherwise answer in words.",
+	TextCallNotice: "The model has written a tool call out as text, which runs nothing, %d times in a row. gnosh keeps telling it so; Esc stops the turn.",
 	EmptyNotice: "The model has answered with nothing %d times in a row. gnosh keeps asking. " +
 		"A lower thinking level usually fixes this (/no_think, or pick a level in /model); Esc stops the turn.",
 
@@ -183,7 +192,7 @@ var defaultTexts = Texts{
 	SummaryAfter: "Carry on with the task from where the summary leaves it. Keep every stop the user set: where they " +
 		"asked to be told or asked before a step, stop there and do that first. Do not ask the user to repeat anything, " +
 		"and otherwise do not ask whether to go on.",
-	TrimNote: "The earliest part of the conversation is left out here, because the whole of it no longer fits.",
+	TrimNote: "Part of the conversation is left out here, because the whole of it no longer fits.",
 
 	LoopContinue: "Keep going with the task. When all of it is finished and checked, reply with " + LoopDone + " alone on a line.",
 	LoopQuestion: "You said the task is done. Before that is believed: name what you produced, and show the listing or the output that proves each part of it. " +
@@ -204,6 +213,7 @@ func (t Texts) fill() Texts {
 		}
 	}
 	set(&d.EmptyNudge, t.EmptyNudge)
+	set(&d.TextCallNudge, t.TextCallNudge)
 	set(&d.EmptyNotice, t.EmptyNotice)
 	set(&d.RepeatNudge, t.RepeatNudge)
 	set(&d.RepeatPair, t.RepeatPair)
@@ -239,7 +249,7 @@ func (t Texts) fill() Texts {
 	// The texts that are given nothing are read as the formats they are,
 	// once, here; the loop then uses them as they stand.
 	for _, p := range []*string{
-		&d.EmptyNudge, &d.StoppedBefore, &d.StoppedDuring, &d.HaltedDuring, &d.ReplyCut, &d.Killed, &d.AsideRunning,
+		&d.EmptyNudge, &d.TextCallNudge, &d.StoppedBefore, &d.StoppedDuring, &d.HaltedDuring, &d.ReplyCut, &d.Killed, &d.AsideRunning,
 		&d.Denied, &d.Unattended, &d.SummaryRequest, &d.SummaryIntro, &d.SummaryAfter,
 		&d.TrimNote, &d.LoopContinue, &d.LoopQuestion,
 	} {

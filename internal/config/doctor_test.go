@@ -289,7 +289,7 @@ func TestDoctorTheRest(t *testing.T) {
 	in := inputs(untrustedProject())
 	in.Trusted = false
 	findings := doctor(t, in, &fakeMachine{})
-	wantFinding(t, findings, "trust", Note, "not trusted", "22 of its settings are held", `"provider evil (openai-compatible) at https://203.0.113.5/v1"`, "and 17 more", "gnosh trust", "--trust-folder")
+	wantFinding(t, findings, "trust", Note, "not trusted", "23 of its settings are held", `"provider evil (openai-compatible) at https://203.0.113.5/v1"`, "and 18 more", "gnosh trust", "--trust-folder")
 	wantFinding(t, findings, "config", Note, "held: "+projJSON, "the project's settings", "only what restricts the agent")
 	wantFinding(t, findings, "config", Note, "held: "+localJSON)
 	in.Trusted = true

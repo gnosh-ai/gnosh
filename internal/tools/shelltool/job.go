@@ -104,8 +104,14 @@ type job struct {
 	callID      string // the tool call waiting for it, if it started in the foreground
 	command     string
 	description string
-	dir         string // the directory it started in, on this machine
-	started     time.Time
+	// owner is the sub-agent that started it, by its session id, or ""
+	// for the session's own command.
+	owner string
+	dir   string // the directory it started in, on this machine
+	// gone is the session's working directory when it was not there any
+	// more and the command started in dir in its place (nearestStanding).
+	gone    string
+	started time.Time
 
 	host *Host        // the machine the command is for; nil for this one
 	ssh  string       // the ssh program that carries it there
@@ -493,9 +499,14 @@ func (j *job) finish(why endReason, limit time.Duration) {
 		// holds the output is. One that started a session of its own
 		// (setsid) is not in it, and is left alone.
 		if left, err := m.procs(j.pid); err == nil && len(left) > 0 {
-			e.detached = left
-			if !m.keepDetached(j.pid, left) {
-				m.sweep(j.pid, left) // (the manager is closing)
+			// A process that let go of the output as it ended may not have
+			// gone at that look: it was left running only if it is still
+			// there a moment later.
+			if left = m.stillThere(j.pid, left); len(left) > 0 {
+				e.detached = left
+				if !m.keepDetached(j.pid, left) {
+					m.sweep(j.pid, left) // (the manager is closing)
+				}
 			}
 		}
 	}
@@ -578,6 +589,10 @@ func (j *job) catchUp() {
 	}
 }
 
+// maxCwdFile is the most of the file in which a shell says where it ended
+// that is read: a path is far shorter.
+const maxCwdFile = 64 << 10
+
 // finalDir reads, and removes, the file in which the shell said where it
 // ended. It returns that directory with its symbolic links resolved, or ""
 // when the shell said nothing usable. The file is written by the shell the
@@ -585,7 +600,7 @@ func (j *job) catchUp() {
 // there counts, and it is resolved here again, so that nothing written into
 // the file can pass a link off as a place inside the session's roots.
 func (j *job) finalDir() string {
-	data, err := os.ReadFile(j.cwdFile)
+	data, err := readCwdFile(j.cwdFile)
 	os.Remove(j.cwdFile)
 	if err != nil {
 		return ""

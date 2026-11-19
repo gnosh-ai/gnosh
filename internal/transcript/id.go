@@ -66,6 +66,10 @@ func formatUUID(b [16]byte) string {
 	return string(out[:])
 }
 
+// ValidID reports whether s has the form of a session's id, and so can
+// stand as a name in a path.
+func ValidID(s string) bool { return validID(s) }
+
 // validID reports whether s has the form of a UUID in lower case: 32 hex
 // digits in groups of 8, 4, 4, 4 and 12.
 func validID(s string) bool {

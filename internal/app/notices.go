@@ -38,12 +38,37 @@ func (l *live) backgroundEnded(e shelltool.Ended) {
 		// Its time ran out, it printed too much, or it was stopped.
 		end.State = prompt.BackgroundStopped
 	}
+	if e.Owner != "" {
+		// A sub-agent started it. While the sub-agent works, the news is
+		// its own, as it was told it would be.
+		if sub := l.runningSub(e.Owner); sub != nil && sub.Tell(agent.Note{Text: l.texts.BackgroundEnded(end), Source: "task-notification"}) == nil {
+			return
+		}
+		// It has ended: the session's model is told, and what the
+		// sub-agent wrote of the command (its description, its first
+		// line) is not given in gnosh's words. The id and the output file
+		// say the rest.
+		end.Command = "a command a sub-agent of this session started; the sub-agent has ended"
+	}
 	_ = a.Tell(agent.Note{
 		Text:   l.texts.BackgroundEnded(end),
 		Source: "task-notification",
 		Notice: "A background command ended: " + e.Summary,
 		Wake:   true,
 	})
+}
+
+// runningSub returns the agent of the sub-agent with this session id while
+// it runs, or nil.
+func (l *live) runningSub(id string) *agent.Agent {
+	l.subMu.Lock()
+	defer l.subMu.Unlock()
+	for s := range l.subs {
+		if s.id == id && s.agent != nil {
+			return s.agent
+		}
+	}
+	return nil
 }
 
 // monitorLines passes on what the command of a Monitor call printed, in a

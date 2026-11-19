@@ -116,8 +116,8 @@ func (t *sendMessageTool) Run(ctx context.Context, call core.ToolCall, env *core
 	if err != nil {
 		return refuse("%v", err)
 	}
-	if len(l.backgroundAgents()) >= maxBackgroundAgents {
-		return refuse("%d sub-agents run in the background already, which is the most there may be at once", maxBackgroundAgents)
+	if n, most := l.runningAgents(), l.maxConcurrentAgents(); n >= most {
+		return refuse("%d sub-agents run already, which is the most there may be at once", most)
 	}
 	def, ok := l.agentDefs().Get(meta[metaAgentType])
 	switch {

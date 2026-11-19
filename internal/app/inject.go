@@ -158,7 +158,12 @@ func (l *live) runInjected(command, dir string) (string, int, error) {
 	}
 	cmd := exec.CommandContext(ctx, shell, "-c", command)
 	cmd.Dir = dir
-	cmd.Env = append(append([]string(nil), l.p.o.Environ...), l.cfg.CommandEnv()...)
+	// As the Bash tool's commands: what the person's env setting takes
+	// away is taken away, and what changes how a shell reads its line
+	// (BASH_ENV, SHELLOPTS, PS4, exported functions) is left out. Appended
+	// to the whole environment, a taken-away variable stayed (the config
+	// review of 2026-11-19).
+	cmd.Env = shelltool.CommandEnv(l.p.o.Environ, dir, l.cfg.CommandEnv())
 	cmd.WaitDelay = 2 * time.Second
 	var buf bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &buf, &buf

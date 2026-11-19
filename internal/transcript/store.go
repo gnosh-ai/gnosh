@@ -94,6 +94,50 @@ func (st *Store) ProjectDir(cwd string) string {
 	return filepath.Join(st.projects(), Slug(cwd))
 }
 
+// Holds reports whether path is a session file of the store's own: under
+// its folder of projects, with links followed on both sides. A file
+// elsewhere (one -r was given by its path) was not written by this store,
+// and is copied in before it is gone on with (Import).
+func (st *Store) Holds(path string) bool {
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+	root, err := filepath.EvalSymlinks(st.projects())
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(root, real)
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// Import copies the entries of src, a session file that is not the
+// store's own, into a new session of the store for the folder cwd: src is
+// never written, and nothing beside it is used. clean is given each entry,
+// inherited ones first, with the fields this version does not know taken
+// out, and returns the entry to copy, or false to leave it out. The copy
+// holds every entry itself: it does not point back at src.
+func (st *Store) Import(src *Session, cwd string, clean func(Entry) (Entry, bool)) (*Session, error) {
+	var out []Entry
+	for _, e := range src.Entries() {
+		e.Extra, e.kept = nil, nil
+		if e, ok := clean(e); ok {
+			out = append(out, e)
+		}
+	}
+	s, err := st.Create(cwd)
+	if err != nil {
+		return nil, err
+	}
+	if len(out) > 0 {
+		if _, err := s.AppendAll(out...); err != nil {
+			_ = s.Close()
+			return nil, fmt.Errorf("transcript: copying %s into the store: %w", src.Path(), err)
+		}
+	}
+	return s, nil
+}
+
 // ProjectDirs are the directories that hold sessions: one for each
 // working directory a session was started in.
 func (st *Store) ProjectDirs() []string {
@@ -239,14 +283,19 @@ func (st *Store) open(ctx context.Context, path, id string, write bool) (*Sessio
 	if write {
 		flag = os.O_RDWR | os.O_APPEND
 	}
-	f, err := os.OpenFile(path, flag, 0)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("transcript: opening session %s: %w: %w", id, ErrNotFound, err)
+	var f *os.File
+	for try := 0; ; try++ {
+		var err error
+		f, err = os.OpenFile(path, flag, 0)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil, fmt.Errorf("transcript: opening session %s: %w: %w", id, ErrNotFound, err)
+			}
+			return nil, fmt.Errorf("transcript: opening session %s: %w", id, err)
 		}
-		return nil, fmt.Errorf("transcript: opening session %s: %w", id, err)
-	}
-	if write {
+		if !write {
+			break
+		}
 		ok, err := lockFile(f)
 		if err != nil {
 			f.Close()
@@ -256,6 +305,16 @@ func (st *Store) open(ctx context.Context, path, id string, write bool) (*Sessio
 			f.Close()
 			return nil, &LockedError{ID: id, Path: path}
 		}
+		// A redaction puts a new file in the old one's place (redact.go):
+		// one that did so between the open and the lock leaves the lock on
+		// a file that is no longer there, which may hold what was redacted
+		// and loses what is written to it. The one there now is opened.
+		held, herr := f.Stat()
+		still, serr := os.Stat(path)
+		if herr != nil || serr != nil || os.SameFile(held, still) || try >= 4 {
+			break
+		}
+		f.Close()
 	}
 	ld, err := load(ctx, f, path)
 	if err != nil {
@@ -419,7 +478,9 @@ type Info struct {
 	// FirstPrompt is the first line of the first prompt the person typed
 	// in this session, cut to 256 characters.
 	FirstPrompt string
-	// Created and Modified are the times of the first and last entries.
+	// Created is the time of the first entry, and Modified of the last
+	// prompt, reply or summary, or else of the last entry: a name given to
+	// an old session does not make it the newest, which -c goes on with.
 	Created  time.Time
 	Modified time.Time
 	// Entries counts the file's entries, Messages its user and assistant
@@ -460,7 +521,12 @@ func (st *Store) List(ctx context.Context, cwd string) ([]Info, error) {
 			}
 			continue
 		}
-		if info.Entries == 0 || info.Cwd != cwd {
+		// A session of another folder whose name comes to the same
+		// directory is that folder's. One whose folder belongs in another
+		// directory is here because a move (/cd) was cut short between
+		// putting its file here and writing down the folder: it is this
+		// folder's, or it would be listed nowhere.
+		if info.Entries == 0 || info.Cwd != cwd && st.ProjectDir(info.Cwd) == dir {
 			continue
 		}
 		out = append(out, info)
@@ -512,7 +578,9 @@ func scanInfo(ctx context.Context, path, id string) (Info, error) {
 	info.Size = fi.Size()
 	s := newScanner(f, path, nil)
 	var autoTitle string
-	var last time.Time
+	// last is the time of the last entry, talked of the last prompt,
+	// reply or summary.
+	var last, talked time.Time
 	for {
 		if err := ctx.Err(); err != nil {
 			return info, err
@@ -538,6 +606,10 @@ func scanInfo(ctx context.Context, path, id string) (Info, error) {
 		t, terr := time.Parse(time.RFC3339Nano, le.Timestamp)
 		if terr == nil {
 			last = t.UTC()
+			switch le.Type {
+			case TypeUser, TypeAssistant, TypeSummary:
+				talked = last
+			}
 		}
 		if le.Type == TypeMeta && le.Key == MovedKey && filepath.IsAbs(le.Value) {
 			info.Cwd = filepath.Clean(le.Value)
@@ -575,7 +647,7 @@ func scanInfo(ctx context.Context, path, id string) (Info, error) {
 	if info.Title == "" {
 		info.Title = autoTitle
 	}
-	info.Modified = last
+	info.Modified = cmp.Or(talked, last)
 	if info.Created.IsZero() {
 		if t, ok := idTime(id); ok {
 			info.Created = t

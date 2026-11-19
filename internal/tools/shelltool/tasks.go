@@ -50,6 +50,10 @@ type Task struct {
 	// Monitor says the command is a Monitor's: what it prints is passed on
 	// as it comes.
 	Monitor bool
+	// Owner is the sub-agent that started the command, by its session id
+	// (core.ToolEnv.SessionID of a sub-agent's call), or "" when the
+	// session's own model did.
+	Owner string
 }
 
 // Ended is the news that a background command has ended, as Options.OnEnd
@@ -80,6 +84,7 @@ func (j *job) task(now time.Time) Task {
 		Duration:    now.Sub(j.started),
 		Running:     true,
 		Monitor:     j.mon != nil,
+		Owner:       j.owner,
 	}
 	if e := j.ending(); e != nil {
 		t.Running = false

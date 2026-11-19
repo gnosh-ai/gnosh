@@ -22,7 +22,15 @@ import (
 // read, and the conversation keeps that one as well. The images it has
 // taken before are not it, so the others of the request are left out of it
 // (provider.unreadable), and the request is sent again; a server that has
-// taken every one of them before has them all left out.
+// taken every one of them before has them all left out. An image larger
+// than the server takes (Anthropic's API: 8000 pixels a side) goes the
+// same way, as one too large.
+//
+// Anthropic's API also holds each image of a request with more than 20 to
+// a lower limit, which a picture it took before can be over: a session
+// that read many screenshots was refused from its 21st on. Once it says
+// so, only the newest images of a request are sent whole
+// (provider.fewImages).
 
 // imageLeftOut stands in a request where an image was.
 const imageLeftOut = "[An image was left out here: the model in use cannot take images.]"
@@ -30,6 +38,33 @@ const imageLeftOut = "[An image was left out here: the model in use cannot take 
 // imageUnread stands in a request where an image was that the server
 // could not read.
 const imageUnread = "[An image was left out here: the model's server could not read it (a format it does not read, such as WebP, or a broken file).]"
+
+// imageTooLarge stands in a request where an image was that is larger
+// than the model's server takes.
+const imageTooLarge = "[An image was left out here: it is larger than the model's server takes. Crop or shrink it, and read the smaller copy.]"
+
+// imageOlder stands in a request where an image was, one of the older of
+// a request that holds more than its server takes whole.
+const imageOlder = "[An image was left out here: the model's server takes only so many images in a request, and this is one of the older ones.]"
+
+// tooLarge are what servers say, in lower case, when an image of the
+// request is larger than they take: Anthropic's API for one over its size
+// or pixel limits.
+var tooLarge = []string{
+	"image exceeds",
+	"image dimensions exceed",
+	"image is too large",
+	"image too large",
+}
+
+// manyImages is what Anthropic's API says, in lower case, when it holds
+// the images of a request with many of them to its lower limit.
+var manyImages = []string{"many-image"}
+
+// manyImagesKept is how many images a request to a server that refused
+// many holds whole: the newest, as many as Anthropic's API takes before
+// its lower limit applies.
+const manyImagesKept = 20
 
 // unreadable are what servers that take images say, in lower case, when
 // they could not read one: llama.cpp's server ("Failed to load image or
@@ -121,17 +156,35 @@ func eachImage(req *core.Request, f func(core.Block)) {
 
 // prepared is req as the server is sent it: without images at all when it
 // has refused them for this model, and otherwise without those it could
-// not read.
+// not read or would not take, and with only the newest whole when it has
+// refused a request for holding many.
 func (p *provider) prepared(req *core.Request) *core.Request {
 	if p.LeavesOutImages(req.Model) {
 		return withoutImages(req)
 	}
+	older := 0
+	if _, few := p.fewImages.Load(req.Model); few {
+		older = max(countImages(req)-manyImagesKept, 0)
+	}
+	seen := 0
 	return replacing(req, func(b core.Block) (string, bool) {
-		if _, bad := p.unreadable.Load(keyOf(b)); bad {
-			return imageUnread, true
+		seen++
+		if line, bad := p.unreadable.Load(keyOf(b)); bad {
+			return line.(string), true
+		}
+		if seen <= older {
+			return imageOlder, true
 		}
 		return "", false
 	})
+}
+
+// countImages is how many images req holds, in messages and in tools'
+// results.
+func countImages(req *core.Request) int {
+	n := 0
+	eachImage(req, func(core.Block) { n++ })
+	return n
 }
 
 // took records the images of a request the server answered: it could read
@@ -154,9 +207,21 @@ func (p *provider) afterImageError(req, send *core.Request, err error) (next *co
 		// The server takes no images: from now on it is sent none.
 		p.noImages.Store(req.Model, true)
 		return withoutImages(req), true
-	case imageUnreadable(err):
+	case serverSays(err, manyImages):
+		// From now on only the newest are sent whole. A request that held
+		// no more than those was refused for something else.
+		if countImages(send) <= manyImagesKept {
+			return nil, false
+		}
+		p.fewImages.Store(req.Model, true)
+		return p.prepared(req), true
+	case imageUnreadable(err), serverSays(err, tooLarge):
 		// One it could not read is among those it has not taken before;
 		// with none such, it is any of them.
+		line := imageUnread
+		if !imageUnreadable(err) {
+			line = imageTooLarge
+		}
 		var fresh, all []imageKey
 		eachImage(send, func(b core.Block) {
 			k := keyOf(b)
@@ -169,7 +234,7 @@ func (p *provider) afterImageError(req, send *core.Request, err error) (next *co
 			fresh = all
 		}
 		for _, k := range fresh {
-			p.unreadable.Store(k, struct{}{})
+			p.unreadable.Store(k, line)
 		}
 		return p.prepared(req), true
 	}

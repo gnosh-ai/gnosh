@@ -186,7 +186,8 @@ func defFindings(cfg *config.Config, trusted bool) []config.Finding {
 	}
 	if !trusted {
 		if agents, held := heldDefs(cfg, nil); agents+held > 0 {
-			add("trust", config.Note, "this folder defines %d kind(s) of sub-agent and %d skill(s) of its own, which are not read because the folder is not trusted", agents, held)
+			what, verb := heldDefsText(agents, held)
+			add("trust", config.Note, "this folder defines %s of its own, which %s not read because the folder is not trusted", what, verb)
 		}
 	}
 	return out
@@ -216,7 +217,7 @@ func (l *live) skills() *skill.Set {
 // puts the person's settings of how far each is seen over them: no reading
 // leaves a skill switched off seen, even for a moment.
 func (l *live) readSkillsLocked() {
-	l.skillSet, l.skillRead = loadSkills(l.cfg, l.st.trusted, l.moreRoots()), time.Now()
+	l.skillSet, l.skillRead = loadSkills(l.cfg, l.st.trusted, l.defRoots()), time.Now()
 	l.skillSet.Override(l.skillOverridesLocked())
 }
 
@@ -1017,7 +1018,8 @@ func (l *live) slashSkills(ctx context.Context, c *SlashContext) error {
 	}
 	if !l.st.trusted {
 		if _, held := heldDefs(l.cfg, l.moreRoots()); held > 0 {
-			c.Say("This folder has %d skill(s) of its own, which are not read because the folder is not trusted (gnosh trust).", held)
+			what, verb := heldDefsText(0, held)
+			c.Say("This folder has %s of its own, which %s not read because the folder is not trusted (gnosh trust).", what, verb)
 		}
 	}
 	return nil
@@ -1082,4 +1084,23 @@ func (l *live) typedFork(sk skill.Skill, text, line string, res CommandResult) (
 	}
 	res.Prompt = id
 	return res, true, nil
+}
+
+// heldDefsText names what a folder that is not trusted defines and is not
+// read ("1 skill", "2 kinds of sub-agent and 1 skill"), leaving out a count
+// of none, and says "is" or "are" to go with it. It read "0 kind(s) of
+// sub-agent and 1 skill(s)".
+func heldDefsText(agents, skills int) (what, verb string) {
+	var parts []string
+	if agents > 0 {
+		parts = append(parts, countWords(agents, "kind of sub-agent", "kinds of sub-agent"))
+	}
+	if skills > 0 {
+		parts = append(parts, countWords(skills, "skill", "skills"))
+	}
+	verb = "are"
+	if agents+skills == 1 {
+		verb = "is"
+	}
+	return strings.Join(parts, " and "), verb
 }

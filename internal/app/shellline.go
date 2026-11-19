@@ -41,6 +41,12 @@ func (l *live) shellLine(command string) error {
 	if l.shell == nil || l.closing.Load() {
 		return errors.New("the session is closing")
 	}
+	if shelltool.GnokeyPassword(command) {
+		// Caught before anything keeps the line: the session's file, the
+		// history Up brings back, and what the model is sent would each
+		// hold the password.
+		return errors.New("the command gives gnokey a password on its standard input, and what is typed here is kept in the session's file and shown to the model: it was not run, and not kept. Sign in a terminal of your own")
+	}
 	bash := l.shell.PersonsBash()
 	l.shellMu.Lock()
 	if l.shellStop != nil {
@@ -88,6 +94,13 @@ func (l *live) shellLine(command string) error {
 		}
 		res = cleanResult(call, res)
 		stopped := ctx.Err() != nil
+		if res.Cwd != "" && !stopped && l.agent != nil {
+			// Their cd moves the session, as one in the model's own calls
+			// does (the shell tool checked it against the session's
+			// folders), and the result tells the model so.
+			l.agent.SetCwd(res.Cwd)
+			l.cwdMoved(l.ctx, res.Cwd)
+		}
 		ended()
 		l.deliver(&agent.ToolEndEvent{
 			Meta: meta(), CallID: call.ID, Name: call.Name, Input: input,
@@ -98,7 +111,9 @@ func (l *live) shellLine(command string) error {
 		}
 		// Into the conversation. The command's output is data, like a
 		// tool's: it is made harmless on its way in.
-		text := prompt.Wrap("The user ran this shell command themselves, in this session's working directory, and this is what it printed. It was their own command, not a request to run it again: answer what it shows, or go on with what they asked for before.") +
+		// (Not "go on with what they asked for before": on box 1, in a
+		// session with nothing asked before, Qwen went looking for it.)
+		text := prompt.Wrap("The user ran this shell command themselves, in this session's working directory, and this is what it printed. It was their own command, not a request to run it again: answer what it shows, in a few words, and if you were in the middle of something for them, go on with it.") +
 			"\n\n$ " + prompt.Untrusted(command) + "\n" + prompt.Untrusted(core.TextOf(res.Content))
 		// One the model does not answer now is put in the conversation at
 		// once (Record), so that it stands before the person's next

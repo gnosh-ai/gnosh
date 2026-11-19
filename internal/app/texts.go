@@ -20,7 +20,7 @@ import (
 //
 // mem says the session has mem, so that a summary leaves out what mem
 // hands back by itself.
-func loopTexts(set *prompt.Set, mem bool) (agent.Texts, error) {
+func loopTexts(set *prompt.Set, mem bool, path string) (agent.Texts, error) {
 	var t agent.Texts
 	var firstErr error
 	format := func(dst *string, name string, holes map[string]string) {
@@ -36,6 +36,7 @@ func loopTexts(set *prompt.Set, mem bool) (agent.Texts, error) {
 	yes := "yes"
 
 	format(&t.EmptyNudge, "empty-reply", nil)
+	format(&t.TextCallNudge, "text-call", nil)
 	// The loop gives: how many rounds were the same, how many were looked
 	// at, and the calls.
 	format(&t.RepeatNudge, "repeat", map[string]string{"calls": "%[3]s"})
@@ -61,7 +62,9 @@ func loopTexts(set *prompt.Set, mem bool) (agent.Texts, error) {
 	format(&t.SummaryRequest, "summary", summary)
 	format(&t.SummaryExtra, "summary-extra", map[string]string{"instructions": "%[1]s"})
 	format(&t.SummaryIntro, "summary-intro", nil)
-	format(&t.SummaryAfter, "after-summary", nil)
+	// The session's file, which holds the conversation as it was, for
+	// what the summary left out (as Claude Code names its transcript).
+	format(&t.SummaryAfter, "after-summary", map[string]string{"path": path})
 	format(&t.TrimNote, "earlier-left-out", nil)
 
 	format(&t.LoopContinue, "loop", map[string]string{"marker": prompt.LoopDone})

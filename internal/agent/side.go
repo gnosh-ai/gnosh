@@ -235,7 +235,7 @@ func (a *Agent) sideOnce(ctx context.Context, sr SideRequest, purpose string, m 
 	}
 	if f := a.opts.Outgoing; f != nil {
 		req = cloneRequest(req)
-		f(req)
+		f(res.Provider, req)
 	}
 	a.emit(&RequestEvent{Purpose: purpose, Attempt: 1, Provider: res.Provider, Model: res.Model, Messages: len(req.Messages)})
 

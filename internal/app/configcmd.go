@@ -131,7 +131,7 @@ func (l *live) slashAutocompact(ctx context.Context, c *SlashContext) error {
 
 // liveOptions are the options a running session can change: /config puts
 // them in force at once.
-var liveOptions = map[string]bool{"autoCompactEnabled": true, "autoCompactWindow": true, "debug": true, "verbose": true, "editorMode": true, "outputStyle": true, "preferredNotifChannel": true, "promptSuggestionEnabled": true, "respondToBashCommands": true, "askUserQuestionTimeout": true, "theme": true, "viewMode": true}
+var liveOptions = map[string]bool{"autoCompactEnabled": true, "autoCompactWindow": true, "debug": true, "verbose": true, "editorMode": true, "outputStyle": true, "preferredNotifChannel": true, "promptSuggestionEnabled": true, "respondToBashCommands": true, "askUserQuestionTimeout": true, "theme": true, "viewMode": true, "showTurnDuration": true, "respectGitignore": true}
 
 // applyOption puts what /config set in force in the running session, for
 // an option that can be (liveOptions), and reports whether it was.
@@ -162,6 +162,9 @@ func (l *live) applyOption(key string, raw json.RawMessage) bool {
 	case "editorMode", "theme", "viewMode":
 		// (The interface's to put in force, as verbose is: the box, its
 		// colours and how it shows the conversation are its own.)
+	case "showTurnDuration", "respectGitignore":
+		// (The interface reads it from the session's info, which
+		// liveBool gives as /config set it.)
 	case "promptSuggestionEnabled", "respondToBashCommands":
 		var on bool
 		if json.Unmarshal(raw, &on) != nil {
@@ -428,6 +431,19 @@ func (l *live) viewModeOff() string {
 		return "verbose"
 	}
 	return "default"
+}
+
+// liveBool is a boolean option as the session has it now: as /config set
+// it since the session started, or else as it started.
+func (l *live) liveBool(key string, start bool) bool {
+	l.configMu.Lock()
+	raw, ok := l.configNow[key]
+	l.configMu.Unlock()
+	var on bool
+	if ok && string(raw) != "null" && json.Unmarshal(raw, &on) == nil {
+		return on
+	}
+	return start
 }
 
 // viewModeSet is the viewMode option for the interface: "" when nothing

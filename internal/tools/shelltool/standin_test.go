@@ -313,5 +313,5 @@ func (b *farBox) lastCall(n int) sshCall {
 // script is what ssh is given as its last argument for a command: the line
 // gnosh puts in front, written out here so that a change to it shows.
 func script(quoted string) string {
-	return `printf 'gnosh-host-cwd:%s\n' "$PWD" >&2; exec 2>&1; export PAGER=cat GIT_PAGER=cat GIT_TERMINAL_PROMPT=0 TERM=dumb GNOSH=1 AGENT=gnosh AI_AGENT=gnosh; eval ` + quoted
+	return `[ -n "${ZSH_VERSION-}" ] && setopt no_equals; printf 'gnosh-host-cwd:%s\n' "$PWD" >&2; exec 2>&1; export PAGER=cat GIT_PAGER=cat GIT_TERMINAL_PROMPT=0 TERM=dumb GNOSH=1 AGENT=gnosh AI_AGENT=gnosh; eval ` + quoted
 }

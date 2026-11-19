@@ -151,7 +151,7 @@ func inputs(fsys *memFS) Inputs {
 // package imports nothing of gnosh's: of everything an untrusted folder's
 // files can say, only what takes something away from the agent applies.
 func restricts(kind string) bool {
-	return kind == KindDenyRule || kind == KindAskRule || kind == KindHiddenSkill || kind == "disabled-tool"
+	return kind == KindDenyRule || kind == KindAskRule || kind == KindHiddenSkill || kind == "disabled-tool" || kind == KindRestriction
 }
 
 // withConfig returns Inputs whose user gnosh.json holds text.

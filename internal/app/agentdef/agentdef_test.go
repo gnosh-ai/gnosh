@@ -2,10 +2,12 @@ package agentdef
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func write(t *testing.T, path, text string) {
@@ -213,5 +215,40 @@ func TestParseMCPServers(t *testing.T) {
 	}
 	if _, err := FromJSON(`{"tester": {"description": "Tests.", "prompt": "Test.", "mcpServers": "github"}}`); err == nil || !strings.Contains(err.Error(), "mcpServers is not a list") {
 		t.Errorf("mcpServers as a string: %v", err)
+	}
+}
+
+// A definition file is read only when it is a plain file: a link a
+// repository holds may lead to /dev/zero or a terminal, which would never
+// end (review of 2026-11-19).
+func TestDefinitionThatIsNotAPlainFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Symlink("/dev/zero", filepath.Join(dir, "zero.md")); err != nil {
+		t.Skip(err)
+	}
+	done := make(chan string, 1)
+	go func() {
+		_, err := readSmall(filepath.Join(dir, "zero.md"))
+		done <- fmt.Sprint(err)
+	}()
+	select {
+	case msg := <-done:
+		if !strings.Contains(msg, "not a plain file") {
+			t.Errorf("reading a link to /dev/zero said %q", msg)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("reading a link to /dev/zero did not end")
+	}
+}
+
+// A setting gnosh knows written in another letter case would be passed
+// over, and the agent run without what it takes away: the definition is
+// not used. A key gnosh does not know at all is passed over.
+func TestSettingInAnotherCase(t *testing.T) {
+	if _, reason := Parse("---\nname: reader\ndescription: Reads.\ndisallowedtools: Write, Edit\n---\nRead.\n"); !strings.Contains(reason, `"disallowedTools"`) {
+		t.Errorf("a definition with disallowedtools: %q", reason)
+	}
+	if d, reason := Parse("---\nname: reader\ndescription: Reads.\ncolor: blue\n---\nRead.\n"); reason != "" || d.Name != "reader" {
+		t.Errorf("a definition with an unknown key: %q", reason)
 	}
 }

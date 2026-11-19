@@ -1,3 +1,6 @@
 === the question ===
 <gnosh>Your last reply was empty: no text and no tool call. Go on from where you were: make the next tool call, or give your answer.</gnosh>
 
+=== a call written out as text ===
+<gnosh>Your last reply held a tool call written out as text, which runs nothing. To use a tool, call it; otherwise answer in words.</gnosh>
+

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
 )
@@ -515,4 +516,30 @@ func TestLoopStops(t *testing.T) {
 			t.Errorf("prompts went out as %v, want %v", order, want)
 		}
 	})
+}
+
+// A /loop whose prompt is refused (the session's start said stop) goes off
+// with the reason: it sent its next prompt at once, refused the same way,
+// again and again until Esc (the agent loop review of 2026-11-19).
+func TestLoopOffWhenItsPromptIsRefused(t *testing.T) {
+	r := newRig(t, func(o *Options) {
+		o.Moments.SessionStart = func(context.Context, StartInfo) ([]Part, error) {
+			return nil, &StopWork{Reason: "the license has run out"}
+		}
+	})
+	if res := r.run("first"); res.Reason != EndRefused {
+		t.Fatalf("first = %+v", res)
+	}
+	r.a.SetLoop(true)
+	off := waitEvent(t, r.rec, func(e *LoopEvent) bool { return !e.On })
+	if !strings.Contains(off.Why, "the license has run out") {
+		t.Errorf("the loop went off because %q", off.Why)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if n := len(eventsOf[*PromptReturnedEvent](r.rec)); n > 3 {
+		t.Errorf("%d prompts were refused", n)
+	}
+	if n := r.model.count(); n != 0 {
+		t.Errorf("the model was asked %d times", n)
+	}
 }

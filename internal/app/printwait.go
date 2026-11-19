@@ -21,7 +21,9 @@ import (
 // JSON formats report the last turn. Claude Code stops what is left after
 // ten minutes of idle waiting; gnosh does not give up on a clock, so every
 // ten minutes of idle waiting it asks the model instead, which may stop
-// the work with TaskStop or wait on. CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS
+// the work with TaskStop or wait on. When the model cannot be asked (the
+// run's --max-turns are spent), what is left is stopped then, as Claude
+// Code's wait stops it. CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS
 // still sets a ceiling for whoever wants one (a number of milliseconds;
 // 0 waits with no checkpoint).
 //
@@ -33,12 +35,12 @@ import (
 // that Pi passed with the same command.
 
 // backgrounder is what a session's controls may also be: able to say what
-// still runs in the background, to put a checkpoint to the model, and to
-// stop the lot; and to say what its commands left running, and tell the
-// model of it.
+// still runs in the background, to put a checkpoint to the model (or say
+// why it cannot), and to stop the lot; and to say what its commands left
+// running, and tell the model of it.
 type backgrounder interface {
 	BackgroundWork() (running []string, ever bool)
-	CheckBackground(waited time.Duration, work []string)
+	CheckBackground(waited time.Duration, work []string) error
 	StopBackground()
 	LeftRunning() []string
 	TellLeftRunning(left []string) bool
@@ -48,14 +50,17 @@ type backgrounder interface {
 // before the run ends, when it says on a terminal that it waits, and how
 // often it asks the model.
 const (
-	waitLook       = 200 * time.Millisecond
-	waitSettle     = time.Second
-	waitSay        = 5 * time.Second
-	waitCheckpoint = 10 * time.Minute
+	waitLook   = 200 * time.Millisecond
+	waitSettle = time.Second
+	waitSay    = 5 * time.Second
 	// wakeLost is how long a note that was to wake the model may go
 	// without a turn starting before the run stops waiting for one.
 	wakeLost = 10 * time.Second
 )
+
+// waitCheckpoint is how long the run waits idle before it asks the model
+// (a variable for the tests).
+var waitCheckpoint = 10 * time.Minute
 
 // awaitBackground keeps the run open for the background work its turns
 // started, and returns the last turn's result. In stream-json output each
@@ -104,9 +109,12 @@ func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.Tur
 			if f.format == cli.FormatStreamJSON {
 				f.emitResult(c, r)
 			}
-			if !woken || ended(r) {
+			if !woken {
 				// (The turn the model was told what the end stops in is
-				// no reason for the run to fail.)
+				// gnosh's own: the run's result stays the answer to the
+				// prompt, which that turn's reply ("Restarted the server
+				// with setsid") had taken the place of, and its end is no
+				// reason for the run to fail.)
 				res = r
 			}
 			idleSince, quietSince, woken = time.Now(), time.Time{}, false
@@ -160,7 +168,14 @@ func (f *printer) awaitBackground(ctx context.Context, c Controls, res agent.Tur
 			b.StopBackground()
 			return res, nil, st
 		case checkpoints && waited >= f.checkpointEvery():
-			b.CheckBackground(waited, work)
+			if err := b.CheckBackground(waited, work); err != nil {
+				// A turn started now would be stopped before its first
+				// request, and the next checkpoint would ask again: the
+				// run never ended (the print mode review of 2026-11-19).
+				f.stderr("the run waited %s for background work and cannot ask the model whether to wait on, as %v; it stops the work now: %s", roundTime(waited), err, strings.Join(work, ", "))
+				b.StopBackground()
+				return res, nil, st
+			}
 			idleSince = time.Now()
 		}
 	}

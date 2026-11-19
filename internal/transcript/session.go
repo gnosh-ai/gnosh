@@ -241,11 +241,17 @@ func (s *Session) AppendAll(entries ...Entry) ([]Entry, error) {
 			return nil, err
 		}
 	}
+	before := int64(-1)
+	if fi, err := s.f.Stat(); err == nil {
+		before = fi.Size()
+	}
 	n, err := s.f.Write(buf)
 	if err != nil {
-		if n > 0 {
-			// Part of it may be in the file: the next write starts on a
-			// line of its own, and a load leaves the torn line out.
+		if n > 0 && (before < 0 || s.f.Truncate(before) != nil) {
+			// Part of it may be in the file, and could not be taken back
+			// off (the whole lines of it would come back as entries the
+			// session never had): the next write starts on a line of its
+			// own, and a load leaves the torn line out.
 			s.open = true
 		}
 		return nil, fmt.Errorf("transcript: appending to session %s: %w (nothing was recorded)", s.id, err)

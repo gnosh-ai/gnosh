@@ -84,7 +84,10 @@ type plain struct {
 	// the model's questions when that is what it holds: they are asked
 	// one after another.
 	question *agent.Question
-	form     *plainForm
+	// behind are the questions behind the one being answered, the
+	// oldest first.
+	behind []agent.Question
+	form   *plainForm
 	// nobody says no more lines will come: questions are answered no.
 	nobody bool
 	// waiting ticks while a request is out and nothing has come back.
@@ -668,6 +671,48 @@ func (f *plain) Run(ctx context.Context, c Controls) int {
 	}
 }
 
+// put puts a question to the person: the one being answered from now on.
+// The caller holds f.mu.
+func (f *plain) put(q agent.Question) {
+	f.question = &q
+	if form, ok := q.Data.(QuestionForm); ok && q.Kind == questionKind && len(form.Questions) > 0 {
+		f.form = &plainForm{form: form, answers: map[string]string{}}
+		f.fresh()
+		fmt.Fprintln(f.out)
+		head := q.Title
+		if form.Lead != "" {
+			head = form.Lead
+		}
+		fmt.Fprintln(f.out, "? "+visible(head))
+		if form.EscCancels {
+			fmt.Fprintln(f.out, "(/cancel answers that you will not say.)")
+		}
+		f.printFormQuestion()
+	} else {
+		f.printQuestion(q)
+	}
+	f.poke()
+	if f.ask != nil {
+		f.ask.Stop()
+		f.ask = nil
+	}
+	if c := f.c; c != nil && c.Info().NotifyHooks {
+		title := q.Title
+		f.ask = time.AfterFunc(askNotifyAfter, func() { c.Notify("permission_prompt", title, "gnosh is waiting for an answer: "+title) })
+	}
+}
+
+// next puts the question that waited longest, if one does. The caller
+// holds f.mu.
+func (f *plain) next() {
+	if len(f.behind) == 0 {
+		return
+	}
+	q := f.behind[0]
+	f.behind = f.behind[1:]
+	f.put(q)
+}
+
 // setNobody notes that no more lines will come, and answers the question
 // that waits, if one does: a question nobody can answer must not hold the
 // session for ever.
@@ -675,10 +720,14 @@ func (f *plain) setNobody(c Controls) {
 	f.mu.Lock()
 	f.nobody = true
 	q := f.question
-	f.question = nil
+	behind := f.behind
+	f.question, f.behind = nil, nil
 	f.mu.Unlock()
 	if q != nil {
 		f.refuse(c, *q)
+	}
+	for _, w := range behind {
+		f.refuse(c, w)
 	}
 }
 
@@ -765,11 +814,20 @@ func (f *plain) line(ctx context.Context, c Controls, line string) (quit bool) {
 			return false
 		}
 		f.question = nil
+		if f.ask != nil {
+			f.ask.Stop()
+			f.ask = nil
+		}
 		f.showTyping()
 		f.mu.Unlock()
 		if err := c.Answer(q.ID, ans); err != nil {
 			f.note("That question is no longer waiting for an answer.")
 		}
+		f.mu.Lock()
+		if f.question == nil {
+			f.next()
+		}
+		f.mu.Unlock()
 		return false
 	}
 	line, ok := f.cleanLine(line)
@@ -1096,6 +1154,10 @@ func (f *plain) Event(ev any) {
 		f.fresh()
 	case *agent.RetryEvent:
 		f.stopWaiting()
+		if ev.FellBack != "" {
+			f.say("%s", visible(ev.Message))
+			break
+		}
 		f.say("waiting: %s", visible(ev.Message))
 	case *agent.PromptEvent:
 		// One of gnosh's own prompts says why a turn started in a notice
@@ -1143,29 +1205,19 @@ func (f *plain) Event(ev any) {
 			}
 			return
 		}
-		f.question = &q
-		if form, ok := q.Data.(QuestionForm); ok && q.Kind == questionKind && len(form.Questions) > 0 {
-			f.form = &plainForm{form: form, answers: map[string]string{}}
-			f.fresh()
-			fmt.Fprintln(f.out)
-			head := q.Title
-			if form.Lead != "" {
-				head = form.Lead
-			}
-			fmt.Fprintln(f.out, "? "+visible(head))
-			if form.EscCancels {
-				fmt.Fprintln(f.out, "(/cancel answers that you will not say.)")
-			}
-			f.printFormQuestion()
-		} else {
-			f.printQuestion(q)
+		if f.question != nil {
+			// One question at a time: this one waits, and is put once the
+			// one being answered is done. Put in its place, it would take
+			// the answer typed for that one (a background sub-agent's
+			// question over the session's own), and leave that one
+			// waiting for good.
+			f.behind = append(f.behind, q)
+			f.say("(Another question waits behind this one: %s)", visible(q.Title))
+			return
 		}
-		f.poke()
-		if c := f.c; c != nil && c.Info().NotifyHooks {
-			title := q.Title
-			f.ask = time.AfterFunc(askNotifyAfter, func() { c.Notify("permission_prompt", title, "gnosh is waiting for an answer: "+title) })
-		}
+		f.put(q)
 	case *agent.AnswerEvent:
+		f.behind = slices.DeleteFunc(f.behind, func(w agent.Question) bool { return w.ID == ev.ID })
 		if f.question != nil && f.question.ID == ev.ID {
 			f.question, f.form = nil, nil
 		}
@@ -1176,11 +1228,16 @@ func (f *plain) Event(ev any) {
 		case ev.Answer.By != "":
 			f.say("(%s answered the question: %s.)", visible(ev.Answer.By), visible(ev.Answer.Choice))
 		}
-		if f.ask != nil {
+		if f.ask != nil && f.question == nil {
+			// (The reminder was the answered question's. One put since
+			// has its own.)
 			f.ask.Stop()
 			f.ask = nil
 		}
 		f.poke()
+		if f.question == nil {
+			f.next()
+		}
 	case *agent.NoticeEvent:
 		lead := "note: "
 		switch ev.Level {

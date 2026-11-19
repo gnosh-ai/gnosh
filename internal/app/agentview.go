@@ -202,7 +202,7 @@ func (p *program) agentViewOn(st *startup, inv cli.Invocation, focus string) int
 		}
 	}
 	return p.o.AgentView(AgentViewInfo{
-		Source: &runSource{p: p, dirs: st.sessions().ProjectDirs(), cwd: cwd, home: home, scoped: inv.Cwd != "", all: inv.All},
+		Source: &runSource{p: p, dirs: st.sessions().ProjectDirs, cwd: cwd, home: home, scoped: inv.Cwd != "", all: inv.All},
 		Cwd:    cwd, Home: home, Scoped: inv.Cwd != "", All: inv.All, Flags: flags,
 		Notify: firstOf(st.cfg.Options.PreferredNotifChannel.V, "auto"),
 		Focus:  focus,
@@ -214,8 +214,11 @@ func (p *program) agentViewOn(st *startup, inv cli.Invocation, focus string) int
 // runSource is the AgentSource of gnosh agents: the runs whose logs are in
 // dirs, the folders of every project's sessions.
 type runSource struct {
-	p      *program
-	dirs   []string
+	p *program
+	// dirs lists the folders of every project's sessions, afresh at each
+	// look: a run started from the view in a folder no session ran in
+	// before makes a new one (box 1's @repo check never saw its run).
+	dirs   func() []string
 	cwd    string
 	home   string
 	scoped bool
@@ -223,6 +226,9 @@ type runSource struct {
 	// seen, when not nil, is told of the runs each time they are listed:
 	// the person sees them (a session's status line, agentsWord).
 	seen func([]backgroundRun)
+	// mode is the permission mode of the session the view was opened
+	// over, given to a run started in its folder with no mode named.
+	mode string
 
 	mu sync.Mutex
 	// runs are the runs as last listed, by session id, and convs what was
@@ -245,7 +251,7 @@ func (s *runSource) Runs() []AgentRun {
 	}
 	listed := map[string]backgroundRun{}
 	var working, over []AgentRun
-	runs := runsIn(s.dirs, since)
+	runs := runsIn(s.dirs(), since)
 	if s.seen != nil {
 		s.seen(runs)
 	}
@@ -390,7 +396,7 @@ func (s *runSource) Forget(id string) error {
 	}
 	// A session sent off from two folders has a log in each.
 	var logs []string
-	for _, dir := range s.dirs {
+	for _, dir := range s.dirs() {
 		if log := filepath.Join(dir, id+".background.log"); fileExists(log) {
 			logs = append(logs, log)
 		}
@@ -419,6 +425,12 @@ func (s *runSource) Dispatch(ctx context.Context, dir, prompt string, flags []st
 	}
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		return "", fmt.Errorf("%s is not a folder that is there", dir)
+	}
+	if s.mode != "" && filepath.Clean(dir) == filepath.Clean(s.cwd) &&
+		!slices.ContainsFunc(flags, func(f string) bool { return strings.HasPrefix(f, "--permission-mode") }) {
+		// (Only in the session's own folder: another's defaultMode
+		// stands, as Claude Code's comes first.)
+		flags = append(slices.Clone(flags), "--permission-mode="+s.mode)
 	}
 	return s.background(ctx, dir, flags, prompt)
 }
@@ -569,11 +581,20 @@ func (l *live) agentView() (AgentViewInfo, error) {
 		l.agentsSeen.Store(now.UnixNano())
 		l.setStatus("agents", agentsWord(runs, now))
 	}
+	// The runs started from it in this session's folder work in its
+	// permission mode, as Claude Code's dispatched from a view opened with
+	// ← work in the source session's when the folder names no defaultMode;
+	// in the default mode none is named, and a run reads its folder's
+	// defaultMode itself (runSource.Dispatch).
+	mode := string(l.engine.Mode())
+	if mode == "default" {
+		mode = ""
+	}
 	return AgentViewInfo{
-		Source: &runSource{p: l.p, dirs: l.store.ProjectDirs(), cwd: cwd, home: home, seen: seen},
+		Source: &runSource{p: l.p, dirs: l.store.ProjectDirs, cwd: cwd, home: home, seen: seen, mode: mode},
 		Cwd:    cwd, Home: home,
 		Notify: firstOf(l.cfg.Options.PreferredNotifChannel.V, "auto"),
-		Kinds:  agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.moreRoots()), l.st.agents).Names(),
+		Kinds:  agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.defRoots()), l.st.agents).Names(),
 		Repos:  agentRepos(cwd),
 	}, nil
 }

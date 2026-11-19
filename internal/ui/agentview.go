@@ -132,6 +132,17 @@ type agentView struct {
 	// their notification channel.
 	prev  map[string]string
 	notes []string
+	// askedAt is when each question waiting on a run was first listed,
+	// lastKey when the last key came, and keyGap how long before the key
+	// in hand: a question takes no answer until it has been seen
+	// (guardShown) and the person has stopped typing (guardPause), as the
+	// session's own questions do (settled).
+	askedAt map[string]time.Time
+	lastKey time.Time
+	keyGap  time.Duration
+	// typedAt is when what is in the box began to be typed: words begun
+	// before a question was seen are for the run, not an answer.
+	typedAt time.Time
 
 	// flags are what the runs started from the view are given: the -y,
 	// mode, model and effort gnosh agents was given, as /model and
@@ -196,6 +207,16 @@ func (v *agentView) refresh() {
 	v.looked = v.now()
 	v.runs = v.src.Runs()
 	v.sortRuns()
+	asked := map[string]time.Time{}
+	for _, r := range v.runs {
+		if q := r.Question; q != nil {
+			asked[q.ID] = v.looked
+			if at, ok := v.askedAt[q.ID]; ok {
+				asked[q.ID] = at
+			}
+		}
+	}
+	v.askedAt = asked
 	doing, status := map[string][]string{}, map[string]string{}
 	// (Those the person stopped are told of no more, and get no words
 	// again.)
@@ -511,6 +532,11 @@ func (v *agentView) tick() {
 
 // input takes in one thing the terminal reported.
 func (v *agentView) input(ev term.Event) {
+	now := v.now()
+	v.keyGap, v.lastKey = now.Sub(v.lastKey), now
+	if strings.TrimSpace(v.box.Text()) == "" {
+		v.typedAt = now
+	}
 	if v.watch != nil {
 		v.watchInput(ev)
 		return
@@ -659,7 +685,7 @@ func (v *agentView) key(k term.Key) {
 		} else {
 			v.say("The runs are grouped by how they stand. Ctrl+S groups them by folder.")
 		}
-	case empty && v.answering() && k.Code == term.KeyRune && k.Rune >= '1' && k.Rune <= '9' && k.Mod&^term.ModShift == 0:
+	case empty && v.answering() && v.settled() && k.Code == term.KeyRune && k.Rune >= '1' && k.Rune <= '9' && k.Mod&^term.ModShift == 0:
 		r, _ := v.chosen()
 		if i := int(k.Rune - '1'); i < len(r.Question.Choices) {
 			v.answer(r, r.Question.Choices[i], "")
@@ -670,8 +696,15 @@ func (v *agentView) key(k term.Key) {
 			v.reply(r, strings.TrimSpace(v.box.Text()))
 		}
 	case !empty && v.answering() && !v.viewWords() && k.IsKey(term.KeyEnter, 0):
+		// Words for the question: no, with them; or, typed before the
+		// question was seen, words for the run, which it reads once it
+		// goes on.
 		r, _ := v.chosen()
-		v.answerWords(r, strings.TrimSpace(v.box.Text()))
+		if v.wordsFor(r) {
+			v.answerWords(r, strings.TrimSpace(v.box.Text()))
+		} else {
+			v.reply(r, strings.TrimSpace(v.box.Text()))
+		}
 	case empty && typedRune(k, ' '):
 		v.peek, v.help = !v.peek, false
 	case empty && typedRune(k, '?'):
@@ -1080,7 +1113,7 @@ func (v *agentView) watchInput(ev term.Event) {
 			// its steps, and one that is over goes on with them, as
 			// Claude Code's attached session takes a prompt; one that
 			// waits on a question is answered no, with them.
-			if r, ok := v.byID(w.id); ok && r.Question != nil {
+			if r, ok := v.byID(w.id); ok && r.Question != nil && v.wordsFor(r) {
 				v.answerWords(r, strings.TrimSpace(v.box.Text()))
 			} else if ok {
 				v.reply(r, strings.TrimSpace(v.box.Text()))
@@ -1124,10 +1157,38 @@ func (v *agentView) watchInput(ev term.Event) {
 }
 
 // watchedAsks reports whether the run watched waits on a question with
-// answers to choose from.
+// answers to choose from that takes an answer now (settledFor).
 func (v *agentView) watchedAsks() bool {
 	r, ok := v.byID(v.watch.id)
-	return ok && r.Question != nil && len(r.Question.Choices) > 0
+	return ok && r.Question != nil && len(r.Question.Choices) > 0 && v.settledFor(r)
+}
+
+// settled reports whether the question of the run chosen takes an answer
+// now, and settledFor that of run r: it has been on the screen guardShown,
+// and the key in hand came guardPause after the one before it. A digit or
+// words typed before then are typing (a review: "2 tests still fail…"
+// typed for a run that just came to a question answered it 2).
+func (v *agentView) settled() bool {
+	r, ok := v.chosen()
+	return ok && v.settledFor(r)
+}
+
+func (v *agentView) settledFor(r app.AgentRun) bool {
+	if r.Question == nil {
+		return false
+	}
+	at, ok := v.askedAt[r.Question.ID]
+	return ok && v.now().Sub(at) >= guardShown && v.keyGap >= guardPause
+}
+
+// wordsFor reports whether the words in the box answer the question of run
+// r: they began to be typed once it had been on the screen guardShown.
+func (v *agentView) wordsFor(r app.AgentRun) bool {
+	if r.Question == nil {
+		return false
+	}
+	at, ok := v.askedAt[r.Question.ID]
+	return ok && !v.typedAt.Before(at.Add(guardShown))
 }
 
 // listPlaceholder and watchPlaceholder are what the box says while it is
@@ -1183,7 +1244,7 @@ func (v *agentView) statusOf(r app.AgentRun) string {
 	case running(r):
 		return firstNonEmpty(v.status[r.ID], "starting")
 	case r.State == "stopped" || r.State == "failed":
-		return strings.TrimSuffix(r.State+v.th.Sep+firstNonEmpty(last, r.Ending), v.th.Sep)
+		return strings.TrimSuffix(r.State+v.th.Sep+firstNonEmpty(last, oneLine(r.Ending)), v.th.Sep)
 	}
 	return firstNonEmpty(last, "(it printed nothing)")
 }

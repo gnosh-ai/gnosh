@@ -172,7 +172,7 @@ func (l *live) styleNow() string {
 // the configuration names. A name no style has is said, and the default is
 // used.
 func (l *live) loadStyles() {
-	styles, problems := loadOutputStyles(l.texts, l.cfg, l.st.trusted, l.moreRoots())
+	styles, problems := loadOutputStyles(l.texts, l.cfg, l.st.trusted, l.defRoots())
 	for _, p := range problems {
 		l.notice(agent.LevelWarning, "output-style", p+".")
 	}

@@ -146,6 +146,17 @@ func (s *session) input(ev term.Event) {
 		}
 		s.dirty = true
 	case term.Key, term.Mouse, term.Paste:
+		if s.listing {
+			// A picker's list is being read (loadThen): what is typed
+			// meanwhile is for the list, as had it come at once. Ctrl+C
+			// lets a list that is slow to come go.
+			if k, ok := ev.(term.Key); ok && k.Is('c', term.ModCtrl) {
+				s.dropList("The list was not opened: " + s.listAgain + " opens it again.")
+				return
+			}
+			s.heldInput = append(s.heldInput, ev)
+			return
+		}
 		if k, ok := ev.(term.Key); ok && s.rebound(k) {
 			return
 		}
@@ -1139,9 +1150,64 @@ func (s *session) help() {
 	}
 }
 
+// loadThen reads a picker's list away from the loop, so that a long
+// session's file, or a folder of many sessions, does not hold the screen
+// still, and then shows it. What the person types meanwhile is held for
+// the list, as had it come at once: Down and Enter pick in it, Esc closes
+// it. A question or a turn that comes first lets the list go (listCheck),
+// and so does Ctrl+C. again says how to ask for the list again.
+func loadThen[T any](s *session, again string, read func() T, show func(T)) {
+	if s.listing {
+		return
+	}
+	s.listing, s.listAgain = true, again
+	gen := s.listGen
+	s.host.spawn(func() func() {
+		got := read()
+		return func() {
+			if !s.listing || gen != s.listGen {
+				// Let go meanwhile.
+				return
+			}
+			s.listing = false
+			held := s.heldInput
+			s.heldInput = nil
+			show(got)
+			if s.q == nil {
+				// No list came up (there was nothing in it): what was
+				// typed for it is not for the box, where Enter sends.
+				return
+			}
+			for _, ev := range held {
+				s.refeed(ev)
+			}
+		}
+	})
+}
+
+// listCheck lets a list that is being read go when a question or a turn
+// came first: what the person types next is for what is on the screen.
+func (s *session) listCheck() {
+	switch {
+	case !s.listing:
+	case s.q != nil:
+		s.dropList("A question came first: " + s.listAgain + " opens the list again.")
+	case s.busy:
+		s.dropList("A turn began first: " + s.listAgain + " opens the list again.")
+	}
+}
+
+// dropList lets the list that is being read go, with what was typed for
+// it, and says why.
+func (s *session) dropList(why string) {
+	s.listing, s.heldInput = false, nil
+	s.listGen++
+	s.flash(why)
+}
+
 // rewindNote is what the menu says of the files a rewind can and cannot
 // put back.
-const rewindNote = "What shell commands changed is not kept, and stays as it is."
+const rewindNote = "What a file holds when it is put back is kept first; what shell commands changed in other files is not put back."
 
 // rewind opens the list of the person's prompts, the newest first, to
 // take the conversation back to before one of them. It is what Esc Esc
@@ -1158,7 +1224,11 @@ func (s *session) rewind() {
 	case s.q != nil:
 		return
 	}
-	points := rw.RewindPoints()
+	loadThen(s, "Esc Esc", rw.RewindPoints, s.rewindMenu)
+}
+
+// rewindMenu opens the list of the person's prompts that rewind read.
+func (s *session) rewindMenu(points []app.RewindPoint) {
 	if len(points) == 0 {
 		s.flash("There is no prompt of yours in this conversation to go back to.")
 		return
@@ -1327,7 +1397,12 @@ func (s *session) resume() {
 	case s.q != nil:
 		return
 	}
-	choices := rs.ResumeChoices()
+	loadThen(s, "/resume", rs.ResumeChoices, s.resumeMenu)
+}
+
+// resumeMenu opens the list of the folder's other sessions that resume
+// read.
+func (s *session) resumeMenu(choices []app.SessionChoice) {
 	if len(choices) == 0 {
 		s.flash("There is no other session in this folder to open.")
 		return

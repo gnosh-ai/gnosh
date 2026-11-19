@@ -16,6 +16,10 @@ Some parts of the tree carry notices of their own:
 - `internal/markdown/testdata/spec/` holds the examples of the CommonMark and
   GitHub Flavored Markdown specifications, under CC BY-SA 4.0. They are read
   by tests and are not part of the program.
+- The Go modules gnosh is built with are named in `go.mod` and are not copied
+  into this repository. They keep their own licences: BSD, MIT and ISC;
+  Apache-2.0 (gno's tm2 among them); and MPL-2.0 (one cache, which gno's tm2
+  uses).
 
 What is not yet settled is set out under "Known licence interactions" at the
 end of this file.
@@ -809,8 +813,26 @@ version of that License on that day was version 6, of 25 November 2025.
 - **The GnoVM's own terms.** The GnoVM and the gno code gnosh embeds (the Gno
   standard library and `internal/gnovm/klashlibs/klash/bptree/v0`) are under
   the GNO Network GPL v6 with NewTendermint, LLC's own Additional Terms
-  (Strong Attribution). Those terms apply independently of this file: gnosh's
-  interface must carry NewTendermint's attribution notice too.
+  (Strong Attribution). Those terms apply independently of this file, so
+  gnosh's interface carries NewTendermint's attribution notice too: see the
+  next item.
+- **The notices in gnosh's interface.** Since 18 November 2026 the header
+  that opens every session ends with gnosh's address, "built on gno.land"
+  with a link to <https://gno.land>, and `/license`; and `/license` shows the
+  copyright, that there is no warranty, this License and where to read it,
+  and both credits. Those are the "Appropriate Legal Notices" of section 0,
+  so under section 5 d every interactive interface of a work made from gnosh
+  must show them too, beside the Attribution Notice the clause above asks
+  for.
+- **The libraries gnosh is built with.** None conflicts with this License.
+  BSD, MIT and ISC code, and Apache-2.0 code, may be made part of a work under
+  this License, as of one under the GNU GPL version 3, whose terms it keeps
+  for this. MPL-2.0 keeps its own files under its own terms (its section
+  3.3), which ask that those files stay available as source, as this License
+  asks of the whole. The GnoVM itself is built with the same libraries. No
+  binary of gnosh is released; when one is, it must carry the notices of the
+  libraries in it, which BSD, MIT, ISC and Apache-2.0 ask for in copies in
+  binary form.
 - **Authorship.** Much of this program was written with AI assistance at Jae
   Kwon's direction (see AUTHORSHIP.md). How much copyright that leaves for the
   clause above to rest on is a question for the legal review.

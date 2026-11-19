@@ -15,6 +15,7 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/cli"
+	"github.com/gnosh-ai/gnosh/internal/prompt"
 	"github.com/gnosh-ai/gnosh/internal/shellquote"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
 )
@@ -91,18 +92,38 @@ func (l *live) slashBackground(ctx context.Context, c *SlashContext) error {
 // run of its own on the prompt, while this session goes on here. The copy
 // works in the same folder.
 func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
+	return l.forkRun(ctx, c, false)
+}
+
+// slashSubtask runs /subtask <task>, as Claude Code's: a copy of the
+// conversation works on the task in the background, as /fork's does, and
+// when it ends what it answered comes back to this conversation, for the
+// model to tell the person (DECISIONS 141). It is named after the task's
+// first words.
+func (l *live) slashSubtask(ctx context.Context, c *SlashContext) error {
+	return l.forkRun(ctx, c, true)
+}
+
+// forkRun is /fork, and with subtask /subtask.
+func (l *live) forkRun(ctx context.Context, c *SlashContext, subtask bool) error {
 	prompt := strings.TrimSpace(c.Args)
+	what := "fork"
+	if subtask {
+		what = "subtask"
+	}
 	switch {
 	case l.p.o.Detach == nil:
 		return errors.New("this gnosh cannot start a session that goes on without a terminal")
+	case prompt == "" && subtask:
+		return errors.New("say what the copy is to do: /subtask <task>. A copy of this conversation works on it in the background, and what it answers comes back here when it is done")
 	case prompt == "":
 		return errors.New("say what the copy is to do: /fork <prompt>. It goes on in the background as a run of its own, whose questions wait for you in gnosh agents, while this session goes on here")
 	case l.busy(ctx):
-		return errors.New("a turn is running. Wait for it, or stop it, then fork")
+		return fmt.Errorf("a turn is running. Wait for it, or stop it, then /%s", what)
 	case !slices.ContainsFunc(l.ts.Entries(), func(e transcript.Entry) bool { return e.Type == transcript.TypeUser }):
 		return errors.New("there is nothing to copy yet: the conversation has not begun")
 	}
-	id, path, err := l.copySession("fork")
+	id, path, err := l.copySession(what)
 	if err != nil {
 		return fmt.Errorf("the conversation could not be copied: %v", err)
 	}
@@ -115,9 +136,12 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 	// (The copy's file is under the folder the session began in, which
 	// is not this one for a session of another folder opened by its id.)
 	name, byPerson := l.title()
-	if !byPerson {
+	switch {
+	case subtask:
+		name = firstWords(prompt, 6)
+	case !byPerson:
 		name = ""
-	} else {
+	default:
 		name += " (fork)" // (as copySession names the copy)
 	}
 	l.p.logHead(log, id, name, l.cfg.Paths.Cwd, path, prompt)
@@ -131,10 +155,29 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 		// this session.
 		t.forked.Store(true)
 	}
-	l.background(func(ctx context.Context) { l.watchRun(ctx, id, log, path) })
+	task := ""
+	if subtask {
+		task = prompt
+	}
+	l.background(func(ctx context.Context) { l.watchRun(ctx, id, log, path, task) })
+	if subtask {
+		c.Say("A copy of this conversation, %s, works on it in the background (process %d): %s", id, pid, oneLine(prompt, 200))
+		c.Say("What it answers comes back here when it is done; meanwhile ← ← shows it among the runs, and what it prints is in %s.", l.tilde(log))
+		return nil
+	}
 	c.Say("A copy of this conversation, %s, goes on in the background (process %d) with: %s", id, pid, oneLine(prompt, 200))
 	c.Say("It works in this same folder, beside this session. gnosh -r %s opens it once it is done; what it prints is in %s.", id, l.tilde(log))
 	return nil
+}
+
+// firstWords is a name made of a text's first words, at most n of them
+// and about 48 bytes.
+func firstWords(text string, n int) string {
+	words := strings.Fields(text)
+	if len(words) > n {
+		words = words[:n]
+	}
+	return oneLine(strings.Join(words, " "), 48)
 }
 
 // watchRun tells the person, while this session is open, when a run /fork
@@ -143,8 +186,15 @@ func (l *live) slashFork(ctx context.Context, c *SlashContext) error {
 // when it ends. A run that never took the file is said to have ended
 // without starting, with the last line of its log, once it has had
 // runStart to take it.
-func (l *live) watchRun(ctx context.Context, id, logPath, path string) {
+//
+// task is what a run /subtask started was set to do, empty for /fork's:
+// what such a run printed goes to the model when it ends.
+func (l *live) watchRun(ctx context.Context, id, logPath, path, task string) {
 	started := l.p.now()
+	what := "fork"
+	if task != "" {
+		what = "subtask"
+	}
 	took := false
 	tick := time.NewTicker(runLook)
 	defer tick.Stop()
@@ -158,30 +208,64 @@ func (l *live) watchRun(ctx context.Context, id, logPath, path string) {
 			took = true
 			continue
 		}
-		if runAlive(id, logPath, path) || !took && l.p.now().Sub(started) < runStart {
+		if runAlive(id, logPath, path) {
 			continue
 		}
 		r := readRunLog(logPath, id, started)
+		// A run that said how it ended took its session, even one that
+		// began and ended between two looks.
+		took = took || r.ended != "" || r.stopped
+		if !took && l.p.now().Sub(started) < runStart {
+			continue
+		}
 		said := ""
 		if r.last != "" {
 			said = " It ended with: " + oneLine(r.last, 160)
 		}
+		end := prompt.SubtaskEnd{ID: id, Task: task}
 		if took {
 			level, how := agent.LevelInfo, "is done"
 			switch {
 			case r.stopped || r.ended == "stopped":
-				how = "was stopped"
+				how, end.State = "was stopped", prompt.AgentStopped
 			case r.ended == "failed":
 				level, how = agent.LevelWarning, "failed, "+strings.TrimSuffix(r.failure, ".")
+				end.State, end.Why = prompt.AgentFailed, r.failure
 			case r.ended == "":
 				level, how = agent.LevelWarning, "ended without a word: it was killed, or its machine stopped"
+				end.State, end.Why = prompt.AgentFailed, "it ended without a word: it was killed, or its machine stopped"
 			}
-			l.notice(level, "fork", fmt.Sprintf("The fork %s %s (gnosh -r %s opens it).%s", RunShort(id), how, id, said))
+			l.notice(level, what, fmt.Sprintf("The %s %s %s (gnosh -r %s opens it).%s", what, RunShort(id), how, id, said))
 		} else {
-			l.notice(agent.LevelWarning, "fork", fmt.Sprintf("The fork %s ended without taking its session (what it printed is in %s).%s", RunShort(id), l.tilde(logPath), said))
+			l.notice(agent.LevelWarning, what, fmt.Sprintf("The %s %s ended without taking its session (what it printed is in %s).%s", what, RunShort(id), l.tilde(logPath), said))
+			end.State, end.Why = prompt.AgentFailed, "it ended without starting"
+		}
+		if task != "" {
+			l.subtaskEnded(end, r.output)
 		}
 		return
 	}
+}
+
+// subtaskEnded gives the model what a run /subtask started printed, once
+// it has ended, for it to tell the person: a note that starts a turn of
+// its own when the session is idle, as a background sub-agent's report
+// does.
+func (l *live) subtaskEnded(end prompt.SubtaskEnd, printed []string) {
+	if l.agent == nil || l.closing.Load() {
+		return
+	}
+	report := strings.TrimSpace(strings.Join(printed, "\n"))
+	if report != "" && len(printed) >= runOutputKept {
+		report = fmt.Sprintf("[the last %d lines it printed]\n%s", runOutputKept, report)
+	}
+	end.Report = prompt.Defuse(report)
+	_ = l.agent.Tell(agent.Note{
+		Text:   l.texts.SubtaskEnded(end),
+		Source: "task-notification",
+		Notice: fmt.Sprintf("What the subtask %s answered is in front of the model.", RunShort(end.ID)),
+		Wake:   true,
+	})
 }
 
 // runLook is how often watchRun looks at a run's session, and runStart how
@@ -464,6 +548,9 @@ func readRunLog(path, id string, started time.Time) backgroundRun {
 			}
 		}
 		if strings.TrimSpace(line) != "" {
+			// A run's own end line is the last it writes: one with what it
+			// printed after it was printed, a quote of another's.
+			r.ended, r.failure, r.endedAt = "", "", time.Time{}
 			r.last = strings.TrimSpace(line)
 			if len(r.output) == runOutputKept {
 				r.output = append(r.output[:0], r.output[1:]...)

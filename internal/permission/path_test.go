@@ -536,7 +536,9 @@ func TestGitPlaces(t *testing.T) {
 		{"git status", ""},
 		{"git log --oneline -C x", ""}, // after the subcommand: its own words
 		{"git -C /repo commit -am x", "/repo"},
-		{"git -C ../repo log", "/repo"},
+		{"git -C ../repo log", "-"}, // (a .. goes through a link first)
+		{"git -C lnk/.. status", "-"},
+		{"git --git-dir=/repo/x/../.git log", "-"},
 		{"git --git-dir=/repo/.git log", "/repo/.git"},
 		{"git --git-dir /repo/.git --work-tree /repo log", "/repo/.git /repo"},
 		{"GIT_DIR=/repo/.git git log", "/repo/.git"},
@@ -561,5 +563,29 @@ func TestGitPlaces(t *testing.T) {
 		if !ok || got != c.want {
 			t.Errorf("GitPlaces(%q) = %q, %v; want %q", c.cmd, got, ok, c.want)
 		}
+	}
+}
+
+// A protected file or folder that is a link protects what it leads to:
+// that is the file the settings are read from. And a work tree named as a
+// protected folder (.git) gets no work tree's exemption.
+func TestProtectedLinksAndTrees(t *testing.T) {
+	o := testOptions(ModeAcceptEdits, rules{allow: []string{"Edit", "Write", "Edit(**)", "Edit(//**)"}})
+	o.Protected = []string{"/home/u/.config/gnosh"}
+	o.Resolve = func(p string) (string, error) {
+		if p == "/home/u/.config/gnosh" {
+			return "/home/u/dotfiles/gnosh", nil
+		}
+		return p, nil
+	}
+	o.WorkTrees = []string{"/proj/.gnosh/worktrees"}
+	e := mustEngine(t, o)
+	for _, p := range []string{"/home/u/dotfiles/gnosh/settings.json", "/proj/.gnosh/worktrees/.git/config"} {
+		if d := file(e, "Write", p); d.Behavior != Ask || d.Stage != StageSafety {
+			t.Errorf("%s: got %s at %s, want a plain ask at the safety stage", p, d.Behavior, d.Stage)
+		}
+	}
+	if d := file(e, "Write", "/home/u/dotfiles/other.txt"); d.Stage == StageSafety {
+		t.Errorf("a file beside the linked folder hit the safety check")
 	}
 }

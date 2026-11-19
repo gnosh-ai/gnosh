@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -228,5 +229,95 @@ func TestImagesAreLeftOutForTheModelThatRefusedThem(t *testing.T) {
 	}
 	if d := p.(core.ImageDropper); !d.LeavesOutImages("m") || d.LeavesOutImages("vision") {
 		t.Errorf("LeavesOutImages: m %v, vision %v; want true, false", d.LeavesOutImages("m"), d.LeavesOutImages("vision"))
+	}
+}
+
+// manyPictures is a conversation in which a tool read n pictures, each
+// different.
+func manyPictures(n int) *core.Request {
+	req := &core.Request{Model: "claude", Messages: []core.Message{core.UserText("look at the pages")}}
+	for i := range n {
+		id := "call_" + strconv.Itoa(i)
+		req.Messages = append(req.Messages,
+			core.Message{Role: core.RoleAssistant, Blocks: []core.Block{core.ToolUse(id, "Read", json.RawMessage(`{"file_path":"shot.png"}`))}},
+			core.Message{Role: core.RoleUser, Blocks: []core.Block{{Type: core.BlockToolResult, ToolUseID: id, Content: []core.Block{
+				{Type: core.BlockImage, MediaType: "image/png", Data: []byte("\x89PNG\r\n\x1a\nshot " + strconv.Itoa(i))},
+			}}}})
+	}
+	return req
+}
+
+// An image larger than Anthropic's API takes is left out of the request,
+// as one too large, and the request is sent again; the conversation keeps
+// it. It refused the request, and the conversation kept it, so every
+// later request was refused too (the model client review of 2026-11-19).
+func TestAnImageTooLargeIsLeftOut(t *testing.T) {
+	big := base64.StdEncoding.EncodeToString([]byte("\x89PNG\r\n\x1a\nshot 1"))
+	f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+		if bytes.Contains(f.last().Body, []byte(big)) {
+			answering(400, nil, `{"type":"error","error":{"type":"invalid_request_error","message":"messages.4.content.0.content.0.image.source.base64.data: At least one of the image dimensions exceed max allowed size: 8000 pixels"}}`)(f, w, r)
+			return
+		}
+		f.play(w, r, events(messageDelta("end_turn", ""), messageStop))
+	})
+	p := f.provider(TypeAnthropic, func(c *Config) { c.PromptCache = "off" })
+	wantOK(t, drain(p.Stream(context.Background(), manyPictures(1))))
+	req := manyPictures(2)
+	wantOK(t, drain(p.Stream(context.Background(), req)))
+	reqs := f.requests()
+	if len(reqs) != 3 {
+		t.Fatalf("%d requests, want the first picture's, the refused one and the one without the large one", len(reqs))
+	}
+	last := reqs[2].Body
+	if bytes.Contains(last, []byte(big)) || bytes.Count(last, []byte(`"type":"image"`)) != 1 || !bytes.Contains(last, []byte("larger than the model")) {
+		t.Errorf("the request sent again should hold the first picture and say the second was too large:\n%s", last)
+	}
+	if req.Messages[4].Blocks[0].Content[0].Type != core.BlockImage {
+		t.Errorf("the conversation lost its picture")
+	}
+}
+
+// When Anthropic's API refuses a request for holding many images (more
+// than 20 are held to a lower limit, which a picture it took before can be
+// over), only the newest 20 are sent whole, then and from then on; the
+// older are lines that say so. A session that read many screenshots was
+// refused from its 21st on (the model client review of 2026-11-19).
+func TestManyImagesKeepTheNewest(t *testing.T) {
+	f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+		if bytes.Count(f.last().Body, []byte(`"type":"image"`)) > 20 {
+			answering(400, nil, `{"type":"error","error":{"type":"invalid_request_error","message":"messages.2.content.0.content.0.image.source.base64.data: Image dimensions exceed the 2000 pixel limit for many-image requests"}}`)(f, w, r)
+			return
+		}
+		f.play(w, r, events(messageDelta("end_turn", ""), messageStop))
+	})
+	p := f.provider(TypeAnthropic, func(c *Config) { c.PromptCache = "off" })
+	wantOK(t, drain(p.Stream(context.Background(), manyPictures(22))))
+	reqs := f.requests()
+	if len(reqs) != 2 {
+		t.Fatalf("%d requests, want the refused one and the one with the newest 20", len(reqs))
+	}
+	oldest := base64.StdEncoding.EncodeToString([]byte("\x89PNG\r\n\x1a\nshot 0"))
+	newest := base64.StdEncoding.EncodeToString([]byte("\x89PNG\r\n\x1a\nshot 21"))
+	last := reqs[1].Body
+	if n := bytes.Count(last, []byte(`"type":"image"`)); n != 20 {
+		t.Errorf("the request sent again holds %d images", n)
+	}
+	if bytes.Contains(last, []byte(oldest)) || !bytes.Contains(last, []byte(newest)) {
+		t.Errorf("the request sent again holds the oldest (%v) or lacks the newest (%v)", bytes.Contains(last, []byte(oldest)), !bytes.Contains(last, []byte(newest)))
+	}
+	if n := bytes.Count(last, []byte("one of the older ones")); n != 2 {
+		t.Errorf("%d older images are said to be left out, want 2", n)
+	}
+	// From then on the newest 20 go from the start.
+	wantOK(t, drain(p.Stream(context.Background(), manyPictures(23))))
+	if reqs := f.requests(); len(reqs) != 3 || bytes.Count(reqs[2].Body, []byte(`"type":"image"`)) != 20 {
+		t.Errorf("after it: %d requests", len(reqs))
+	}
+	// A request with no more than 20 that is refused so is not this.
+	f2 := newFake(t, answering(400, nil, `{"type":"error","error":{"type":"invalid_request_error","message":"many-image requests are held to a lower limit"}}`))
+	p2 := f2.provider(TypeAnthropic, func(c *Config) { c.PromptCache = "off" })
+	wantFailure(t, drain(p2.Stream(context.Background(), manyPictures(3))).err, core.ErrInvalidRequest)
+	if n := len(f2.requests()); n != 1 {
+		t.Errorf("a refusal with 3 images was sent %d times", n)
 	}
 }

@@ -22,6 +22,7 @@ func TestFormat(t *testing.T) {
 		want  string
 	}{
 		{"an empty reply", textEmptyReply, nil, nil, s.EmptyReply()},
+		{"a call written out as text", textTextCall, nil, nil, s.TextCall()},
 		{"a repeated call", textRepeat, map[string]string{"calls": "%[3]s"}, []any{6, 10, "- Bash {\"command\":\"ls\"}"}, s.Repeat([]string{"Bash {\"command\":\"ls\"}"})},
 		{"two calls taking turns", textRepeat, map[string]string{"calls": "%[2]s"}, []any{10, "- Read a\n- Grep b"}, s.Repeat([]string{"Read a", "Grep b"})},
 		{"a checkpoint", textCheckpoint, map[string]string{"marker": "%[1]s", "count": "%[2]d"}, []any{StopMarker, 10}, s.Checkpoint(10, "", "")},

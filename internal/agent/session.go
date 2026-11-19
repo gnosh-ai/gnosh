@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -347,6 +348,17 @@ func (a *Agent) admitLoop() {
 			if persisted {
 				_ = a.appendLog(Entry{Kind: EntryUnqueued, Prompt: s.id, Text: "taken back"})
 			}
+			a.emitQueue()
+		case !ok && s.note && why == ReturnStopped:
+			// A note that was to start a turn, stopped in its check (Esc
+			// as the session's start ran for it), is still a note: it goes
+			// with the next request, as Tell promises. It came back as a
+			// hidden prompt nobody shows, and was lost (the agent loop
+			// review of 2026-11-19).
+			a.mu.Lock()
+			a.notes = append(a.notes, Note{Text: s.prompt.Text, Source: s.prompt.Source, Notice: s.prompt.Notice})
+			a.mu.Unlock()
+			s.resolve(TurnResult{Prompts: []string{s.id}, Reason: EndWithdrawn, Detail: reason})
 		case !ok:
 			a.emit(&PromptReturnedEvent{ID: s.id, Prompt: s.prompt, Why: why, Reason: reason})
 			end := EndWithdrawn
@@ -354,6 +366,12 @@ func (a *Agent) admitLoop() {
 				end = EndRefused
 			}
 			s.resolve(TurnResult{Prompts: []string{s.id}, Reason: end, Detail: reason})
+			if why == ReturnRefused && s.prompt.Own && s.prompt.Source == "loop" {
+				// Its next prompt would be refused the same way: it sent
+				// one at once, again and again, until Esc (the agent loop
+				// review of 2026-11-19).
+				a.loopOff("its prompt was refused: " + reason)
+			}
 		case wait:
 			// It waits behind a turn or behind other prompts, and is
 			// shown as waiting.
@@ -369,6 +387,12 @@ func (a *Agent) admitLoop() {
 func (a *Agent) admit(ctx context.Context, s *submission) (bool, ReturnReason, string) {
 	const stopped = "the session was stopped while this prompt was being checked, so it was not sent"
 
+	a.mu.Lock()
+	halted := a.startHalt
+	a.mu.Unlock()
+	if halted != "" {
+		return false, ReturnRefused, halted
+	}
 	if f := a.opts.Moments.SessionStart; f != nil {
 		a.mu.Lock()
 		ran, empty, model := a.startRan, !a.sent, a.model.Info.ID
@@ -383,6 +407,16 @@ func (a *Agent) admit(ctx context.Context, s *submission) (bool, ReturnReason, s
 			})
 			if ctx.Err() != nil || !ok {
 				return false, ReturnStopped, stopped
+			}
+			var h *StopWork
+			if errors.As(err, &h) {
+				// The start said stop: this prompt and every one after it
+				// are refused, with its reason.
+				reason := firstNonEmpty(h.Reason, "the session's start stopped it")
+				a.mu.Lock()
+				a.startRan, a.startHalt = true, reason
+				a.mu.Unlock()
+				return false, ReturnRefused, reason
 			}
 			if err != nil {
 				a.notice(LevelWarning, "session-start", fmt.Sprintf(
@@ -540,10 +574,18 @@ func (a *Agent) settle() error {
 		entries = append(entries, Entry{Kind: EntryTurn, Reason: EndInterrupted, Text: detail})
 	}
 	var back []Entry
-	for _, id := range order {
-		if e, ok := waiting[id]; ok {
-			back = append(back, e)
-			entries = append(entries, Entry{Kind: EntryUnqueued, Prompt: id, Text: "returned when the session was reopened"})
+	if !a.opened {
+		// (In a session this process opened, a prompt written down as
+		// queued and not sent is still in its line, or in the turn that is
+		// starting: only a process that died leaves one behind. Returned
+		// here after a turn's end could not be written, it went out all
+		// the same, and twice once the person sent it again (the agent
+		// loop review of 2026-11-19).)
+		for _, id := range order {
+			if e, ok := waiting[id]; ok {
+				back = append(back, e)
+				entries = append(entries, Entry{Kind: EntryUnqueued, Prompt: id, Text: "returned when the session was reopened"})
+			}
 		}
 	}
 	if err := a.appendLog(entries...); err != nil {

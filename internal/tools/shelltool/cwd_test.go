@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
 )
@@ -199,14 +200,16 @@ func TestStoppedCommandDoesNotMoveTheSession(t *testing.T) {
 	t.Parallel()
 	m := newManager(t, Options{})
 	env, _, _ := project(t)
-	res := run(t, t.Context(), m, BashName, env, args{argCommand: "cd sub; echo ready; sleep 300", argTimeout: 500})
+	res := run(t, t.Context(), m, BashName, env, args{argCommand: "cd sub; echo ready; sleep 300", argTimeout: 2000})
 	if res.Cwd != "" {
 		t.Errorf("Cwd = %q after a timeout, want none", res.Cwd)
 	}
 	// A recent bash says where it was even when it is terminated; other
-	// shells may not, and then there is nothing to say.
-	if runtime.GOOS == "linux" && filepath.Base(m.shell) == "bash" && !hasNote(res, "its change of directory is not kept") {
-		_, _, notes := parts(res)
+	// shells may not, and then there is nothing to say. Nor is there when
+	// the timeout came before the cd ran (a box under load can take that
+	// long to start the shell): "ready" says it ran.
+	_, body, notes := parts(res)
+	if runtime.GOOS == "linux" && filepath.Base(m.shell) == "bash" && strings.Contains(body, "ready") && !hasNote(res, "its change of directory is not kept") {
 		t.Errorf("notes = %q, want word that the session did not move", notes)
 	}
 }
@@ -256,5 +259,56 @@ func TestPlace(t *testing.T) {
 		if got := place(final, treed); got.to != "" || got.outside != final || !got.checkout {
 			t.Errorf("in a checkout its work tree was made from, place(%q) = %+v", final, got)
 		}
+	}
+}
+
+// A working directory that was taken away (a checkout without the folder,
+// a clean) no longer keeps every command from running: the command runs in
+// the nearest folder above it that is there, inside the session's, and the
+// session moves there; a command that takes its own working directory away
+// moves the session up as well. (The shell tool review of 2026-11-19:
+// nothing could run again, not even the person's own cd.)
+func TestWorkingDirectoryTakenAway(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{})
+	env, sub, _ := project(t)
+	root := env.Roots[0]
+	env.Cwd = sub
+	if err := os.RemoveAll(filepath.Dir(sub)); err != nil {
+		t.Fatal(err)
+	}
+	res := bash(t, m, env, "pwd")
+	if _, body, notes := parts(res); res.Cwd != root || !strings.Contains(body, root) || !hasNote(res, "was not there any more, so the command ran in "+root) {
+		t.Errorf("a command in a folder taken away: Cwd %q, output %q, notes %q", res.Cwd, body, notes)
+	}
+
+	gone := filepath.Join(root, "gone")
+	if err := os.MkdirAll(gone, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env.Cwd = gone
+	res = bash(t, m, env, `rm -rf "$PWD"`)
+	if _, _, notes := parts(res); res.Cwd != root || !hasNote(res, "the command took away its working directory "+gone+", so the working directory is now "+root) {
+		t.Errorf("a command that took its own folder away: Cwd %q, notes %q", res.Cwd, notes)
+	}
+}
+
+// The file in which the shell says where it ended is read with care: one
+// a command put a pipe in place of (nobody writes to it) does not hold the
+// result up, and one it made a link to an endless device does not fill
+// memory. (The shell tool review of 2026-11-19.)
+func TestWhereItEndedIsAPlainFile(t *testing.T) {
+	t.Parallel()
+	m := newManager(t, Options{})
+	env := newEnv(t)
+	start := time.Now()
+	res := run(t, t.Context(), m, BashName, env, args{argCommand: `rm -f "$__gnosh_cwd"; mkfifo "$__gnosh_cwd"`, argTimeout: 2000})
+	if took := time.Since(start); res.Cwd != "" || took > 15*time.Second {
+		t.Errorf("a pipe in place of the file: Cwd %q after %v", res.Cwd, took)
+	}
+	start = time.Now()
+	res = bash(t, m, env, `ln -sf /dev/zero "$__gnosh_cwd"`)
+	if took := time.Since(start); res.Cwd != "" || took > 15*time.Second {
+		t.Errorf("a link to /dev/zero in place of the file: Cwd %q after %v", res.Cwd, took)
 	}
 }

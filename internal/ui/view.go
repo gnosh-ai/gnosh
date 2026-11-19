@@ -449,8 +449,10 @@ func (s *session) hintLines(width int, now time.Time) []string {
 // for, with how long that has lasted. It is empty when the session is
 // idle; the status line then says so.
 //
-// Nothing in it moves but the clock, and nothing in it looks like data: a
-// mark, plain words, a time.
+// Nothing in it looks like data: a mark, plain words, a time. With colour
+// the mark turns and colour falls through the words, the more the longer
+// the model has been in one thought (fall.go); the words stay as they
+// are.
 func (s *session) activityLine(width int, now time.Time) string {
 	th := &s.th
 	// what says it in full and brief in fewer words, for a terminal too
@@ -533,7 +535,14 @@ func (s *session) activityLine(width int, now time.Time) string {
 			what = firstNonEmpty(s.said(), "working")
 		}
 	}
-	markText, markWidth := s.busyMark(now)
+	// With colour, and unless a question waits for the person (a line
+	// that waits for someone does not move), the line moves: its mark
+	// turns, and the fall passes over its words (fall.go).
+	moving := th.Fall.moves() && s.q == nil
+	markWidth := s.m.Width(th.BusyMark)
+	if moving {
+		markWidth = 1
+	}
 	room := width - markWidth - 1
 	if brief != "" && s.m.Width(what) > room {
 		what = brief
@@ -549,33 +558,20 @@ func (s *session) activityLine(width int, now time.Time) string {
 		parts = append(parts, "Esc stops")
 	}
 	// As many of the parts as fit; what gnosh is doing is always there.
-	mark := markText + " "
-	line := th.Activity.Render(parts[0])
+	rest := ""
 	used := s.m.Width(parts[0])
 	for _, p := range parts[1:] {
 		if used+s.m.Width(th.Sep)+s.m.Width(p) > room {
 			break
 		}
-		line += th.Quiet.Render(th.Sep + p)
+		rest += th.Sep + p
 		used += s.m.Width(th.Sep) + s.m.Width(p)
 	}
-	return fit(s.m, mark+line, width)
-}
-
-// busyMark draws the mark that leads the activity line, and says how wide
-// it is. While gnosh works and there is colour, it is the fall (fall.go):
-// sparkle marks dropping to the right across a few cells, calm and nearly
-// grey at first, and more of them, faster and in more colour the longer
-// the model has been in one thought. With no colour, and while a question
-// waits for the person, it is BusyMark, standing still: a line that waits
-// for someone does not move.
-func (s *session) busyMark(now time.Time) (string, int) {
-	th := &s.th
-	if !th.Fall.moves() || s.q != nil {
-		return th.Busy.Render(th.BusyMark), s.m.Width(th.BusyMark)
+	if !moving {
+		return fit(s.m, th.Busy.Render(th.BusyMark)+" "+th.Activity.Render(parts[0])+th.Quiet.Render(rest), width)
 	}
-	s.fall.step(&th.Fall, now, depthOf(s.thinkingFor(now)))
-	return s.fall.draw(&th.Fall), th.Fall.Cells
+	s.fall.step(now, depthOf(s.thinkingFor(now)), used)
+	return fit(s.m, s.fall.mark(&th.Fall)+" "+s.fall.wash(&th.Fall, s.m, parts[0], rest), width)
 }
 
 // thinkingFor is how long the thought that is arriving now has lasted, or

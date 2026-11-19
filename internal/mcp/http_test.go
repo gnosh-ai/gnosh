@@ -91,6 +91,29 @@ func (f *fakeHTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+		// Answers in which the answer never comes.
+		switch p.Name {
+		case "accepted":
+			w.WriteHeader(http.StatusAccepted)
+			return
+		case "wrongid":
+			fmt.Fprintf(w, `{"jsonrpc":"2.0","id":"not-%s","result":{"content":[]}}`, strings.Trim(id, `"`))
+			return
+		case "cutstream":
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/message\"}\n\n")
+			return
+		case "bigevent":
+			w.Header().Set("Content-Type", "text/event-stream")
+			line := "data: " + strings.Repeat("x", 1<<20) + "\n"
+			for range 20 {
+				if _, err := fmt.Fprint(w, line); err != nil {
+					return
+				}
+			}
+			<-r.Context().Done()
+			return
+		}
 		fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"called %s"}]}}`, id, p.Name)
 	default:
 		// Notifications and the client's answers.
@@ -177,6 +200,35 @@ func TestHTTPClient(t *testing.T) {
 		if h.Get("Mcp-Protocol-Version") != "2025-03-26" {
 			t.Errorf("request %d had version %q", i, h.Get("Mcp-Protocol-Version"))
 		}
+	}
+}
+
+// A request whose answer will not come fails at once, as a server that
+// could not be reached does: answered with 202, with JSON that holds no
+// answer to it, with a stream that ends before the answer, or with an
+// event larger than any answer may be. Each waited for ever before, with
+// no timeout set (the MCP review of 2026-11-19).
+func TestHTTPAnswersThatNeverCome(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	srv := httptest.NewServer(&fakeHTTP{})
+	defer srv.Close()
+	c, err := StartHTTP(ctx, "x", srv.URL, nil, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	for _, name := range []string{"accepted", "wrongid", "cutstream", "bigevent"} {
+		callCtx, stop := context.WithTimeout(ctx, 10*time.Second)
+		start := time.Now()
+		_, err := c.CallTool(callCtx, name, nil)
+		stop()
+		if took := time.Since(start); !errors.Is(err, ErrUnreachable) || took > 5*time.Second {
+			t.Errorf("%s: %v after %v, want it unreachable at once", name, err, took.Round(time.Millisecond))
+		}
+	}
+	if res, err := c.CallTool(ctx, "fine", nil); err != nil || len(res.Content) != 1 || res.Content[0].Text != "called fine" {
+		t.Errorf("a call after those: %+v, %v", res, err)
 	}
 }
 

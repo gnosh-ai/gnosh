@@ -30,10 +30,6 @@ import (
 // waits too, and says so. A background sub-agent has neither the Agent
 // tool nor anyone to put a question of its own to.
 
-// maxBackgroundAgents is how many sub-agents may run in the background at
-// once.
-const maxBackgroundAgents = 20
-
 // bgAgent is a sub-agent running in the background.
 type bgAgent struct {
 	id, desc, kind, output string
@@ -59,6 +55,19 @@ func (l *live) backgroundOff(owner *subSession) string {
 	return ""
 }
 
+// backgroundAgent returns the sub-agent with this id that runs in the
+// background, if one does.
+func (l *live) backgroundAgent(id string) (*bgAgent, bool) {
+	l.bgMu.Lock()
+	defer l.bgMu.Unlock()
+	for _, b := range l.bgAgents {
+		if b.id == id {
+			return b, true
+		}
+	}
+	return nil, false
+}
+
 // startBackground runs a sub-agent that is ready to start in the
 // background, and returns what the Agent call returns: that it started.
 func (l *live) startBackground(s *subSession, in agentInput) core.ToolResult {
@@ -77,6 +86,9 @@ func (l *live) startBackground(s *subSession, in agentInput) core.ToolResult {
 		defer l.bgWG.Done()
 		defer close(b.done)
 		defer cancel()
+		// (Closed below before its report goes out; this one is for a run
+		// that never gets there. Closing is done once.)
+		defer s.close()
 		res, err := s.agent.Run(ctx, agent.Prompt{Text: in.Prompt})
 		var rep core.ToolResult
 		var caution string
@@ -215,9 +227,29 @@ func (t *stopAgentTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Ac
 }
 
 func (t *stopAgentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv) (core.ToolResult, error) {
+	sub := env != nil && env.ParentSessionID != ""
 	if b := t.agentOf(call); b != nil {
+		if sub {
+			// A sub-agent starts none in the background, so this one is
+			// not its to stop.
+			return core.ErrorResult(fmt.Sprintf("%s is a sub-agent the session runs in the background, and a sub-agent stops only what it started itself.", b.id)), nil
+		}
 		t.l.stopBackgroundAgent(b)
 		return core.TextResult(fmt.Sprintf("The background sub-agent %s is stopped: %s. Its session file is %s.", b.id, b.desc, b.output)), nil
+	}
+	if sub && t.l.shell != nil {
+		// A sub-agent stops its own background commands, and no other's.
+		var in struct {
+			TaskID  string `json:"task_id"`
+			ShellID string `json:"shell_id"`
+		}
+		_ = json.Unmarshal(call.Input, &in)
+		id := firstOf(in.TaskID, in.ShellID)
+		for _, task := range t.l.shell.Tasks() {
+			if task.ID == id && task.Owner != env.SessionID {
+				return core.ErrorResult(fmt.Sprintf("The background command %s was not started by this sub-agent, and a sub-agent stops only what it started itself.", id)), nil
+			}
+		}
 	}
 	return t.shell.Run(ctx, call, env)
 }

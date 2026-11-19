@@ -53,7 +53,10 @@ func (s *source) settingsPermissions(f jfield) {
 				s.errorf(m.line, "\"permissions.disableBypassPermissionsMode\" takes the one value \"disable\".")
 				continue
 			}
-			s.add(op{kind: KindMode, text: "disableBypassPermissionsMode", origin: o, feature: FeaturePermissions, what: "a permission setting",
+			// (It only takes a mode away, so a folder that is not trusted
+			// keeps it too, as DECISIONS 2 says; the config review of
+			// 2026-11-19 found it held as a mode.)
+			s.add(op{kind: KindRestriction, text: "disableBypassPermissionsMode", origin: o, feature: FeaturePermissions, what: "a permission setting",
 				apply: func(b *builder) { b.bypassDisabled.put(true, o) }})
 		case "disableAutoMode":
 			if m.val.kind != jString || m.val.str != "disable" {
@@ -423,6 +426,92 @@ func (s *source) statusLine(f jfield) {
 		apply: func(b *builder) { b.statusLine.put(sl, sl.Origin) }})
 }
 
+// attribution reads the attribution setting: {"commit": "...", "pr":
+// "...", "sessionUrl": false}, or false for none. sessionUrl is taken and
+// adds nothing: a gnosh session has no web address to link.
+func (s *source) attribution(f jfield) {
+	a := Attribution{Origin: s.at(f.line)}
+	switch {
+	case f.val.kind == jBool && !f.val.b:
+	case f.val.kind != jObject:
+		s.errorf(f.line, "\"attribution\" is an object such as {\"commit\": \"...\", \"pr\": \"...\"}, or false for none, and here it is %s.", f.val.kind.word())
+		return
+	default:
+		good := true
+		for _, m := range s.unique(f.val, "attribution.") {
+			switch m.key {
+			case "commit", "pr":
+				if m.val.kind != jString {
+					s.errorf(m.line, "the attribution's %q is the text added, as a string (an empty one adds none).", m.key)
+					good = false
+					break
+				}
+				if m.key == "commit" {
+					a.Commit = strings.TrimSpace(m.val.str)
+				} else {
+					a.PR = strings.TrimSpace(m.val.str)
+				}
+			case "sessionUrl":
+				if m.val.kind != jBool {
+					s.errorf(m.line, "the attribution's \"sessionUrl\" is true or false.")
+					good = false
+				}
+			default:
+				s.errorf(m.line, "the attribution has no field %s; its fields are commit, pr and sessionUrl.", showName(m.key))
+				good = false
+			}
+		}
+		if !good {
+			return
+		}
+	}
+	s.add(op{kind: KindOption, text: "attribution: commit " + strconv.Quote(a.Commit) + ", pull request " + strconv.Quote(a.PR), origin: a.Origin, what: "what the model signs its commits and pull requests with",
+		apply: func(b *builder) { b.attribution.put(a, a.Origin) }})
+}
+
+// fileSuggestion reads the fileSuggestion object: {"type": "command",
+// "command": "..."}.
+func (s *source) fileSuggestion(f jfield) {
+	if f.val.kind != jObject {
+		s.errorf(f.line, "\"fileSuggestion\" is an object such as {\"type\": \"command\", \"command\": \"~/.config/gnosh/file-suggestion.sh\"}, and here it is %s.", f.val.kind.word())
+		return
+	}
+	fs := FileSuggestion{Origin: s.at(f.line)}
+	typ, good := "", true
+	bad := func(line int, format string, a ...any) {
+		s.errorf(line, format, a...)
+		good = false
+	}
+	for _, m := range s.unique(f.val, "fileSuggestion.") {
+		switch m.key {
+		case "type":
+			if m.val.kind != jString || m.val.str != "command" {
+				bad(m.line, "the file suggestion's \"type\" is \"command\", the one kind there is.")
+			}
+			typ = "command"
+		case "command":
+			if m.val.kind != jString || strings.TrimSpace(m.val.str) == "" {
+				bad(m.line, "the file suggestion's \"command\" is the command line to run, as a string that is not empty.")
+				break
+			}
+			fs.Command = m.val.str
+		default:
+			bad(m.line, "the file suggestion has no field %s; its fields are type and command.", showName(m.key))
+		}
+	}
+	if good && typ == "" {
+		bad(f.line, "the file suggestion has no \"type\". Add \"type\": \"command\".")
+	}
+	if good && fs.Command == "" {
+		bad(f.line, "the file suggestion has no \"command\", so it would run nothing.")
+	}
+	if !good {
+		return
+	}
+	s.add(op{kind: KindFileSuggest, text: "fileSuggestion: " + fs.Command, origin: fs.Origin, what: "a command that offers the paths for @",
+		apply: func(b *builder) { b.fileSuggestion.put(fs, fs.Origin) }})
+}
+
 // settingsEnv reads the env object: variables for the commands and hooks
 // gnosh starts.
 // SkillVisibilities are the values of skillOverrides, as Claude Code's,
@@ -439,7 +528,7 @@ func (s *source) settingsSkillOverrides(f jfield) {
 	}
 	for _, m := range s.unique(f.val, "skillOverrides.") {
 		if m.val.kind != jString || !slices.Contains(SkillVisibilities, m.val.str) {
-			s.errorf(m.line, "the value of \"skillOverrides.%s\" is one of %s, and here it is %s.", m.key, strings.Join(SkillVisibilities, ", "), shown(m.val))
+			s.errorf(m.line, "the value of %s is one of %s, and here it is %s.", showName("skillOverrides."+m.key), strings.Join(SkillVisibilities, ", "), shown(m.val))
 			continue
 		}
 		name, v := m.key, Value[string]{V: m.val.str, Set: true, Origin: s.at(m.line)}
@@ -462,9 +551,25 @@ func (s *source) settingsEnv(f jfield) {
 			s.errorf(m.line, "the value of \"env.%s\" is a string (put a number in quotes), and here it is %s.", m.key, m.val.kind.word())
 			continue
 		}
+		if movesOwnDirs(m.key) && (s.scope == "project" || s.scope == "local") {
+			s.probs.warnf(s.file, m.line, "\"env.%s\" is not taken from a project's file: it moves where gnosh and the programs it starts keep their own files. Set it in your own gnosh.json if you mean it.", m.key)
+			continue
+		}
 		s.secrets.add(m.val.str)
 		v := EnvVar{Name: m.key, Value: NewSecret(m.val.str), Origin: s.at(m.line)}
 		s.add(op{kind: KindEnv, text: "env " + m.key, origin: v.Origin, feature: FeatureEnv, what: "a variable for commands",
 			apply: func(b *builder) { b.setEnv(v) }})
 	}
+}
+
+// movesOwnDirs reports whether a variable moves where gnosh, or a program
+// it starts, keeps its own files and reads its own settings: a
+// repository's files must not set those (spec/cc/settings.md 2; a trusted
+// project's env block could, until the config review of 2026-11-19).
+func movesOwnDirs(name string) bool {
+	switch name {
+	case "HOME", "TMPDIR", "CLAUDE_CONFIG_DIR":
+		return true
+	}
+	return strings.HasPrefix(name, "XDG_") || strings.HasPrefix(name, "GNOSH_") && strings.HasSuffix(name, "_DIR")
 }

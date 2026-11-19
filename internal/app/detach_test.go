@@ -217,6 +217,103 @@ func TestContinuePassesOverASessionOpenElsewhere(t *testing.T) {
 
 // While this session is open, it says when a run /fork started is done:
 // the run holds its session file while it works and lets go at its end.
+// /subtask is /fork whose answer comes back: when the run ends, what it
+// printed goes to the model, which tells the person.
+func TestSubtaskAnswerComesBack(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Hi."}, apptest.Reply{Text: "The subtask says all 42 tests pass."})
+	var named string
+	s := sitWith(t, w, func(o *Options) {
+		o.Detach = func(args, env []string, log string) (int, error) {
+			id := ""
+			for _, a := range args {
+				if v, ok := strings.CutPrefix(a, "--resume="); ok {
+					id = v
+				}
+			}
+			if head, err := os.ReadFile(log); err == nil {
+				named = string(head)
+			}
+			path := filepath.Join(filepath.Dir(log), id+".jsonl")
+			held := make(chan error, 1)
+			go func() {
+				f, err := os.OpenFile(path, os.O_RDWR, 0)
+				if err != nil {
+					held <- err
+					return
+				}
+				defer f.Close()
+				if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+					held <- err
+					return
+				}
+				held <- nil
+				time.Sleep(3 * time.Second)
+				lf, err := os.OpenFile(log, os.O_WRONLY|os.O_APPEND, 0)
+				if err == nil {
+					fmt.Fprintln(lf, "Ran the suite.")
+					fmt.Fprintln(lf, "All 42 tests pass.")
+					fmt.Fprintf(lf, "gnosh: %s%s\n", time.Now().UTC().Format(time.RFC3339), runDone)
+					lf.Close()
+				}
+			}()
+			return 4545, <-held
+		}
+	})
+	s.see("Type a prompt and Enter.")
+	s.typeLine("/subtask")
+	s.see("say what the copy is to do: /subtask <task>")
+	s.typeLine("say hi")
+	s.see("Hi.")
+	s.see("-- done in ")
+	s.typeLine("/subtask run the whole test suite and report the count")
+	s.see("works on it in the background (process 4545)")
+	s.see("is done (gnosh -r ")
+	s.see("The subtask says all 42 tests pass.")
+	s.typeLine("/exit")
+	s.exit()
+	if !strings.Contains(named, runNameLine+"run the whole test suite and\n") {
+		t.Errorf("the run is not named after the task's first words: %q", named)
+	}
+	reqs := w.Model.Requests()
+	last := reqs[len(reqs)-1]
+	var told string
+	for _, m := range last.Messages() {
+		told += apptest.Text(m) + "\n"
+	}
+	has(t, "what the model read", told, "set to work in the background with /subtask has finished: run the whole test suite and report the count",
+		"Its answer, in its own words", "Ran the suite.\nAll 42 tests pass.")
+}
+
+// A run that begins and ends between two looks of the watcher (it never
+// seems to hold its session) is read from its log: it is done, and its
+// answer comes back, not "ended without taking its session".
+func TestSubtaskThatEndsBetweenLooks(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Hi."}, apptest.Reply{Text: "It says: fast answer."})
+	s := sitWith(t, w, func(o *Options) {
+		o.Detach = func(args, env []string, log string) (int, error) {
+			lf, err := os.OpenFile(log, os.O_WRONLY|os.O_APPEND, 0)
+			if err != nil {
+				return 0, err
+			}
+			fmt.Fprintln(lf, "Fast answer.")
+			fmt.Fprintf(lf, "gnosh: %s%s\n", time.Now().UTC().Format(time.RFC3339), runDone)
+			lf.Close()
+			return 4646, nil
+		}
+	})
+	s.see("Type a prompt and Enter.")
+	s.typeLine("say hi")
+	s.see("-- done in ")
+	s.typeLine("/subtask answer fast")
+	s.see("is done (gnosh -r ")
+	s.see("It says: fast answer.")
+	s.typeLine("/exit")
+	s.exit()
+	if strings.Contains(s.out.String(), "ended without taking its session") {
+		t.Error("a run that ended between two looks was said not to have started")
+	}
+}
+
 func TestForkSaysWhenItIsDone(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "Hi."})
 	s := sitWith(t, w, func(o *Options) {

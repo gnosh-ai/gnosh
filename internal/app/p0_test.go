@@ -163,6 +163,30 @@ func TestInstructionFilesAreRead(t *testing.T) {
 	}
 }
 
+// claudeMdExcludes keeps the files it names out of what the model reads.
+// A pattern the reader cannot use stops startup, at the line that sets
+// it: it would keep nothing out.
+func TestClaudeMdExcludesLeaveFilesOut(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "ok"})
+	w.Settings(`{"options": {"claudeMdExcludes": ["**/vendor/**/AGENTS.md"]}}`)
+	w.Write("AGENTS.md", "The project's rule: tests live in ./tests.\n")
+	w.Write("vendor/lib/AGENTS.md", "A vendored rule nobody here wrote.\n")
+	o := testOptions(w, "-p", "hello")
+	o.Cwd = w.Path("vendor/lib")
+	runWith(t, t.Context(), o).wantCode(t, 0).wantNoErr(t)
+	first := userTexts(w.Model.Requests()[0])[0]
+	has(t, "the first message", first, "The project's rule")
+	hasNot(t, "the first message", first, "nobody here wrote")
+
+	bad := apptest.NewWorld(t)
+	bad.Settings(`{"options": {"claudeMdExcludes": ["src/[a-"]}}`)
+	r := run(t, bad, "-p", "hello").wantCode(t, 1)
+	has(t, "stderr", r.err, "gnosh.json:", "claudeMdExcludes", "no ] closes")
+	if n := len(bad.Model.Requests()); n != 0 {
+		t.Errorf("the model was sent %d requests", n)
+	}
+}
+
 // A setting Claude Code has and this gnosh has not built stops startup,
 // with a message that says so. It is never taken and left unused.
 func TestConfigForWhatIsNotBuiltStopsStartup(t *testing.T) {

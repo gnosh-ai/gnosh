@@ -431,9 +431,13 @@ func (t *grepTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 				if f.isLink() {
 					return
 				}
+				shown := filepath.Join(q.root.abs, filepath.FromSlash(f.rel))
+				if o.denied(shown, f.path) {
+					return
+				}
 				tally.seen.Add(1)
 				if q.wants(f.rel) {
-					q.search(sctx, tally, filepath.Join(q.root.abs, filepath.FromSlash(f.rel)), f.path)
+					q.search(sctx, tally, shown, f.path)
 				}
 			},
 		}

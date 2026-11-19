@@ -125,6 +125,7 @@ from project or local files.
 | `disableAllHooks` | boolean | any | Switch off all hooks, the custom status line and the custom file-suggestion command. |
 | `env` | object of strings | any | Environment variables for the session and for every subprocess it starts. A value here overwrites the same variable from the shell; `""` cancels a shell export. From user settings and `--settings` it applies at startup; from project and local settings after the workspace is trusted (at startup in `-p`). |
 | `model` | string | any | Model for new sessions. `--model` and the shell variable override it. |
+| `fallbackModel` | string or list of up to three | any | Models a turn goes on with, in order, when the model cannot answer; the next turn tries the model first again. `--fallback-model` overrides it. In gnosh, names are "<provider>/<model id>" (DECISIONS 140). |
 
 ### 5.2 Daily use (gnosh P1)
 
@@ -157,7 +158,7 @@ from project or local files.
 
 ### 5.3 Later or mapped (gnosh P2)
 
-`effortLevel`, `fallbackModel`, `alwaysThinkingEnabled`,
+`effortLevel`, `alwaysThinkingEnabled`,
 `showThinkingSummaries`, `plansDirectory` (default `~/.claude/plans`; gnosh
 keeps plans in `mem`), `autoMemoryEnabled`, `autoMemoryDirectory` (gnosh
 memory is its own design), `idleCompaction`, `tui` (`theme` is an option of

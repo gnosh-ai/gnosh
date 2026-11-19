@@ -44,7 +44,7 @@ func (a *Agent) summarize(ctx context.Context, t *turn, trigger, instructions st
 	lim := a.limits(su)
 	full := a.assemble(su, v.Messages)
 	pre := a.predict(a.estimate(full, su.model), su.model)
-	info := SummaryInfo{Trigger: trigger, Instructions: instructions, PreTokens: pre}
+	info := SummaryInfo{Trigger: trigger, Instructions: instructions, PreTokens: pre, Window: lim.window}
 
 	// The request is gnosh's own line: the asking, then on lines of their
 	// own what the person and their hooks want of the summary, and the
@@ -70,6 +70,11 @@ func (a *Agent) summarize(ctx context.Context, t *turn, trigger, instructions st
 	a.setPhase(PhaseSummary, "writing a summary of the conversation")
 	post := 0
 	defer func() {
+		if errors.Is(err, errFellBack) {
+			// Not a summary that failed: the fallback model is asked for
+			// it, and says so with an end of its own.
+			return
+		}
 		ev := &SummaryEvent{Phase: "end", Trigger: trigger, PreTokens: pre, PostTokens: post}
 		if err != nil && !errors.Is(err, errStopped) {
 			ev.Err = err
@@ -122,6 +127,11 @@ func (a *Agent) summarize(ctx context.Context, t *turn, trigger, instructions st
 			return false, xerr
 		case rep.stop == core.StopMaxTokens:
 			return false, nil // cut short: not accepted
+		case len(rep.msg.ToolUses()) > 0 || rep.stop == core.StopToolUse || rep.stop == core.StopRefusal:
+			// The model began a call ("Let me check the test first.")
+			// or refused: not a summary, which would stand for the whole
+			// conversation. The bare try has no tools to call.
+			return false, nil
 		}
 		text = strings.TrimSpace(rep.msg.Text())
 		return text != "", nil
@@ -141,14 +151,26 @@ func (a *Agent) summarize(ctx context.Context, t *turn, trigger, instructions st
 		if err != nil {
 			return err
 		}
-		for i := 1; !done && i < len(v.Messages); i++ {
-			if v.Messages[i].Role != core.RoleAssistant {
-				continue
-			}
-			rest := append([]core.Message{core.UserText(a.mark(a.texts.TrimNote))}, v.Messages[i:]...)
-			done, err = try(withAsk(bare, rest, ask))
-			if err != nil {
-				return err
+		// The earliest part is left out, cut at one of the model's own
+		// messages: first keeping the first message (the task as it was
+		// set, or the summary made before this one, on which all after it
+		// builds), with the note of what was left out after it; and only
+		// when nothing fits so, without it as well.
+		first := v.Messages[0]
+		for _, keepFirst := range []bool{true, false} {
+			for i := 1; !done && i < len(v.Messages); i++ {
+				if v.Messages[i].Role != core.RoleAssistant {
+					continue
+				}
+				lead := core.UserText(a.mark(a.texts.TrimNote))
+				if keepFirst {
+					lead = core.Message{Role: core.RoleUser, Blocks: append(slices.Clone(first.Blocks), core.Text(a.mark(a.texts.TrimNote)))}
+				}
+				rest := append([]core.Message{lead}, v.Messages[i:]...)
+				done, err = try(withAsk(bare, rest, ask))
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -181,11 +203,24 @@ func (a *Agent) summarize(ctx context.Context, t *turn, trigger, instructions st
 	if f := a.opts.Moments.AfterSummary; f != nil {
 		info.Summary = text
 		parts, ferr, ok := await(ctx, a, "the after-summary moment", func(ctx context.Context) ([]Part, error) { return f(ctx, info) })
-		switch {
-		case !ok || ctx.Err() != nil:
-		case ferr != nil:
-			a.notice(LevelWarning, "summary", fmt.Sprintf("What the session is given back after a summary could not be put together (%v).", ferr))
-		default:
+		var h *StopWork
+		halted := errors.As(ferr, &h)
+		if halted && t != nil {
+			// It said stop: the turn the summary was made in ends here,
+			// once what it gave back is kept. (After /compact no turn
+			// runs, and there is nothing to end.)
+			t.halt = firstNonEmpty(h.Reason, "the end of the summary stopped the turn")
+		}
+		if ferr != nil && !halted && ok && ctx.Err() == nil {
+			// What could not be made is said; what was made is still
+			// given back below (the instructions the session started with,
+			// its skills: lost, they stayed lost for the session).
+			a.notice(LevelWarning, "summary", fmt.Sprintf("Not all of what the session is given back after a summary could be put together (%v).", ferr))
+		}
+		// What the moment made is kept even when the turn is being stopped,
+		// as the summary is, with which it goes; only a moment that did not
+		// finish gives nothing back.
+		if ok {
 			var notes []Entry
 			for _, p := range parts {
 				if strings.TrimSpace(p.Text) != "" {

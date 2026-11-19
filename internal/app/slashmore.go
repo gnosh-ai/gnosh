@@ -98,6 +98,9 @@ func (l *live) slashAddDir(ctx context.Context, c *SlashContext) error {
 	_ = l.agent.Tell(agent.Note{Source: "add-dir",
 		Text: prompt.Wrap(fmt.Sprintf("The user added %s as a working directory for the rest of this session: its files may be read and changed as the project's are, under the same permission mode and rules.", dir))})
 	c.Say("%s is a working directory for the rest of this session: its files are read and changed as the project's are, under the same mode and rules. --add-dir adds one for a whole session.", dir)
+	if note := untrustedRootNote(dir); note != "" && l.st.trusted && !l.rootTrusted(dir) {
+		c.Say("%s", note)
+	}
 	l.directoryAdded(ctx, dir)
 	return nil
 }

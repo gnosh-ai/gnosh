@@ -130,6 +130,9 @@ func Default() *Table {
 	effort := t.add(&flag{names: "--reasoning-effort --effort", kind: kindText, arg: "level", group: groupModel, pri: 1,
 		help: "How hard the model thinks in this run. The levels depend on the model.",
 		set:  func(i *Invocation, v flagValue) { i.Effort = v.text }})
+	fallback := t.add(&flag{names: "--fallback-model", kind: kindText, arg: "models", group: groupModel, pri: 1,
+		help: "Models to go on with, tried in order, when the model cannot answer (its server is down, not ready or too busy): up to three, separated by commas. The switch holds for the rest of the turn; the next one asks the model first again.",
+		set:  func(i *Invocation, v flagValue) { i.FallbackModel = v.text }})
 
 	yolo := t.add(&flag{names: "-y --yolo --dangerously-skip-permissions", group: groupPermissions, pri: 0,
 		help: "Skip every permission question; the same as --permission-mode bypassPermissions. A print run refuses whatever would have asked, unless it is given this, a permission mode or allow rules."})
@@ -278,7 +281,7 @@ func Default() *Table {
 
 	sessionFlags := []*flag{
 		cont, resume, sessionID, fork, name, back,
-		model, effort,
+		model, effort, fallback,
 		yolo, mode, allowSkip, allowed, disallowed, tools, addDir, trustFolder,
 		system, systemFile, appendSystem, appendSystemFile, agents, asAgent,
 		cwd, worktree, settings, settingSrc, mcpConfig, strictMCP, channels, devChannels, safeMode, bare, noSlash, debug, debugFile, verbose,

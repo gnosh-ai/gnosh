@@ -1242,6 +1242,26 @@ func (lc *lineCheck) disagreement(r shellRun, rcs []ranCmd) string {
 			"break", "continue", "shopt", "enable", "alias", "unalias", "hash", "suspend", "logout", "ulimit":
 			return ""
 		}
+		for _, rd := range c.redirs {
+			// A redirection's word can fail to expand too (> ${}), which
+			// ends the line.
+			if _, ok := e.known(rd.target); !ok {
+				return ""
+			}
+		}
+		if len(c.redirs) > 0 {
+			// A command's redirections can hide it from the trace: one
+			// that sends standard error elsewhere takes its own trace
+			// line with it (seed 157: ":&> $((x))" ran, and made the file
+			// 0, which then held the trace), and one that fails (a folder
+			// that is not there) keeps the command from running while
+			// bash goes on to the next. Either way the trace cannot say
+			// the engine read too much, and the command is not looked
+			// for. (The checks above, that end the line, still apply to
+			// it: seed 158 skipped them for a redirected exec and a
+			// redirected command holding ${}.)
+			continue
+		}
 		want = append(want, c)
 	}
 	var got []ranCmd

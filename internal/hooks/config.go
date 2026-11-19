@@ -498,6 +498,9 @@ func Check(cfg Config, opts Options) []Problem {
 			continue
 		}
 		switch {
+		case info.subject == toolName && bareServer(h.Matcher) != "":
+			server := bareServer(h.Matcher)
+			out = append(out, Problem{Source: h.Source, Warning: true, Message: fmt.Sprintf("the matcher %s of the hook %s names the MCP server %s, and fits none of its tools, which are named mcp__%s__ and the tool's name: %s fits them all.", quote(h.Matcher), h.label(), server, server, quote("mcp__"+server+"__.*"))})
 		case info.subject == toolName && len(opts.ToolNames) > 0 && !strings.Contains(h.Matcher, "mcp__"):
 			if !slices.ContainsFunc(opts.ToolNames, func(tool string) bool { ok, _ := tools.fit(m, tool); return ok }) {
 				out = append(out, Problem{Source: h.Source, Warning: true, Message: fmt.Sprintf("the matcher %s of the hook %s fits no tool gnosh has, so the hook never runs.", quote(h.Matcher), h.label())})
@@ -520,6 +523,19 @@ func stopping(problems []Problem) []Problem {
 		}
 	}
 	return out
+}
+
+// bareServer returns the server a tool matcher names alone, as
+// "mcp__memory", or "": such a matcher fits none of the server's tools.
+func bareServer(matcher string) string {
+	for _, part := range strings.Split(matcher, "|") {
+		part = strings.TrimSpace(part)
+		name, ok := strings.CutPrefix(part, "mcp__")
+		if ok && name != "" && !strings.Contains(name, "__") && strings.Trim(name, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") == "" {
+			return name
+		}
+	}
+	return ""
 }
 
 // startsWithRelativePath reports whether the first word of a command line

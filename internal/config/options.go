@@ -45,6 +45,10 @@ type Options struct {
 	LoopMaxTurns Value[int]
 	// MaxBackgroundTasks is how many background commands may run at once.
 	MaxBackgroundTasks Value[int]
+	// BashOutputMaxChars is how many characters of a command's output the
+	// model reads (Claude Code's bashOutputMaxChars). BASH_MAX_OUTPUT_LENGTH
+	// outranks it, as the environment outranks the files.
+	BashOutputMaxChars Value[int]
 	// MemReviewCloses switches the review of a closed todo.
 	MemReviewCloses Value[bool]
 	// RespondToBashCommands says the model answers what a command the
@@ -63,6 +67,9 @@ type Options struct {
 	// ProjectInstructionFiles are more instruction files of the project,
 	// as absolute paths.
 	ProjectInstructionFiles []ListItem
+	// ClaudeMdExcludes are instruction files never to read, as patterns
+	// matched against their absolute paths.
+	ClaudeMdExcludes []ListItem
 	// HiddenSkills are skills hidden from the model.
 	HiddenSkills []ListItem
 	// MemoryText chooses which of gnosh's two texts about mem a model is
@@ -86,6 +93,13 @@ type Options struct {
 	// both are set) or "focus" (each run of tool calls folded into one
 	// line that sums it up). Claude Code's viewMode; /focus sets it.
 	ViewMode Value[string]
+	// ShowTurnDuration shows the line under a turn that ended as it should:
+	// how long it took, its replies and its tokens (Claude Code's
+	// showTurnDuration).
+	ShowTurnDuration Value[bool]
+	// RespectGitignore leaves what git ignores out of the @ file picker
+	// (Claude Code's respectGitignore).
+	RespectGitignore Value[bool]
 	// ProjectDataDir is the name of the project's data folder.
 	ProjectDataDir Value[string]
 
@@ -93,6 +107,12 @@ type Options struct {
 	// "default", one of gnosh's own, or one of the person's or the
 	// project's files.
 	OutputStyle Value[string]
+	// Language is the language the model replies to the person in, as
+	// they name it ("japanese"), or empty (Claude Code's language).
+	Language Value[string]
+	// IncludeGitInstructions puts how git stands in the block ahead of a
+	// session's first prompt (Claude Code's includeGitInstructions).
+	IncludeGitInstructions Value[bool]
 
 	// EditorMode is how the box takes keys: "normal", readline's keys, or
 	// "vim". VimInsertModeRemaps are the pairs of characters that, typed
@@ -113,6 +133,9 @@ type Options struct {
 	// session, the session's model is asked for the person's likely next
 	// prompt, which the box shows until they type (Tab takes it).
 	PromptSuggestionEnabled Value[bool]
+	// FileCheckpointingEnabled says what Write and Edit change is kept, so
+	// that /rewind can put it back.
+	FileCheckpointingEnabled Value[bool]
 }
 
 // ServerOff is the value of an option that names where a server of gnosh's
@@ -128,8 +151,13 @@ func defaultOptions() Options {
 	var o Options
 	o.AutoCompactEnabled.V = true
 	o.MaxBackgroundTasks.V = 50
+	o.BashOutputMaxChars.V = 30000
 	o.MemReviewCloses.V = true
 	o.RespondToBashCommands.V = true
+	o.FileCheckpointingEnabled.V = true
+	o.ShowTurnDuration.V = true
+	o.RespectGitignore.V = true
+	o.IncludeGitInstructions.V = true
 	o.MemoryText.V = "lean"
 	o.DeliverablesServer.V = DefaultDeliverablesServer
 	o.ProjectDataDir.V = ".gnosh"
@@ -203,6 +231,11 @@ var optionDefs = []optionDef{
 		what: "background commands that may run at once", from: fromPlain + ", with Claude Code's word for them (background tasks)",
 		bounded: true, min: 1, max: 100000,
 		num: func(o *Options) *Value[int] { return &o.MaxBackgroundTasks }},
+	{key: "bashOutputMaxChars", kind: oInt, def: "30000",
+		what:    "characters of a command's output the model reads (a longer output is shown as its start and its end around a line that says what was left out, and is kept whole in a file); BASH_MAX_OUTPUT_LENGTH, when set, wins",
+		from:    fromClaudeCode + ": the settings key",
+		bounded: true, min: 1, max: 128000,
+		num: func(o *Options) *Value[int] { return &o.BashOutputMaxChars }},
 	{key: "askUserQuestionTimeout", kind: oEnum, def: "unset (a question waits for its answer)",
 		what: "how long a question the model asks (AskUserQuestion) may go without a key before it closes by itself, with what was picked by then, and the model goes on on its own judgment: 60s, 5m or 10m; permission questions never close so; not from a project's file",
 		from: fromClaudeCode + ": the settings key", enum: []string{"60s", "5m", "10m"}, ownOnly: true,
@@ -211,6 +244,10 @@ var optionDefs = []optionDef{
 		what:  "the model answers what a command you ran behind ! printed, as soon as it ends; false puts the command and its output in front of the model with your next prompt instead",
 		from:  fromClaudeCode + ": the settings key",
 		truth: func(o *Options) *Value[bool] { return &o.RespondToBashCommands }},
+	{key: "fileCheckpointingEnabled", kind: oBool, def: "true",
+		what:  "what Write and Edit change is kept beside the session, for /rewind to put back (the copies of your 100 most recent prompts); false keeps nothing, and a rewind takes the conversation alone",
+		from:  fromClaudeCode + ": the settings key",
+		truth: func(o *Options) *Value[bool] { return &o.FileCheckpointingEnabled }},
 
 	// What the model reads.
 	{key: "userInstructionFiles", kind: oPathList, def: "none beyond your GNOSH.md and AGENTS.md",
@@ -221,6 +258,11 @@ var optionDefs = []optionDef{
 		what: "more instruction files of the project", from: fromPlain,
 		trust: KindExtraPath, fromCwd: true,
 		list: func(o *Options) *[]ListItem { return &o.ProjectInstructionFiles }},
+	{key: "claudeMdExcludes", kind: oNameList, def: "none",
+		what:  "instruction files never to read, by any route, as patterns matched against their absolute paths: \"**/vendor/**/CLAUDE.md\", a folder (\"/work/vendor\") for all under it, or a bare name for every file of that name; a project's file holds them until the folder is trusted, as they can leave out your own",
+		from:  fromClaudeCode + ": the settings key",
+		trust: KindRemoval,
+		list:  func(o *Options) *[]ListItem { return &o.ClaudeMdExcludes }},
 	{key: "hiddenSkills", kind: oNameList, def: "none",
 		what: "skills to hide from the model", from: fromPlain,
 		trust: KindHiddenSkill,
@@ -265,8 +307,20 @@ var optionDefs = []optionDef{
 		what: "how the conversation is shown as an interactive session starts: \"default\", \"verbose\" (as the verbose option, over which this one wins when both are set) or \"focus\" (each run of tool calls folded into one line that sums it up, with the lines each edit added and took out; /focus turns it on and off); not from a project's file",
 		from: fromClaudeCode + ": the settings key and /focus", enum: []string{"default", "verbose", "focus"}, ownOnly: true,
 		text: func(o *Options) *Value[string] { return &o.ViewMode }},
+	{key: "showTurnDuration", kind: oBool, def: "true",
+		what: "the line under a turn that ended as it should, with how long it took, its replies and its tokens; false leaves it out (a turn that was stopped or failed still says so); not from a project's file",
+		from: fromClaudeCode + ": the settings key", ownOnly: true,
+		truth: func(o *Options) *Value[bool] { return &o.ShowTurnDuration }},
+	{key: "respectGitignore", kind: oBool, def: "true",
+		what:  "leave the files git ignores (and, outside a repository, those the ignore files name) out of the @ file picker; false lists them too, which in a big build folder can crowd out the rest",
+		from:  fromClaudeCode + ": the settings key",
+		truth: func(o *Options) *Value[bool] { return &o.RespectGitignore }},
+	// (A project's own file cannot move it: the folder is where gnosh
+	// reads the project's local settings from, and the trust question was
+	// asked of the one a repository had not moved (the config review of
+	// 2026-11-19).)
 	{key: "projectDataDir", kind: oPath, def: ".gnosh",
-		what: "the name of the project's data folder", from: fromPlain,
+		what: "the name of the project's data folder", from: fromPlain, ownOnly: true,
 		text: func(o *Options) *Value[string] { return &o.ProjectDataDir }},
 
 	// How the model replies.
@@ -274,6 +328,14 @@ var optionDefs = []optionDef{
 		what: "how the model replies: Proactive, Concise, Explanatory, Learning, or a style of your own (/output-style switches it)",
 		from: fromClaudeCode + ": the settings key",
 		text: func(o *Options) *Value[string] { return &o.OutputStyle }},
+	{key: "language", kind: oName, def: "none",
+		what: "the language the model replies to you in, as you name it (\"japanese\", \"français\"): the system prompt asks for it; code, commands and quoted text stay as they are",
+		from: fromClaudeCode + ": the settings key",
+		text: func(o *Options) *Value[string] { return &o.Language }},
+	{key: "includeGitInstructions", kind: oBool, def: "true",
+		what:  "say how git stands (a repository, its branch) in the block ahead of a session's first prompt; false leaves git out of it (gnosh has no commit or pull request workflow text to leave out besides)",
+		from:  fromClaudeCode + ": the settings key",
+		truth: func(o *Options) *Value[bool] { return &o.IncludeGitInstructions }},
 
 	// The box.
 	{key: "editorMode", kind: oEnum, def: "normal",

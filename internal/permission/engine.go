@@ -190,8 +190,19 @@ func New(o Options) (*Engine, error) {
 		e.only[CanonicalTool(t)] = true
 	}
 	for _, p := range o.Protected {
-		if strings.HasPrefix(p, "/") {
-			e.protected = append(e.protected, guardPath(path.Clean(p)))
+		if !strings.HasPrefix(p, "/") {
+			continue
+		}
+		p = path.Clean(p)
+		e.protected = append(e.protected, guardPath(p))
+		// A protected file or folder that is a link (a settings file
+		// linked from a dotfiles repository, a data folder linked
+		// elsewhere) protects what it leads to as well: that is the file
+		// the settings are read from.
+		if o.Resolve != nil {
+			if r, err := o.Resolve(p); err == nil && r != p {
+				e.protected = append(e.protected, guardPath(r))
+			}
 		}
 	}
 	for _, trees := range o.WorkTrees {

@@ -49,6 +49,9 @@ const metaPastes = "pastes"
 func (s *session) handle(ev any) {
 	s.dirty = true
 	s.heard = s.now()
+	// A question or a turn that comes while a picker's list is read goes
+	// first.
+	defer s.listCheck()
 	if e, ok := ev.(agent.Event); ok {
 		if m := e.EventMeta(); m != nil && m.Agent != "" {
 			s.subAgent(ev, m)
@@ -549,6 +552,12 @@ func (s *session) retry(ev *agent.RetryEvent) {
 	} else {
 		s.endThinking()
 	}
+	if ev.FellBack != "" {
+		// Not a wait: the fallback model is asked at once.
+		s.notice(agent.LevelWarning, ev.Message)
+		s.retries, s.retryKind = 0, ""
+		return
+	}
 	kind := fmt.Sprintf("%s/%d", ev.Kind, ev.Status)
 	if s.retries == 0 {
 		s.retrySince = now
@@ -653,6 +662,7 @@ func (s *session) turnEnd(res agent.TurnResult) {
 	// (The model may have made or removed files: the fuzzy @ search lists
 	// the project again when it is next used.)
 	s.index.stale = true
+	s.suggest.answers = nil
 	s.endReply()
 	for _, c := range append([]*call(nil), s.calls...) {
 		s.cut(c, "no result: the turn ended first")
@@ -680,6 +690,10 @@ func (s *session) turnEnd(res agent.TurnResult) {
 	detail := strings.TrimSpace(res.Detail)
 	switch res.Reason {
 	case agent.EndCompleted:
+		if s.info.HideTurnDuration {
+			// (The showTurnDuration option is off.)
+			break
+		}
 		s.begin(blkTurn)
 		s.put(wrap(s.m, th.Quiet.Render("done"+tail), s.cols, "", "  ")...)
 	case agent.EndStopped:

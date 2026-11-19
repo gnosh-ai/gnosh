@@ -11,10 +11,11 @@ package gnovm
 
 import "sync"
 
-// AttributionNotice is the notice gnosh shows wherever it names itself
-// (--version, gnovm_list): NewTendermint's for the GnoVM, which gnosh
-// includes, and this subsystem's own Designation (LICENSE.md).
-const AttributionNotice = "Built on gno.land (https://gno.land) · GnoVM machines built on gnosh (https://gnosh.ai)"
+// AttributionNotice is the line gnovm_list ends with: NewTendermint's
+// credit for the GnoVM, which this subsystem includes, and this
+// subsystem's own Designation (LICENSE.md). gnosh's session header shows
+// both addresses too.
+const AttributionNotice = "Built on gno.land (https://gno.land) · built on gnosh (https://gnosh.ai)"
 
 // Lazy is an App's hold on the process's client: it acquires it on first use,
 // so a gnosh that never runs a VM never starts a worker, and releases it on

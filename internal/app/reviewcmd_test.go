@@ -64,6 +64,9 @@ func TestReviewCommands(t *testing.T) {
 	has(t, "what the model is asked", asked(), "The user typed /security-review", "from where this branch left main ("+base+")", "git diff "+base, "Change no file", "look at this in particular: the login path")
 	run(t, w, "--trust-folder", "-p", "/review").wantCode(t, 0)
 	has(t, "/review", asked(), "The user typed /review", "for bugs", "git diff "+base, "Change no file")
+	// As Claude Code 2.1.328's: the instruction files too, each finding
+	// marked, a fix suggested, and a clean review said in its words.
+	has(t, "/review", asked(), "instruction files", "Important (", "Pre-existing (", "Nit (", "the fix you suggest", "Code review found no issues.")
 
 	// Claude Code's name for it, a level, --fix, and what to look at.
 	r = run(t, w, "--trust-folder", "-p", "/code-review low --fix the parser").wantCode(t, 0)

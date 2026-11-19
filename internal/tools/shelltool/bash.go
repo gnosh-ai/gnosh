@@ -85,8 +85,11 @@ func (t bashTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEnv
 // start starts a command. A refusal is for the model; any other error is
 // the harness's own.
 func (m *Manager) start(a bashArgs, env *core.ToolEnv, callID string) (*job, error) {
-	if st, err := os.Stat(env.Cwd); err != nil || !st.IsDir() {
-		return nil, refusal(fmt.Sprintf("The command was not run: the working directory %s is not there any more. Nothing can run until it exists again.", env.Cwd))
+	cwd := env.Cwd
+	if st, err := os.Stat(cwd); err != nil || !st.IsDir() {
+		if cwd = nearestStanding(env); cwd == "" {
+			return nil, refusal(fmt.Sprintf("The command was not run: the working directory %s is not there any more, and neither is any folder of the session's.", stampText(env.Cwd)))
+		}
 	}
 	ssh := ""
 	if a.host != nil {
@@ -99,8 +102,15 @@ func (m *Manager) start(a bashArgs, env *core.ToolEnv, callID string) (*job, err
 	if err != nil {
 		return nil, err
 	}
-	j := newJob(m, a, env.Cwd)
+	j := newJob(m, a, cwd)
+	if cwd != env.Cwd {
+		j.gone = env.Cwd
+	}
 	j.ssh = ssh
+	if env.ParentSessionID != "" {
+		// A sub-agent's: the news of its end is the sub-agent's.
+		j.owner = env.SessionID
+	}
 	name, err := m.admit(j, a.background, callID)
 	if err != nil {
 		return nil, err
@@ -259,19 +269,36 @@ func (m *Manager) finishedResult(j *job, a bashArgs, env *core.ToolEnv, person b
 	// Where the session is now. A command on another machine never moves
 	// it: a directory there is not a directory here.
 	ownExit := e.reason == endExited && e.reaped && e.sig == 0
+	if j.gone != "" {
+		notes = append(notes, fmt.Sprintf("the working directory %s was not there any more, so the command ran in %s", stampText(j.gone), stampText(j.dir)))
+	}
+	// (Folder names go into the notes as the stamp's do: a name with a
+	// line break in it could otherwise pass for a note of gnosh's.)
 	switch where := place(e.finalDir, env); {
 	case j.host != nil:
+	case ownExit && e.finalDir == "" && !isDir(j.dir):
+		// The command took its own working directory away (a checkout
+		// without the folder, a clean): the session goes to the nearest
+		// folder above it that is there.
+		gone := *env
+		gone.Cwd = j.dir
+		if alt := nearestStanding(&gone); alt != "" {
+			res.Cwd = alt
+			notes = append(notes, fmt.Sprintf("the command took away its working directory %s, so the working directory is now %s", stampText(j.dir), stampText(alt)))
+		} else {
+			notes = append(notes, fmt.Sprintf("the command took away its working directory %s, and no folder of the session's is there", stampText(j.dir)))
+		}
 	case ownExit && e.finalDir == "":
-		notes = append(notes, "the shell did not say where it ended (the command replaced it with exec, or set an EXIT trap of its own), so the working directory is still "+env.Cwd)
+		notes = append(notes, "the shell did not say where it ended (the command replaced it with exec, or set an EXIT trap of its own), so the working directory is still "+stampText(env.Cwd))
 	case ownExit && where.to != "":
 		res.Cwd = where.to
-		notes = append(notes, "working directory is now "+where.to)
+		notes = append(notes, "working directory is now "+stampText(where.to))
 	case ownExit && where.checkout:
-		notes = append(notes, fmt.Sprintf("working directory reset to %s: %s is in the checkout your work tree was made from, so the session does not follow the command there", env.Cwd, where.outside))
+		notes = append(notes, fmt.Sprintf("working directory reset to %s: %s is in the checkout your work tree was made from, so the session does not follow the command there", stampText(env.Cwd), stampText(where.outside)))
 	case ownExit && where.outside != "":
-		notes = append(notes, fmt.Sprintf("working directory reset to %s: %s is outside the project, so the session does not follow the command there", env.Cwd, where.outside))
+		notes = append(notes, fmt.Sprintf("working directory reset to %s: %s is outside the project, so the session does not follow the command there", stampText(env.Cwd), stampText(where.outside)))
 	case !ownExit && (where.to != "" || where.outside != ""):
-		notes = append(notes, "the command did not end by itself, so its change of directory is not kept: the working directory is still "+env.Cwd)
+		notes = append(notes, "the command did not end by itself, so its change of directory is not kept: the working directory is still "+stampText(env.Cwd))
 	}
 
 	// The output file is kept only when it holds something the model was

@@ -556,6 +556,8 @@ type controls struct {
 	skills    []app.SkillChoice
 	levels    []string
 	level     string
+	// suggest answers SuggestFiles, the person's own @ search, when set.
+	suggest func(query string) ([]string, error)
 	// agentsStopped counts the calls of StopBackgroundAgents, and
 	// agentsRunning is what each says it stopped.
 	agentsStopped int
@@ -765,6 +767,17 @@ func (c *controls) Context() agent.ContextStatus {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.ctxs
+}
+
+func (c *controls) SuggestFiles(_ context.Context, query string) ([]string, bool, error) {
+	c.mu.Lock()
+	f := c.suggest
+	c.mu.Unlock()
+	if f == nil {
+		return nil, false, nil
+	}
+	paths, err := f(query)
+	return paths, true, err
 }
 
 func (c *controls) Info() app.SessionInfo {

@@ -705,6 +705,80 @@ func TestAnthropicThinkingAndMaxTokens(t *testing.T) {
 	}
 }
 
+// A request with no cap of its own asks for no more than the model writes
+// in one answer, as the Models API listed it: the default of 64000 was
+// above an older Claude's 32000, and every such request was refused (the
+// model client review of 2026-11-19). A thinking budget goes under that.
+func TestAnthropicDefaultCapIsTheModelsOwn(t *testing.T) {
+	stream := playing(events(messageDelta("end_turn", ""), messageStop))
+	f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":[{"type":"model","id":"claude-old","max_input_tokens":200000,"max_tokens":32000},{"type":"model","id":"claude-new","max_input_tokens":1000000,"max_tokens":128000}],"has_more":false,"last_id":"claude-new"}`)
+			return
+		}
+		stream(f, w, r)
+	})
+	p := f.provider(TypeAnthropic, func(c *Config) { c.PromptCache = "off" })
+	if _, err := p.(core.ModelLister).Models(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		model    string
+		thinking core.Thinking
+		max      int
+		want     string
+	}{
+		{"claude-old", core.Thinking{}, 0, `"max_tokens": 32000`},
+		{"claude-old", core.Thinking{Mode: "on", BudgetTokens: 40000}, 0, `"max_tokens": 32000, "thinking": {"type": "enabled", "budget_tokens": 31999}`},
+		{"claude-old", core.Thinking{}, 50000, `"max_tokens": 50000`},
+		{"claude-new", core.Thinking{}, 0, `"max_tokens": 64000`},
+		{"unlisted", core.Thinking{}, 0, `"max_tokens": 64000`},
+	} {
+		req := &core.Request{Model: tt.model, Messages: []core.Message{core.UserText("hi")}, Thinking: tt.thinking, MaxTokens: tt.max}
+		wantOK(t, drain(p.Stream(context.Background(), req)))
+		wantJSON(t, tt.model+" "+tt.want, f.last().Body, `{"model": "`+tt.model+`", "stream": true, "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}], `+tt.want+`}`)
+	}
+}
+
+// No thinking is asked for the way each model takes it, as the Models API
+// says: thinking {type: "disabled"} where it is taken (or not said),
+// {type: "between_tools"} on a model that takes only that, and the least
+// effort on one whose thinking cannot be turned off. The models that
+// refuse "disabled" refused every request that asked for no thinking (the
+// model client review of 2026-11-19).
+func TestAnthropicThinkingOffAsEachModelTakesIt(t *testing.T) {
+	stream := playing(events(messageDelta("end_turn", ""), messageStop))
+	f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"data":[
+				{"id":"always-thinks","max_tokens":128000,"capabilities":{"thinking":{"supported":true,"types":{"disabled":{"supported":false},"between_tools":{"supported":false}}}}},
+				{"id":"between-tools","max_tokens":128000,"capabilities":{"thinking":{"supported":true,"types":{"disabled":{"supported":false},"between_tools":{"supported":true}}}}},
+				{"id":"can-stop","max_tokens":128000,"capabilities":{"thinking":{"supported":true,"types":{"disabled":{"supported":true},"between_tools":{"supported":false}}}}},
+				{"id":"says-nothing","max_tokens":128000}
+			],"has_more":false,"last_id":"says-nothing"}`)
+			return
+		}
+		stream(f, w, r)
+	})
+	p := f.provider(TypeAnthropic, func(c *Config) { c.PromptCache = "off" })
+	if _, err := p.(core.ModelLister).Models(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for model, want := range map[string]string{
+		"always-thinks": `"output_config": {"effort": "low"}`,
+		"between-tools": `"thinking": {"type": "between_tools"}`,
+		"can-stop":      `"thinking": {"type": "disabled"}`,
+		"says-nothing":  `"thinking": {"type": "disabled"}`,
+		"unlisted":      `"thinking": {"type": "disabled"}`,
+	} {
+		req := &core.Request{Model: model, Messages: []core.Message{core.UserText("hi")}, Thinking: core.Thinking{Mode: "off"}}
+		wantOK(t, drain(p.Stream(context.Background(), req)))
+		wantJSON(t, model, f.last().Body, `{"model": "`+model+`", "stream": true, "max_tokens": 64000, "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}], `+want+`}`)
+	}
+}
+
 // cacheMarks lists where a request body carries cache marks, as
 // "system[0]", "tools[1]", "messages[2][0]".
 func cacheMarks(t *testing.T, body []byte) []string {

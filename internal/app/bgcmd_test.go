@@ -255,12 +255,31 @@ func TestRunLoggedFromTwoFolders(t *testing.T) {
 	write(filepath.Join(a, id+".background.log"), "gnosh: 2026-11-18T10:00:00Z the session "+id+" goes on in the background with: first\ngnosh: its folder is /a\ndone\n")
 	write(filepath.Join(a, id+".background.pid"), "4242\n")
 	write(filepath.Join(b, id+".background.log"), "gnosh: 2026-11-18T09:00:00Z the session "+id+" goes on in the background with: second\ngnosh: its folder is /b\nworking\n")
-	proc := exec.Command("sh", "-c", "sleep 30", id)
+	// A stand-in for gnosh on its session: a process whose command line
+	// names the session the whole time. (With one command, dash puts sleep
+	// in its own place, and the session's id is gone from the command line:
+	// a CI run on a busy machine looked after that.) It is in a process
+	// group of its own, so that a kill takes its sleep too.
+	proc := exec.Command("sh", "-c", "sleep 30; true", id)
+	proc.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := proc.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { proc.Process.Kill(); proc.Wait() })
+	stop := func() { _ = syscall.Kill(-proc.Process.Pid, syscall.SIGKILL); _ = proc.Wait() }
+	t.Cleanup(stop)
 	write(filepath.Join(b, id+".background.pid"), strconv.Itoa(proc.Process.Pid)+"\n")
+	// Start returns once the exec is under way; the kernel sets out the
+	// new program's arguments a moment later, and until then its command
+	// line reads empty, naming no session. On a busy machine that moment
+	// was long enough for the run to read as one that had died (a CI run
+	// of 19 November).
+	cmdline := "/proc/" + strconv.Itoa(proc.Process.Pid) + "/cmdline"
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		data, err := os.ReadFile(cmdline)
+		if err != nil || strings.Contains(string(data), id) {
+			break
+		}
+	}
 
 	runs := runsIn([]string{a, b}, time.Time{})
 	if len(runs) != 1 || runs[0].prompt != "second" || !runs[0].running || runs[0].cwd != "/b" {
@@ -272,8 +291,7 @@ func TestRunLoggedFromTwoFolders(t *testing.T) {
 		}
 	}
 	// Once neither works, the newer run is told.
-	proc.Process.Kill()
-	proc.Wait()
+	stop()
 	runs = runsIn([]string{a, b}, time.Time{})
 	if len(runs) != 1 || runs[0].prompt != "first" || runs[0].running {
 		t.Fatalf("runs once neither works: %+v", runs)

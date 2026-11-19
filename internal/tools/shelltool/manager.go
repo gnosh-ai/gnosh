@@ -65,10 +65,13 @@ type Manager struct {
 	detached  map[int][]procInfo  // sessions of ended commands where something that let go of their output runs on, with those processes
 	tasks     map[string]*job     // background commands by id; ended ones stay
 	order     []string            // the ids in tasks, oldest first
-	calls     map[string]*job     // foreground commands by the id of the call that waits for them
-	pending   map[string]bool     // calls about to start a foreground command, by id: true once asked to go to the background as it starts
-	kept      []keptFile          // output files of finished foreground commands, oldest first
-	keptBytes int64               // how much disk those files take
+	// ended are the ids of the background commands that have ended, in
+	// the order they ended: maxEndedTasks of them are kept.
+	ended     []string
+	calls     map[string]*job // foreground commands by the id of the call that waits for them
+	pending   map[string]bool // calls about to start a foreground command, by id: true once asked to go to the background as it starts
+	kept      []keptFile      // output files of finished foreground commands, oldest first
+	keptBytes int64           // how much disk those files take
 
 	wg sync.WaitGroup // every goroutine the manager has started
 
@@ -355,6 +358,45 @@ func (m *Manager) LeftRunning() []string {
 	return out
 }
 
+// StopLeftRunning stops what finished commands left running, as Close
+// does at the end, and returns what LeftRunning said of it: a run about to
+// end stops them before it tells the model, so that one started again to
+// outlive the run (with setsid) finds its port and its files free. The
+// manager goes on.
+func (m *Manager) StopLeftRunning() []string {
+	left := m.LeftRunning()
+	m.stopLeft(false)
+	return left
+}
+
+// stopLeft stops what finished commands left behind, still holding their
+// output, and what they left that let go of it; closing, it also closes
+// their output and waits for what was read of it.
+func (m *Manager) stopLeft(closing bool) {
+	m.mu.Lock()
+	left := make(map[*job][]procInfo, len(m.lingering))
+	for j, procs := range m.lingering {
+		left[j] = procs
+	}
+	detached := m.detached
+	m.detached = make(map[int][]procInfo)
+	m.mu.Unlock()
+	var sweeps sync.WaitGroup
+	for j, procs := range left {
+		sweeps.Go(func() {
+			m.sweep(j.pid, procs)
+			if closing {
+				j.pipe.Close()
+				waitFor(j.pumped, m.opt.PipeGrace+time.Second)
+			}
+		})
+	}
+	for sid, procs := range detached {
+		sweeps.Go(func() { m.sweep(sid, procs) })
+	}
+	sweeps.Wait()
+}
+
 // Close stops every command the manager started and is still running,
 // foreground and background, with everything those commands started; kills
 // what a finished command left behind if that still holds the command's
@@ -410,29 +452,7 @@ func (m *Manager) close() error {
 		}
 	}
 
-	// What finished commands left behind, still holding their output, and
-	// what they left that let go of it.
-	m.mu.Lock()
-	left := make(map[*job][]procInfo, len(m.lingering))
-	for j, procs := range m.lingering {
-		left[j] = procs
-	}
-	detached := m.detached
-	m.detached = make(map[int][]procInfo)
-	m.mu.Unlock()
-	var sweeps sync.WaitGroup
-	for j, procs := range left {
-		sweeps.Go(func() {
-			m.sweep(j.pid, procs)
-			j.pipe.Close()
-			waitFor(j.pumped, m.opt.PipeGrace+time.Second)
-		})
-	}
-	for sid, procs := range detached {
-		sweeps.Go(func() { m.sweep(sid, procs) })
-	}
-	sweeps.Wait()
-
+	m.stopLeft(true)
 	m.notes.close()
 
 	// Every goroutine should be done by now. One that is not is waiting on
@@ -626,7 +646,12 @@ func (m *Manager) keepDetached(sid int, left []procInfo) bool {
 
 // pruneDetached forgets the sessions on the books (detached) in which no
 // process is left. The sessions are looked at without the lock held; one
-// put on the books again meanwhile, under the same id, is kept.
+// put on the books again meanwhile, under the same id, is kept. A session
+// must look empty twice, pruneRecheck apart: a look at a session is not one
+// moment, and a process that started a last one and ended while it was
+// looked at can make it look empty. (A clean-copy CI saw it: a launcher's
+// shell started its server and ended as the session was looked at, the
+// session was forgotten, and Close left the server running.)
 func (m *Manager) pruneDetached() {
 	m.mu.Lock()
 	books := make(map[int][]procInfo, len(m.detached))
@@ -634,7 +659,18 @@ func (m *Manager) pruneDetached() {
 		books[sid] = procs
 	}
 	m.mu.Unlock()
+	empty := make(map[int][]procInfo)
 	for sid, then := range books {
+		if now, err := m.procs(sid); err != nil || len(now) > 0 {
+			continue
+		}
+		empty[sid] = then
+	}
+	if len(empty) == 0 {
+		return
+	}
+	time.Sleep(pruneRecheck)
+	for sid, then := range empty {
 		if now, err := m.procs(sid); err != nil || len(now) > 0 {
 			continue
 		}
@@ -645,6 +681,30 @@ func (m *Manager) pruneDetached() {
 		m.mu.Unlock()
 	}
 }
+
+// stillThere looks at a session again, pruneRecheck later, and keeps of
+// left the processes that are still in it. A look at a session is not one
+// moment: a process that closed the output as it ended may be seen before
+// it is gone (a CI run on a busy machine saw `(sleep 0.1; echo late) &`
+// reported as left running).
+func (m *Manager) stillThere(sid int, left []procInfo) []procInfo {
+	time.Sleep(pruneRecheck)
+	again, err := m.procs(sid)
+	if err != nil {
+		return left
+	}
+	var out []procInfo
+	for _, p := range left {
+		if slices.ContainsFunc(again, func(q procInfo) bool { return q.pid == p.pid && q.start == p.start }) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// pruneRecheck is how long pruneDetached waits before it looks again at a
+// session that looked empty.
+const pruneRecheck = 50 * time.Millisecond
 
 // settle is called when a command's output has closed for good. A command
 // whose leftovers held it open (lingering) is taken off that list; when
@@ -681,14 +741,43 @@ func (m *Manager) settle(j *job) {
 	}
 }
 
+// maxEndedTasks is how many ended background commands are kept, each with
+// its output's start and end in memory and its output file on disk.
+var maxEndedTasks = 100
+
 // release takes a command that has ended off the list of running ones. It
-// is called once for each command that started.
+// is called once for each command that started, its ending recorded.
+//
+// A long session (a /loop, say) runs many background commands: of those
+// that ended, the last maxEndedTasks are kept, and an older one is let go
+// of, its output file with it unless something it left running still
+// writes there. They all stayed until the session ended, in memory and on
+// disk.
 func (m *Manager) release(j *job) {
+	var drop []*job
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	delete(m.running, j)
-	if j.taskID() != "" {
+	if id := j.taskID(); id != "" {
 		m.bgRunning--
+		m.ended = append(m.ended, id)
+		for len(m.ended) > maxEndedTasks {
+			old := m.ended[0]
+			m.ended = m.ended[1:]
+			if oj := m.tasks[old]; oj != nil {
+				delete(m.tasks, old)
+				m.order = slices.DeleteFunc(m.order, func(x string) bool { return x == old })
+				drop = append(drop, oj)
+			}
+		}
+	}
+	m.mu.Unlock()
+	for _, oj := range drop {
+		oj.mu.Lock()
+		held := oj.end != nil && oj.end.held
+		oj.mu.Unlock()
+		if !held && oj.out != nil {
+			os.Remove(oj.out.path)
+		}
 	}
 }
 

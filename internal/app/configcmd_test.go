@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
@@ -98,4 +100,80 @@ func TestConfigLiveOptions(t *testing.T) {
 	if code := s.exit(); code != 0 {
 		t.Errorf("exit code %d", code)
 	}
+}
+
+// showTurnDuration and respectGitignore reach the interface by the
+// session's info, and /config changes them in a running session: the
+// interface reads the info again after each command.
+func TestInterfaceOptionsAreLive(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Settings(`{"options": {"showTurnDuration": false, "respectGitignore": false}}`)
+	_, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
+		if info := c.Info(); !info.HideTurnDuration || !info.ListIgnored {
+			t.Errorf("showTurnDuration and respectGitignore false do not reach the interface: %+v", info)
+		}
+		if _, err := c.Command(ctx, "/config showTurnDuration=true respectGitignore=true"); err != nil {
+			t.Errorf("/config showTurnDuration=true respectGitignore=true: %v", err)
+		}
+		if info := c.Info(); info.HideTurnDuration || info.ListIgnored {
+			t.Errorf("/config set them true, and the interface still has them off: %+v", info)
+		}
+		c.Quit("prompt_input_exit")
+		return 0
+	})
+	r.wantCode(t, 0)
+}
+
+// Claude Code's language and includeGitInstructions: the language the
+// person set is asked for in the system prompt, and with
+// includeGitInstructions false the block ahead of a session's first
+// prompt says nothing of git.
+func TestLanguageAndGitInstructions(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Konnichiwa."}, apptest.Reply{Text: "Hai."})
+	w.Settings(`{"options": {"language": "japanese"}}`)
+	run(t, w, "-p", "hello").wantCode(t, 0)
+	first := requestText(t, w, 0)
+	has(t, "the first session's request", first, "Reply to the user in japanese, whatever language their messages are in", "- Git: ")
+	w.Settings(`{"options": {"includeGitInstructions": false}}`)
+	run(t, w, "-p", "hello again").wantCode(t, 0)
+	second := requestText(t, w, 1)
+	has(t, "the second session's request", second, "Reply to the user in japanese", "Working directory: ")
+	hasNot(t, "the second session's request", second, "- Git: ")
+}
+
+// bashOutputMaxChars, Claude Code's settings key, bounds the part of a
+// command's output the model reads; BASH_MAX_OUTPUT_LENGTH, when set,
+// wins, as the environment outranks the files.
+func TestBashOutputMaxChars(t *testing.T) {
+	count := apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"seq 1 3000"}`}}}
+	w := apptest.NewWorld(t, count, apptest.Reply{Text: "Counted."}, count, apptest.Reply{Text: "Counted again."})
+	w.Settings(`{"options": {"bashOutputMaxChars": 2000}}`)
+	run(t, w, "-y", "-p", "count").wantCode(t, 0)
+	// seq 1 3000 prints 13,893 characters: the start and the end of them
+	// are shown, 2,000 in all.
+	cut := toolResult(t, w, 1, "c1")
+	has(t, "the cut output", cut, "1\n2\n3\n", "3000")
+	if len(cut) > 4000 {
+		t.Errorf("the model read %d characters of the output, with bashOutputMaxChars 2000", len(cut))
+	}
+	o := testOptions(w, "-y", "-p", "count again")
+	o.Environ = append(o.Environ, "BASH_MAX_OUTPUT_LENGTH=20000")
+	runWith(t, t.Context(), o).wantCode(t, 0)
+	if whole := toolResult(t, w, 3, "c1"); !strings.Contains(whole, "\n1500\n") {
+		t.Errorf("with BASH_MAX_OUTPUT_LENGTH 20000 the middle of the output was still cut")
+	}
+}
+
+// attribution, Claude Code's: the lines a settings file sets are asked
+// for in the system prompt; with none set, gnosh says nothing of signing,
+// as it signs with nothing of its own.
+func TestAttributionInTheSystemPrompt(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "ok"}, apptest.Reply{Text: "ok"})
+	run(t, w, "-p", "hi").wantCode(t, 0)
+	hasNot(t, "a request with no attribution set", requestText(t, w, 0), "end its message with these lines", "end its description with")
+	w.Settings(`{"attribution": {"commit": "Co-Authored-By: gnosh <bot@example.com>"}}`)
+	run(t, w, "-p", "hi").wantCode(t, 0)
+	second := requestText(t, w, 1)
+	has(t, "a request with the commit's attribution set", second, "When you make a git commit, end its message with these lines, as they are:", "Co-Authored-By: gnosh ", "theirs come first")
+	hasNot(t, "a request with the commit's attribution set", second, "When you open a pull request")
 }

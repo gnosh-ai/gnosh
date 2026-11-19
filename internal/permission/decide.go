@@ -579,6 +579,13 @@ func (e *Engine) GitPlaces(dir, command string) (places []string, why string) {
 		if text == "" {
 			return
 		}
+		if strings.Contains("/"+text+"/", "/../") {
+			// The system goes into each part through a link first, so
+			// "lnk/.." is where lnk points, and above it: not the text's
+			// place (a review found it).
+			ok = false
+			return
+		}
 		if strings.HasPrefix(text, "/") {
 			places = unionStrings(places, []string{path.Clean(text)})
 			return
@@ -904,9 +911,16 @@ func (e *Engine) match(list List, req *request) *crule {
 			}
 		case kindAgent:
 			if req.info.class == classAgent {
-				typ := "general-purpose"
+				// The kind as the tool reads it: blanks around it left
+				// off, and none given (or only blanks) the general-purpose
+				// one. Read as written, "" and " Explore" went past
+				// Agent(general-purpose) and Agent(Explore).
+				typ := ""
 				if raw, ok := req.input["subagent_type"]; ok {
 					_ = json.Unmarshal(raw, &typ)
+				}
+				if typ = strings.TrimSpace(typ); typ == "" {
+					typ = "general-purpose"
 				}
 				if typ == c.value {
 					return c

@@ -68,7 +68,9 @@ func (l *live) runAsAgent() error {
 	var deny []string
 	if def.ToolsSet {
 		for _, tool := range l.p.toolNames() {
-			if !slices.Contains(def.Tools, tool) {
+			// (A tool listed by Claude Code's old name, Task for Agent,
+			// is listed.)
+			if !slices.ContainsFunc(def.Tools, func(t string) bool { return permission.CanonicalTool(t) == tool }) {
 				deny = append(deny, tool)
 			}
 		}

@@ -130,15 +130,11 @@ Recorded plainly so they are not forgotten. Jae Kwon's instruction, 29 October
 2026: prioritize the GNO Network GPL and the strong attribution clause above
 for this subsystem; the details and conflicts will be worked out later.
 
-- **The rest of gnosh.** This subsystem was written for an earlier gnosh that
-  was a fork of another program, most of which was under a license that
-  conflicted with this one in a combined binary. That program's code is no
-  longer part of gnosh: gnosh was rewritten from an empty repository in
-  November 2026 (see PROVENANCE.md at the repository's root), and by Jae
-  Kwon's instruction of 13 November 2026 the whole of it is under the GNO
-  Network General Public License, version 6, with Additional Terms (Strong
-  Attribution), in the root `LICENSE.md`. The conflict that was recorded here
-  before that date went with the code that caused it.
+- **The rest of gnosh.** By Jae Kwon's instruction of 13 November 2026 the
+  whole of gnosh is under the GNO Network General Public License, version 6,
+  with Additional Terms (Strong Attribution), in the root `LICENSE.md`, which
+  also lists the parts that keep licenses of their own. PROVENANCE.md at the
+  repository's root says how gnosh was written.
 - **Two Licensors, to be reconciled.** This file names Jae Kwon as the
   Licensor for this subsystem; the root `LICENSE.md` names NewTendermint, LLC,
   with Jae Kwon acting for it. Both instruments are otherwise the same. Which
@@ -157,10 +153,15 @@ for this subsystem; the details and conflicts will be worked out later.
   (`stdlibs/` and `klashlibs/klash/bptree/v0`) are under the GNO Network GPL
   v6 with NewTendermint, LLC's Additional Terms (Strong Attribution). Those
   terms apply independently of this file: since gnosh includes the GnoVM, its
-  interface must carry NewTendermint's attribution notice too.
+  interface carries NewTendermint's attribution notice too. The header that
+  opens every gnosh session ends with "built on gno.land" and a link to
+  <https://gno.land>, `gnovm_list` ends with `AttributionNotice`, and
+  `/license` shows both credits.
 - **Other licenses in the dependency tree.** The tm2 packages used here are
-  Apache-2.0 (github.com/gnolang/gno/tm2/LICENSE). Files in `stdlibs/` that came
-  from Go are under Go's BSD license (`stdlibs/LICENSE-GO`).
+  Apache-2.0 (github.com/gnolang/gno/tm2/LICENSE), and one cache tm2 uses is
+  MPL-2.0. Files in `stdlibs/` that came from Go are under Go's BSD license
+  (`stdlibs/LICENSE-GO`). The root `LICENSE.md` says why none of them
+  conflicts with this one.
 - **Authorship.** Much of this subsystem was written with AI assistance at Jae
   Kwon's direction. How much copyright that leaves for this clause to rest on
   is a question for the legal review.

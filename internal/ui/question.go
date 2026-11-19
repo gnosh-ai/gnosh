@@ -115,6 +115,12 @@ type deadliner interface {
 	Deadline() time.Time
 }
 
+// noStopper is what the Data of a permission question has whose bare "no"
+// stops something other than the turn (a sub-agent in the background).
+type noStopper interface {
+	NoStops() string
+}
+
 // menuGutter is how many cells a question keeps at the left of the rows of
 // its body, which the body must be laid out for.
 func menuGutter(th *Theme, m text.Metrics) int {
@@ -174,8 +180,12 @@ func newQuestion(th *Theme, m text.Metrics, width int, q agent.Question, at int)
 				// come with it. Each gets a row of its own, and Tab on
 				// the first opens a note as well.
 				no = len(opts)
+				stops := "the turn"
+				if d, ok := q.Data.(noStopper); ok && d.NoStops() != "" {
+					stops = d.NoStops()
+				}
 				opts = append(opts,
-					menu.Option{Label: "No", Description: "the call does not run, and the turn stops", Text: menu.TextOptional,
+					menu.Option{Label: "No", Description: "the call does not run, and " + stops + " stops", Text: menu.TextOptional,
 						Placeholder: "or say what to do instead, and the model carries on"},
 					menu.Option{Label: "No, and tell the model what to do instead", Text: menu.TextRequired,
 						Placeholder: "the model reads this and carries on"})

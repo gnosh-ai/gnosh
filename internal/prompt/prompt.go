@@ -44,6 +44,8 @@ const (
 	textStyleLearning    = "style-learning"
 	textSecurity         = "security"
 	textNoTools          = "no-tools"
+	textLanguage         = "language"
+	textAttribution      = "attribution"
 	textMemory           = "memory"
 	textMemoryFull       = "memory-full"
 	textGno              = "gno"
@@ -57,6 +59,7 @@ const (
 	textRepeat           = "repeat"
 	textRepeatClose      = "repeat-refused-close"
 	textEmptyReply       = "empty-reply"
+	textTextCall         = "text-call"
 	textStopHook         = "stop-hook"
 	textContinuation     = "continuation"
 	textCheckFailed      = "check-could-not-run"
@@ -69,6 +72,7 @@ const (
 	textInterrupted      = "interrupted"
 	textBackgroundEnded  = "background-ended"
 	textAgentEnded       = "agent-ended"
+	textSubtaskEnded     = "subtask-ended"
 	textMonitorLines     = "monitor-lines"
 	textBtw              = "btw"
 	textRecap            = "recap"
@@ -83,6 +87,7 @@ const (
 	textStructured       = "structured-output"
 	textAfterSummary     = "after-summary"
 	textEarlierLeftOut   = "earlier-left-out"
+	textFilesBack        = "files-back"
 	textSummary          = "summary"
 	textSummaryExtra     = "summary-extra"
 	textSummaryIntro     = "summary-intro"
@@ -141,6 +146,10 @@ func specs() []spec {
 			when: "After the core, under the built-in output style Explanatory: Insight blocks on the choices made."},
 		{name: textStyleLearning, kind: KindSystem,
 			when: "After the core, under the built-in output style Learning: Insights, and a piece of the code left to the user (TODO(human))."},
+		{name: textLanguage, kind: KindSystem, need: []string{"language"},
+			when: "After the core and the output style, when the person set the language replies are in (Claude Code's language)."},
+		{name: textAttribution, kind: KindSystem, may: []string{"commit", "pr"},
+			when: "After those, when a settings file says what the model signs its commits and pull requests with (Claude Code's attribution); gnosh adds none of its own."},
 		{name: textNoTools, kind: KindSystem,
 			when: "A part of the system prompt only when the session has no tools at all."},
 		{name: textMemory, kind: KindSystem,
@@ -174,6 +183,8 @@ func specs() []spec {
 			when: "When the call being repeated is a close that mem or the check refuses."},
 		{name: textEmptyReply, kind: KindLine,
 			when: "When a reply ended with no text and no tool call."},
+		{name: textTextCall, kind: KindLine,
+			when: "When a reply calls no tool and its text is a tool call written out in a chat template's markup, which the model's server did not take as a call."},
 		{name: textStopHook, kind: KindLine, need: []string{"reason"},
 			when: "When a Stop hook refuses to let the turn end, carrying the hook's reason."},
 		{name: textContinuation, kind: KindLine, need: []string{"reason"},
@@ -203,6 +214,9 @@ func specs() []spec {
 		{name: textAgentEnded, kind: KindLine, need: []string{"description", "id"},
 			may:  []string{"finished", "failed", "stopped", "why", "caution", "report", "output"},
 			when: "When a sub-agent the model started in the background ends, between rounds or as a turn of its own."},
+		{name: textSubtaskEnded, kind: KindLine, need: []string{"task", "id"},
+			may:  []string{"finished", "failed", "stopped", "why", "report"},
+			when: "When a copy of the conversation the person set to work in the background with /subtask ends, between rounds or as a turn of its own."},
 		{name: textBtw, kind: KindLine,
 			when: "Before a side question the person asks with /btw, in a request beside the session's that is not kept."},
 		{name: textRecap, kind: KindLine,
@@ -235,6 +249,8 @@ func specs() []spec {
 			when: "Just before a summary, where it stands in place of the conversation it replaced."},
 		{name: textAfterSummary, kind: KindLine, may: []string{"path"},
 			when: "Just after that summary: carry on, keeping every stop the user set."},
+		{name: textFilesBack, kind: KindLine, need: []string{"path"}, may: []string{"shown", "named"},
+			when: "After a summary, for each file the model read or changed last that is given back: what Read returns for it follows; and once, the ones that are not given back."},
 
 		{name: textPopNote, kind: KindResult, may: []string{"messages", "one_message", "calls", "one_call", "tools"},
 			when: "Appended to the answer of the call that entered a todo, once the todo is popped: what came between was removed."},

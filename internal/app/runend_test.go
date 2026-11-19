@@ -81,6 +81,8 @@ func TestRunStates(t *testing.T) {
 		{"no process id", head + "Working on it.\n", false, "done", ""},
 		{"signal", head + "gnosh: 2026-11-18T10:01:00Z the run was stopped by a signal (exit status 143).\n", true, "stopped", "it was stopped by a signal"},
 		{"gnosh stop", head + "gnosh: 2026-11-18T10:01:00Z the run was stopped by a signal (exit status 143).\ngnosh: 2026-11-18T10:01:01Z" + runStopped + "\n", true, "stopped", ""},
+		// (What the run printed after an end line makes that one a quote.)
+		{"quoted", head + "gnosh: 2026-11-18T10:01:00Z the run is done.\nand then it was killed\n", true, "failed", "it ended without a word: it was killed, or its machine stopped"},
 		{"again", head + "gnosh: 2026-11-18T10:01:00Z the run failed: it ended with exit status 1.\n" +
 			"gnosh: 2026-11-18T10:02:00Z the session " + id + " goes on in the background with: again\nDone.\ngnosh: 2026-11-18T10:03:00Z the run is done.\n", true, "done", ""},
 	} {

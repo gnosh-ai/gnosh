@@ -515,7 +515,7 @@ func TestCleanResultAndOutgoing(t *testing.T) {
 		o.CleanResult = func(_ core.ToolCall, res core.ToolResult) core.ToolResult {
 			return core.TextResult(strings.ReplaceAll(core.TextOf(res.Content), "<|", "< |"))
 		}
-		o.Outgoing = func(req *core.Request) {
+		o.Outgoing = func(_ string, req *core.Request) {
 			// The request is the loop's own copy: changing it must not
 			// reach the log.
 			req.Messages[0].Blocks[0].Text = "REWRITTEN"

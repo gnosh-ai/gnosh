@@ -130,6 +130,11 @@ func newToolNames(renamed map[string]string, guards map[string][]string) toolNam
 	// A hook written for the tool that made several edits at once checked
 	// that tool's input, not Edit's. It guards Edit and approves nothing.
 	guard("Edit", "MultiEdit")
+	// A Bash hook guards the commands Monitor starts, as in Claude Code:
+	// before they run (PreToolUse and PermissionRequest), seeing each as a
+	// Bash call; its approval and changed input count for nothing there
+	// (selected.asBash).
+	guard(monitorTool, "Bash")
 	for _, tool := range slices.Sorted(maps.Keys(guards)) {
 		for _, by := range guards[tool] {
 			guard(tool, by)

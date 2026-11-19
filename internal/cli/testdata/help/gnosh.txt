@@ -75,6 +75,11 @@ Which model
   --reasoning-effort, --effort <level>
       How hard the model thinks in this run. The levels depend on the model.
       (Not built yet.)
+  --fallback-model <models>
+      Models to go on with, tried in order, when the model cannot answer (its
+      server is down, not ready or too busy): up to three, separated by
+      commas. The switch holds for the rest of the turn; the next one asks the
+      model first again. (Not built yet.)
 
 Permissions
   -y, --yolo, --dangerously-skip-permissions

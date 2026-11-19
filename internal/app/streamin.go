@@ -120,18 +120,20 @@ func (f *printer) runStream(ctx context.Context, c Controls) int {
 		}
 		if !m.u.ClientComposed && strings.HasPrefix(strings.TrimSpace(text), "/") {
 			res, err := c.Command(ctx, strings.TrimSpace(text))
-			if (res.Handled && res.Prompt == "") || err != nil {
+			switch {
+			case err != nil || res.Handled && res.Prompt == "":
 				if f.streamCommand(c, res, err, m.u.UUID) {
 					code = cli.ExitFailure
 				}
 				return
+			case res.Handled:
+				pending[res.Prompt] = waiting{since: f.p.now(), uuid: m.u.UUID}
+				unstarted[res.Prompt] = true
+				return
 			}
-			pending[res.Prompt] = waiting{since: f.p.now(), uuid: m.u.UUID}
-			unstarted[res.Prompt] = true
-			return
-		}
-		if m.u.Priority == "now" {
-			c.Interrupt()
+			// Not a command ("/etc/nginx.conf fails to load", or slash
+			// commands are off): a prompt like any other, as in the text
+			// path. (It waited under no id, and the run never ended.)
 		}
 		p := agent.Prompt{Text: text, Attachments: m.images, Later: m.u.Priority == "later"}
 		if m.u.ClientComposed {
@@ -185,6 +187,14 @@ func (f *printer) runStream(ctx context.Context, c Controls) int {
 				f.p.errf("%v", m.err)
 				c.Interrupt()
 				return cli.ExitFailure
+			}
+			if m.u.Priority == "now" && (m.u.ShouldQuery == nil || *m.u.ShouldQuery) && (strings.TrimSpace(m.text) != "" || len(m.images) > 0) {
+				// It stops what runs as it arrives. Stopped when its turn
+				// came to be sent, after the messages before it, it let the
+				// turn it was sent to stop run on, and stopped one that
+				// started after it came. The person's messages before it
+				// stay in line and are answered.
+				c.Interrupt()
 			}
 			backlog = append(backlog, m)
 			drain()

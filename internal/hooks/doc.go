@@ -258,9 +258,10 @@
 // configuration that has one: an event name that is not exactly one of
 // gnosh's events (a misspelling, another letter case, or a Claude Code event
 // gnosh does not have); an event this build does not fire
-// (Options.Fires); a hook type other than "command"; an "if" that is not
-// a string; "args"; a background hook; "onFailure" other than "continue"; any field
-// gnosh does not know; a name written twice in one JSON object; a matcher
+// (Options.Fires); a hook type gnosh does not have (it has "command",
+// "http", "mcp_tool", "prompt" and "agent"); an "if" that is not a string;
+// "args" that are not a list of strings; "onFailure" other than
+// "continue"; any field gnosh does not know; a name written twice in one JSON object; a matcher
 // on an event that takes none, or one that cannot be read; a missing
 // command; a timeout that is not above zero; and, in the user's own
 // configuration, a command that starts with a relative path.

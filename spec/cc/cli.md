@@ -128,7 +128,7 @@ effect with `-p`.
 | Flag | Value | Meaning | Pri |
 | :- | :- | :- | :- |
 | `--model` | alias or full model name | Model for this session. Overrides the `model` setting and the `ANTHROPIC_MODEL` environment variable. | P0 (gnosh model names) |
-| `--fallback-model` | comma-separated list | Models to fall back to, in order, when the primary is overloaded or unavailable; the primary is retried at the start of each user turn. Overrides the `fallbackModel` setting. | P2 |
+| `--fallback-model` | comma-separated list | Models to fall back to, in order, when the primary is overloaded or unavailable; the primary is retried at the start of each user turn. Overrides the `fallbackModel` setting. | P2 (built: DECISIONS 140) |
 | `--effort` | `low` \| `medium` \| `high` \| `xhigh` \| `max` | Reasoning effort for the session; available levels depend on the model. Not persisted. (`ultracode` is an extra Anthropic value: not adopted.) | P2 |
 | `--betas` | list | Anthropic API beta headers. | not adopted |
 

@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
 	"github.com/gnosh-ai/gnosh/internal/core"
@@ -46,7 +48,7 @@ func TestRunJSONFormat(t *testing.T) {
 	}
 }
 
-const wantStream = `{"type":"system","subtype":"init","uuid":"UUID","session_id":"UUID","cwd":"ROOT/proj","model":"test-model","tools":["Read","Write","Edit","Glob","Grep","Bash","TaskStop","Monitor","WebFetch","Agent","SendMessage","AskUserQuestion","EnterPlanMode","ExitPlanMode"],"mcp_servers":[],"permissionMode":"default","slash_commands":["help","exit","background","restart","clear","compact","think","no_think","effort","model","status","release-notes","focus","theme","config","loop","noloop","permissions","hooks","output-style","skills","reload-skills","autocompact","context","btw","statusline","recap","rename","keybindings","color","resume","fork","branch","rewind","plan","add-dir","cd","panel","tasks","cost","agents","memory","mcp","diff","export","copy","review","security-review","simplify","init","debug","doctor"],"output_style":"default","skills":[],"plugins":[],"apiKeySource":"none","gnosh_version":"test-build"}
+const wantStream = `{"type":"system","subtype":"init","uuid":"UUID","session_id":"UUID","cwd":"ROOT/proj","model":"test-model","tools":["Read","Write","Edit","Glob","Grep","Bash","TaskStop","Monitor","WebFetch","Agent","SendMessage","AskUserQuestion","EnterPlanMode","ExitPlanMode"],"mcp_servers":[],"permissionMode":"default","slash_commands":["help","exit","background","restart","clear","compact","think","no_think","effort","model","status","release-notes","license","focus","theme","config","loop","noloop","permissions","hooks","output-style","skills","reload-skills","autocompact","context","btw","statusline","recap","rename","keybindings","color","resume","fork","subtask","branch","rewind","plan","add-dir","cd","panel","tasks","cost","agents","memory","mcp","diff","export","copy","review","security-review","simplify","init","debug","doctor"],"output_style":"default","skills":[],"plugins":[],"apiKeySource":"none","gnosh_version":"test-build"}
 {"type":"assistant","uuid":"UUID","session_id":"UUID","parent_tool_use_id":null,"message":{"id":"msg_ID_1","type":"message","role":"assistant","model":"test-model","content":[{"type":"text","text":"Let me look."}],"stop_reason":"tool_use","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":7,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}
 {"type":"assistant","uuid":"UUID","session_id":"UUID","parent_tool_use_id":null,"message":{"id":"msg_ID_1","type":"message","role":"assistant","model":"test-model","content":[{"type":"tool_use","id":"call_ID","name":"Read","input":{"file_path":"a.txt"}}],"stop_reason":"tool_use","stop_sequence":null,"usage":{"input_tokens":100,"output_tokens":7,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}
 {"type":"user","uuid":"UUID","session_id":"UUID","parent_tool_use_id":null,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_ID","content":"1\ttwo plus two\n"}]},"tool_use_result":{"file":{"filePath":"ROOT/proj/a.txt","numLines":1,"startLine":1,"totalLines":1},"type":"text"}}
@@ -447,5 +449,133 @@ func TestRunSeveralCallsInOrder(t *testing.T) {
 	}
 	for i, want := range []string{"ONE", "TWO", "THREE", "FOUR"} {
 		has(t, "the result of "+got[i], texts[i], want)
+	}
+}
+
+// A stream-json message that begins with "/" and names no command ("/etc
+// ... fails to load") is a prompt like any other, as in the text path: it
+// is answered, its result line written, and the run ends. (The print mode
+// review of 2026-11-19: it waited under no id, and the run never ended.)
+func TestStreamJSONInputSlashThatIsNoCommand(t *testing.T) {
+	w := apptest.NewWorld(t, apptest.Reply{Text: "Look at line 3."})
+	o := testOptions(w, "-p", "--input-format", "stream-json", "--output-format", "stream-json")
+	o.Stdin = strings.NewReader(`{"type":"user","message":{"role":"user","content":"/etc/nginx/nginx.conf fails to load, why?"}}` + "\n")
+	o.StdinIsTerminal = false
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	r := runWith(t, ctx, o).wantCode(t, 0)
+	lines := jsonLines(t, r.out)
+	last := lines[len(lines)-1]
+	if last["type"] != "result" || last["result"] != "Look at line 3." {
+		t.Errorf("the last line: %v", last)
+	}
+	has(t, "what the model read", requestText(t, w, 0), "/etc/nginx/nginx.conf fails to load")
+}
+
+// A run in stream-json whose turn ran a command in the foreground writes
+// its result line once, last, with the structured output in it: such a run
+// was taken for one with work in the background, its line written before
+// the structured output was asked for. (The print mode review of
+// 2026-11-19.)
+func TestStreamJSONResultAfterAForegroundCommand(t *testing.T) {
+	schema := `{"type": "object", "properties": {"count": {"type": "integer"}}, "required": ["count"]}`
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"ls | wc -l"}`}}},
+		apptest.Reply{Text: "There are three files."},
+		apptest.Reply{Text: `{"count": 3}`})
+	r := run(t, w, "-y", "-p", "how many files?", "--output-format", "stream-json", "--verbose", "--json-schema", schema).wantCode(t, 0)
+	lines := jsonLines(t, r.out)
+	results := 0
+	for _, l := range lines {
+		if l["type"] == "result" {
+			results++
+		}
+	}
+	last := lines[len(lines)-1]
+	if results != 1 || last["type"] != "result" {
+		t.Fatalf("%d result lines, the last line %v", results, last)
+	}
+	if out, ok := last["structured_output"].(map[string]any); !ok || fmt.Sprint(out["count"]) != "3" {
+		t.Errorf("the result line holds no structured output: %v", last)
+	}
+}
+
+// A message with priority "now" stops the turn that runs when it arrives,
+// though a message sent before it still waits in line: it was acted on
+// only once that one's turn had started, so the turn it was sent to stop
+// ran on (here, for ever), and the next one was stopped in its place (the
+// print mode review of 2026-11-19). The message before it is answered, and
+// so is it.
+func TestStreamJSONPriorityNowStopsWhatRuns(t *testing.T) {
+	hold := make(chan struct{})
+	t.Cleanup(func() { close(hold) })
+	arrived := make(chan struct{}, 1)
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "A long answer that never ends", Hold: hold, Arrived: func() { arrived <- struct{}{} }},
+		apptest.Reply{Text: "The second answer."},
+		apptest.Reply{Text: "The urgent answer."})
+	o := testOptions(w, "-y", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose")
+	pr, pw := io.Pipe()
+	o.Stdin, o.StdinIsTerminal = pr, false
+	message := func(text, priority string) string {
+		return `{"type":"user","message":{"role":"user","content":"` + text + `"},"priority":"` + priority + `"}` + "\n"
+	}
+	go func() {
+		_, _ = io.WriteString(pw, message("the long one", "next"))
+		<-arrived
+		_, _ = io.WriteString(pw, message("the second", "next"))
+		time.Sleep(200 * time.Millisecond)
+		_, _ = io.WriteString(pw, message("the urgent one", "now"))
+		pw.Close()
+	}()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	r := runWith(t, ctx, o)
+	var results []map[string]any
+	for _, l := range jsonLines(t, r.out) {
+		if l["type"] == "result" {
+			results = append(results, l)
+		}
+	}
+	if len(results) != 3 {
+		t.Fatalf("%d result lines: %v", len(results), results)
+	}
+	if results[0]["is_error"] != true {
+		t.Errorf("the long one's result: %v", results[0])
+	}
+	if results[1]["result"] != "The second answer." || results[2]["result"] != "The urgent answer." {
+		t.Errorf("the other results: %v, %v", results[1], results[2])
+	}
+}
+
+// With stream-json input each message starts a turn with a fresh count
+// under --max-turns, as Claude Code's: one turn that reached the cap does
+// not stop the next message's. (The print mode review of 2026-11-19:
+// every later message was stopped before its first request.)
+func TestStreamJSONMaxTurnsPerMessage(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo one"}`}}},
+		apptest.Reply{Text: "Second answer."})
+	o := testOptions(w, "-y", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--max-turns", "1")
+	o.Stdin = strings.NewReader(`{"type":"user","message":{"role":"user","content":"run echo one"}}` + "\n" +
+		`{"type":"user","message":{"role":"user","content":"and now just answer"}}` + "\n")
+	o.StdinIsTerminal = false
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	r := runWith(t, ctx, o)
+	var results []map[string]any
+	for _, l := range jsonLines(t, r.out) {
+		if l["type"] == "result" {
+			results = append(results, l)
+		}
+	}
+	if len(results) != 2 {
+		t.Fatalf("%d result lines: %v", len(results), results)
+	}
+	if results[0]["subtype"] != "error_max_turns" {
+		t.Errorf("the first message's result: %v", results[0])
+	}
+	if results[1]["subtype"] != "success" || results[1]["result"] != "Second answer." || results[1]["is_error"] != false {
+		t.Errorf("the second message's result: %v", results[1])
 	}
 }

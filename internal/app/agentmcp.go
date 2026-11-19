@@ -9,6 +9,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
 	"github.com/gnosh-ai/gnosh/internal/mcp"
+	"github.com/gnosh-ai/gnosh/internal/permission"
 )
 
 // This file gives an agent the MCP servers its definition names
@@ -84,9 +85,14 @@ func (l *live) connectAgentMCP(s *subSession) {
 			l.notice(agent.LevelWarning, "mcp", fmt.Sprintf("The sub-agent %s writes an MCP server of its own named %s, the name of one of this session's, so it is not started: the session's %s is the one it has.", s.def.Name, c.Name, c.Name))
 			continue
 		}
+		// It is the sub-agent's before it connects, so that a sub-agent
+		// that ends meanwhile closes it (closeAgentMCP), and the
+		// connection is then not taken.
 		srv := &mcpServer{cfg: c, status: "pending", own: s.def.Name}
-		l.connectMCP(srv)
+		l.subMu.Lock()
 		s.ownMCP = append(s.ownMCP, srv)
+		l.subMu.Unlock()
+		l.connectMCP(srv, 0)
 	}
 }
 
@@ -149,7 +155,9 @@ func (l *live) agentMCPTools(s *subSession) []*mcpTool {
 func toolListed(list []string, name string, away bool) bool {
 	for _, entry := range list {
 		switch {
-		case entry == name:
+		case permission.CanonicalTool(entry) == name:
+			// (Claude Code's old names count: Task is Agent, KillShell
+			// is TaskStop.)
 			return true
 		case !strings.HasPrefix(entry, "mcp__") || !strings.HasPrefix(name, "mcp__"):
 		case strings.HasSuffix(entry, "__*") && strings.HasPrefix(name, strings.TrimSuffix(entry, "*")):

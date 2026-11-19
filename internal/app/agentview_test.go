@@ -276,3 +276,64 @@ func TestAgentRepos(t *testing.T) {
 		t.Errorf("of a folder that is not there: %q", got)
 	}
 }
+
+// The agent view opened over a session (←) starts runs in the session's
+// permission mode, as Claude Code's dispatched from a view opened with ←
+// take the source session's; a session in the default mode names none, so
+// that a run reads its folder's defaultMode itself.
+func TestAgentViewOverASessionKeepsItsMode(t *testing.T) {
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"-y"}, "bypassPermissions"},
+		{[]string{"--permission-mode", "acceptEdits"}, "acceptEdits"},
+		{nil, ""},
+	} {
+		w := apptest.NewWorld(t)
+		_, r := attach(t, w, nil, func(ctx context.Context, sc SessionControls, f *scripted) int {
+			av, ok := sc.(interface{ AgentView() (AgentViewInfo, error) })
+			if !ok {
+				t.Fatal("the session offers no agent view")
+			}
+			info, err := av.AgentView()
+			src, _ := info.Source.(*runSource)
+			if err != nil || src == nil || src.mode != c.want {
+				t.Errorf("%q: the runs' mode is %+v (%v), want %q", c.args, src, err, c.want)
+			}
+			sc.Quit("prompt_input_exit")
+			return 0
+		}, c.args...)
+		r.wantCode(t, 0)
+	}
+}
+
+// The view's runs are looked for in the project folders as they are at
+// each look: a run started from the view in a folder no session ran in
+// before (@repo) makes a new one, and is listed (box 1's @repo check
+// never saw its run, the folders having been read once as the view
+// opened).
+func TestRunSourceSeesNewFolders(t *testing.T) {
+	root := t.TempDir()
+	src := &runSource{p: &program{now: time.Now}, dirs: func() []string {
+		dirs, _ := filepath.Glob(filepath.Join(root, "*"))
+		return dirs
+	}}
+	if runs := src.Runs(); len(runs) != 0 {
+		t.Fatalf("runs before any: %+v", runs)
+	}
+	const id = "01a1eea5-8888-7000-8000-000000000008"
+	dir := filepath.Join(root, "-home-jae-src-app-api")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	log := "gnosh: " + now + " the session " + id + " goes on in the background with: write it\nDone.\ngnosh: " + now + runDone + "\n"
+	if err := os.WriteFile(filepath.Join(dir, id+".background.log"), []byte(log), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runs := src.Runs()
+	if len(runs) != 1 || runs[0].ID != id || runs[0].State != "done" {
+		t.Errorf("the run in the new folder: %+v", runs)
+	}
+}

@@ -1,6 +1,9 @@
 package hooks
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -157,6 +160,7 @@ func TestToolMatchersChooseTheHooks(t *testing.T) {
 		{"Download", []string{"(none)", "*", "Download", "Edit|Write (guard)", "WebFetch (guard)"}},
 		{"CodeSearch", []string{"(none)", "*", "WebSearch (guard)"}},
 		{"Spawn", []string{"(none)", "*", "Task (guard)"}},
+		{"Monitor", []string{"(none)", "*", "Bash (guard)"}},
 	}
 	for _, tt := range tests {
 		in := input(PreToolUse)
@@ -260,5 +264,42 @@ func TestIdenticalCommandsRunOnce(t *testing.T) {
 	}
 	if got := strings.Count(waitFor(t, dir+"/count"), "ran"); got != 2 {
 		t.Errorf("the commands ran %d times, want 2", got)
+	}
+}
+
+// A Bash hook guards the commands Monitor starts, as in Claude Code: before
+// they run, seeing each as a Bash call, and its changed input counts for
+// nothing; after them (PostToolUse) it does not run for them.
+func TestBashHooksGuardMonitorCommands(t *testing.T) {
+	seen := filepath.Join(t.TempDir(), "seen.json")
+	rewrite := prints(t, `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "updatedInput": {"command": "echo rewritten"}}}`)
+	r := newRunner(t, options(t),
+		Hook{Event: PreToolUse, Matcher: "Bash", Command: "cat > " + shq(seen) + "; " + rewrite},
+		Hook{Event: PostToolUse, Matcher: "Bash", Command: "true"})
+	in := input(PreToolUse)
+	in.ToolName, in.ToolInput = "Monitor", json.RawMessage(`{"command":"tail -f log","description":"the log","timeout_ms":1000}`)
+	out := run(t, r, in)
+	if out.UpdatedInput != nil {
+		t.Errorf("a Bash hook's changed input was applied to a Monitor call: %s", out.UpdatedInput)
+	}
+	data, err := os.ReadFile(seen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		ToolName  string         `json:"tool_name"`
+		ToolInput map[string]any `json:"tool_input"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ToolName != "Bash" || got.ToolInput["command"] != "tail -f log" || got.ToolInput["timeout_ms"] != nil {
+		t.Errorf("the Bash hook was given %s", data)
+	}
+
+	post := input(PostToolUse)
+	post.ToolName, post.ToolInput = "Monitor", json.RawMessage(`{"command":"tail -f log"}`)
+	if names := ran(run(t, r, post)); len(names) != 0 {
+		t.Errorf("after a Monitor call, the hooks %v ran", names)
 	}
 }

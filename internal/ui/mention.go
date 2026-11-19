@@ -37,6 +37,8 @@ type fileIndex struct {
 	// turn ended): it is listed again when next used, even when a listing
 	// under way ends after the change.
 	stale bool
+	// ignored says what git ignores is listed too (respectGitignore off).
+	ignored bool
 }
 
 // newIndex keeps of the paths of dir the ones that can be offered.
@@ -74,11 +76,12 @@ func (s *session) indexed() *fileIndex {
 	if s.listProject == nil || s.cwd == "" {
 		return nil
 	}
-	if ix := &s.index; !ix.loading && (ix.dir != s.cwd || ix.stale || s.now().Sub(ix.at) > indexAge) {
+	if ix := &s.index; !ix.loading && (ix.dir != s.cwd || ix.stale || ix.ignored != s.info.ListIgnored || s.now().Sub(ix.at) > indexAge) {
 		ix.loading, ix.stale = true, false
-		dir, list, now := s.cwd, s.listProject, s.now
+		dir, list, now, ignored := s.cwd, s.listProject, s.now, s.info.ListIgnored
 		s.host.spawn(func() func() {
-			ix := newIndex(dir, list(dir), now())
+			ix := newIndex(dir, list(dir, ignored), now())
+			ix.ignored = ignored
 			return func() {
 				ix.stale = s.index.stale
 				s.index = ix
@@ -189,18 +192,23 @@ func fuzzyRank(lp, q string) int {
 // In a git repository it is git's list of the files it tracks and the
 // ones it would track (so the ignored ones are left out); elsewhere a walk
 // by the ignore rules gnosh's search tools go by, without the folders
-// whose names begin with a dot. At most maxIndexed paths, each way read in
-// at most indexWait.
+// whose names begin with a dot. With ignored (the respectGitignore option
+// off) what the ignore rules name is listed too. At most maxIndexed
+// paths, each way read in at most indexWait.
 //
 // It runs in a folder that may not be trusted, so git is kept from
 // running any program the repository's own settings name: ls-files reads
 // the index, and a repository's core.fsmonitor is a command git would run
 // for that (the setting is turned off on the command line, which wins
 // over the repository's), and nothing else ls-files does runs one.
-func listProject(dir string) []string {
+func listProject(dir string, ignored bool) []string {
 	ctx, cancel := context.WithTimeout(context.Background(), indexWait)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-c", "core.fsmonitor=false", "--no-pager", "-C", dir, "ls-files", "--cached", "--others", "--exclude-standard", "-z")
+	args := []string{"-c", "core.fsmonitor=false", "--no-pager", "-C", dir, "ls-files", "--cached", "--others", "-z"}
+	if !ignored {
+		args = append(args, "--exclude-standard")
+	}
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
 	var files []string
 	if out, err := cmd.Output(); err == nil {
@@ -212,7 +220,7 @@ func listProject(dir string) []string {
 	} else {
 		// (A walk of its own time: git's may be what ran out.)
 		walk, stop := context.WithTimeout(context.Background(), indexWait)
-		files = walkProject(walk, dir)
+		files = walkProject(walk, dir, ignored)
 		stop()
 	}
 	folders := map[string]bool{}
@@ -229,9 +237,9 @@ func listProject(dir string) []string {
 	return paths
 }
 
-// walkProject lists the files under dir by the ignore rules, for a folder
-// that is not in a git repository.
-func walkProject(ctx context.Context, dir string) []string {
+// walkProject lists the files under dir by the ignore rules (or, with
+// ignored, without them), for a folder that is not in a git repository.
+func walkProject(ctx context.Context, dir string, ignored bool) []string {
 	var files []string
 	rules := map[string]*ignore.Rules{".": ignore.For(dir, ignore.Options{})}
 	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
@@ -251,7 +259,7 @@ func walkProject(ctx context.Context, dir string) []string {
 			return nil
 		}
 		name := d.Name()
-		if r.Ignored(name, d.IsDir()) || strings.HasPrefix(name, ".") {
+		if !ignored && r.Ignored(name, d.IsDir()) || strings.HasPrefix(name, ".") {
 			if d.IsDir() {
 				return fs.SkipDir
 			}

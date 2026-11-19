@@ -18,6 +18,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/cli"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
+	"github.com/gnosh-ai/gnosh/internal/instructions"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
@@ -203,10 +204,7 @@ func (p *program) prepare(ctx context.Context, inv cli.Invocation, interactive b
 	if st.cfg == nil {
 		return st, cli.ExitFailure
 	}
-	for _, h := range st.cfg.Held {
-		st.held = append(st.held, trust.Holding{Kind: h.Kind, Text: h.Text, File: h.Origin.File, Line: h.Origin.Line})
-	}
-	st.held = append(st.held, st.gitPrograms...)
+	st.held = st.heldList()
 
 	record := st.trustStore()
 	st.decision = trust.Decide(trust.Asked{
@@ -252,6 +250,7 @@ func (st *startup) load(trusted bool) {
 	flags := config.Flags{
 		Model:           inv.Model,
 		SmallModel:      inv.SmallModel,
+		FallbackModel:   inv.FallbackModel,
 		ReasoningEffort: inv.Effort,
 		PermissionMode:  inv.PermissionMode,
 		AllowedTools:    inv.AllowedTools,
@@ -310,7 +309,7 @@ func (st *startup) load(trusted bool) {
 		},
 		Tools:      p.toolNames(),
 		KnownEnv:   env,
-		Checks:     []config.Check{st.checkRules, st.checkHooks},
+		Checks:     []config.Check{st.checkRules, st.checkHooks, checkExcludes},
 		LookupUser: lookupUser,
 	}
 	cfg, problems, err := config.Load(st.inputs)
@@ -433,6 +432,13 @@ func (st *startup) permissionOptions(cfg *config.Config, protected []string) per
 	}
 	if s := st.inputs.Flags.Settings; s != "" && !strings.HasPrefix(strings.TrimSpace(s), "{") {
 		o.Protected = append(o.Protected, s)
+	}
+	// And the files --mcp-config names, as Claude Code protects them: a
+	// server added to one would start with the next run that names it.
+	for _, m := range st.inv.MCPConfigs {
+		if m = strings.TrimSpace(m); m != "" && !strings.HasPrefix(m, "{") {
+			o.Protected = append(o.Protected, st.p.absFrom(m))
+		}
 	}
 	o.Protected = append(o.Protected, protected...)
 	// What is inside the work trees made for sub-agents (worktree.go) is
@@ -603,6 +609,7 @@ func (st *startup) hookOptions(cfg *config.Config) hooks.Options {
 		Fires:      firedEvents(),
 		ProjectDir: cfg.Paths.ProjectRoot,
 		StartDir:   cfg.Paths.Cwd,
+		Untrusted:  !st.trusted,
 		Environ:    func() []string { return overlayEnv(base, extra) },
 		Now:        st.p.now,
 		ToolNames:  st.p.toolNames(),
@@ -648,6 +655,20 @@ func (st *startup) checkHooks(cfg *config.Config) []config.Problem {
 			sev = config.Warning
 		}
 		out = append(out, config.Problem{Severity: sev, Where: hp.Source, Message: hp.Message})
+	}
+	return out
+}
+
+// checkExcludes says which claudeMdExcludes patterns the instruction
+// files' reader cannot use, where they are set: one that matched nothing
+// would leave a file in that the person meant to keep out.
+func checkExcludes(cfg *config.Config) []config.Problem {
+	var out []config.Problem
+	for _, e := range cfg.Context.Exclude {
+		if _, problems := instructions.CompilePaths([]string{e.V}); len(problems) > 0 {
+			out = append(out, config.Problem{Severity: config.Error, File: e.Origin.File, Line: e.Origin.Line, Where: e.Origin.Name,
+				Message: "in \"options.claudeMdExcludes\", " + problems[0]})
+		}
 	}
 	return out
 }
@@ -717,7 +738,15 @@ func resolveDepth(p string, depth int) (string, error) {
 				return "", rerr
 			}
 			if !filepath.IsAbs(target) {
-				target = filepath.Join(filepath.Dir(cur), target)
+				// The target is read from the folder the link is in, as
+				// the system reads it: that folder as it really is, past
+				// the links on the way to it ("d/../.." is not the text's
+				// folder when d is a link).
+				dir, derr := resolveDepth(filepath.Dir(cur), depth+1)
+				if derr != nil {
+					return "", derr
+				}
+				target = filepath.Join(dir, target)
 			}
 			real, err := resolveDepth(filepath.Clean(target), depth+1)
 			if err != nil {

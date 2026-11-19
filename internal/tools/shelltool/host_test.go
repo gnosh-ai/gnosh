@@ -230,7 +230,7 @@ func TestHostCommandThatLooksLikeAnOption(t *testing.T) {
 	}
 	call := box.lastCall(1)
 	n := len(call.Args)
-	if n < 3 || call.Args[n-3] != "--" || call.Args[n-2] != "root@203.0.113.7" || !strings.HasPrefix(call.Args[n-1], "printf ") {
+	if n < 3 || call.Args[n-3] != "--" || call.Args[n-2] != "root@203.0.113.7" || !strings.HasPrefix(call.Args[n-1], "[ -n ") {
 		t.Errorf("ssh was given %q: the command must be its last argument, after -- and the destination, and must not begin with a dash", call.Args)
 	}
 	for _, a := range call.Args[:n-3] {
@@ -929,5 +929,29 @@ func TestLastHostCountsAndSplitStamp(t *testing.T) {
 	}
 	if stamp, rest := SplitStamp("no stamp here\n<host>x</host>"); stamp != "" || rest != "no stamp here\n<host>x</host>" {
 		t.Errorf("SplitStamp of a text with no stamp = %q, %q", stamp, rest)
+	}
+}
+
+// A command on a host whose login shell is zsh runs as it was written:
+// zsh takes a word that begins with "=" for a command's path, and "[ a ==
+// a ]" or "echo ====" failed with "= not found" (as Claude Code 2.1.328
+// fixed for its own). The lead line turns that off in zsh; the other
+// shells pass over it.
+func TestRemoteScriptWithEqualsWords(t *testing.T) {
+	ran := 0
+	for _, sh := range []string{"zsh", "bash"} {
+		path, err := exec.LookPath(sh)
+		if err != nil {
+			t.Logf("no %s here", sh)
+			continue
+		}
+		ran++
+		out, _ := exec.Command(path, "-c", remoteScript("[ a == a ] && echo same; echo ====")).CombinedOutput()
+		if s := string(out); !strings.Contains(s, "same\n====\n") || strings.Contains(s, "not found") {
+			t.Errorf("%s printed %q", sh, s)
+		}
+	}
+	if ran == 0 {
+		t.Skip("neither zsh nor bash is here")
 	}
 }

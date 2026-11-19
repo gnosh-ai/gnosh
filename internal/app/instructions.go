@@ -59,6 +59,9 @@ func (l *live) readInstructions(ctx context.Context) (*instructions.Set, error) 
 	for _, e := range c.Extra {
 		o.ProjectFiles = append(o.ProjectFiles, e.V)
 	}
+	for _, e := range c.Exclude {
+		o.Exclude = append(o.Exclude, e.V)
+	}
 	if c.Off {
 		// Safe mode: no instruction file is read at all.
 		o = instructions.Options{Cwd: c.Cwd, ProjectRoot: c.ProjectRoot, Home: l.cfg.Paths.Home}
@@ -166,7 +169,9 @@ func (l *live) environment() string {
 	for _, h := range l.currentHosts() {
 		e.Hosts = append(e.Hosts, prompt.Host{Name: h.Name, Machine: h.SSH, Description: h.Description})
 	}
-	e.Git = l.gitState()
+	if l.cfg.Options.IncludeGitInstructions.V {
+		e.Git = l.gitState()
+	}
 	return l.texts.Environment(e)
 }
 
@@ -193,7 +198,7 @@ func (l *live) gitState() prompt.Git {
 			g.Branch = ref
 		}
 	}
-	if !l.st.trusted && len(l.st.gitPrograms) > 0 {
+	if l.gitRunsPrograms() {
 		g.State = prompt.GitUnread
 		g.Why = "this repository's own git settings name programs that git would run, and the folder is not trusted"
 	}
@@ -294,8 +299,11 @@ func (l *live) systemPrompt() ([]string, error) {
 	if l.cfg.Options.MemoryText.V == "full" {
 		in.Memory = prompt.MemoryFull
 	}
-	// The output style chosen (outputstyle.go).
+	// The output style chosen (outputstyle.go), and the language replies
+	// are in.
 	in.Style = l.currentStyle()
+	in.Language = l.cfg.Options.Language.V
+	in.AttributionCommit, in.AttributionPR = l.cfg.Attribution.Commit, l.cfg.Attribution.PR
 	for _, c := range l.contribs {
 		if c.c.System != nil {
 			c.c.System(&in)

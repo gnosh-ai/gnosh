@@ -93,6 +93,7 @@ func (ld *loader) finish() *Config {
 		cfg.Models = append(cfg.Models, *m)
 	}
 	cfg.Large, cfg.Small = b.large, b.small
+	cfg.Fallback = b.fallback
 	cfg.Options = b.opts
 	cfg.Hosts = b.hosts
 	ld.probs.list = append(ld.probs.list, checkHosts(cfg.Hosts)...)
@@ -119,6 +120,18 @@ func (ld *loader) finish() *Config {
 			cfg.StatusLine = &sl
 		}
 	}
+	cfg.Attribution = b.attribution.V
+	if b.fileSuggestion.Set {
+		switch {
+		case cfg.Switches.SafeMode.V:
+			cfg.FileSuggestionOff = "safe mode"
+		case b.hooksOff.V:
+			cfg.FileSuggestionOff = "disableAllHooks in " + b.hooksOff.Origin.String()
+		default:
+			fs := b.fileSuggestion.V
+			cfg.FileSuggestion = &fs
+		}
+	}
 	for _, name := range slices.Sorted(maps.Keys(b.env)) {
 		cfg.Env = append(cfg.Env, b.env[name])
 	}
@@ -141,6 +154,7 @@ func (ld *loader) finish() *Config {
 		Cwd:            in.Cwd,
 		ProjectRoot:    in.ProjectRoot,
 		Extra:          b.opts.ProjectInstructionFiles,
+		Exclude:        b.opts.ClaudeMdExcludes,
 		ImportDepth:    contextImportDepth,
 		MaxFileBytes:   contextMaxFileBytes,
 		NestedMaxChars: contextNestedMaxChars,
@@ -304,6 +318,42 @@ func (ld *loader) models() {
 			sl.Thinking.V = "on"
 		}
 	}
+	ld.fallbacks()
+}
+
+// fallbacks settles "fallbackModel", which --fallback-model outranks, and
+// checks that each model it names is on a provider that is configured.
+func (ld *loader) fallbacks() {
+	in, b := ld.in, ld.b
+	if text := strings.TrimSpace(in.Flags.FallbackModel); text != "" {
+		o := flagOrigin("--fallback-model")
+		var refs []ModelRef
+		ok := true
+		for name := range strings.SplitSeq(text, ",") {
+			ref, good := ld.modelFlag("--fallback-model", name)
+			ok = ok && good
+			if good && !slices.Contains(refs, ref) {
+				refs = append(refs, ref)
+			}
+		}
+		if len(refs) > MaxFallbacks {
+			ld.probs.at(Error, o, "--fallback-model names %d models, and a turn falls back to %d at most. Keep the ones to try first.", len(refs), MaxFallbacks)
+			ok = false
+		}
+		if ok {
+			b.fallback.put(refs, o)
+		}
+	}
+	for _, ref := range b.fallback.V {
+		p := b.provider(ref.Provider)
+		switch {
+		case ref.Provider == "":
+		case p == nil:
+			ld.probs.at(Error, b.fallback.Origin, "the fallback model %s is on a provider that is not configured. The providers are: %s.%s", ref, b.providerIDs(), ld.heldNote())
+		case p.ListModels.Set && !p.ListModels.V && b.model(ref) == nil:
+			ld.probs.at(Error, b.fallback.Origin, "the fallback model %s is not one provider %s lists, and that provider is set not to ask its server (\"listModels\": false). Register the model under \"models\", as %q: {}, or name another.", ref, ref.Provider, ref.String())
+		}
+	}
 }
 
 // providers completes each provider: its addresses and their time limits,
@@ -320,7 +370,7 @@ func (ld *loader) providers(limits Limits) {
 		for i := range p.Endpoints {
 			e := &p.Endpoints[i]
 			e.URL = apiRoot(e.Given, t)
-			e.Display = displayURL(e.URL)
+			e.Display = DisplayURL(e.URL)
 			if u, err := url.Parse(e.URL); err == nil {
 				e.Local = IsLocal(u.Hostname())
 			}

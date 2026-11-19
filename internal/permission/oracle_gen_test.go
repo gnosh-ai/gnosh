@@ -43,7 +43,7 @@ var (
 		"2>&1 | cat", ">out.txt", "<a.txt", "> 'sp ace.txt'", "> $X", "> *.txt", "<<EOF\nbody $X\nEOF\n", "<<'EOF'\n$(rm x)\nEOF\n",
 		">&'$(rm x)'", ">&\"$X\"", "1>&'~/x'", ">&out.txt", ">& 'a b'", "> build/[", "> /[", ">&'$X'"}
 	genAssigns = []string{"X=1", "X=$(echo y)", "PATH=@BIN@/p0", "PATH=.", "IFS=_", "ENV=x", "BASH_ENV=x", "PROMPT_COMMAND=ls",
-		"X+=1", "a=(1 2)", "a[0]=1", "LANG=C", "NODE_ENV=test", "GIT_DIR=.git", "GIT_EXTERNAL_DIFF=rm", "PAGER=rm", "LD_PRELOAD=x", "X=",
+		"X+=1", "a=(1 2)", "a[0]=1", "LANG=C", "NODE_ENV=test", "GIT_DIR=.git", "GIT_DIR=link-dir/../.git", "GIT_EXTERNAL_DIFF=rm", "PAGER=rm", "LD_PRELOAD=x", "X=",
 		"GLOBIGNORE=zzz", "CDPATH=@OUT@", "HOME=@OUT@", "BASH_CMDS[ls]=@BIN@/p0/rm", "PS4='$(rm x)'", "X=rm", "X=.env", "X=@OUT@/secret.txt"}
 	genPrograms = strings.Fields(`ls cat head tail wc grep find which diff stat du pwd echo sort uniq cut tr basename
 		dirname date test true false sed nl file whoami uname seq realpath readlink type command cd [ rm curl touch mv
@@ -51,6 +51,15 @@ var (
 		less man kill exec eval source . alias trap export unset read set`)
 	genGitSubs = strings.Fields(`status diff log show branch rev-parse ls-files blame push commit checkout config
 		stash grep fetch clone add reset -c --exec-path=. -C --no-pager --git-dir=.git`)
+	// genGitDirs are the folders git is sent to (by -C, --git-dir or
+	// --work-tree): the line's own, written plainly (read as plain git),
+	// and places reached through a link and a .. or a pattern, which are
+	// elsewhere. A review found that the engine took "lnk/.." for the
+	// line's own folder, and no seed had tried it; link-dir/.. is the
+	// jail's hostile repository outside.
+	genGitDirs = strings.Fields(`. ./ @WORK@ @WORK@/ ./src/.. src/.. link-in/.. link-out/.. @WORK@/link-out/..
+		link-in/../.. sub/../link-out/.. ../outside @OUT@ link-in link-out @WORK@/link-in/.. @WOR? {.,src}
+		link-dir/.. @WORK@/link-dir/.. ./link-dir/.. link-dir da/.. link-dir/../dir/..`)
 	genDanger = map[string][]string{
 		"find": {"-exec rm {} \\;", "-delete", "-fprint out.txt", "-L", "-ok rm {} \\;", "-exec sh -c 'rm x' \\;", "-fls out.txt", "-execdir rm {} +", "-newer /etc/passwd", "-files0-from a.txt"},
 		"sed": {"-i", "-i.bak", "'w out.txt'", "'e'", "'1e id'", "'s/a/b/e'", "'s/a/b/w out.txt'", "-f a.txt", "--in-place", "-n 'r /etc/passwd'", "-e p -i", "-ni", "-s",
@@ -159,6 +168,16 @@ func (g *lineGen) simple(depth int) string {
 	}
 	parts = append(parts, prog)
 	if prog == "git" {
+		if g.chance(0.2) {
+			switch d := g.one(genGitDirs); g.r.Intn(5) {
+			case 0:
+				parts = append(parts, "--git-dir="+d+"/.git")
+			case 1:
+				parts = append(parts, "--work-tree="+d)
+			default:
+				parts = append(parts, "-C", d)
+			}
+		}
 		sub := g.one(genGitSubs)
 		parts = append(parts, sub)
 		if spec, ok := gitRead[sub]; ok {
@@ -718,6 +737,11 @@ var attackLines = []string{
 	"git diff -U @OUT@/secret.txt a.txt", "git diff --unified @OUT@/secret.txt a.txt", "git log --pretty @OUT@", "git show --abbrev @OUT@/secret.txt",
 	"git -c core.pager=touch log", "git -c alias.x='!touch pwned' x", "git --exec-path=. status", "git diff --ext-diff",
 	"git diff @OUT@/secret.txt a.txt", "git diff -- @OUT@/secret.txt a.txt", "git diff --stat=1 @OUT@/secret.txt a.txt",
+	// git sent to the hostile repository outside, which runs a program of
+	// its config as soon as git reads its index: "lnk/.." is where the
+	// kernel says, not where the text says.
+	"git -C link-dir/.. status", "git -C link-dir/.. show", "git -C ./link-dir/.. diff", "git --git-dir=link-dir/../.git log -p",
+	"GIT_DIR=link-dir/../.git git status", "git --work-tree=link-dir/.. status", "git -C link-dir log -p", "cd link-dir/.. && git status",
 	// SAFE-8 10: a date command that prints the file it cannot parse.
 	"date -f @OUT@/secret.txt", "date --file=@OUT@/secret.txt", "date -f sneaky.txt", "date -fsneaky.txt", "date -uf sneaky.txt",
 	// Read-only commands made to write, run or read elsewhere.

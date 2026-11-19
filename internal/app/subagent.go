@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,14 +15,17 @@ import (
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app/agentdef"
+	"github.com/gnosh-ai/gnosh/internal/app/skill"
 	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
 	"github.com/gnosh-ai/gnosh/internal/hooks"
 	"github.com/gnosh-ai/gnosh/internal/instructions"
 	"github.com/gnosh-ai/gnosh/internal/permission"
 	"github.com/gnosh-ai/gnosh/internal/prompt"
+	"github.com/gnosh-ai/gnosh/internal/tools/fstools"
 	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 	"github.com/gnosh-ai/gnosh/internal/transcript"
+	"github.com/gnosh-ai/gnosh/internal/trust"
 )
 
 // This file is the Agent tool: how a session hands a task to a sub-agent.
@@ -48,10 +52,49 @@ import (
 // agentToolName is the name of the tool, which is Claude Code's.
 const agentToolName = "Agent"
 
+// defaultAgentDepth is how many layers of sub-agents there may be below
+// the session the person is in, unless CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH
+// says otherwise. At the last layer a sub-agent has no Agent tool.
+const defaultAgentDepth = 3
+
+// defaultConcurrentAgents is how many sub-agents may run at once in one
+// session, unless CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS says otherwise.
+const defaultConcurrentAgents = 20
+
 // maxAgentDepth is how many layers of sub-agents there may be below the
-// session the person is in. At the last layer a sub-agent has no Agent
-// tool.
-const maxAgentDepth = 3
+// session: CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH, as Claude Code reads it
+// (a whole number above 0 in plain digits; 1 turns nesting off; anything
+// else is passed over, so the limit can be moved and not taken away).
+func (l *live) maxAgentDepth() int {
+	return envCount(l.p.env["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"], defaultAgentDepth)
+}
+
+// maxConcurrentAgents is how many sub-agents may run at once, in the
+// foreground, the background or below another:
+// CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS, read as Claude Code reads it.
+func (l *live) maxConcurrentAgents() int {
+	return envCount(l.p.env["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"], defaultConcurrentAgents)
+}
+
+// envCount reads a whole number above 0 written in plain digits, or gives
+// def for anything else.
+func envCount(v string, def int) int {
+	if v == "" || strings.Trim(v, "0123456789") != "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return def
+	}
+	return n
+}
+
+// runningAgents counts the sub-agents that run now.
+func (l *live) runningAgents() int {
+	l.subMu.Lock()
+	defer l.subMu.Unlock()
+	return len(l.subs)
+}
 
 // agentDescription is what a model is told about the tool. It names only
 // gnosh's own three kinds: the kinds a person or a project defined are told
@@ -154,8 +197,8 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 	if why := l.backgroundOff(t.owner); background && why != "" {
 		background, waited = false, why
 	}
-	if background && len(l.backgroundAgents()) >= maxBackgroundAgents {
-		return core.ErrorResult(fmt.Sprintf("No sub-agent was started: %d run in the background already, which is the most there may be at once. Do not try again until one of them has ended; TaskStop stops one.", maxBackgroundAgents)), nil
+	if n, most := l.runningAgents(), l.maxConcurrentAgents(); n >= most {
+		return core.ErrorResult(fmt.Sprintf("No sub-agent was started: %d run already, which is the most there may be at once. Do not try again until one of them has ended; TaskStop stops one in the background.", most)), nil
 	}
 	parent := agent.FromContext(ctx)
 	if parent == nil {
@@ -197,7 +240,7 @@ func (t *agentTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolE
 // definition is a stranger's instructions for an agent that acts with the
 // person's permissions. Safe mode reads none but gnosh's own.
 func (l *live) agentDefs() *agentdef.Set {
-	set := agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.moreRoots()), l.st.agents)
+	set := agentdef.Over(loadAgentDefs(l.cfg, l.st.trusted, l.defRoots()), l.st.agents)
 	if l.p.env["CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS"] == "1" {
 		// Claude Code's switch for its two looking kinds: gnosh's own go.
 		set = set.WithoutBuiltin("Explore", "Plan")
@@ -236,6 +279,85 @@ func (l *live) moreRoots() []string {
 	return l.roots[1:]
 }
 
+// subStart is the folder the sub-agent with this id starts in, when it
+// has a work tree of its own, or "": its hooks run there, not in the
+// session's folder.
+func (l *live) subStart(id string) string {
+	if id == "" {
+		return ""
+	}
+	l.subMu.Lock()
+	defer l.subMu.Unlock()
+	for s := range l.subs {
+		if s.id == id {
+			return s.start
+		}
+	}
+	return ""
+}
+
+// defRoots are the added folders whose own sub-agents, skills and
+// commands are read: those trusted in their own right, or in the project
+// of the folder the session trusts. A folder is added to a session for
+// its files; its definitions carry hooks and tool grants, which run as the
+// person, so the main folder's trust does not reach them (Claude Code runs
+// an agent file's hooks only once the folder it came from is trusted).
+func (l *live) defRoots() []string {
+	var out []string
+	for _, r := range l.moreRoots() {
+		if l.rootTrusted(r) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// rootTrusted says whether an added folder's own definitions are read.
+func (l *live) rootTrusted(root string) bool {
+	l.rootTrustMu.Lock()
+	defer l.rootTrustMu.Unlock()
+	if ok, seen := l.rootTrust[root]; seen {
+		return ok
+	}
+	ok := false
+	if l.st != nil {
+		if f, err := trust.Resolve(root, l.p.home); err == nil {
+			ok = l.st.trusted && f.Key == l.st.folder.Key || l.st.trustStore().Check(f).Trusted
+		}
+	}
+	if l.rootTrust == nil {
+		l.rootTrust = map[string]bool{}
+	}
+	l.rootTrust[root] = ok
+	return ok
+}
+
+// rootDefs counts what one folder defines of its own, in .gnosh or
+// .claude: its kinds of sub-agent and its skills and commands.
+func rootDefs(root string) (agents, skills int) {
+	dirs := func(kind string) []string {
+		return []string{filepath.Join(root, ownDir, kind), filepath.Join(root, theirDir, kind)}
+	}
+	for _, d := range agentdef.LoadFrom(nil, dirs("agents")).All() {
+		if d.Scope == "project" {
+			agents++
+		}
+	}
+	held := skill.Load(skill.Dirs{}, skill.Dirs{Skills: dirs("skills"), Commands: dirs("commands")})
+	return agents, len(held.All())
+}
+
+// untrustedRootNote says what an added folder that is not trusted defines
+// and is not read, or "".
+func untrustedRootNote(root string) string {
+	agents, skills := rootDefs(root)
+	if agents+skills == 0 {
+		return ""
+	}
+	what, verb := heldDefsText(agents, skills)
+	return fmt.Sprintf("The added folder %s defines %s of its own (in .gnosh or .claude), which %s not read: that folder is not trusted, and what it defines can run commands as you. To use what it defines, trust it: gnosh trust, run in that folder.", root, what, verb)
+}
+
 // agentNotices says, once at the start of a session, what of the agent
 // definitions and the skills is not in force: a project's, in a folder
 // that is not trusted, and files that hold nothing usable.
@@ -245,8 +367,16 @@ func (l *live) agentNotices() {
 	}
 	if !l.st.trusted {
 		if agents, skills := heldDefs(l.cfg, l.moreRoots()); agents+skills > 0 {
+			heldWhat, heldVerb := heldDefsText(agents, skills)
 			l.notice(agent.LevelWarning, "agents", fmt.Sprintf(
-				"This folder defines %d kind(s) of sub-agent and %d skill(s) of its own (in .gnosh or .claude), which are not read because the folder is not trusted. To use them: gnosh trust, or --trust-folder for this one run.", agents, skills))
+				"This folder defines %s of its own (in .gnosh or .claude), which %s not read because the folder is not trusted. To use what it defines: gnosh trust, or --trust-folder for this one run.", heldWhat, heldVerb))
+		}
+	}
+	if l.st.trusted {
+		for _, r := range l.moreRoots() {
+			if note := untrustedRootNote(r); note != "" && !l.rootTrusted(r) {
+				l.notice(agent.LevelWarning, "agents", note)
+			}
 		}
 	}
 	for _, sk := range l.agentDefs().Skipped() {
@@ -552,6 +682,8 @@ func (l *live) newSub(ctx context.Context, parent *agent.Agent, owner *subSessio
 	if s.wt != nil {
 		in.Append = strings.TrimSpace(in.Append + "\n\n" + l.texts.AgentWorkTree(s.wt.path, s.wt.repo))
 	}
+	// A sub-agent makes commits too, signed as the session's are.
+	in.AttributionCommit, in.AttributionPR = l.cfg.Attribution.Commit, l.cfg.Attribution.PR
 
 	sub := agent.SubOptions{
 		CallID:  callID,
@@ -662,12 +794,13 @@ func (s *subSession) tools() ([]core.Tool, error) {
 		}
 	}
 	// The tools of the MCP servers connected when the sub-agent starts, as
-	// for the session: a kind that lists its tools has those it names.
-	all = append(all, l.mcpTools()...)
+	// far as the session may have them (--agent's list holds for its
+	// sub-agents too): a kind that lists its tools has those it names.
+	all = append(all, l.allowedMCPTools()...)
 	for _, t := range l.agentMCPTools(s) {
 		all = append(all, t)
 	}
-	if s.depth < maxAgentDepth && !s.background && l.engine.ToolEnabled(agentToolName) {
+	if s.depth < l.maxAgentDepth() && !s.background && l.engine.ToolEnabled(agentToolName) {
 		all = append(all, &agentTool{l: l, owner: s})
 	}
 
@@ -776,9 +909,13 @@ func (s *subSession) sessionStart(ctx context.Context, info agent.StartInfo) ([]
 	if !l.hooks.has(hooks.SubagentStart) {
 		return nil, nil
 	}
-	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.SubagentStart, AgentID: s.id, AgentType: s.def.Name})
+	out, err := l.hooks.run(ctx, hooks.Input{Event: hooks.SubagentStart, Cwd: s.start, AgentID: s.id, AgentType: s.def.Name})
 	if err != nil {
 		return nil, err
+	}
+	if out.EndTurn {
+		// "continue": false: the sub-agent does not take its task.
+		return hookParts(hooks.SubagentStart, out), &agent.StopWork{Reason: hookHalt(hooks.SubagentStart, "the sub-agent did not take its task", out.StopReason)}
 	}
 	return hookParts(hooks.SubagentStart, out), nil
 }
@@ -833,6 +970,9 @@ func (s *subSession) afterTool(ctx context.Context, done agent.ToolDone) (agent.
 // was summarized.
 func (s *subSession) afterSummary(ctx context.Context, info agent.SummaryInfo) ([]agent.Part, error) {
 	var parts []agent.Part
+	// As in the session: no file is written from a copy the sub-agent can
+	// no longer see.
+	fstools.ForgetAll(s.env())
 	s.instr.Forget()
 	if !s.def.OmitInstructions {
 		if text := prompt.Wrap(s.instr.Render()); text != "" {
@@ -875,6 +1015,7 @@ func (s *subSession) stopHooks(ctx context.Context, end agent.TurnEnd) (agent.Ve
 	}
 	out, err := l.hooks.run(ctx, hooks.Input{
 		Event:                hooks.SubagentStop,
+		Cwd:                  s.start,
 		AgentID:              s.id,
 		AgentType:            s.def.Name,
 		StopHookActive:       end.Streak > 0,
@@ -940,6 +1081,11 @@ func (s *subSession) report(res agent.TurnResult, took time.Duration) (_ core.To
 		} else {
 			out = core.TextResult(text + "\n\n[The sub-agent did not finish: " + strings.TrimRight(why, ".") + ". What stands above is what it had written.]")
 		}
+	case res.Reason == agent.EndRefused:
+		// Its task was refused before it went out: a SubagentStart hook
+		// said to stop. Its words say why.
+		status, caution = "stopped", ""
+		out = core.ErrorResult(firstOf(res.Detail, "The sub-agent did not take its task."))
 	default:
 		status, caution = "stopped", ""
 		out = core.ErrorResult("The sub-agent was stopped before it finished, with the turn that started it.")

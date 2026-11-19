@@ -153,14 +153,15 @@ func (a *Agent) SetLoop(on bool) {
 	a.kick()
 }
 
-// dropOwnLocked takes the prompts gnosh queued for itself that match off
-// the queue and returns them. One that is being admitted right now stays
-// for the admitting goroutine to deal with. The caller holds the lock.
+// dropOwnLocked takes the prompts gnosh queued for itself (Prompt.Own, and
+// notes that were to start a turn) that match off the queue and returns
+// them. One that is being admitted right now stays for the admitting
+// goroutine to deal with. The caller holds the lock.
 func (a *Agent) dropOwnLocked(match func(*submission) bool) []*submission {
 	var dropped []*submission
 	keep := a.queue[:0:0]
 	for _, s := range a.queue {
-		if s.prompt.Hidden && match(s) {
+		if s.own() && match(s) {
 			s.taken = true
 			dropped = append(dropped, s)
 			continue
@@ -170,7 +171,7 @@ func (a *Agent) dropOwnLocked(match func(*submission) bool) []*submission {
 	a.queue = keep
 	keepIn := a.intake[:0:0]
 	for _, s := range a.intake {
-		if s.prompt.Hidden && a.admitting != s && match(s) {
+		if s.own() && a.admitting != s && match(s) {
 			s.taken = true
 			dropped = append(dropped, s)
 			continue
@@ -279,7 +280,7 @@ func (a *Agent) loopNext() {
 	a.loop.questioned = questioned
 	a.mu.Unlock()
 
-	_, err := a.submit(Prompt{Text: a.mark(text), Hidden: true, Source: "loop"}, func(s *submission) { s.checkin = checkin })
+	_, err := a.submit(Prompt{Text: a.mark(text), Hidden: true, Source: "loop", Own: true}, func(s *submission) { s.checkin = checkin })
 	if err != nil {
 		a.loopOff("the next prompt could not be sent")
 	}

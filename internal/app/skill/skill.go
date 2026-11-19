@@ -18,6 +18,7 @@ package skill
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -203,17 +204,28 @@ func readSmall(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if info.IsDir() {
+	switch {
+	case info.IsDir():
 		return "", fmt.Errorf("it is a folder, not a file")
-	}
-	if info.Size() > maxFile {
+	case !info.Mode().IsRegular():
+		// (A link a repository holds may lead to /dev/zero, a terminal or
+		// a pipe: reading one would never end.)
+		return "", fmt.Errorf("it is not a plain file")
+	case info.Size() > maxFile:
 		return "", fmt.Errorf("it is %d bytes, and a skill file is read up to %d", info.Size(), maxFile)
 	}
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
-	if !utf8.Valid(data) {
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxFile+1))
+	switch {
+	case err != nil:
+		return "", err
+	case len(data) > maxFile:
+		return "", fmt.Errorf("it is more than %d bytes, and a skill file is read up to %d", maxFile, maxFile)
+	case !utf8.Valid(data):
 		return "", fmt.Errorf("it is not text (UTF-8)")
 	}
 	return string(data), nil

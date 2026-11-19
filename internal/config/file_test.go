@@ -273,9 +273,11 @@ func TestOptions(t *testing.T) {
     "autoCompactWindow": 200000,
     "loopMaxTurns": 25,
     "maxBackgroundTasks": 7,
+    "bashOutputMaxChars": 12000,
     "userInstructionFiles": ["~/notes", "/etc/gnosh/RULES.md", "rules"],
     "projectInstructionFiles": ["docs/AGENT-NOTES.md"],
     "hiddenSkills": ["pdf", "xlsx", "pdf"],
+    "claudeMdExcludes": ["**/vendor/**/CLAUDE.md", "/work/old"],
     "memoryText": "full",
     "memReviewCloses": false,
     "memEmbeddingsUrl": "http://127.0.0.1:8090",
@@ -291,9 +293,14 @@ func TestOptions(t *testing.T) {
     "vimInsertModeRemaps": ["jj", "jk"],
     "promptSuggestionEnabled": true,
     "respondToBashCommands": false,
+    "fileCheckpointingEnabled": false,
     "askUserQuestionTimeout": "5m",
     "theme": "light",
-    "viewMode": "focus"
+    "viewMode": "focus",
+    "showTurnDuration": false,
+    "respectGitignore": false,
+    "language": "japanese",
+    "includeGitInstructions": false
   }
 }`
 	cfg := mustLoad(t, withConfig(text))
@@ -319,9 +326,12 @@ func TestOptions(t *testing.T) {
 	check("autoCompactWindow", o.AutoCompactWindow.V, 200000)
 	check("loopMaxTurns", o.LoopMaxTurns.V, 25)
 	check("maxBackgroundTasks", o.MaxBackgroundTasks.V, 7)
+	check("bashOutputMaxChars", o.BashOutputMaxChars.V, 12000)
 	check("userInstructionFiles", items(o.UserInstructionFiles), []string{testHome + "/notes", "/etc/gnosh/RULES.md", userDir + "/rules"})
 	check("projectInstructionFiles", items(o.ProjectInstructionFiles), []string{testCwd + "/docs/AGENT-NOTES.md"})
 	check("hiddenSkills", items(o.HiddenSkills), []string{"pdf", "xlsx"})
+	check("claudeMdExcludes", items(o.ClaudeMdExcludes), []string{"**/vendor/**/CLAUDE.md", "/work/old"})
+	check("the files left out", items(cfg.Context.Exclude), []string{"**/vendor/**/CLAUDE.md", "/work/old"})
 	check("memoryText", o.MemoryText.V, "full")
 	check("memReviewCloses", o.MemReviewCloses.V, false)
 	check("memEmbeddingsUrl", o.MemEmbeddingsURL.V, "http://127.0.0.1:8090")
@@ -337,9 +347,14 @@ func TestOptions(t *testing.T) {
 	check("vimInsertModeRemaps", items(o.VimInsertModeRemaps), []string{"jj", "jk"})
 	check("promptSuggestionEnabled", o.PromptSuggestionEnabled.V, true)
 	check("respondToBashCommands", o.RespondToBashCommands.V, false)
+	check("fileCheckpointingEnabled", o.FileCheckpointingEnabled.V, false)
 	check("askUserQuestionTimeout", o.AskUserQuestionTimeout.V, "5m")
 	check("theme", o.Theme.V, "light")
 	check("viewMode", o.ViewMode.V, "focus")
+	check("showTurnDuration", o.ShowTurnDuration.V, false)
+	check("respectGitignore", o.RespectGitignore.V, false)
+	check("language", o.Language.V, "japanese")
+	check("includeGitInstructions", o.IncludeGitInstructions.V, false)
 
 	// The table lists every key exactly once, All reports each, and the
 	// file above sets every one of them.
@@ -582,7 +597,7 @@ func TestFileRefusals(t *testing.T) {
 		pieces []string
 	}{
 		// The top of the file.
-		{"an unknown key", "{\n  \"provders\": {}\n}", "provders", []string{`"provders"`, "not a key gnosh knows", "providers, models, model, smallModel, hosts, options, permissions, hooks, env, disableAllHooks"}},
+		{"an unknown key", "{\n  \"provders\": {}\n}", "provders", []string{`"provders"`, "not a key gnosh knows", "providers, models, model, smallModel, fallbackModel, hosts, options, permissions, hooks, env, disableAllHooks"}},
 		{"an option at the top", "{\n  \"requestTimeout\": 900\n}", "requestTimeout", []string{`"requestTimeout" is one of gnosh's options`, `"options": {"requestTimeout": …}`}},
 		{"a Claude Code option at the top", `{"autoCompactWindow": 200000}`, "", []string{`"autoCompactWindow" is one of gnosh's options`, `inside "options"`}},
 		{"a setting Claude Code has and gnosh has not built", "{\n  \"spinnerVerbs\": {\"mode\": \"append\", \"verbs\": [\"Pondering\"]}\n}", "spinnerVerbs", []string{`"spinnerVerbs" is a setting Claude Code has and gnosh has not built`, "would do nothing here", "Take it out"}},
@@ -590,6 +605,14 @@ func TestFileRefusals(t *testing.T) {
 		{"a status line with no command", `{"statusLine": {"type": "command"}}`, "", []string{`the status line has no "command"`}},
 		{"a status line refreshed too often", `{"statusLine": {"type": "command", "command": "x", "refreshInterval": 0.5}}`, "", []string{`"refreshInterval" is a number of seconds, at least 1`}},
 		{"a status line field gnosh does not know", `{"statusLine": {"type": "command", "command": "x", "color": "red"}}`, "", []string{"the status line has no field"}},
+		{"a file suggestion of another type", `{"fileSuggestion": {"type": "static", "command": "x"}}`, "", []string{`the file suggestion's "type" is "command"`}},
+		{"a file suggestion with no command", `{"fileSuggestion": {"type": "command"}}`, "", []string{`the file suggestion has no "command"`}},
+		{"a file suggestion field gnosh does not know", `{"fileSuggestion": {"type": "command", "command": "x", "limit": 5}}`, "", []string{"the file suggestion has no field"}},
+		{"a file suggestion that is not an object", `{"fileSuggestion": "x"}`, "", []string{`"fileSuggestion" is an object`}},
+		{"attribution true", `{"attribution": true}`, "", []string{`"attribution" is an object`, "or false for none"}},
+		{"an attribution that is not text", `{"attribution": {"commit": 3}}`, "", []string{`the attribution's "commit" is the text added`}},
+		{"an attribution field gnosh does not know", `{"attribution": {"commit": "x", "footer": "y"}}`, "", []string{"the attribution has no field"}},
+		{"includeCoAuthoredBy not a boolean", `{"includeCoAuthoredBy": "no"}`, "", []string{`"includeCoAuthoredBy" is true or false`}},
 		{"another one", `{"cleanupPeriodDays": 30}`, "", []string{`"cleanupPeriodDays" is a setting Claude Code has and gnosh has not built`}},
 		{"a key of the earlier format", `{"mcp": {}}`, "", []string{`"mcp"`, "not a key gnosh knows"}},
 		{"a key given twice", "{\n  \"options\": {},\n  \"options\": {}\n}", "\"options\": {}\n}", []string{`"options"`, "given twice", "line 2"}},
@@ -681,6 +704,7 @@ func TestFileRefusals(t *testing.T) {
 		{"a timeout with a fraction", `{"options": {"requestTimeout": 1.5}}`, "", []string{"written with digits alone", "1.5"}},
 		{"a window out of range", `{"options": {"autoCompactWindow": 5000}}`, "", []string{`"options.autoCompactWindow" is a whole number from 100000 to 1000000`, "5000"}},
 		{"no background tasks", `{"options": {"maxBackgroundTasks": 0}}`, "", []string{"a whole number from 1 to"}},
+		{"more output than Claude Code allows", `{"options": {"bashOutputMaxChars": 200000}}`, "", []string{"a whole number from 1 to 128000"}},
 		{"a switch in quotes", `{"options": {"debug": "true"}}`, "", []string{`"options.debug" is true or false`, "a string"}},
 		{"a switch as a number", `{"options": {"autoCompactEnabled": 1}}`, "", []string{`"options.autoCompactEnabled" is true or false`, "and here it is 1"}},
 		{"a text gnosh does not have", `{"options": {"memoryText": "long"}}`, "", []string{`"options.memoryText" is one of "lean", "full"`, `"long"`}},

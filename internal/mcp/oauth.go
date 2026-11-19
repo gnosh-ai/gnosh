@@ -584,8 +584,17 @@ func Listen(port int, state func() string) (redirectURI string, back <-chan url.
 	servers := []*http.Server{srv}
 	go srv.Serve(ln)
 	stop = func() {
+		// Gracefully: the answer to the browser that brought the code may
+		// still be on its way (the code goes to the sign-in before the
+		// page is written), and a server closed under it leaves the tab
+		// with an error where "Signed in" belongs. What does not finish
+		// in a moment is closed.
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
 		for _, s := range servers {
-			s.Close()
+			if s.Shutdown(ctx) != nil {
+				s.Close()
+			}
 		}
 	}
 	ln6, err := net.Listen("tcp", net.JoinHostPort("::1", strconv.Itoa(port)))

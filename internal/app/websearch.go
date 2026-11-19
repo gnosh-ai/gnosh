@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gnosh-ai/gnosh/internal/config"
 	"github.com/gnosh-ai/gnosh/internal/core"
 )
 
@@ -41,6 +42,10 @@ const webSearchDescription = `Searches the web and returns the results' titles a
 
 var webSearchSchema = json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","description":"What to look for."},"allowed_domains":{"type":"array","items":{"type":"string"},"description":"Only results from these hosts."},"blocked_domains":{"type":"array","items":{"type":"string"},"description":"Never results from these hosts."},"mode":{"type":"string","enum":["standard","extended"],"description":"standard for fewer results, extended (the default) for more."}},"required":["query"],"additionalProperties":false}`)
 
+// webSearchMaxQuery is the longest query a search takes, and all of it
+// is shown when the person is asked.
+const webSearchMaxQuery = 2000
+
 type webSearchInput struct {
 	Query   string   `json:"query"`
 	Allowed []string `json:"allowed_domains"`
@@ -68,6 +73,8 @@ func (t *webSearchTool) read(input json.RawMessage) (webSearchInput, string) {
 	switch {
 	case in.Query == "":
 		return in, "query is empty: say what to look for"
+	case len(in.Query) > webSearchMaxQuery:
+		return in, fmt.Sprintf("query is %d bytes long; a search takes at most %d", len(in.Query), webSearchMaxQuery)
 	case len(in.Allowed) > 0 && len(in.Blocked) > 0:
 		return in, "allowed_domains and blocked_domains are given together; give one of them"
 	case in.Mode != "" && in.Mode != "standard" && in.Mode != "extended":
@@ -79,7 +86,10 @@ func (t *webSearchTool) read(input json.RawMessage) (webSearchInput, string) {
 // Describe says what a call would do: send a query to the search server.
 func (t *webSearchTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action, error) {
 	in, wrong := t.read(call.Input)
-	act := core.Action{Kind: core.ActionNetwork, URL: t.base, Summary: "Search the web: " + oneLine(in.Query, 80)}
+	// The question shows the server without what can hold a secret (a
+	// password in the address), and the whole query (read refuses one
+	// longer than it shows): what is sent is what the person agrees to.
+	act := core.Action{Kind: core.ActionNetwork, URL: config.DisplayURL(t.base), Summary: "Search the web: " + oneLine(in.Query, webSearchMaxQuery)}
 	if wrong != "" {
 		return act, errors.New(wrong)
 	}

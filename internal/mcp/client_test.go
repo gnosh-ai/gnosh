@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -123,6 +125,24 @@ func fakeServer(mode string) {
 			case "slow":
 				time.Sleep(3 * time.Second)
 				reply(map[string]any{"content": []map[string]any{}})
+			case "flood":
+				// Two thousand notices that its tools changed, then the answer.
+				for range 2000 {
+					write(map[string]any{"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+				}
+				reply(map[string]any{"content": []map[string]any{{"type": "text", "text": "flooded"}}})
+			case "deaf":
+				// It answers, and reads nothing more.
+				reply(map[string]any{"content": []map[string]any{{"type": "text", "text": "deaf now"}}})
+				time.Sleep(time.Hour)
+			case "orphan":
+				// It leaves a process of its own outside its group with its
+				// output, and exits without an answer.
+				cmd := exec.Command("sleep", "8")
+				cmd.Stdout = os.Stdout
+				cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+				_ = cmd.Start()
+				os.Exit(0)
 			case "roots":
 				// The server asks the client, and answers the call when the
 				// client has answered.
@@ -242,6 +262,83 @@ func TestStartFailures(t *testing.T) {
 	_, err := Start(ctx, fake(t, "die"), Options{StartTimeout: 5 * time.Second})
 	if err == nil || !strings.Contains(err.Error(), "it cannot find its config") {
 		t.Errorf("a server that dies at once: %v, want what it wrote on its standard error", err)
+	}
+}
+
+// A flood of notices that the tools changed costs one listing at a time,
+// not a goroutine each: OnToolsChanged runs on one goroutine, and once more
+// after the notices that came while it ran (the MCP review of 2026-11-19).
+func TestToolsChangedFloodIsCoalesced(t *testing.T) {
+	var mu sync.Mutex
+	calls, running, most := 0, 0, 0
+	opt := Options{OnToolsChanged: func() {
+		mu.Lock()
+		calls++
+		running++
+		most = max(most, running)
+		mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+		mu.Lock()
+		running--
+		mu.Unlock()
+	}}
+	ctx := context.Background()
+	c, err := Start(ctx, fake(t, "ok"), opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if res, err := c.CallTool(ctx, "flood", nil); err != nil || res.Content[0].Text != "flooded" {
+		t.Fatalf("flood: %+v, %v", res, err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	if calls == 0 || calls > 100 || most != 1 {
+		t.Errorf("2000 notices ran OnToolsChanged %d times, at most %d at once; want a few, one at a time", calls, most)
+	}
+}
+
+// A server that stops reading its input does not hold a call, and every
+// write after it, for ever: the write gives up with the call (the MCP
+// review of 2026-11-19; a call larger than the pipe waited for ever).
+func TestServerThatStopsReading(t *testing.T) {
+	ctx := context.Background()
+	c, err := Start(ctx, fake(t, "ok"), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if res, err := c.CallTool(ctx, "deaf", nil); err != nil || res.Content[0].Text != "deaf now" {
+		t.Fatalf("deaf: %+v, %v", res, err)
+	}
+	short, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	start := time.Now()
+	_, err = c.CallTool(short, "echo", json.RawMessage(`{"text":"`+strings.Repeat("x", 300<<10)+`"}`))
+	if took := time.Since(start); err == nil || took > 4*time.Second {
+		t.Errorf("a call to a server that reads no more: %v after %v", err, took.Round(time.Millisecond))
+	}
+}
+
+// A server that exits while a process it left outside its group still
+// holds its output: the call that waits fails soon after, and Close ends
+// at once, not when that process lets go (the MCP review of 2026-11-19).
+func TestServerGoneWhileItsOutputStaysOpen(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	c, err := Start(ctx, fake(t, "ok"), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if _, err := c.CallTool(ctx, "orphan", nil); err == nil || time.Since(start) > 6*time.Second {
+		t.Errorf("a call to a server that exited: %v after %v", err, time.Since(start).Round(time.Millisecond))
+	}
+	start = time.Now()
+	c.Close()
+	if took := time.Since(start); took > 4*time.Second {
+		t.Errorf("Close took %v", took.Round(time.Millisecond))
 	}
 }
 

@@ -299,6 +299,31 @@ func TestEmptyReplyIsAskedAgain(t *testing.T) {
 	r.checkLog()
 }
 
+// A reply that is a tool call written out as text (a chat template's
+// markup the model's server did not take as a call, or only its closing
+// tag, as Qwen on llama.cpp leaves now and then) runs nothing: the model
+// is told so and asked again, as after an empty reply, and the turn goes
+// on. A reply that only speaks of the markup is an answer.
+func TestCallWrittenAsTextIsToldSo(t *testing.T) {
+	r := newRig(t, nil)
+	r.model.push(say("</tool_call>"), say("<tool_call>\n{\"name\": \"Read\", \"arguments\": {}}\n</tool_call>"), say("here I am"))
+	res := r.run("hello?")
+	if res.Reason != EndCompleted || res.Text != "here I am" || res.Rounds != 3 {
+		t.Fatalf("result = %+v", res)
+	}
+	nudges := ownPrompts(r.log, "nudge:text-call")
+	if len(nudges) != 2 || !strings.Contains(nudges[0], "tool call written out as text") {
+		t.Fatalf("nudges = %q", nudges)
+	}
+	r.checkLog()
+
+	r2 := newRig(t, nil)
+	r2.model.push(say("Qwen puts <tool_call> tags around its calls, as its template says."))
+	if res := r2.run("how does Qwen call tools?"); res.Reason != EndCompleted || res.Rounds != 1 {
+		t.Fatalf("an answer that speaks of the markup: %+v", res)
+	}
+}
+
 // No count ends the asking. At every third empty reply in a row the person
 // is told what is happening and what usually fixes it.
 func TestEmptyRepliesTellThePersonAtEveryThird(t *testing.T) {

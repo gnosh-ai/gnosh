@@ -45,7 +45,7 @@ func readFile(s *source, data []byte) {
 		}
 		given[f.key] = f
 	}
-	for _, key := range []string{"providers", "models", "model", "smallModel", "hosts", "options", "permissions", "hooks", "env", "disableAllHooks", "statusLine", "agent", "skillOverrides"} {
+	for _, key := range []string{"providers", "models", "model", "smallModel", "fallbackModel", "hosts", "options", "permissions", "hooks", "env", "disableAllHooks", "statusLine", "fileSuggestion", "attribution", "includeCoAuthoredBy", "agent", "skillOverrides"} {
 		f, ok := given[key]
 		if !ok {
 			continue
@@ -57,6 +57,8 @@ func readFile(s *source, data []byte) {
 			s.models(f)
 		case "model", "smallModel":
 			s.slot(f)
+		case "fallbackModel":
+			s.fallbackModel(f)
 		case "hosts":
 			s.hosts(f)
 		case "options":
@@ -71,6 +73,17 @@ func readFile(s *source, data []byte) {
 			s.settingsSkillOverrides(f)
 		case "statusLine":
 			s.statusLine(f)
+		case "fileSuggestion":
+			s.fileSuggestion(f)
+		case "attribution":
+			s.attribution(f)
+		case "includeCoAuthoredBy":
+			// Claude Code's older word for leaving its own attribution out.
+			// gnosh adds none of its own, so there is nothing for it to
+			// leave out: it is taken, and changes nothing.
+			if f.val.kind != jBool {
+				s.errorf(f.line, "\"includeCoAuthoredBy\" is true or false, and here it is %s.", f.val.kind.word())
+			}
 		case "agent":
 			if f.val.kind != jString || strings.TrimSpace(f.val.str) == "" {
 				s.errorf(f.line, "\"agent\" is the name of a kind of agent for the session to run as, as a string, and here it is %s.", f.val.kind.word())
@@ -296,7 +309,7 @@ func (s *source) provider(id string, m jfield) {
 					// stranger's file could have chosen.
 					addresses = append(addresses, "an address filled in from the environment")
 				} else {
-					addresses = append(addresses, displayURL(got.text))
+					addresses = append(addresses, DisplayURL(got.text))
 				}
 			}
 		case "apiKey":
@@ -661,6 +674,57 @@ func (s *source) slot(f jfield) {
 	s.add(op{kind: KindModel, text: text, origin: o, apply: func(b *builder) { b.setSlot(which, ch, o) }})
 }
 
+// MaxFallbacks is how many models "fallbackModel" may name, as in Claude
+// Code.
+const MaxFallbacks = 3
+
+// fallbackShapes says the shapes "fallbackModel" takes, for a message.
+const fallbackShapes = `one model as "<provider>/<model id>", or a list of up to three, tried in order`
+
+// fallbackModel reads "fallbackModel": the models a turn goes on with when
+// the session's model cannot answer. null, or an empty list, takes away
+// what a weaker file named.
+func (s *source) fallbackModel(f jfield) {
+	mark := len(s.probs.list)
+	o := s.at(f.line)
+	var items []*jnode
+	switch f.val.kind {
+	case jNull:
+	case jString:
+		items = []*jnode{f.val}
+	case jArray:
+		items = f.val.items
+	default:
+		s.errorf(f.line, "\"fallbackModel\" is %s. Here it is %s.", fallbackShapes, shown(f.val))
+		return
+	}
+	var refs []ModelRef
+	for _, it := range items {
+		if it.kind != jString {
+			s.errorf(f.line, "\"fallbackModel\" is %s, and an item of it here is %s.", fallbackShapes, shown(it))
+			continue
+		}
+		if ref, ok := s.modelRef(f.line, it.str, "\"fallbackModel\""); ok && !slices.Contains(refs, ref) {
+			refs = append(refs, ref)
+		}
+	}
+	if len(refs) > MaxFallbacks {
+		s.errorf(f.line, "\"fallbackModel\" names %d models, and a turn falls back to %d at most. Keep the ones to try first.", len(refs), MaxFallbacks)
+	}
+	if s.failed(mark) {
+		return
+	}
+	text := "fallbackModel: null (takes the fallback models away)"
+	if len(refs) > 0 {
+		names := make([]string, len(refs))
+		for i, r := range refs {
+			names[i] = r.String()
+		}
+		text = "fallbackModel: " + strings.Join(names, ", ")
+	}
+	s.add(op{kind: KindModel, text: text, origin: o, apply: func(b *builder) { b.fallback.put(refs, o) }})
+}
+
 // hosts reads the "hosts" object. Each declaration is checked by itself
 // here, with the one check there is of a host (checkHosts), so that a
 // mistake in a file that is held stops startup as it would in one that is
@@ -778,7 +842,7 @@ func (s *source) options(f jfield) {
 				s.errorf(m.line, "the address given in %q cannot be used: %s.%s", key, why, hint)
 				continue
 			}
-			s.add(op{kind: def.trustKind(), text: key + ": " + displayURL(address), origin: o, apply: func(b *builder) { def.text(&b.opts).put(address, o) }})
+			s.add(op{kind: def.trustKind(), text: key + ": " + DisplayURL(address), origin: o, apply: func(b *builder) { def.text(&b.opts).put(address, o) }})
 		case oListen:
 			if v.kind != jString {
 				s.errorf(m.line, "%q is an address of this machine with a port, as a string, such as %q, or %q; here it is %s.", key, DefaultDeliverablesServer, ServerOff, shown(v))

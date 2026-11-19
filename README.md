@@ -1,6 +1,6 @@
 # gnosh
 
-An AI harness that thinks in Gno.
+An AI harness that thinks in Gno, built on [gno.land](https://gno.land).
 
 gnosh sits between a person, a language model and the machine. The model
 reads, edits and runs things under the person's rules, and it keeps its plan
@@ -48,10 +48,10 @@ Built:
     opens one that is over, Ctrl+X stops one, and Ctrl+S groups them by
     folder.
   - A run that waits on a permission question is under Needs input, and
-    a number answers it; the view tells you by your
-    preferredNotifChannel, and in the title.
-  - Words typed while peeking reach a working run between its steps, or
-    send one that is over back to work on them.
+    a number answers it, in the peek or while watching it; the view tells
+    you by your preferredNotifChannel, and in the title.
+  - Words typed while peeking or watching reach a working run between its
+    steps, or send one that is over back to work on them.
   - A prompt typed at the bottom starts a run; `/model` and `/effort` set
     what those runs get, and `@name` first starts one as that kind of
     agent, or in that folder (a git repo below the view's, or one runs
@@ -182,6 +182,16 @@ Built:
   {"thinkingBudget": N}}` sets a model's own (0 for no cap), and Claude
   Code's `MAX_THINKING_TOKENS` sets it for every model (0 turns thinking
   off).
+- **Fallback models**, as Claude Code's `fallbackModel`: `"fallbackModel":
+  ["box2/qwen3.8-27b"]` (up to three; `--fallback-model` for one run).
+  When the model's server cannot be reached, is not ready or too busy,
+  does not have the model, or keeps failing until the wait for it runs
+  out, the turn goes on with the first fallback that answers, at once and
+  with a line that says so; the next turn asks the model first again. A
+  limit on your requests is waited out as always. A fallback that cannot
+  hold the conversation as it stands, or that is on a model server of
+  your own that failed in the turn, is passed over; when every fallback
+  fails too, the turn waits for the model as it would without them.
 - **No invisible characters in a prompt**, as in Claude Code: Enter takes
   out what a terminal draws as nothing (tag characters, the controls of
   the drawing order, zero-width spaces), keeping what Persian, the
@@ -200,9 +210,12 @@ In a session, Claude Code's commands work as there: `/help`, `/clear`,
 build is installed, which the session says), `/background` (the session goes
 on without the terminal, as a run of its own on the prompt given), `/fork` (a
 copy of the conversation works on the prompt in the background while this
-session goes on), `/compact`, `/resume` (by number, id, name, or words from
+session goes on), `/subtask` (as `/fork`, and what the copy answers comes
+back to this conversation when it is done), `/compact`, `/resume` (by number, id, name, or words from
 a session's name or first prompt), `/branch`, `/rewind` (the
-conversation, the files Write and Edit changed, or both), `/model`, `/effort`,
+conversation, the files Write and Edit changed, or both; what a file holds
+is kept before it is put back, and the copies of your 100 most recent
+prompts are kept), `/model`, `/effort`,
 `/config`, `/plan`, `/permissions`, `/add-dir`, `/cd` (the session moves to
 another folder and goes on there, with that folder's settings, instructions
 and skills; Cd rules say where it may go), `/status`, `/context`, `/btw`
@@ -258,7 +271,11 @@ against run. Nothing here is released.
 The GNO Network General Public License, version 6, with Additional Terms
 (Strong Attribution): see [LICENSE.md](LICENSE.md). The GnoVM subsystem has
 its own copy in `internal/gnovm/LICENSE.md`. A user interface built on gnosh
-shows "built on gnosh" with a link to <https://gnosh.ai>.
+shows "built on gnosh" with a link to <https://gnosh.ai>. gnosh includes
+gno.land's GnoVM, whose licence asks the same with "built on gno.land" and
+<https://gno.land>: every session's header shows both, and `/license` the
+legal notices. The libraries gnosh is built with keep their own licences
+(BSD, MIT, ISC, Apache-2.0, MPL-2.0), and none conflicts with gnosh's.
 
 ## Build
 

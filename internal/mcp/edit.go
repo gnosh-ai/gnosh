@@ -31,14 +31,14 @@ type Place struct {
 
 // goodName is what a server's name may be made of, so that its tools'
 // names (mcp__<server>__<tool>) are the name as it was typed.
-var goodName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+var goodName = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // CheckName says what is wrong with a name for a new server, or "".
 func CheckName(name string) string {
 	if !goodName.MatchString(name) {
-		return "a server's name is made of letters, digits, - and _ (up to 64 of them), since its tools are named after it"
+		return fmt.Sprintf("a server's name is made of letters, digits, - and _ (up to %d of them), since its tools are named after it", maxServerName)
 	}
-	return ""
+	return blurredName(name)
 }
 
 // Lookup returns a server's entry in a place, compacted, or nil when it

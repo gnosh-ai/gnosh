@@ -244,7 +244,12 @@ func (l *sessionLog) encode(e agent.Entry) []transcript.Entry {
 		f.ToolName, f.Display, f.ResultCwd, f.Meta = e.ToolName, e.Result.Display, e.Result.Cwd, e.Result.Meta
 		f.Input, f.Denied, f.Interrupted, f.DurationNS = e.Input, e.Denied, e.Interrupted, int64(e.Duration)
 	case agent.EntrySummary:
-		te = transcript.SummaryEntry(summaryText(e.Blocks), "")
+		// The summary is the model's writing about a conversation that
+		// held outside text (files, pages, tool output): it is kept with
+		// gnosh's own marks and chat-template tokens in it broken, as a
+		// tool's output is, since it goes back to the model on the user's
+		// side, after gnosh's line that says whose it is.
+		te = transcript.SummaryEntry(prompt.Untrusted(summaryText(e.Blocks)), "")
 		f.Blocks, f.Trigger, f.PreTokens = e.Blocks, e.Trigger, e.PreTokens
 	case agent.EntryNotice:
 		te = transcript.Entry{Type: typeNotice}
@@ -271,6 +276,16 @@ func (l *sessionLog) encode(e agent.Entry) []transcript.Entry {
 		out = append(out, u)
 	}
 	return out
+}
+
+// summaryLead is what stands before a summary when it becomes the first
+// message the model reads: gnosh's own line, in its marks, that the summary
+// is the model's, and not the person's words.
+func (l *sessionLog) summaryLead() string {
+	if l.texts == nil {
+		return ""
+	}
+	return prompt.Wrap(l.texts.SummaryIntro()) + "\n\n"
 }
 
 // summaryText is the text a summary entry holds: the model's own summary.
@@ -476,7 +491,7 @@ func (l *sessionLog) View(ctx context.Context) (agent.View, error) {
 	l.mu.Lock()
 	last := l.last
 	l.mu.Unlock()
-	msgs, _ := l.ts.View(transcript.ViewOptions{Prompt: last})
+	msgs, _ := l.ts.View(transcript.ViewOptions{Prompt: last, SummaryLead: l.summaryLead()})
 	return agent.View{Messages: msgs}, nil
 }
 
@@ -509,10 +524,11 @@ func (l *sessionLog) MakeRoom(ctx context.Context, req agent.RoomRequest) (agent
 	keep := l.prompts[req.Protect]
 	l.mu.Unlock()
 	slides, cuts := transcript.Slide(l.ts.Entries(), req.Need, transcript.ViewOptions{
-		Session:  l.ts.ID(),
-		Prompt:   keep,
-		Estimate: req.EstimateMessage,
-		Trace:    true,
+		Session:     l.ts.ID(),
+		Prompt:      keep,
+		Estimate:    req.EstimateMessage,
+		Trace:       true,
+		SummaryLead: l.summaryLead(),
 	})
 	if len(slides) == 0 {
 		return agent.Room{}, nil

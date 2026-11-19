@@ -179,7 +179,8 @@ func TestEntry(t *testing.T) {
 			t.Errorf("CheckEntry(%s) = %v, want %q", tc.entry, err, tc.wrong)
 		}
 	}
-	for name, ok := range map[string]bool{"github": true, "my-server_2": true, "a.b": false, "": false, "ünï": false, strings.Repeat("x", 65): false} {
+	for name, ok := range map[string]bool{"github": true, "my-server_2": true, "_x": true, strings.Repeat("x", 48): true,
+		"a.b": false, "": false, "ünï": false, strings.Repeat("x", 49): false, "github__x": false, "github_": false} {
 		if got := CheckName(name) == ""; got != ok {
 			t.Errorf("CheckName(%q) ok = %v", name, got)
 		}

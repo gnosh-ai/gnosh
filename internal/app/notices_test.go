@@ -104,13 +104,20 @@ func TestRunTellsWhatItsEndStops(t *testing.T) {
 	w := apptest.NewWorld(t,
 		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"nohup sleep 300 > server.log 2>&1 & echo $! > server.pid"}`}}},
 		apptest.Reply{Text: "Done."},
-		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"setsid nohup sleep 301 > kept.log 2>&1 < /dev/null & echo $! > kept.pid"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"if kill -0 $(cat server.pid) 2>/dev/null; then echo running > before.txt; else echo stopped > before.txt; fi; setsid nohup sleep 301 > kept.log 2>&1 < /dev/null & echo $! > kept.pid"}`}}},
 		apptest.Reply{Text: "Kept the server."})
-	r := run(t, w, "-y", "-p", "start the server").wantCode(t, 0)
-	if r.out != "Done.\n\nKept the server.\n" {
-		t.Errorf("the run printed %q", r.out)
+	r := run(t, w, "-y", "-p", "start the server", "--output-format", "json").wantCode(t, 0)
+	// The run's result is the answer to the prompt: the reply to gnosh's
+	// own note took its place (the print mode review of 2026-11-19).
+	if obj := jsonLines(t, r.out)[0]; obj["result"] != "Done." || obj["subtype"] != "success" {
+		t.Errorf("the run's result: %v", obj)
 	}
-	has(t, "what the model read", requestText(t, w, 2), "This run (gnosh -p) is about to end, and what your commands left running is stopped with it: process group", "(sleep)", "setsid nohup <command>")
+	has(t, "what the model read", requestText(t, w, 2), "This run (gnosh -p) is about to end, and what your commands left running was stopped: process group", "(sleep)", "setsid nohup <command>")
+	// (Stopped before the model's turn: a server started again finds its
+	// port free.)
+	if data, _ := os.ReadFile(filepath.Join(w.Dir, "before.txt")); strings.TrimSpace(string(data)) != "stopped" {
+		t.Errorf("as the model was told, the process it left was %q", strings.TrimSpace(string(data)))
+	}
 	pidOf := func(name string) int {
 		t.Helper()
 		data, err := os.ReadFile(filepath.Join(w.Dir, name))
@@ -169,6 +176,35 @@ func TestRunWaitsInStreamJSON(t *testing.T) {
 		t.Errorf("a run fed stream-json:\n%s", r.out)
 	}
 	w.Model.Done()
+}
+
+// A run whose turns of the model are spent (--max-turns) cannot ask the
+// model at a checkpoint whether to wait on: what is left is stopped and
+// the run ends, as Claude Code's wait ends. It asked, the turn was stopped
+// before its first request, and the next checkpoint asked again, so the
+// run never ended (the print mode review of 2026-11-19).
+func TestRunWaitCheckpointWithItsTurnsSpent(t *testing.T) {
+	defer func(was time.Duration) { waitCheckpoint = was }(waitCheckpoint)
+	waitCheckpoint = 300 * time.Millisecond
+	start := apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"sleep 60; touch late.txt","run_in_background":true}`}}}
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	// The answer took the last of the run's turns.
+	w := apptest.NewWorld(t, start, apptest.Reply{Text: "Started."})
+	r := runWith(t, ctx, testOptions(w, "-y", "-p", "--max-turns", "2", "--output-format", "json", "start it")).wantCode(t, 0)
+	has(t, "the JSON result", r.out, `"result":"Started."`, `"subtype":"success"`)
+	has(t, "stderr", r.err, "cannot ask the model whether to wait on, as its 2 turns of the model are spent (--max-turns); it stops the work now: bg1")
+	w.Model.Done()
+	// The cap stopped the turn.
+	w.Model.Add(start)
+	r = runWith(t, ctx, testOptions(w, "-y", "-p", "--max-turns", "1", "--output-format", "json", "start it again")).wantCode(t, 1)
+	has(t, "the JSON result", r.out, `"subtype":"error_max_turns"`)
+	has(t, "stderr", r.err, "it stops the work now: bg1")
+	w.Model.Done()
+	time.Sleep(time.Second)
+	if w.Exists("late.txt") {
+		t.Errorf("the background command outlived the run")
+	}
 }
 
 // A ceiling set with CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS stops what is

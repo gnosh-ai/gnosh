@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -91,8 +92,12 @@ func criticalTimeout(why string) string {
 }
 
 // Check decides about one call.
-func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision, error) {
+func (g *gate) Check(ctx context.Context, req agent.GateRequest) (dec agent.Decision, err error) {
 	l := g.l
+	// What a PreToolUse hook added for the model goes with the call's
+	// result, whatever is decided.
+	var added []agent.Part
+	defer func() { dec.Context = append(dec.Context, added...) }()
 	call, action, cannot := req.Call, req.Action, req.CannotRun
 	cwd := l.cwd()
 	if req.Env != nil && req.Env.Cwd != "" {
@@ -105,10 +110,13 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	if l.hooks.has(hooks.PreToolUse) {
 		out, err := l.hooks.run(ctx, hooks.Input{
 			Event: hooks.PreToolUse, Cwd: cwd,
-			ToolName: call.Name, ToolUseID: call.ID, ToolInput: call.Input,
+			ToolName: call.Name, ToolUseID: call.ID, ToolInput: hookToolInput(call, cwd, l.cfg.Paths.Home),
 			AgentID: req.AgentID, AgentType: req.AgentType,
 			IfMatch: l.hookIf(cwd, call, action),
 		})
+		if strings.TrimSpace(out.AdditionalContext) != "" {
+			added = append(added, agent.Part{Source: "hook:PreToolUse", Text: hookWords(hooks.PreToolUse, call.Name, out.AdditionalContext)})
+		}
 		switch {
 		case err != nil && ctx.Err() != nil:
 			return agent.Decision{}, ctx.Err()
@@ -123,10 +131,11 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 			// The rules judge the arguments the tool will run with.
 			changed = out.UpdatedInput
 			call.Input = changed
-			if call.Name == askToolName {
+			if call.Name == askToolName && answersChanged(req.Call.Input, changed) {
 				// A hook may answer the model's questions in the
-				// person's place; the tool is told that these arguments
-				// are a hook's.
+				// person's place; the tool is told that these answers
+				// are a hook's. Answers the model wrote and the hook
+				// left as they were are not.
 				l.hookChanged.Store(call.ID, true)
 			}
 			act, err := describe(req.Tool, call, req.Env)
@@ -202,7 +211,7 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	if !confirm && l.hooks.has(hooks.PermissionRequest) {
 		out, err := l.hooks.run(ctx, hooks.Input{
 			Event: hooks.PermissionRequest, Cwd: cwd,
-			ToolName: call.Name, ToolInput: call.Input,
+			ToolName: call.Name, ToolInput: hookToolInput(call, cwd, l.cfg.Paths.Home),
 			AgentID: req.AgentID, AgentType: req.AgentType,
 			IfMatch: l.hookIf(cwd, call, action),
 		})
@@ -211,6 +220,11 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 			return agent.Decision{}, ctx.Err()
 		case err != nil:
 			l.notice(agent.LevelWarning, "hook:PermissionRequest", fmt.Sprintf("The PermissionRequest hooks could not be run (%v), so the question is put to you.", err))
+		case out.PermissionDecision == hooks.Allow && d.Critical:
+			// A call that may remove what cannot be got back is the
+			// person's alone to approve: no rule and no hook does
+			// (permission.Decision.Critical). A hook's refusal stands.
+			l.notice(agent.LevelWarning, "hook:PermissionRequest", "A PermissionRequest hook approved a call that may remove what cannot be got back. Only you can approve that, so the question is put to you.")
 		case out.PermissionDecision == hooks.Allow:
 			return agent.Decision{Allow: true, Input: changed}, nil
 		case out.PermissionDecision == hooks.Deny:
@@ -226,7 +240,30 @@ func (g *gate) Check(ctx context.Context, req agent.GateRequest) (agent.Decision
 	}
 	askCtx := ctx
 	q := l.permissionQuestion(call, action, d)
-	data := QuestionData{Modes: map[string]string{}, CommentOnYes: true, Input: call.Input, PersonOnly: confirm || d.Critical}
+	stops := ""
+	if req.AgentID != "" {
+		// A sub-agent asks: the question says which, and a background
+		// one's says what it was started for, so that it is never taken
+		// for a question of the conversation the person is in.
+		asker := "The sub-agent " + trust.Escape(firstOf(req.AgentType, "of this session"))
+		if b, ok := l.backgroundAgent(req.AgentID); ok {
+			asker = fmt.Sprintf("The background sub-agent %s (%s)", trust.Escape(b.kind), trust.Escape(oneLine(b.desc, 80)))
+			stops = "that sub-agent"
+			for i := range q.Choices {
+				if q.Choices[i].Key == "no" {
+					q.Choices[i].Label = "No (alone it stops that sub-agent; with words after it, it reads them and carries on)"
+				}
+			}
+		}
+		q.Title = asker + " asks: " + q.Title
+	}
+	if changed != nil {
+		// A hook changed the call: the question shows what will run, not
+		// what the model wrote (its diff, its command).
+		act := action
+		q.Action = &act
+	}
+	data := QuestionData{Modes: map[string]string{}, CommentOnYes: true, Input: call.Input, PersonOnly: confirm || d.Critical, Stops: stops}
 	for i, s := range d.Suggestions {
 		if s.Mode != "" {
 			data.Modes["always:"+strconv.Itoa(i)] = string(s.Mode)
@@ -501,6 +538,62 @@ func escapeKeepingTabs(line string) string {
 	return strings.Join(parts, "\t")
 }
 
+// answersChanged says a hook's rewrite of a question call gave it answers
+// the model's call did not have.
+func answersChanged(model, hook json.RawMessage) bool {
+	var a, b struct {
+		Answers json.RawMessage `json:"answers"`
+	}
+	if json.Unmarshal(hook, &b) != nil || len(b.Answers) == 0 || string(b.Answers) == "null" {
+		return false
+	}
+	_ = json.Unmarshal(model, &a)
+	var ca, cb bytes.Buffer
+	if json.Compact(&cb, b.Answers) != nil {
+		return true
+	}
+	return json.Compact(&ca, a.Answers) != nil || !bytes.Equal(ca.Bytes(), cb.Bytes())
+}
+
+// hookPathKeys are the arguments of the file tools that name a path.
+var hookPathKeys = map[string]string{"Read": "file_path", "Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path",
+	"NotebookEdit": "notebook_path", "Glob": "path", "Grep": "path"}
+
+// hookToolInput is a call's arguments as hooks are given them: the path a
+// file tool is given made absolute and clean, from the call's folder and
+// with ~ the home folder, as Claude Code gives them. A hook that guards
+// $CLAUDE_PROJECT_DIR/secrets sees "secrets/key" and "~/x" for the files
+// they are. (The tool reads the same file from the path as written.)
+func hookToolInput(call core.ToolCall, cwd, home string) json.RawMessage {
+	key, ok := hookPathKeys[call.Name]
+	if !ok {
+		return call.Input
+	}
+	var m map[string]json.RawMessage
+	var p string
+	if json.Unmarshal(call.Input, &m) != nil || json.Unmarshal(m[key], &p) != nil || p == "" {
+		return call.Input
+	}
+	abs := p
+	switch {
+	case home != "" && p == "~":
+		abs = home
+	case home != "" && strings.HasPrefix(p, "~/"):
+		abs = filepath.Join(home, p[2:])
+	case !filepath.IsAbs(p) && filepath.IsAbs(cwd) && !strings.HasPrefix(p, "~"):
+		abs = filepath.Join(cwd, p)
+	}
+	if !filepath.IsAbs(abs) || filepath.Clean(abs) == p {
+		return call.Input
+	}
+	m[key], _ = json.Marshal(filepath.Clean(abs))
+	out, err := json.Marshal(m)
+	if err != nil {
+		return call.Input
+	}
+	return out
+}
+
 // permissionQuestion writes the question about one call: exactly what
 // would run, why gnosh asks, and the answers there are. What the model and
 // the files it read brought is shown escaped, never as terminal control
@@ -723,6 +816,10 @@ func (l *live) editLocalSettings(change func(doc map[string]json.RawMessage) err
 	if data, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(data))) > 0 {
 		plain, err := config.StandardJSON(data)
 		if err == nil {
+			if dup := config.DuplicateKey(plain); dup != "" {
+				// (Read last-wins, the first of the two would be lost.)
+				return fmt.Errorf("%s holds %q twice, which gnosh does not load, so it was left as it is; take one out", path, dup)
+			}
 			err = json.Unmarshal(plain, &doc)
 		}
 		if err != nil {

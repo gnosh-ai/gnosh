@@ -191,6 +191,8 @@ func TestErrorShapes(t *testing.T) {
 		{"a web page without a title", 500, nil, "<html><body>oops</body></html>", core.ErrServer, "internal server error", 0},
 		{"plain words", 500, nil, "upstream connect error or disconnect/reset before headers", core.ErrServer, "upstream connect error", 0},
 		{"a bare overloaded message", 500, nil, `{"error":{"message":"The engine is currently overloaded, please try again later"}}`, core.ErrOverloaded, "overloaded", 0},
+		{"a refused request that quotes the word", 400, nil, `{"type":"error","error":{"type":"invalid_request_error","message":"messages.3: tool 'resolve overloaded function' is not a valid name"}}`, core.ErrInvalidRequest, "overloaded function", 0},
+		{"a proxy's echo of the request", 502, nil, `{"error":{"message":"upstream failed"},"request":{"prompt":"why is my overloaded operator ambiguous?"}}`, core.ErrServer, "upstream failed", 0},
 		{"no body at all", 500, nil, ``, core.ErrServer, "internal server error", 0},
 		{"too many requests, no body", 429, map[string]string{"Retry-After": "2.5"}, ``, core.ErrRateLimit, "too many requests", 2500 * time.Millisecond},
 		{"body too large for a proxy", 413, nil, "<html><head><title>413 Request Entity Too Large</title></head></html>", core.ErrContextTooLong, "413", 0},
@@ -315,6 +317,7 @@ func TestRetryHint(t *testing.T) {
 		{"no hint here", 0},
 		{"", 0},
 		{"try again in 99999999999999999999h", time.Duration(1<<63 - 1)},
+		{"try again in " + strings.Repeat("1s", 1<<22), 4 * time.Second},
 	}
 	for _, tt := range tests {
 		if got := retryHint(tt.msg); got != tt.want {

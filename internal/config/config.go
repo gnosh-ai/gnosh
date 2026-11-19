@@ -37,6 +37,11 @@ type Config struct {
 	// slot whose Model is not set has no choice made for it: Small then
 	// follows Large, and Large is asked for.
 	Large, Small Slot
+	// Fallback are the models a turn goes on with, in order, when the
+	// session's model cannot answer ("fallbackModel", --fallback-model; at
+	// most MaxFallbacks). A model named without its provider by the flag
+	// has an empty Provider, which the app settles as it does for -m.
+	Fallback Value[[]ModelRef]
 
 	// Options are the settings of the "options" object.
 	Options Options
@@ -65,6 +70,17 @@ type Config struct {
 	// says why.
 	StatusLine    *StatusLine
 	StatusLineOff string
+	// FileSuggestion is the command that offers the paths an @ mention
+	// completes to, in place of gnosh's own search (Claude Code's
+	// fileSuggestion), or nil. It is nil in safe mode and when
+	// disableAllHooks is set, as the status line is; FileSuggestionOff
+	// then says why.
+	FileSuggestion    *FileSuggestion
+	FileSuggestionOff string
+	// Attribution is what the model adds to the git commits and pull
+	// requests it makes (Claude Code's attribution). gnosh adds none of
+	// its own: both are empty unless a file sets them.
+	Attribution Attribution
 	// Permissions are the permission rules, the starting mode and the
 	// extra directories.
 	Permissions Permissions
@@ -133,8 +149,10 @@ const (
 	KindExtraPath   = "extra-path"
 	KindAddress     = "address"
 	KindHiddenSkill = "hidden-skill"
-	KindRemoval     = "removal" // taking away a provider, a model or a host a weaker file declared
+	KindRestriction = "restriction" // a setting that only takes a power away, such as disableBypassPermissionsMode
+	KindRemoval     = "removal"     // taking away a provider, a model or a host a weaker file declared
 	KindStatusLine  = "status-line"
+	KindFileSuggest = "file-suggestion"
 )
 
 // StatusLine is a command whose output takes the place of the status line
@@ -148,6 +166,24 @@ type StatusLine struct {
 	// Refresh is how often it is run again besides the moments it runs at
 	// (Claude Code's refreshInterval); zero means at those moments alone.
 	Refresh time.Duration
+	// Origin is the line that sets it.
+	Origin Origin
+}
+
+// Attribution is Claude Code's attribution setting: the lines the model
+// ends a commit's message with, and a pull request's description.
+type Attribution struct {
+	Commit, PR string
+	// Origin is the line that sets it.
+	Origin Origin
+}
+
+// FileSuggestion is a command that offers the paths an @ mention completes
+// to: Claude Code's fileSuggestion setting, of type "command".
+type FileSuggestion struct {
+	// Command is the command line, run by sh with {"query": what was typed
+	// after the @} on its standard input; it prints a path a line.
+	Command string
 	// Origin is the line that sets it.
 	Origin Origin
 }
@@ -366,7 +402,7 @@ type Hook struct {
 // quoted where a shell would need it.
 func (h Hook) CommandLine() string {
 	if h.URL != "" {
-		return "POST " + h.URL
+		return "POST " + ShownHookURL(h.URL)
 	}
 	if h.Server != "" {
 		return "mcp " + h.Server + "/" + h.Tool
@@ -475,6 +511,9 @@ type ContextFiles struct {
 	// Extra are more instruction files of the project, from the
 	// projectInstructionFiles option.
 	Extra []ListItem
+	// Exclude are the files never read, by any route, as patterns matched
+	// against their absolute paths (the claudeMdExcludes option).
+	Exclude []ListItem
 	// ImportDepth is how many levels deep an @path line is followed.
 	ImportDepth int
 	// MaxFileBytes is the size past which a file is passed over, with a

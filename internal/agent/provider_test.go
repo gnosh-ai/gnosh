@@ -271,12 +271,15 @@ func TestProviderFailuresThatPass(t *testing.T) {
 // The wait a provider asks for is the wait that is made.
 func TestRetryAfterIsHonoured(t *testing.T) {
 	r, res := endsWith(t, nil,
-		step{err: &core.ProviderError{Provider: "fake", Kind: core.ErrRateLimit, Status: 429, RetryAfter: 7 * time.Millisecond}},
+		step{err: &core.ProviderError{Provider: "fake", Kind: core.ErrRateLimit, Status: 429, RetryAfter: 3 * time.Millisecond}},
+		step{err: &core.ProviderError{Provider: "fake", Kind: core.ErrRateLimit, Status: 429, RetryAfter: 24 * time.Hour}},
 		say("ok"))
 	if res.Reason != EndCompleted {
 		t.Fatalf("result = %+v", res)
 	}
-	if retry := eventsOf[*RetryEvent](r.rec); len(retry) != 1 || retry[0].Wait != 7*time.Millisecond || !retry[0].Until.IsZero() {
+	// The provider's wait is kept to, up to BusyMax: a day is not slept.
+	retry := eventsOf[*RetryEvent](r.rec)
+	if len(retry) != 2 || retry[0].Wait != 3*time.Millisecond || !retry[0].Until.IsZero() || retry[1].Wait != testRetry.BusyMax {
 		t.Errorf("retry = %+v", retry)
 	}
 }
@@ -412,6 +415,35 @@ func TestServerThatStaysGone(t *testing.T) {
 	}
 	if n := len(eventsOf[*RetryEvent](r.rec)); n < 5 {
 		t.Errorf("only %d tries in the time allowed", n)
+	}
+	r.checkLog()
+}
+
+// A provider that sends a little of every reply and then fails the same
+// way each time (llama.cpp's "Failed to parse tool call arguments as JSON",
+// a proxy that cuts at the same byte) is given up on once GoneAfter has
+// passed with no reply whole: each try's first piece set the clock back,
+// and it was asked again every 20 seconds for ever (the model client
+// review of 2026-11-19).
+func TestPartialFailuresRunOutTheClock(t *testing.T) {
+	clock := &fakeClock{now: time.Date(2026, 11, 19, 9, 0, 0, 0, time.UTC)}
+	r := newRig(t, func(o *Options) {
+		o.Clock = clock
+		o.Retry = RetryPolicy{} // the real waits, on a clock that does not make anyone wait
+	})
+	r.model.answer(func(_ *core.Request, n int) step {
+		if n > 100 {
+			return say("the clock never ran out")
+		}
+		return step{evs: []core.Event{{Type: core.EventTextDelta, Text: "I will call"}},
+			err: &core.ProviderError{Provider: "fake", Kind: core.ErrServer, Status: 500, Message: "Failed to parse tool call arguments as JSON"}}
+	})
+	res := r.run("call a tool")
+	if res.Reason != EndFailed {
+		t.Fatalf("result = %+v", res)
+	}
+	if n := len(eventsOf[*RetryEvent](r.rec)); n > 30 {
+		t.Errorf("%d tries in five minutes", n)
 	}
 	r.checkLog()
 }

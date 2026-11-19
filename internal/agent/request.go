@@ -381,7 +381,13 @@ func (a *Agent) fit(ctx context.Context, t *turn, moment RoomMoment, extra int) 
 		// Last the summary. One that left the conversation over the point
 		// is not followed by another.
 		if summarized {
-			a.summaryDidNotHelp(su, lim, predicted)
+			// It did not help only if what it left is over the point: what
+			// is over may be the prompt about to go out (a long paste),
+			// which no summary makes shorter, and for which summaries must
+			// not be turned off.
+			if a.predict(est, su.model) > lim.point {
+				a.summaryDidNotHelp(su, lim, predicted)
+			}
 			if predicted <= lim.hard {
 				return fr, nil
 			}
@@ -403,6 +409,11 @@ func (a *Agent) fit(ctx context.Context, t *turn, moment RoomMoment, extra int) 
 			continue
 		case ctx.Err() != nil:
 			return fitted{}, errStopped
+		case errors.Is(err, errFellBack):
+			// The turn goes on with a fallback model, which room is made
+			// for afresh.
+			slid, slideSpent, before = false, false, -1
+			continue
 		case errors.Is(err, errNothingToSummarize):
 			// The model has said nothing yet: what is long is what the
 			// person sent, and a summary of that alone would only put the
@@ -480,7 +491,11 @@ func (a *Agent) slide(ctx context.Context, t *turn, moment RoomMoment, need int)
 		EstimateMessage: func(m core.Message) int { return a.estMessages([]core.Message{m}, thinking) },
 	}
 	if t != nil && moment == RoomMidTurn {
-		req.Protect = t.newest
+		// The prompt the person sent, and all after it: after a nudge or
+		// a driver's objection the newest prompt is gnosh's own, and a
+		// slide that kept only that one took the person's words with the
+		// rest (the compaction review of 2026-11-19).
+		req.Protect = firstNonEmpty(t.sent, t.newest)
 	}
 	room, err, done := await(ctx, a, "making room in the log", func(ctx context.Context) (Room, error) {
 		a.logMu.Lock()

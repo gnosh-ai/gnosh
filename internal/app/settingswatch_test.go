@@ -144,3 +144,28 @@ func TestConfigChangeBlockHolds(t *testing.T) {
 	r = run(t, w2, "-y", "-p", "go").wantCode(t, 0)
 	has(t, "the notice for a change made before the first request", r.err+r.out, "a ConfigChange hook the user set up blocked it")
 }
+
+// The file --settings names is watched where the loader read it: a path
+// relative to where gnosh was started, though --cwd works in another
+// folder. Watched under --cwd's folder, edits to it were never taken in
+// (the config review of 2026-11-19).
+func TestSettingsFlagFileWatchedWithCwd(t *testing.T) {
+	w := apptest.NewWorld(t)
+	w.Write("extra.json", "{}\n")
+	w.Write("sub/a.txt", "keep me\n")
+	w.Model.Respond(func(n int, r apptest.Request) *apptest.Reply {
+		switch n {
+		case 0:
+			w.Write("extra.json", `{"permissions": {"deny": ["Bash(rm *)"]}}`+"\n")
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo first"}`}}}
+		case 1:
+			return &apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Bash", Args: `{"command":"rm -f a.txt"}`}}}
+		}
+		return &apptest.Reply{Text: "Done."}
+	})
+	run(t, w, "-y", "--cwd", "sub", "--settings", "extra.json", "-p", "go").wantCode(t, 0)
+	has(t, "the rule added to the --settings file", toolResult(t, w, 2, "c2"), "This call did not run", "Bash(rm *)")
+	if !w.Exists("sub/a.txt") {
+		t.Errorf("the rm ran past the deny rule added to the --settings file")
+	}
+}

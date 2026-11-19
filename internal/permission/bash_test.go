@@ -338,6 +338,9 @@ func TestBashReadOnly(t *testing.T) {
 		// A cd to where the line already is goes nowhere: git runs where it
 		// would have.
 		"cd /proj && git log", "cd . && git status", "cd /proj/ && git diff",
+		// So does a git -C that names that folder (box 1's /security-review:
+		// git -C /its/own/folder diff <base> --stat).
+		"git -C /proj diff --stat", "git -C . status", "git -C /proj/ log --oneline -3",
 		"ls | head -3", "cat a | grep foo | wc -l", "ls && pwd; echo done", "ls || true",
 		"ls 2>/dev/null", "ls > /dev/null 2>&1", "cat < a", "cat <<EOF\nplain text\nEOF",
 		"timeout 5 ls", "nice ls", "time ls -la", "command -v go", "sort a", "sort -u -k2 a",
@@ -388,6 +391,11 @@ func TestBashReadOnly(t *testing.T) {
 		"git worktree add x", "git worktree remove x", "git worktree prune", "git worktree list x",
 		"git worktree", "git stash list --output=x", "git stash list -p", "git stash pop", "git stash drop",
 		"cd src && git status", "cd /proj/src && git log", "cd .. && git log",
+		"git -C /proj/src status", "git -C src log", "git -C .. status", "git -C ~ status", "git -C /proj diff --output=x",
+		"cd src && git -C /proj/src log",
+		// (A review: -C goes through a link before its .., so lnk/.. may
+		// be another repository; a pattern names what it matches.)
+		"git -C src/.. log -p", "git -C /proj/src/.. status", "timeout 5 git -C src/.. diff", "git -C /pro? status", "git -C /{proj,x} status",
 		// Reads that leave the working directories.
 		"cat /etc/passwd", "cat ~/.ssh/id_ed25519", "cat ../other/x", "ls /", "ls ~", "head /etc/hosts",
 		"grep foo /etc/passwd", "grep -rn foo /", "find / -name x", "find ~ -name x", "wc -l ../x",

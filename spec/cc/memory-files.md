@@ -258,7 +258,8 @@ existing memory folders are understood, not to be re-implemented.
       the size limit and the "read the rest" note.
 - [ ] `.claude/rules/` and `~/.claude/rules/`, unscoped and path-scoped.
 - [ ] Re-injection after compaction.
-- [ ] External-import approval dialog; `claudeMdExcludes`.
+- [ ] External-import approval dialog. (`claudeMdExcludes` is built:
+  gnosh's `options.claudeMdExcludes`.)
 - [ ] `/memory`, `/init`, the memory-file list in `/context`.
 - [ ] `InstructionsLoaded` hook.
 - [ ] The other two instruction-file policies as a `gnoshrc` option.

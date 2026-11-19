@@ -105,8 +105,7 @@ type retryStep struct {
 }
 
 // next decides what to do about the failure pe, which happened at now.
-// answered says whether the provider has answered at all since its model
-// was chosen.
+// answered says whether the provider has answered at all in the session.
 func (p RetryPolicy) next(st *retryState, pe *core.ProviderError, answered bool, now time.Time) retryStep {
 	if st.since.IsZero() {
 		st.since = now
@@ -122,7 +121,10 @@ func (p RetryPolicy) next(st *retryState, pe *core.ProviderError, answered bool,
 		}
 		step.wait = min(step.wait, p.BusyMax)
 		if pe.RetryAfter > 0 {
-			step.wait = pe.RetryAfter
+			// The provider's own wait, up to BusyMax: a proxy that asked
+			// for a day (or "Retry-After: inf") had a run sleep a day
+			// without a word (the model client review of 2026-11-19).
+			step.wait = min(pe.RetryAfter, p.BusyMax)
 		}
 		return step
 	case troubleUnreachable:
@@ -257,6 +259,19 @@ func (r *reply) silent() bool {
 	return len(r.msg.ToolUses()) == 0 && strings.TrimSpace(r.msg.Text()) == ""
 }
 
+// callAsText reports whether a reply that calls no tool is a tool call
+// written out as text, which runs nothing: a chat template's markup that
+// the model's server did not take as a call, which the reply begins or
+// ends with (Qwen on llama.cpp now and then leaves one, or only its
+// closing tag).
+func (r *reply) callAsText() bool {
+	if len(r.msg.ToolUses()) > 0 {
+		return false
+	}
+	text := strings.TrimSpace(r.msg.Text())
+	return strings.HasPrefix(text, "<tool_call>") || strings.HasSuffix(text, "</tool_call>")
+}
+
 // exchange sends req and returns the reply, trying again for as long as
 // the retry policy says when the provider fails in a way that may pass.
 // What the person sees meanwhile is a RetryEvent for every wait, with the
@@ -268,9 +283,8 @@ func (r *reply) silent() bool {
 // reply holds what had arrived; it is nil when the turn was stopped
 // between two tries, with no request out.
 func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core.Request, est int, m Model, show bool) (*reply, error) {
-	if a.answeredFor != modelKey(m) {
-		a.answered, a.answeredFor = false, modelKey(m)
-		a.rs = retryState{}
+	if a.rsFor != modelKey(m) {
+		a.rsFor, a.rs = modelKey(m), retryState{}
 	}
 	round := 0
 	if t != nil {
@@ -280,7 +294,7 @@ func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core
 		send := req
 		if f := a.opts.Outgoing; f != nil {
 			send = cloneRequest(req)
-			f(send)
+			f(m.Provider.Name(), send)
 		}
 		a.emit(&RequestEvent{
 			Purpose: purpose, Round: round, Attempt: attempt,
@@ -304,6 +318,20 @@ func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core
 		if pe.Kind == core.ErrContextTooLong {
 			return rep, &tooLongError{cause: pe}
 		}
+		// A server that is down, not ready or too busy is not waited for
+		// while there is a fallback to go on with.
+		if a.fellBack(ctx, t, purpose, m, pe, false, rep, est) {
+			a.rs = retryState{}
+			return rep, errFellBack
+		}
+		if ctx.Err() != nil {
+			// Stopped while a fallback was being made ready. What had
+			// arrived of the failed try is not handed back, as after a
+			// wait (the person saw it cut off); the try is closed as
+			// stopped all the same, with an empty reply, since no retry
+			// closed it: a turn must not end with a request still out.
+			return &reply{model: m}, errStopped
+		}
 		if !pe.Retryable() {
 			return rep, &failure{
 				msg:  fmt.Sprintf("%s %s.%s", m.label(), whatHappened(pe), a.turnEndedWords()),
@@ -312,10 +340,18 @@ func (a *Agent) exchange(ctx context.Context, t *turn, purpose string, req *core
 		}
 
 		now := a.clock.Now()
-		step := a.retry.next(&a.rs, pe, a.answered, now)
+		step := a.retry.next(&a.rs, pe, a.answeredBy[modelKey(m)], now)
 		if step.giveUp {
 			waited := now.Sub(a.rs.since)
 			a.rs = retryState{}
+			if a.fellBack(ctx, t, purpose, m, pe, true, rep, est) {
+				return rep, errFellBack
+			}
+			if ctx.Err() != nil {
+				// (As above: the try is closed, and what arrived is not
+				// kept.)
+				return &reply{model: m}, errStopped
+			}
 			msg := fmt.Sprintf("%s did not come back within %s: it %s.", m.label(), span(waited), whatHappened(pe))
 			if step.notRunning {
 				other := "pick another model with /model"
@@ -402,17 +438,23 @@ func (a *Agent) count(t *turn, purpose string, m Model, rep *reply) {
 	a.mu.Unlock()
 }
 
-// alive notes that the provider has sent something: it is there.
+// alive notes that the provider has sent something: it is there. The
+// clock of its failures (rs.since) runs on until a reply is whole: one
+// that sends a little of every reply and then fails the same way each
+// time (llama.cpp's "Failed to parse tool call arguments as JSON", a proxy
+// that cuts at the same byte) set the clock back with each try's first
+// piece, and was asked again every 20 seconds for ever (the model client
+// review of 2026-11-19).
 func (a *Agent) alive(m Model) {
-	a.answered = true
-	a.live.Store(modelKey(m))
-	if !a.rs.since.IsZero() {
-		if a.rs.down {
-			a.notice(LevelInfo, "provider", fmt.Sprintf("%s is answering again, %s after it stopped.", m.label(), span(a.clock.Now().Sub(a.rs.since))))
-		}
-		a.rs.since = time.Time{}
-		a.rs.down = false
+	if a.answeredBy == nil {
+		a.answeredBy = map[string]bool{}
 	}
+	a.answeredBy[modelKey(m)] = true
+	a.live.Store(modelKey(m))
+	if a.rs.down && !a.rs.since.IsZero() {
+		a.notice(LevelInfo, "provider", fmt.Sprintf("%s is answering again, %s after it stopped.", m.label(), span(a.clock.Now().Sub(a.rs.since))))
+	}
+	a.rs.down = false
 }
 
 // streamItem is one step of a provider's answer, or its failure.

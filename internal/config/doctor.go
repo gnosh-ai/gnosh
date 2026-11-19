@@ -319,7 +319,7 @@ func Doctor(ctx context.Context, cfg *Config, problems []Problem, pr Probes) []F
 		if s.v.V == "" {
 			continue
 		}
-		at := displayURL(s.v.V)
+		at := DisplayURL(s.v.V)
 		if pr.Connect == nil {
 			add("tools", Note, "%s is %s (%s). Whether it answers was not checked.", s.name, at, s.v.Origin)
 		} else if err := pr.Connect(ctx, s.v.V); err != nil {

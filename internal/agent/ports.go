@@ -420,6 +420,9 @@ type Decision struct {
 	Halt bool
 	// Unattended marks a refusal made only because nobody could be asked.
 	Unattended bool
+	// Context is what the model reads about the call beside its result,
+	// whatever was decided: a PreToolUse hook's added text.
+	Context []Part
 }
 
 // Concurrent is a Tool that can say whether one of its calls may run beside
@@ -438,6 +441,15 @@ type Concurrent interface {
 // it; an adapter for an outside tool must never copy it from what that tool
 // sent.
 const MetaHalt = "gnosh.halt"
+
+// StopWork is the error a moment returns to stop the work it stands before,
+// as a hook's "continue": false does: the session's start refuses the
+// prompt it stands before and every one after it (a sub-agent's start, its
+// task), and the end of a summary made in a turn ends that turn. Reason is
+// what the person and the model are told.
+type StopWork struct{ Reason string }
+
+func (h *StopWork) Error() string { return h.Reason }
 
 // Part is a piece of hidden text that rides on a prompt or is put between
 // two rounds. It is stored exactly as given, so its author marks it the way
@@ -496,6 +508,14 @@ type Moments struct {
 	// without that provider's lines.
 	PromptLines []func(ctx context.Context, info LineInfo) ([]Part, error)
 
+	// MoreRounds, when set, is asked after a round's tool calls, before
+	// what the person queued meanwhile is handed to the turn and the model
+	// asked again, with the number of requests the turn has made: false
+	// ends the turn there, halted, with why as its detail, and what was
+	// queued goes out as a turn of its own. (The cap on a run's replies,
+	// --max-turns: one that stopped the next request instead had the
+	// queued words handed to a turn that never answered them.)
+	MoreRounds func(turn string, rounds int) (more bool, why string)
 	// BeforeRequest are asked, in order, before every request of a turn
 	// for reminders to put in front of the model. An error is a warning.
 	BeforeRequest []func(ctx context.Context, info RequestInfo) ([]Part, error)
@@ -677,6 +697,9 @@ type SummaryInfo struct {
 	Summary string
 	// PreTokens is about how long the conversation was before it.
 	PreTokens int
+	// Window is the model's window as the loop believes it: what is given
+	// back after the summary keeps to a small share of it.
+	Window int
 }
 
 // EndInfo is what SessionEnd is told.

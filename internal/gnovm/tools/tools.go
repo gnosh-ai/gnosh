@@ -757,7 +757,7 @@ func renderList(l gnovm.ListResult, deaths []string) string {
 		fmt.Fprintf(&b, "the VM worker ended %d time(s) in this gnosh; last: %s\n", len(deaths), deaths[len(deaths)-1])
 	}
 	fmt.Fprintf(&b, "importable: fmt, %s\n", strings.Join(gnovm.ImportablePackages(), ", "))
-	b.WriteString("Built on gno.land (https://gno.land) · built on gnosh (https://gnosh.ai)\n")
+	b.WriteString(gnovm.AttributionNotice + "\n")
 	return b.String()
 }
 

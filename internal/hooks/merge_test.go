@@ -269,7 +269,10 @@ func TestPermissionRequestAnswersCombine(t *testing.T) {
 		{"one allows, one refuses", func(t *testing.T) []string { return []string{yes(t), no(t, "not this one")} }, Deny, "not this one", 0},
 		{"one refuses, one allows", func(t *testing.T) []string { return []string{no(t, "not this one"), yes(t)} }, Deny, "not this one", 0},
 		{"two refuse", func(t *testing.T) []string { return []string{no(t, "first"), no(t, "second")} }, Deny, "first\n\nsecond", 0},
-		{"one allows, one could not evaluate", func(t *testing.T) []string { return []string{yes(t), "exit 3"} }, Allow, "", 1},
+		// (A hook that could not check answers nothing, and the other's
+		// approval does not stand in for it: the question goes to the
+		// person, as the warning says. Review of 2026-11-19.)
+		{"one allows, one could not evaluate", func(t *testing.T) []string { return []string{yes(t), "exit 3"} }, NoDecision, "", 1},
 		{"one could not evaluate", func(t *testing.T) []string { return []string{"exit 127"} }, NoDecision, "", 1},
 	}
 	for _, tt := range tests {

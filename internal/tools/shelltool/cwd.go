@@ -1,6 +1,7 @@
 package shelltool
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -70,6 +71,49 @@ func physical(path string) string {
 		return p
 	}
 	return filepath.Clean(path)
+}
+
+// isDir reports whether path is a directory that is there.
+func isDir(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.IsDir()
+}
+
+// nearestStanding is where a command runs when the session's working
+// directory has been taken away (a checkout or a clean removed it): the
+// nearest folder above it that is there and inside the session's folders
+// (its work tree, for a session that has one), or else the first of those
+// that is there; "" when none is. Refusing every command there left no
+// way out: not even the person's own cd could run.
+func nearestStanding(env *core.ToolEnv) string {
+	inside := func(d string) bool {
+		if t := env.Tree; t != nil {
+			return within(d, physical(t.Path))
+		}
+		for _, r := range env.Roots {
+			if within(d, physical(r)) {
+				return true
+			}
+		}
+		return len(env.Roots) == 0
+	}
+	for d := filepath.Dir(env.Cwd); ; d = filepath.Dir(d) {
+		if isDir(d) && inside(physical(d)) {
+			return d
+		}
+		if d == filepath.Dir(d) {
+			break
+		}
+	}
+	if t := env.Tree; t != nil && isDir(t.Path) {
+		return t.Path
+	}
+	for _, r := range env.Roots {
+		if isDir(r) {
+			return r
+		}
+	}
+	return ""
 }
 
 // within reports whether dir is root or lies under it. Both are clean,

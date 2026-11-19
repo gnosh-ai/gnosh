@@ -86,6 +86,7 @@ var topKeys = []keyDef{
 	{"models", "", "what gnosh should know about a model, under \"<provider>/<model id>\"", fromPlain},
 	{"model", "", "the session's model: \"<provider>/<model id>\", or an object that also says how it is asked", fromClaudeCode + ": the settings key"},
 	{"smallModel", "", "the model for the short side jobs (titles, summaries, checks); the session's model does them when none is named", fromPlain + ", after \"model\""},
+	{"fallbackModel", "", "the models a turn goes on with when the session's model cannot answer: \"<provider>/<model id>\", or a list of up to three, tried in order", fromClaudeCode + ": the settings key"},
 	{"hosts", FeatureHosts, "other machines the model may run commands on, each under a name", fromPlain},
 	{"options", "", "gnosh's own switches and limits", fromPlain},
 	{"permissions", FeaturePermissions, "allow, ask and deny rules, the starting mode, more directories", fromClaudeCode + ": the settings key"},
@@ -94,6 +95,9 @@ var topKeys = []keyDef{
 	{"disableAllHooks", "", "switch every hook off", fromClaudeCode + ": the settings key"},
 	{"agent", "", "the kind of agent the session runs as: its prompt, its tools and its model", fromClaudeCode + ": the settings key"},
 	{"statusLine", "", "a command whose output is the status line under the prompt", fromClaudeCode + ": the settings key"},
+	{"fileSuggestion", "", "a command that offers the paths an @ mention completes to, in place of gnosh's own search", fromClaudeCode + ": the settings key"},
+	{"attribution", "", "the lines the model ends its commits' messages and its pull requests' descriptions with: {\"commit\": ..., \"pr\": ...}; none by default", fromClaudeCode + ": the settings key"},
+	{"includeCoAuthoredBy", "", "Claude Code's older word for leaving its attribution out: taken, and changes nothing, as gnosh adds none of its own", fromClaudeCode + ": the settings key"},
 	{"skillOverrides", "", "how far each skill is seen, by its name: on, name-only, user-invocable-only or off", fromClaudeCode + ": the settings key"},
 	{"$schema", "", "accepted and not read", fromClaudeCode + ": the settings key"},
 }
@@ -151,12 +155,10 @@ var permissionKeys = []keyDef{
 // whose key it is. Those that gnosh has under "options", with Claude
 // Code's names and meaning, are in the options table instead.
 var claudeCodeKeys = []string{
-	"cleanupPeriodDays", "attribution", "includeCoAuthoredBy", "includeGitInstructions",
-	"fileCheckpointingEnabled",
-	"respectGitignore", "fileSuggestion", "claudeMdExcludes",
-	"bashOutputMaxChars", "showTurnDuration", "language", "spinnerVerbs", "spinnerTipsEnabled",
+	"cleanupPeriodDays",
+	"spinnerVerbs", "spinnerTipsEnabled",
 	"skipDangerousModePermissionPrompt",
-	"effortLevel", "fallbackModel", "alwaysThinkingEnabled", "showThinkingSummaries", "plansDirectory",
+	"effortLevel", "alwaysThinkingEnabled", "showThinkingSummaries", "plansDirectory",
 	"autoMemoryEnabled", "autoMemoryDirectory", "idleCompaction", "tui", "enabledMcpjsonServers",
 	"disabledMcpjsonServers", "enableAllProjectMcpServers", "allowedMcpServers", "deniedMcpServers",
 	"allowedHttpHookUrls", "httpHookAllowedEnvVars", "worktree", "sandbox",

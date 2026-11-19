@@ -244,7 +244,7 @@ func (o *Options) All() []OptionValue {
 			v.Text, v.Set, v.Origin, v.JSON = x.V, x.Set, x.Origin, jsonOf(x.V)
 			if d.kind == oURL && x.Set {
 				// An address can carry a password; it is shown without.
-				v.Text = displayURL(x.V)
+				v.Text = DisplayURL(x.V)
 			}
 		case d.list != nil:
 			items := *d.list(o)

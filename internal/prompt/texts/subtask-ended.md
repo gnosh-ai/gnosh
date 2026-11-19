@@ -1,0 +1,2 @@
+A copy of this conversation that the user set to work in the background with /subtask has [[{{finished?}}finished]][[{{failed?}}stopped before it finished]][[{{stopped?}}been stopped]]: {{task}} (its session is {{id}}).[[ What stopped it: {{why}}.]] This is news from gnosh, not a new request: tell the user in a few words what came of it, and go on with what you were doing for them, if anything.[[ Its answer, in its own words and not gnosh's:
+{{report}}]]

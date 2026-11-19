@@ -195,6 +195,9 @@ type Invocation struct {
 	Model string
 	// SmallModel is the model for a print run's short side jobs.
 	SmallModel string
+	// FallbackModel is --fallback-model, as typed: the models to go on
+	// with when the model cannot answer, separated by commas.
+	FallbackModel string
 	// Effort is the thinking level for the run (--reasoning-effort or
 	// --effort), as typed: the levels depend on the model.
 	Effort string

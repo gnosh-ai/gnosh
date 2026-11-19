@@ -46,6 +46,10 @@ type Outcome struct {
 	// Such a hook counts as a block wherever a block counts. It must
 	// never be shown as a check that passed.
 	CouldNotEvaluate bool
+	// CutShort says a hook did not finish on its own: it ran out of time,
+	// was killed, or printed more than is read. What it would have said
+	// is not known, whatever it was for.
+	CutShort bool
 
 	// PermissionDecision is the hooks' answer about a tool call.
 	//
@@ -255,6 +259,9 @@ type verdict struct {
 	// failure says what went wrong when the hook could not evaluate; it
 	// is empty when the hook could.
 	failure string
+	// cutShort says the hook did not finish on its own: it ran out of
+	// time, was killed, or printed more than is read.
+	cutShort bool
 	// words is what the hook itself said about its answer: the reason it
 	// gave, or what it wrote to stderr.
 	words string
@@ -334,17 +341,17 @@ func (r *Runner) judge(event Event, info eventInfo, h selected, p proc) verdict 
 		v.failure = "it could not be started (" + startError(p.startErr) + ")"
 		return v
 	case p.timedOut:
-		v.failure = "it did not finish within " + spell(p.limit) + " and was stopped"
+		v.failure, v.cutShort = "it did not finish within "+spell(p.limit)+" and was stopped", true
 	case p.signal != "":
-		v.failure = "it was killed by " + p.signal
+		v.failure, v.cutShort = "it was killed by "+p.signal, true
 	case p.unknown != "":
 		v.failure = "gnosh could not tell what it answered, because " + p.unknown
 	case p.exit < 0:
 		v.failure = "it ended without an exit status"
 	case p.lost > 0:
-		v.failure = "it printed more than the " + size(r.maxOutput) + " gnosh reads from a hook"
+		v.failure, v.cutShort = "it printed more than the "+size(r.maxOutput)+" gnosh reads from a hook", true
 	case p.leftOpen:
-		v.failure = "it ended but left a process running that still holds its output open, so what it printed may not be all it has to say. A hook must redirect the output of anything it leaves running"
+		v.failure, v.cutShort = "it ended but left a process running that still holds its output open, so what it printed may not be all it has to say. A hook must redirect the output of anything it leaves running", true
 	}
 	if v.failure != "" {
 		// What it printed is of no use as an answer.
@@ -369,7 +376,7 @@ func (r *Runner) judge(event Event, info eventInfo, h selected, p proc) verdict 
 		v.failure = "it exited with status 127: a command it needs was not found"
 		v.say(stderr)
 	case c > 128:
-		v.failure = fmt.Sprintf("it exited with status %d, which means a command in it was killed (signal %d)", c, c-128)
+		v.failure, v.cutShort = fmt.Sprintf("it exited with status %d, which means a command in it was killed (signal %d)", c, c-128), true
 		v.say(stderr)
 	case stderr != "":
 		v.failure = fmt.Sprintf("it exited with status %d and reported trouble", c)
@@ -439,7 +446,13 @@ func (r *Runner) judge(event Event, info eventInfo, h selected, p proc) verdict 
 		v.say(reason)
 	}
 	if a.input != nil && event == PreToolUse {
-		v.input = a.input
+		if h.asBash {
+			// (As in Claude Code: the hook saw Monitor's command as a Bash
+			// call, and what it wrote is a Bash call's input.)
+			v.notes = append(v.notes, fmt.Sprintf("its changed input was not used: it is written for %s and ran here only as a guard of the command Monitor starts", quote(h.Matcher)))
+		} else {
+			v.input = a.input
+		}
 	}
 	if a.action != "" {
 		switch {
@@ -524,6 +537,7 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 		answerer, otherAnswer  string // (two Elicitation hooks' different values)
 		accepted               json.RawMessage
 		cancelled              bool
+		unanswered             bool // (a hook that answers could not check)
 	)
 	for i, v := range verdicts {
 		h, p := sel[i], procs[i]
@@ -603,6 +617,7 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 		switch {
 		case v.failure != "":
 			out.CouldNotEvaluate = true
+			out.CutShort = out.CutShort || v.cutShort
 			rec.Result = ResultCouldNotEvaluate
 			rec.Reason = v.failure + "." + said
 			switch info.class {
@@ -614,6 +629,10 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 					blocks = append(blocks, orElse(v.words, fmt.Sprintf("The %s hook %s refused this and gave no reason.", event, h.label())))
 					out.Warnings = append(out.Warnings, fmt.Sprintf("The %s hook %s refused the call in an answer gnosh could not read in full: %s. Its refusal holds.", event, h.label(), v.failure))
 				} else {
+					// A hook that could not check answers nothing, and
+					// another hook's approval does not stand for it: the
+					// question goes to the person.
+					unanswered = true
 					out.Warnings = append(out.Warnings, fmt.Sprintf("The %s hook %s did not answer the permission question: %s. The question goes to the user instead.%s", event, h.label(), v.failure, said))
 				}
 			case warns:
@@ -679,6 +698,7 @@ func (r *Runner) combine(in *Input, info eventInfo, sel []selected, procs []proc
 	switch {
 	case info.class == answers && refused:
 		out.PermissionDecision, out.Reason = Deny, join(blocks)
+	case info.class == answers && unanswered:
 	case info.class == answers && len(approves) > 0:
 		out.PermissionDecision, out.Reason = Allow, join(approves)
 	case info.class == answers:

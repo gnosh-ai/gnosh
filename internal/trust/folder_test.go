@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // root makes a directory of the test's own and returns its real path, so
@@ -396,4 +398,30 @@ func FuzzGitConfig(f *testing.F) {
 			_ = runsProgram(s)
 		}
 	})
+}
+
+// A named pipe where a repository's git settings would be is refused, not
+// opened: opening it waits for a writer, and gnosh hung at start in such a
+// folder (the config review of 2026-11-19).
+func TestGitConfigThatIsAPipe(t *testing.T) {
+	dir := t.TempDir()
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = real
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(filepath.Join(dir, ".git", "config"), 0o644); err != nil {
+		t.Skip("no named pipes here:", err)
+	}
+	done := make(chan string, 1)
+	go func() { done <- workTreeElsewhere(filepath.Join(dir, ".git"), dir) }()
+	select {
+	case said := <-done:
+		if !strings.Contains(said, "could not be read") {
+			t.Errorf("said %q", said)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("reading the repository's git settings waited on the pipe")
+	}
 }

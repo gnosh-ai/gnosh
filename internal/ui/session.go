@@ -87,7 +87,7 @@ type config struct {
 	files func(dir string) []fileEntry
 	// project lists the project in a directory for the fuzzy @ search
 	// (mention.go), or is nil for none.
-	project func(dir string) []string
+	project func(dir string, ignored bool) []string
 	// programs lists the programs on the PATH, for shell mode's Tab
 	// (shellcomplete.go), or is nil for none. It is slow, and is run in
 	// the background.
@@ -217,9 +217,11 @@ type session struct {
 	progAt      time.Time
 	progLoading bool
 	// listProject and index are the fuzzy @ search's lister and what it
-	// last listed (mention.go).
-	listProject func(string) []string
+	// last listed (mention.go); suggest is what the person's own @ search
+	// command answered (filesuggest.go).
+	listProject func(dir string, ignored bool) []string
 	index       fileIndex
+	suggest     suggested
 
 	// pending are the lines that wait to be committed at the next frame,
 	// last is the kind of block the last of them ends, and dirty says
@@ -255,6 +257,17 @@ type session struct {
 	// stopArmed is when Ctrl+X Ctrl+K was pressed once, waiting for the
 	// second press that stops the background sub-agents.
 	stopArmed time.Time
+	// listing says a picker's list is being read (loadThen): heldInput is
+	// what the person typed meanwhile, for the list; listAgain says how to
+	// ask for it again; listGen counts the lists let go before they came.
+	listing   bool
+	heldInput []term.Event
+	listAgain string
+	listGen   int
+	// refeed is input, set when the session is made: a list that came
+	// takes in what was held for it by it (a call to input from there
+	// would tie the slash commands' table to itself).
+	refeed func(term.Event)
 
 	// q is the question on the screen and qwait the ones behind it.
 	q     *question
@@ -271,8 +284,9 @@ type session struct {
 	busy  bool
 	ph    phase
 	since time.Time
-	// fall is the working mark's drops, as they stood when the mark was
-	// last drawn (fall.go).
+	// fall is what falls through the words of the line that says what
+	// the session is doing, as it stood when the line was last drawn
+	// (fall.go).
 	fall fall
 	// heard is when the session last reported anything.
 	heard time.Time
@@ -382,6 +396,7 @@ func newSession(cfg config) *session {
 	if s.now == nil {
 		s.now = time.Now
 	}
+	s.refeed = s.input
 	s.ed = editor.New(editor.Options{
 		Theme:    s.th.Editor,
 		Complete: s.complete,
@@ -468,6 +483,25 @@ func (s *session) header() {
 	}
 	s.put(wrap(s.m, where, s.cols, "", "  ")...)
 	s.put(wrap(s.m, th.Quiet.Render("? shows the keys"+th.Sep+"/help lists the commands"+th.Sep+"Esc stops a turn"), s.cols, "", "")...)
+	s.put(wrap(s.m, th.credits(), s.cols, "", "")...)
+}
+
+// The addresses the header's last line names. gnosh's licence asks an
+// interface built on gnosh to show "built on gnosh" with a link to
+// gnoshURL, and the GnoVM's licence, gno.land's, asks an interface that
+// includes the GnoVM to show "built on gno.land" with a link to gnoURL
+// (LICENSE.md and internal/gnovm/LICENSE.md, the Additional Terms).
+const (
+	gnoshURL = "https://gnosh.ai"
+	gnoURL   = "https://gno.land"
+)
+
+// credits is the header's last line: gnosh's address, the credit the
+// GnoVM's licence asks for, and the command that shows the legal notices
+// (DECISIONS item 139).
+func (th *Theme) credits() string {
+	return th.Profile.Hyperlink(gnoshURL, gnoshURL) + th.Quiet.Render(th.Sep+"built on gno.land (") +
+		th.Profile.Hyperlink(gnoURL, gnoURL) + th.Quiet.Render(")"+th.Sep+"/license")
 }
 
 // begin starts a block of the given kind in the scrollback. No blank line
@@ -746,8 +780,8 @@ func (s *session) wake() time.Time {
 		soon(s.agentsHintUntil)
 	}
 	if (s.busy || s.cmdRun != "") && s.q == nil && s.th.Fall.moves() {
-		// The drops of the working mark fall on: the deeper the thought,
-		// the sooner the next step.
+		// The fall goes on through the working line: the deeper the
+		// thought, the sooner the next step.
 		soon(now.Add(s.th.Fall.every(s.fall.depth)))
 	}
 	if s.info.NotifyHooks || s.host.desktop(s.info.NotifChannel, "") {

@@ -83,6 +83,10 @@ type live struct {
 	own        []core.Tool // gnosh's own tools that are offered, without the Agent tool
 	toolStore  *sync.Map
 	roots      []string
+	// rootTrust says, of each added folder looked at, whether its own
+	// agents, skills and commands are read (defRoots).
+	rootTrustMu sync.Mutex
+	rootTrust   map[string]bool
 	// addedDirs are the folders /add-dir added, which a new start of the
 	// session (/restart, /cd) is given as --add-dir.
 	addedDirs []string
@@ -120,11 +124,15 @@ type live struct {
 	// (serverload.go).
 	load   loadWatch
 	typeMu sync.Mutex
-	types  map[string]string // a model's id -> its provider's type
+	types  map[string]string // provider/model id -> the provider's type
 	// modelMu guards large once the session is open, and switchMu makes
 	// /model one switch at a time.
 	modelMu  sync.Mutex
 	switchMu sync.Mutex
+	// offerMu makes taking the list of tools and offering it one step, so
+	// that two servers that connect at once cannot have the older list
+	// offered last, in place of the newer (mcp.go offerMCPTools).
+	offerMu sync.Mutex
 
 	// lastSummary is how the last summary ended.
 	lastSummary atomic.Pointer[agent.SummaryEvent]
@@ -164,6 +172,9 @@ type live struct {
 	capMu        sync.Mutex
 	roundsBefore int
 	capped       bool
+	// capKey is the turn the cap was reached in, with stream-json input,
+	// where each turn has a count of its own.
+	capKey string
 
 	// reopen is the id of the session this one opens again, after a
 	// rewind; rewindTo is the point /rewind asked to go back to, which
@@ -188,6 +199,10 @@ type live struct {
 	bgWG     sync.WaitGroup
 	// resumeTo is the session /resume asked to open in place of this one.
 	resumeTo string
+	// resumeShown is the list /resume showed last, by id: /resume N opens
+	// the Nth of it, though the folder's sessions have changed order since
+	// (a session beside this one was written to).
+	resumeShown []string
 	// branchTo is set by /branch: the name of the copy it asked for, which
 	// may be empty.
 	branchTo *string
@@ -467,7 +482,9 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 
 	// The tools, the instruction files and the system prompt. What the
 	// files the tools change held is kept beside the session's file.
-	l.checks = openCheckpoints(filepath.Join(l.st.dirs(l.ts.ID()).Session, "checkpoints"), l.p.now)
+	// (By the session's own file: a session resumed from another folder
+	// keeps its copies where they were made.)
+	l.checks = openCheckpoints(filepath.Join(strings.TrimSuffix(l.ts.Path(), ".jsonl"), "checkpoints"), l.p.now)
 	if err := l.buildTools(); err != nil {
 		return l, err
 	}
@@ -530,7 +547,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 			l.instr.Forget()
 		}
 	}
-	texts, err := loopTexts(l.texts, slices.Contains(l.toolNames(), gnoRunTool))
+	texts, err := loopTexts(l.texts, slices.Contains(l.toolNames(), gnoRunTool), l.ts.Path())
 	if err != nil {
 		return l, err
 	}
@@ -543,6 +560,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 		Relay:         !l.interactive && l.p.runAsks != "",
 		StartSource:   l.source,
 		Model:         l.large.model,
+		Fallbacks:     l.fallbacks(),
 		System:        system,
 		Tools:         l.tools,
 		Log:           l.log,
@@ -718,7 +736,16 @@ func (l *live) openTranscript(ctx context.Context) error {
 		}
 		return l.store.OpenReadOnly(ctx, id)
 	}
-	ts, err := open(!inv.ForkSession)
+	// A file -r named by its path that is not one of gnosh's own is gone
+	// on with as a copy in gnosh's folder (importSession).
+	foreign := path != "" && !l.store.Holds(path)
+	var ts *transcript.Session
+	var err error
+	if foreign {
+		ts, err = l.importSession(ctx, path, cwd)
+	} else {
+		ts, err = open(!inv.ForkSession)
+	}
 	if err != nil {
 		var locked *transcript.LockedError
 		switch {
@@ -735,7 +762,7 @@ func (l *live) openTranscript(ctx context.Context) error {
 		return fmt.Errorf("the session could not be opened: %w", err)
 	}
 	l.source = "resume"
-	if inv.ForkSession {
+	if inv.ForkSession && !foreign {
 		copied, err := l.store.Branch(ts, "")
 		ts.Close()
 		if err != nil {
@@ -752,6 +779,64 @@ func (l *live) openTranscript(ctx context.Context) error {
 	// screen already.)
 	l.showPast = l.source == "resume" && !l.p.restarted
 	return l.nameSession()
+}
+
+// importSession opens a session file from outside gnosh's folder, which
+// -r named by its path (a file someone shared, one a repository holds), as
+// a copy in gnosh's own folder, and goes on in the copy. The file itself
+// is never written, and nothing kept beside it is used: its checkpoints,
+// which /rewind would restore files from, are not gnosh's. What would
+// steer the session is left out of the copy (its scheduled tasks, goal,
+// todos, the kind it runs as), and every word in it but the model's own
+// is read as data, gnosh's own tags in it broken: the file was not
+// written by this gnosh, and its tool results or notes could pass for
+// gnosh's words, or its prompts for the person's standing rules.
+func (l *live) importSession(ctx context.Context, path, cwd string) (*transcript.Session, error) {
+	src, err := l.store.OpenPath(ctx, path, true)
+	if err != nil {
+		return nil, err
+	}
+	defer src.Close()
+	ts, err := l.store.Import(src, cwd, importedEntry)
+	if err != nil {
+		return nil, err
+	}
+	l.notice(agent.LevelInfo, "session", fmt.Sprintf("%s is not one of gnosh's own session files, so it goes on as a copy in gnosh's folder (%s): the file is not written to, what it holds besides the model's replies is read as data, and its scheduled tasks, goal and todos are not brought back.", path, shortID(ts.ID())))
+	return ts, nil
+}
+
+// importedEntry is an entry of a session file from outside gnosh's folder
+// as it is copied in (importSession): a note that steers the session, a
+// branch's pointer or a count is left out, and every word but the model's
+// replies is made data.
+func importedEntry(e transcript.Entry) (transcript.Entry, bool) {
+	switch e.Type {
+	case transcript.TypeMeta, transcript.TypeBranch, transcript.TypeUsage:
+		return e, false
+	case transcript.TypeAssistant:
+		return e, true
+	}
+	m := e.Message
+	m.Blocks = untrustedBlocks(m.Blocks)
+	e.Message = m
+	e.Summary = prompt.Untrusted(e.Summary)
+	e.Label, e.Result, e.Title = prompt.Untrusted(e.Label), prompt.Untrusted(e.Result), prompt.Untrusted(e.Title)
+	return e, true
+}
+
+// untrustedBlocks is a copy of blocks with gnosh's own tags broken in
+// every text, a tool result's too.
+func untrustedBlocks(blocks []core.Block) []core.Block {
+	if blocks == nil {
+		return nil
+	}
+	out := make([]core.Block, len(blocks))
+	for i, b := range blocks {
+		b.Text = prompt.Untrusted(b.Text)
+		b.Content = untrustedBlocks(b.Content)
+		out[i] = b
+	}
+	return out
 }
 
 // nameSession gives the session the name -n asks for. A name the person
@@ -939,15 +1024,24 @@ func (l *live) statusFacts() map[string]string {
 // noteBackground keeps the count of commands that run in the background
 // among the facts for a status line.
 func (l *live) noteBackground() {
-	l.bgEver.Store(true)
 	// The commands and the sub-agents that run in the background.
 	running := len(l.backgroundAgents())
+	tasks := 0
 	if l.shell != nil {
-		for _, t := range l.shell.Tasks() {
+		all := l.shell.Tasks()
+		tasks = len(all)
+		for _, t := range all {
 			if t.Running {
 				running++
 			}
 		}
+	}
+	if running > 0 || tasks > 0 {
+		// Only work that went to the background counts: every Bash call
+		// that ended in the foreground did, and a run then waited as for
+		// background work, its result line written before the structured
+		// output and the end's checks.
+		l.bgEver.Store(true)
 	}
 	value := ""
 	if running > 0 {
@@ -1286,34 +1380,37 @@ func (l *live) onPanic(what string, v any, stack []byte) {
 func (l *live) info() SessionInfo {
 	m := l.agent.Model()
 	info := SessionInfo{
-		ID:             l.ts.ID(),
-		Path:           l.ts.Path(),
-		Cwd:            l.cfg.Paths.Cwd,
-		Model:          m.Info.ID,
-		Address:        m.Address,
-		Thinking:       m.Level,
-		ThinkingBudget: m.ThinkingBudget,
-		BudgetNote:     m.BudgetNote,
-		Tools:          l.toolNames(),
-		MCPServers:     l.mcpStatus(),
-		Mode:           string(l.engine.Mode()),
-		Commands:       l.slash.names(),
-		CommandList:    l.slash.list(),
-		Skills:         append(l.typedSkills(), l.mcpPromptInfos()...),
-		Version:        l.p.o.BuildID,
-		Interactive:    l.interactive,
-		SidePanel:      l.cfg.Options.SidePanel.V,
-		Verbose:        l.cfg.Options.Verbose.V,
-		ViewMode:       l.viewModeSet(),
-		Vim:            l.cfg.Options.EditorMode.V == "vim",
-		Theme:          l.cfg.Options.Theme.V,
-		OutputStyle:    l.styleNow(),
-		Color:          l.sessionColor(),
-		Keybindings:    l.keybindingsPath(),
-		ShowPast:       l.showPast,
-		NotifChannel:   l.notifChannel(),
-		AskTimeout:     time.Duration(l.askIdle.Load()),
-		Resume:         "gnosh -r " + l.ts.ID(),
+		ID:               l.ts.ID(),
+		Path:             l.ts.Path(),
+		Cwd:              l.cfg.Paths.Cwd,
+		Model:            m.Info.ID,
+		Address:          m.Address,
+		Thinking:         m.Level,
+		ThinkingBudget:   m.ThinkingBudget,
+		BudgetNote:       m.BudgetNote,
+		Tools:            l.toolNames(),
+		MCPServers:       l.mcpStatus(),
+		Mode:             string(l.engine.Mode()),
+		Commands:         l.slash.names(),
+		CommandList:      l.slash.list(),
+		Skills:           append(l.typedSkills(), l.mcpPromptInfos()...),
+		Version:          l.p.o.BuildID,
+		Interactive:      l.interactive,
+		SidePanel:        l.cfg.Options.SidePanel.V,
+		Verbose:          l.cfg.Options.Verbose.V,
+		ViewMode:         l.viewModeSet(),
+		HideTurnDuration: !l.liveBool("showTurnDuration", l.cfg.Options.ShowTurnDuration.V),
+		ListIgnored:      !l.liveBool("respectGitignore", l.cfg.Options.RespectGitignore.V),
+		FileSuggestion:   l.cfg.FileSuggestion != nil,
+		Vim:              l.cfg.Options.EditorMode.V == "vim",
+		Theme:            l.cfg.Options.Theme.V,
+		OutputStyle:      l.styleNow(),
+		Color:            l.sessionColor(),
+		Keybindings:      l.keybindingsPath(),
+		ShowPast:         l.showPast,
+		NotifChannel:     l.notifChannel(),
+		AskTimeout:       time.Duration(l.askIdle.Load()),
+		Resume:           "gnosh -r " + l.ts.ID(),
 	}
 	for _, it := range l.cfg.Options.VimInsertModeRemaps {
 		info.VimRemaps = append(info.VimRemaps, it.V)
@@ -1494,18 +1591,10 @@ func (c *controls) Command(ctx context.Context, line string) (CommandResult, err
 	if point := l.rewindTo; err == nil && res.Handled && res.Name == "rewind" && point != "" {
 		all := l.rewindAll
 		l.rewindTo, l.rewindAll = "", false
-		files := ""
-		if all {
-			// The files first, while the session that changed them is the
-			// one behind the controls.
-			done, failed := l.checks.restore(l.rewindFiles(point))
-			l.flog.logf("turn", "the files were put back as they were before the prompt in entry %s: %d put back, %d not", point, len(done), len(failed))
-			files = restoreSaid(done, failed)
-		}
-		text, rerr := c.Rewind(ctx, point)
+		text, files, rerr := c.rewindWith(ctx, point, all)
 		if rerr != nil {
 			if files != "" {
-				return res, fmt.Errorf("%s But the conversation could not be taken back: %w", files, rerr)
+				return res, fmt.Errorf("%s But the session could not be opened again: %w", files, rerr)
 			}
 			return res, rerr
 		}
@@ -1645,13 +1734,16 @@ func (c *controls) BackgroundWork() (running []string, ever bool) {
 // CheckBackground hands the model a checkpoint in a run that has waited
 // long for background work: a note that wakes it, says what still runs
 // and for how long the run has waited, and asks whether to stop that work
-// or to wait on.
-func (c *controls) CheckBackground(waited time.Duration, work []string) {
+// or to wait on. It says why when the model cannot be asked.
+func (c *controls) CheckBackground(waited time.Duration, work []string) error {
 	l := c.cur()
-	if l.agent == nil || l.closing.Load() {
-		return
+	switch {
+	case l.agent == nil || l.closing.Load():
+		return errors.New("the session is closing")
+	case l.turnsSpent():
+		return fmt.Errorf("its %d turns of the model are spent (--max-turns)", l.maxTurns)
 	}
-	_ = l.agent.Tell(agent.Note{
+	return l.agent.Tell(agent.Note{
 		Text:   l.texts.PrintWait(roundTime(waited), strings.Join(work, ", ")),
 		Source: "print-wait",
 		Notice: "The run has waited " + roundTime(waited) + " for background work; the model is asked whether to go on waiting.",
@@ -1686,19 +1778,26 @@ func (c *controls) LeftRunning() []string {
 	return l.shell.LeftRunning()
 }
 
-// TellLeftRunning hands the model, as a run is about to end, what its
-// commands left running, which the end stops: a note that wakes it, so
-// that a server the task needs can be kept with setsid. It reports
-// whether the note went to the model.
+// TellLeftRunning stops, as a run is about to end, what its commands left
+// running, which the end would stop, and hands the model what that was: a
+// note that wakes it, so that a server the task needs is started again
+// with setsid. They are stopped first, so that the one started again finds
+// its port free (a copy started beside the old one could not take it, the
+// old one would answer the check, and the end would then stop it: two
+// FrontierHarness tasks were lost so). It reports whether the note went to
+// the model.
 func (c *controls) TellLeftRunning(left []string) bool {
 	l := c.cur()
 	if l.agent == nil || l.closing.Load() {
 		return false
 	}
+	if l.shell != nil {
+		l.shell.StopLeftRunning()
+	}
 	return l.agent.Tell(agent.Note{
 		Text:   l.texts.PrintLeftovers(strings.Join(left, ", ")),
 		Source: "print-leftovers",
-		Notice: "The run is about to end, and stops what its commands left running: " + strings.Join(left, ", ") + ". The model is told once, to keep what the task needs with setsid.",
+		Notice: "The run is about to end, and stopped what its commands left running: " + strings.Join(left, ", ") + ". The model is told once, to start again with setsid what the task needs.",
 		Wake:   true,
 	}) == nil
 }

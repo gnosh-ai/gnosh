@@ -518,12 +518,25 @@ func TestBadEnvironment(t *testing.T) {
 		t.Error("Run with a relative working directory returned no error")
 	}
 
-	// A working directory that has gone is something the model can be told.
+	// A working directory that has gone: the command runs in the nearest
+	// folder above it that is there, and the session moves there.
 	env := newEnv(t)
-	env.Cwd = filepath.Join(env.Cwd, "gone")
+	root := env.Cwd
+	env.Cwd = filepath.Join(root, "gone")
 	res, err := tool.Run(t.Context(), call, env)
 	if err != nil {
 		t.Fatalf("Run in a missing directory: %v", err)
+	}
+	if res.IsError || res.Cwd != root || !strings.Contains(core.TextOf(res.Content), "was not there any more") {
+		t.Errorf("result = %q (IsError %v, Cwd %q); want it run in %s", core.TextOf(res.Content), res.IsError, res.Cwd, root)
+	}
+	// With no folder of the session's there at all, it is something the
+	// model can be told.
+	env = newEnv(t)
+	env.Roots = []string{filepath.Join(env.Cwd, "absent")}
+	env.Cwd = filepath.Join(env.Cwd, "absent", "deeper")
+	if res, err = tool.Run(t.Context(), call, env); err != nil {
+		t.Fatalf("Run with no folder there: %v", err)
 	}
 	if !res.IsError || !strings.Contains(core.TextOf(res.Content), "is not there any more") {
 		t.Errorf("result = %q (IsError %v); want a plain refusal", core.TextOf(res.Content), res.IsError)

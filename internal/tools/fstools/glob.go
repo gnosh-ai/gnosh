@@ -285,6 +285,10 @@ func (t *globTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 			if !p.rest.Match(f.rel) {
 				return
 			}
+			shown := filepath.Join(p.base.abs, filepath.FromSlash(f.rel))
+			if o.denied(shown, f.path) {
+				return
+			}
 			var info fs.FileInfo
 			var err error
 			if f.isLink() {
@@ -297,7 +301,7 @@ func (t *globTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 			if err != nil || !info.Mode().IsRegular() {
 				return
 			}
-			found.add(foundFile{path: filepath.Join(p.base.abs, filepath.FromSlash(f.rel)), modTime: info.ModTime()})
+			found.add(foundFile{path: shown, modTime: info.ModTime()})
 		},
 	}
 	if err := walkTree(sctx, job, problems); err != nil {

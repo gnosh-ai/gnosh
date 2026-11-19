@@ -272,18 +272,24 @@ func (l *live) mcpLogout(c *SlashContext, s *mcpServer) error {
 }
 
 // mcpReconnect lets go of a server's connection and makes it again, and
-// waits for it.
+// waits for it. A server the person disabled stays so: a sign-in that
+// ends after /mcp disable, or /mcp logout, does not start it again.
 func (l *live) mcpReconnect(s *mcpServer) {
 	l.mcp.mu.Lock()
+	if s.status == "disabled" {
+		l.mcp.mu.Unlock()
+		return
+	}
 	old := s.client
 	s.gen++
+	gen := s.gen
 	s.client, s.tools, s.err, s.status = nil, nil, "", "pending"
 	l.mcp.mu.Unlock()
 	if old != nil {
 		_ = old.Close()
 	}
 	l.offerMCPTools()
-	l.connectMCP(s)
+	l.connectMCP(s, gen)
 }
 
 // mcpSignedIn reports whether a sign-in is kept for the server.

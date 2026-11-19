@@ -191,11 +191,7 @@ func (l *live) cdTrust(ctx context.Context, c *SlashContext, dir, cur string) (s
 	if st.cfg == nil {
 		return false, cdMistakes(dir, cur, st.problems)
 	}
-	var held []trust.Holding
-	for _, h := range st.cfg.Held {
-		held = append(held, trust.Holding{Kind: h.Kind, Text: h.Text, File: h.Origin.File, Line: h.Origin.Line})
-	}
-	held = append(held, st.gitPrograms...)
+	held := st.heldList()
 	record := st.trustStore()
 	d := trust.Decide(trust.Asked{Folder: folder, Verdict: record.Check(folder), Interactive: true, Held: len(held)})
 	if d.Ask {

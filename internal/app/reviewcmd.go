@@ -157,9 +157,9 @@ const (
 
 // reviewTask is what /review asks of the model: the range in words, then
 // the command that shows it.
-const reviewTask = `The user typed /review. Review the changes %s for bugs. %s shows them. Read the changed files around each change, and the code that calls into them, before you judge a change.
+const reviewTask = `The user typed /review. Review the changes %s for bugs, and for what goes against the project's instruction files (GNOSH.md, CLAUDE.md, AGENTS.md). %s shows them. Read the changed files around each change, and the code that calls into them, before you judge a change.
 
-Look for what will go wrong when this code runs: a wrong result; a case that is not handled (empty, nil, zero, the last one, an error); a crash, a leak or a race; a promise to a caller that is broken; a test that does not test what it says. For each, give the file and line, how sure you are, and how it fails: the input, and what comes out instead of what should. Leave out style, naming and taste unless they hide a bug. If you find nothing, say so plainly. Change no file.`
+Look for what will go wrong when this code runs: a wrong result; a case that is not handled (empty, nil, zero, the last one, an error); a crash, a leak or a race; a promise to a caller that is broken; a test that does not test what it says. For each, give the file and line, how sure you are, how it fails (the input, and what comes out instead of what should), and the fix you suggest. Mark each one Important (these changes bring it), Pre-existing (it was there before, in code the changes touch or lean on) or Nit (small, but it will bite someone). Leave out style, naming and taste unless they hide a bug. If you find nothing, say "Code review found no issues." Change no file.`
 
 // simplifyTask is what /simplify asks of the model: the range in words,
 // then the command that shows it. It does not hunt for bugs; /review does.

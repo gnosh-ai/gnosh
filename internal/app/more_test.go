@@ -78,14 +78,16 @@ func TestResumeByWords(t *testing.T) {
 }
 
 // /resume lists the folder's other sessions and opens one in place of the
-// session that is open, which is kept.
+// session that is open, which is kept. /resume N opens the Nth of the list
+// as it was shown, though a session beside it was written to since (it
+// listed them again, and opened that one).
 func TestResumeInsideASession(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "The earlier answer."})
 	run(t, w, "-p", "the earlier session's prompt").wantCode(t, 0)
 	earlier := w.Sessions()[0]
 	id := strings.TrimSuffix(earlier[strings.LastIndex(earlier, "/")+1:], ".jsonl")
 
-	w.Model.Add(apptest.Reply{Text: "A new answer."}, apptest.Reply{Text: "Back in the earlier session."})
+	w.Model.Add(apptest.Reply{Text: "A new answer."}, apptest.Reply{Text: "A third answer."}, apptest.Reply{Text: "Back in the earlier session."})
 	s := sit(t, w)
 	s.see("Type a prompt and Enter.")
 	s.typeLine("a new session's prompt")
@@ -97,6 +99,8 @@ func TestResumeInsideASession(t *testing.T) {
 	s.see("the earlier session's prompt")
 	s.typeLine("/resume 7")
 	s.see("error: ")
+	// A session beside this one is written to: it comes first now.
+	run(t, w, "-p", "a third session's prompt").wantCode(t, 0)
 	s.typeLine("/resume 1")
 	s.see("Session " + id + " is open: the earlier session's prompt. The one before is kept; gnosh -r ")
 	s.typeLine("where were we?")
@@ -109,8 +113,8 @@ func TestResumeInsideASession(t *testing.T) {
 	if code := s.exit(); code != 0 {
 		t.Errorf("exit code %d", code)
 	}
-	if n := len(w.Sessions()); n != 2 {
-		t.Errorf("%d session files, want the two", n)
+	if n := len(w.Sessions()); n != 3 {
+		t.Errorf("%d session files, want the three", n)
 	}
 	for _, path := range w.Sessions() {
 		checkSession(t, w, path)

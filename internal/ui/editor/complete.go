@@ -128,6 +128,17 @@ func (e *Editor) accept(cand Candidate) {
 	}
 }
 
+// Recomplete asks the application for candidates again, as when the text
+// has just changed, where a list is open or would open by itself at the
+// cursor: for candidates that came in after the list was made (a command
+// of the person's own that answered later). Elsewhere it does nothing.
+func (e *Editor) Recomplete() {
+	if e.comp == nil && !e.inTriggerWord() {
+		return
+	}
+	e.refresh(false, false)
+}
+
 // refresh asks the application for candidates and opens, updates or
 // closes the list to match. explicit says the person asked with Tab: a
 // single candidate is then taken at once. changed says the text changed

@@ -191,6 +191,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "model", Args: "[provider/model [level]]", Summary: "List the models, or switch to one. The choice is saved.", InRun: true, Run: l.slashModel},
 		{Name: "status", Summary: "What this session is, what it is doing, and every setting with where it came from.", InRun: true, Run: l.slashStatus},
 		{Name: "release-notes", Summary: "The changes this build of gnosh was made from, newest first.", InRun: true, Run: l.slashReleaseNotes},
+		{Name: "license", Aliases: []string{"licence"}, Summary: "gnosh's copyright, licence and credits.", InRun: true, Run: l.slashLicense},
 		{Name: "focus", Args: "[on|off]", Summary: "Focus view: each run of tool calls folded into one line that sums it up, with what the edits changed; the prompts and the model's words as they are. A bare /focus turns it over. Kept for every project.", InRun: true, Run: l.slashFocus},
 		{Name: "theme", Args: "[auto|dark|light|ansi]", Summary: "The interface's colours: for the terminal's background, dark, light, or the terminal's own sixteen. Kept for every project.", InRun: true, Run: l.slashTheme},
 		{Name: "config", Args: "[key[=value] ...]", Summary: "gnosh's options and where each value comes from; key=value sets one for every project, from gnosh's next start, and key= takes it away.", InRun: true, Run: l.slashConfig},
@@ -223,6 +224,7 @@ func (s *slashSet) own() []SlashCommand {
 		{Name: "color", Args: "[" + strings.Join(PromptColors, "|") + "|default]", Summary: "Give this session's prompt mark a colour, to tell it from other sessions; with none named, one at random. It is kept with the session.", InRun: true, Run: l.slashColor},
 		{Name: "resume", Aliases: []string{"continue"}, Args: "[number, id, name or words]", Summary: "Open another session of this folder in place of this one, which is kept. Words find the session whose name or first prompt has them.", Run: l.slashResume},
 		{Name: "fork", Args: "<prompt>", Summary: "Copy the conversation into a new session that works on the prompt in the background, as a run of its own, while this one goes on here.", Run: l.slashFork},
+		{Name: "subtask", Args: "<task>", Summary: "Copy the conversation into a run in the background that works on the task while this session goes on; what it answers comes back here when it is done.", Run: l.slashSubtask},
 		{Name: "branch", Args: "[name]", Summary: "Copy the conversation into a new session and go on in the copy. The original is kept.", Run: l.slashBranch},
 		{Name: "rewind", Aliases: []string{"checkpoint", "undo"}, Args: "[number [all|files]]", Summary: "Take the conversation back to before one of your prompts; with all, the files Write and Edit changed too; with files, the files alone.", Run: l.slashRewind},
 		{Name: "plan", Args: "[task]", Summary: "Switch to plan mode: the model looks and plans, and changes nothing. With a task after it, starts on it.", Run: l.slashPlan},
@@ -884,6 +886,9 @@ func (l *live) switchedOff(m agent.Model) []string {
 	}
 	if l.cfg.StatusLineOff != "" {
 		off = append(off, "the status line ("+l.cfg.StatusLineOff+")")
+	}
+	if l.cfg.FileSuggestionOff != "" {
+		off = append(off, "the fileSuggestion command, so @ offers gnosh's own search ("+l.cfg.FileSuggestionOff+")")
 	}
 	return off
 }

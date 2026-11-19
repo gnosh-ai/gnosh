@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -304,6 +306,10 @@ func parseConfig(path, scope string, servers map[string]json.RawMessage, project
 			probs = append(probs, Problem{Path: path, Server: name, Message: fmt.Sprintf("its entry cannot be read (%v)", err)})
 			continue
 		}
+		if why := blurredName(name); why != "" {
+			probs = append(probs, Problem{Path: path, Server: name, Message: why + ", so it is not used: rename it"})
+			continue
+		}
 		c := Config{Name: name, Scope: scope, Path: path}
 		var unset, kept []string
 		x := func(s string) string {
@@ -449,4 +455,45 @@ func ToolName(server, tool string) string {
 		return b.String()
 	}
 	return "mcp__" + clean(server) + "__" + clean(tool)
+}
+
+// MaxToolName is the longest tool name the model's APIs take: OpenAI's
+// function names, and Anthropic's tools', are at most 64 characters.
+const MaxToolName = 64
+
+// maxServerName is the longest name a server may have, as its tools' names
+// write it: FitToolName keeps mcp__<server>__ whole when it shortens a name.
+const maxServerName = MaxToolName - 9 - len("mcp__") - len("__")
+
+// blurredName says why a server's name is not used, or "". Its tools are
+// named mcp__<server>__<tool>, and a rule for the tools of a server reads
+// as mcp__<server>__*: the rule for github's would cover the tools of a
+// server named github__x (mcp__github__x__tool) or github_
+// (mcp__github___tool), and one for a server whose name a shortened tool
+// name cut short would cover none of them. So a name that, as the tools'
+// names write it, holds "__", ends in "_" or is longer than maxServerName
+// is refused (the MCP review of 2026-11-19).
+func blurredName(name string) string {
+	server := strings.TrimSuffix(strings.TrimPrefix(ToolName(name, ""), "mcp__"), "__")
+	switch {
+	case server == "":
+		return "a server's name cannot be empty"
+	case strings.Contains(server, "__") || strings.HasSuffix(server, "_"):
+		return fmt.Sprintf("its tools would be named mcp__%s__<tool>, and a rule for the tools of another server could cover them: a server's name holds no \"__\" and does not end in \"_\"", server)
+	case len(server) > maxServerName:
+		return fmt.Sprintf("a server's name is at most %d characters long, so that the names of its tools, which the model's APIs take up to %d characters long, keep it whole", maxServerName, MaxToolName)
+	}
+	return ""
+}
+
+// FitToolName shortens a tool's name that is longer than the model's APIs
+// take: its start is kept, and its end becomes a short hash of the whole,
+// so that two long names that begin alike stay apart. A name that fits
+// comes back as it was.
+func FitToolName(name string) string {
+	if len(name) <= MaxToolName {
+		return name
+	}
+	sum := sha256.Sum256([]byte(name))
+	return name[:MaxToolName-9] + "_" + hex.EncodeToString(sum[:4])
 }

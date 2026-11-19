@@ -2166,3 +2166,1266 @@ or kept with the reason said (27).
     rows of its text, its numbered answers): a number answers it, and
     words with Enter answer no, with them, as in the peek (answerWords,
     shared). The peek still shows the whole text.
+
+135. **A run stops what its commands left running before it tells the
+    model.** DECISIONS 117's note told the model, as a run was about to
+    end, that what its commands left running would be stopped, and to
+    start what the task needs again with setsid. But the old copy still
+    ran: a server started again beside it could not take its port, the
+    check the model made reached the old one, and the run's end stopped
+    that one, so no server was left. (The FrontierHarness peer's second
+    lost task, pypi-server, on a build before 117: `nohup python3 ... &`,
+    started again the same way after an edit, checked on its port, done,
+    and stopped at exit; Pi kept it and passed.) Now the run stops them
+    first (shelltool Manager.StopLeftRunning, the sweep Close makes) and
+    tells the model they were stopped; one it starts again with setsid
+    finds the port free and outlives the run.
+
+136. **Runs started from the agent view over a session keep its mode.**
+    Claude Code's sessions dispatched from an agent view opened with ←
+    start in the directory's defaultMode, or else in the mode of the
+    session the view was opened from. gnosh's view over a session (←
+    twice) started its runs with no mode, so from a session started with
+    -y every run stopped at its first command to ask. Now the view is
+    given the session's mode for the runs it starts
+    (--permission-mode=<mode>); a session in the default mode names none,
+    and the run reads its folder's defaultMode itself. gnosh agents keeps
+    its own --permission-mode flag for the runs it starts.
+
+137. **After a review of the agent view's evening.** A second reviewer
+    read 963b235..d1eae3e and found five things; these were fixed. The
+    serious one, in the permission engine, is its own commit: a git -C
+    with a .. (git goes through a link before its ..) or a pattern is no
+    longer taken for the line's own folder, and the work-tree guard no
+    longer folds a .. in a git place. In the agent view: a question that
+    has just come takes no answer for a moment, as the session's own
+    questions do (guardShown since it was first listed, guardPause since
+    the key before); a digit typed in that moment is typing, and words
+    begun before the question was seen go to the run, which reads them
+    once it goes on, instead of answering it "no, with them". The
+    session's mode is given only to runs started in the session's own
+    folder (another folder's defaultMode stands, as Claude Code's comes
+    first). A run's end line is written to the millisecond, so that the
+    status line's count of runs done since a look in the same second
+    finds it; an end line followed by more of what the run printed is a
+    quote, not its end; and how a run ended is shown as one line.
+
+138. **The fall runs through the words, behind one mark (Jae, 18 November
+    2026; replaces the strip of 116).** Of the ten-cell strip of 116 he
+    said: "make it two part (it already is) where the first part is like
+    claude, i think a single letter, and then the second part is the
+    text that starts non-white and the whole text is animated. the thing
+    that moves rightward is a different color of the text, but the text
+    is always the same... and the transition to fasater/more rightward
+    should be faster".
+    - The mark is one cell again: a spark that turns through four of
+      gnosh's own sparkle marks, swelling and dwindling, six shapes a
+      second while calm and twelve in a deep thought, in the colour of
+      the drop that started last. One changing character before the
+      words is what he asked for by "like claude"; the shapes are
+      gnosh's (UI-50's sparkle) and not that program's.
+    - While gnosh works the words of the line are no longer the
+      terminal's own colour: they stand in a grey between the quiet grey
+      and white (the quiet grey itself on a light background), and what
+      follows them (the time, the key that stops) in the quiet grey, as
+      before.
+    - The drops of 116 fall through the letters themselves, as colour. A
+      drop starts at the first letter and is pulled to the right along
+      the whole line, the time and the keys included. The letter its
+      head is over takes the drop's colour, and so do the letters behind
+      it: one, and as many more as the drop crosses in a seventh of a
+      second, up to eight, the first four in the head's colour and the
+      rest in the next, fading into the letters' own. No drop goes
+      faster than 60 cells a second, however long the line. No letter
+      changes, moves or is hidden. (UI-52's one colour holds for every
+      letter no drop is over; the colour that passes is what he asked
+      for.)
+    - Depth is as in 116 but comes sooner: it begins three seconds into
+      one unbroken thought and is full at fifteen, where 116 had five
+      and forty, and "is deep in thought" is said from fifteen. Calm:
+      one drop at a time, a pull of 8 cells a second each second, pale
+      (a tenth of the way from the colour of the person's own words to
+      its own colour). Deep: three at a time, a pull of 40, the four
+      colours of 116, bold heads, glints toward the pale colour, the
+      mark bold. Frames, settling, and what happens with no colour and
+      while a question waits are as in 116.
+    - With sixteen colours the words are faint and a calm drop is one of
+      the terminal's whites; on a light background a calm drop is the
+      terminal's own colour over grey words.
+    - "The transition ... should be faster" was read as the build-up to
+      the deep state, not as a stronger pull on each drop. The pull was
+      raised a little all the same (5 to 8, 30 to 40), since the line is
+      several times longer than the strip was.
+
+139. **The credits and the legal notices are in the interface.** gnosh's
+    licence (LICENSE.md, the Additional Terms) asks an interface built on
+    gnosh to show "built on gnosh" with a link to https://gnosh.ai, and the
+    GnoVM's (gno.land's) asks an interface that includes the GnoVM to show
+    "built on gno.land" with a link to https://gno.land; gnosh showed
+    neither except at the end of gnovm_list. Now the header that opens a
+    session ends with one line: https://gnosh.ai · built on gno.land
+    (https://gno.land) · /license, the addresses as links where the
+    terminal takes them. /license (also /licence) shows the copyright, that
+    there is no warranty, the licence and where to read it, and both
+    credits: the "Appropriate Legal Notices" of the licence's section 0, so
+    that under its section 5 d a work made from gnosh shows them in its own
+    interface too. gnovm_list ends with gnovm.AttributionNotice, whose
+    words it already printed. Asked by Jae on 18 November 2026: "make sure
+    the new gnosh license is good, strong attribution too".
+
+140. **Fallback models, as Claude Code's fallbackModel.** `"fallbackModel"`
+    in gnosh.json (one "<provider>/<model id>", or a list of up to three;
+    a project's waits for trust as its "model" does) and `--fallback-model`
+    (comma-separated, bare names as -m takes them) name the models a turn
+    goes on with, in order, when the session's model cannot answer. What
+    hands a turn on: a server that cannot be reached or says it is not
+    ready (gateway errors, a connect timeout), one that says it is too
+    busy (overloaded), one that does not have the model (404), at once
+    and with no wait; and any other trouble that may pass, once the retry
+    policy's wait for it runs out. A limit on the person's requests, a key
+    that is refused, and a request too long or that no model would take
+    are not: another model would meet them too. Claude Code leaves
+    "transport errors" out; gnosh counts a server that cannot be reached
+    as unavailable, since each model of gnosh's lives on a server of its
+    own. The switch holds for the rest of the turn (its sub-agents start on
+    the fallback, and keep the list), and the next turn asks the session's
+    model first again; a model chosen with /model outranks it. A fallback
+    is made (its client, its window) only when a turn first needs it, so
+    that one whose server is down costs nothing until then; one that
+    cannot be made, whose context window is smaller than the session
+    model's (the conversation would be cut to fit it), or that is on the
+    same model server of one's own as the model that failed (no help when
+    that server is down or busy, and a router that holds one model at a
+    time would unload the one in use to load it), is passed over with a
+    warning. The session's thinking level carries over where the
+    fallback has it. The person is told in one line, as a retry event that
+    names the fallback (RetryEvent.FellBack), not counted as a retry.
+    Summaries fall back too. When every fallback fails as well, the last
+    one is waited for as any model is. Not built: a fallback chain for
+    the small model's side jobs (they fall back to the session's model
+    already).
+
+141. **/subtask, as Claude Code's.** `/subtask <task>` copies the
+    conversation into a run in the background that works on the task, as
+    /fork does, and when the run ends what it printed comes back to this
+    conversation: a task notification (prompt text subtask-ended, the
+    answer marked as the run's own words and defused) that starts a turn
+    of its own when the session is idle, so the model tells the person
+    what came of it. The run is named after the task's first words (six
+    at most), as Claude Code names its fork. In Claude Code /subtask is an
+    in-session forked sub-agent with a panel under the prompt; gnosh's is
+    a run of its own (its questions wait in the agent view, ← ← shows it
+    meanwhile), because gnosh's background runs are where its agent view
+    already lives, and a fork in the same process would take turns with
+    the session on one model server and push its cache out. A report is
+    the last 40 lines the run printed, and says so when it was cut. As
+    with /fork, a running turn must end first. Not built: the model
+    starting a fork of its own (Claude Code's fork mode).
+
+142. **The review of fallback models and /subtask (1835835, fd5fc19).** A
+    fresh-eyes review found nine problems, fixed together:
+    - A fallback whose window nobody knew was let through and taken to
+      hold UnknownWindow tokens, so a long conversation was slid and
+      summarized for good to fit it. Now a fallback must hold the
+      conversation as it stands (the failed request's size under its
+      compaction point, a window nobody knows counted as UnknownWindow;
+      for a summary, which is there to cut, under its hard limit). A
+      smaller window that does hold it is used.
+    - A fallback that was down made a turn fail sooner than none: it was
+      called not running after 90 s, and the session forgot that its own
+      model had been answering. Which models have answered is now kept
+      per model for the session, and when every fallback fails the turn
+      goes back to the session's own model and waits for it as it would
+      without them.
+    - The same-server guard compared only with the model that failed
+      last; every model server of one's own that failed in a turn is now
+      remembered.
+    - What a provider's type adds to a request was looked up by the
+      model's id alone, so a fallback with the same id on a provider of
+      another type changed the session model's requests (its thinking
+      switch was lost). It is kept by provider and model; the agent's
+      Outgoing hook is given the provider's name.
+    - Making a fallback read the providers' lists without switchMu, as
+      every other maker of a model holds it.
+    - Esc while a fallback was being made ready ended the turn as failed;
+      it is a stop. The line says "getting the fallback model … ready".
+    - A summary handed to a fallback said "No summary was made"; it says
+      nothing, and the fallback's own summary reports.
+    - A panic at a turn's very end left the fallback in force.
+    - /subtask: a run that began and ended between two looks was said
+      not to have started; how it ended is read from its log.
+    Not changed: a /subtask whose session closes or restarts before it
+    ends does not report back (its answer stays in its own session and in
+    the agent view).
+
+143. **The review of /rewind and its file copies.** A fresh-eyes review of
+    the rewind (checkpoint.go, rewind.go) found five ways to lose work or
+    put back the wrong thing, fixed together:
+    - A rewind of the conversation alone left the copies kept under the
+      prompts it took out unread, so a later rewind of the files put back
+      an abandoned attempt (or nothing). The files' rewind now goes by the
+      prompts of the session's file in order, those taken out of the
+      conversation among them: their changes were made to the files all
+      the same.
+    - A rewind overwrote or took away what a file held without looking:
+      the person's own edits, or a command's, since the model's change. It
+      now keeps what a file holds first, when that is not what is put
+      back, in the session's checkpoints/replaced, and says where. (Claude
+      Code overwrites; gnosh never loses work to a rewind.)
+    - A sub-agent's changes were kept as the session's own, so a rewind
+      took back work a worktree sub-agent had left for the person, or
+      wrote into a tree already removed. As in Claude Code, they are not
+      kept.
+    - A prompt typed while a turn ran was cut back to where it was typed,
+      with the turn's changes made meanwhile left in place and shown as
+      interrupted. The cut is where the prompt went out; a prompt that
+      waited is marked as taken back, so that a session opened again does
+      not send it.
+    - The copies were looked for under the folder gnosh was started in,
+      not the session's own: a session resumed from another folder, and a
+      branch (/branch, /fork, /subtask, --fork-session), found none. They
+      are found by the session's file, and a branch also reads the copies
+      of the session it came from, under the prompts it took over.
+    Also: a copy that fails is noted, so a later one is not taken for what
+    the file held before; copies are named afresh, not by count; a rewind
+    of the files waits for the sub-agents in the background; the files of
+    "/rewind N all" are put back only once the rewind is written and the
+    background work is stopped; and the menu is worked out from one read
+    of the session's file. Not changed yet: copies are never pruned, and
+    fileCheckpointingEnabled is not built.
+
+144. **File copies: the 100 most recent prompts, hard links, and
+    fileCheckpointingEnabled.** As Claude Code keeps the file snapshots of
+    its 100 most recent checkpoints, a session keeps the copies of its 100
+    most recent prompts (checkpointPrompts): when a new prompt's first copy
+    is made, the copies of older prompts are deleted, the index is written
+    again without them, and the prompts are noted first in the store's file
+    "pruned". A rewind of the files to before one of those (or to before a
+    prompt of a branch's origin whose copies were let go) is refused, and
+    the list says so: putting back what is left would be wrong, not just
+    short. A file with another name (a hard link, as pnpm makes them) is
+    not put back, as in Claude Code: a new file in its place would cut it
+    off from its other names. "options": {"fileCheckpointingEnabled": false}
+    keeps nothing; a rewind of the files then says why it cannot be done.
+    Not built: Claude Code's retention sweep (cleanupPeriodDays): gnosh
+    keeps a session's copies as long as its file.
+
+145. **The security review of the file tools' paths.** A fresh-eyes review
+    of how Read, Write, Edit, Glob and Grep are judged outside Bash found:
+    - Grep and Glob left Read deny rules out of a folder they walked: the
+      gate judged the folder, and a deny on Read(./customer-data/**) or
+      Read(*.pem) did not keep those files' contents or names out of a
+      search of the project. fstools.Options.ReadDenied (the engine's
+      ReadDenied, which nothing called) now leaves them out of both walks,
+      by the path as written and as reached.
+    - Write and Edit judged one path and could write another: they found
+      the file again when they ran, so a folder on the way swapped for a
+      link between the question and the run (by a command in the
+      background) sent the write where nobody was asked about. A call is
+      now held to the real path it was described with, and refused when
+      that changed.
+    - A protected file or folder that is a link (a settings file linked
+      from a dotfiles repository) did not protect what it leads to, which
+      is the file the settings are read from; it does now. The files
+      --mcp-config names are protected, as in Claude Code. A work tree
+      named as a protected folder (.git) gets no work tree's exemption.
+    - The shared resolver read a dangling link's target from its folder as
+      written, not as reached: "d/dang" with d a link was read from the
+      text's folder. It now resolves the link's folder first.
+    Not changed: Write and Edit say that a file outside the project exists
+    when they cannot run (its content is not shown).
+
+146. **The security review of the web tools.** A fresh-eyes review of
+    WebFetch and WebSearch found the fetching sound (addresses checked
+    after DNS on every connection, redirects on the same host only, domain
+    rules matched label by label, everything a page says marked untrusted)
+    and two things to change:
+    - Turning a page into Markdown had no bound of its own: the download
+      is cut at 10 MiB, but every paragraph mark copied all that was
+      written so far, and every list item was indented by every list left
+      open, so a page of about 8 MB grew to gigabytes or kept a core busy
+      for many minutes, after Esc too. The converter now ends a line and a
+      link in place, keeps at most 16 lists and 64 links open, and stops
+      at 4 MiB of text, many times what a model is given of a page, saying
+      so at the end ("The page went on past what gnosh turns into text").
+      A page made to blow up now costs what its size does: under a second.
+    - The WebSearch question showed webSearchUrl as written, password and
+      all, and only the first 80 bytes of the query. It now shows the
+      server as the rest of gnosh shows an address (no user name,
+      password or query string), and the whole query; a query longer than
+      the question shows (2000 bytes) is refused with the reason, so
+      nothing sent is hidden from the person asked.
+    Not security, but found there: a self-closing <svg/>, <iframe/> or
+    <button/> opened an element to skip that never closed, and the rest of
+    the page was lost. Not changed: the addresses the fetcher refuses leave
+    out a few rare ranges (198.18/15, 192.0.0.0/24, NAT64); every fetch is
+    https with a certificate checked against the name asked for.
+
+147. **Esc Esc and /resume read their lists away from the loop.** The list
+    of prompts to go back to is read from the session's file (and the
+    file copies' index), the list of sessions from the folder's files: on
+    a long session, or a folder of many, the screen stood still meanwhile.
+    Both are now read away from the loop. What is typed meanwhile is held
+    for the list, as had it come at once: Down and Enter pick in it. (A
+    first version let those keys through to the box, where Down took the
+    last prompt back and Enter sent it again; the test with the real
+    program caught it.) A question or a turn that comes first lets the
+    list go, and so does Ctrl+C, with a line that says how to open it
+    again; what was typed for it is dropped, never given to the box or to
+    the question.
+
+148. **claudeMdExcludes.** Claude Code's settings key (its settings
+    reference, read 2026-11-19): instruction files never to read, as
+    glob patterns or absolute paths matched against their absolute paths,
+    for a monorepo's other teams' CLAUDE.md files. gnosh's reader of
+    instruction files could already leave files out (Options.Exclude) and
+    nothing set it; "options": {"claudeMdExcludes": [...]} now does, with
+    the patterns rule files use: "**/vendor/**/CLAUDE.md", a folder for
+    all under it, or a bare name for every file of that name. The entries
+    of every file add up. A project's file holds them until the folder is
+    trusted, as a removal: they can leave out the person's own GNOSH.md,
+    which may hold the rules they keep the agent to. A pattern the reader
+    cannot use stops startup at its line, since it would keep nothing
+    out; the app checks it (the config package imports nothing of
+    gnosh's).
+
+149. **showTurnDuration and respectGitignore.** Claude Code's settings keys
+    (its settings reference, read 2026-11-19), as options. showTurnDuration
+    false leaves out the line under a turn that ended as it should ("done
+    in 42s · 2 replies · …", Claude Code's "Cooked for …"); a turn that
+    was stopped or failed still says so, since that line is news. It is
+    the person's own (not from a project's file), as the other ways the
+    conversation is shown are. respectGitignore false has the @ file
+    picker list what the ignore rules name too: git's list without
+    --exclude-standard, or the walk without the ignore files (dot folders
+    stay out). Both go to the interface in the session's info, and
+    /config changes them at once: the session's info gives an option as
+    /config last set it (liveBool), and the interface reads the info
+    again after every command; the picker lists the project again when
+    the setting changes.
+
+150. **The security review of the hooks core: the three high findings.**
+    A fresh-eyes review of the hooks and their callers found that a
+    hook's approval cannot override a deny or ask rule, a protected path,
+    a safety check, plan mode or a tool's own confirmation; the holes
+    were around that.
+    - Monitor runs any shell command, and hooks are matched by the tool's
+      name, so a Bash hook never saw Monitor's commands: a hook refusing
+      `git push --force` let Monitor run it. As in Claude Code (its hooks
+      page), a Bash hook now guards the commands Monitor starts, on
+      PreToolUse and PermissionRequest: it is given each as a Bash call
+      (tool_name Bash, the command and its description), it can refuse or
+      ask, and its approval and changed input count for nothing there.
+      After the command (PostToolUse) it does not run for Monitor. The
+      other guards (MultiEdit for Edit, gnosh's own tools for Claude
+      Code's) keep their rule: their changed input is used.
+    - A PermissionRequest hook's approval ran a call the engine marks as
+      critical (a removal that may take what cannot be got back), with
+      no person there under -p. Only the person approves one, as no rule
+      does; the hook's refusal still stands, and its approval puts the
+      question to the person with a line that says why.
+    - The folders added to a session (--add-dir, /add-dir,
+      additionalDirectories) were searched for sub-agents, skills,
+      commands and output styles once the main folder was trusted, and
+      their hooks and tool grants went live with nobody asked. A folder
+      is added for its files; its definitions are now read only when it
+      is trusted itself (gnosh trust, run there) or lies in the trusted
+      project, and the session says what it leaves out. Claude Code runs
+      an agent file's hooks only once the folder it came from is trusted.
+
+151. **The security review of the hooks core: the medium findings.**
+    - Hooks configured twice were run once by the line a person reads of
+      them, which cuts a question short and leaves out an MCP tool's
+      input and an address's headers, and the first copy's way of running
+      won: an async copy listed first turned the blocking guard into one
+      that decided nothing. One handler now runs once only when it is the
+      same in all of that, and runs the same way.
+    - The file tools' paths reached hooks as the model wrote them, so a
+      hook guarding $CLAUDE_PROJECT_DIR/secrets let "secrets/key" through.
+      Hooks are now given the path absolute and clean, from the call's
+      folder and with ~ the home folder, as Claude Code gives them; the
+      tool reads the same file from the path as written.
+    - A PermissionRequest hook's approval stood though another hook could
+      not check, while the warning said the question went to the person.
+      A hook that could not check now leaves the question to the person.
+    - The SubagentStart, SubagentStop, PostToolUse and PostToolBatch hooks
+      of a sub-agent with a work tree ran in the session's folder: a "the
+      tests must pass" hook tested the person's checkout. They run in the
+      sub-agent's.
+    - A PostToolUse hook's replacement of a call's output skipped the
+      filter every result goes through (gnosh's own marks broken, the size
+      cut). It goes through it now.
+    - A PostToolUse hook that did not finish (it ran out of time, was
+      killed, printed past the cap, or was cut short when the turn
+      stopped) left the output as the tool gave it, so a hook there to
+      hide a key showed the key when it slipped. Such output is withheld
+      now, with a line that says why. A hook that ends with a status of
+      trouble on purpose leaves it as it is: a formatter that fails on a
+      file must not hide every result.
+    - The question about a call a hook changed showed the call as the
+      model wrote it (its diff, its command); it shows the call as it
+      will run.
+    - In a folder that is not trusted, a hook of the person's own that
+      runs a program in the project ("$CLAUDE_PROJECT_DIR"/.claude/hooks/
+      check.sh) ran whatever a repository just cloned put there. It is not
+      run there now, and counts as a hook that could not start: a guard of
+      that kind blocks what it would have checked.
+
+152. **The security review of the hooks core: the low findings.**
+    - What a PreToolUse hook adds for the model (additionalContext) was
+      read and never given to it. It goes with the call's result now,
+      whatever was decided (agent.Decision.Context).
+    - "once" in an agent's definition took the agent's guard away after
+      its first run; Claude Code reads "once" in skills alone, and so does
+      gnosh now.
+    - A hook's rewrite of a question call made the answers in it the
+      person's, even answers the model wrote itself and the hook left as
+      they were. Only answers the hook changed or added are.
+    - A tool matcher that names an MCP server alone ("mcp__memory") fits
+      none of its tools; the check at startup says so, and names the one
+      that would ("mcp__memory__.*").
+    - The exec form ("args") looked its program up in the empty and
+      relative entries of PATH too, which are the folder the hook works
+      in; they are passed over, as Go's own lookup does.
+    - The package's docs said the hook types other than "command", "args"
+      and background hooks stop startup; they no longer do.
+    "continue": false on SessionStart, SubagentStart and PostCompact was
+    recorded as having ended the turn while nothing ended: built in 154.
+    Not changed: the shell command of a call is also given to hooks as
+    GNOSH_TOOL_INPUT_COMMAND, and one past 128 KiB is more than Linux lets
+    a program be given in its environment, so no hook can start for it
+    and a guard blocks the call. To leave the variable out would let a
+    command padded past the limit by those hooks that read it; a call
+    that big is better put another way (a file the model writes first).
+
+153. **What a command leaves running is looked at twice.** When a Bash
+    command ends, the processes still in its session that let go of its
+    output (a server started with cmd >log 2>&1 &) are kept on the books
+    and reported. A clean-copy CI run on a busy devbox reported
+    `(sleep 0.1; echo late) &` as left running: the subshell had closed
+    the output as it ended and was seen before it was gone. As the
+    pruning of the books already does (pruneDetached, since 7fd75ab),
+    the session is looked at again 50 ms later, and only what is there
+    both times, with the same start, was left running.
+
+154. **"continue": false at the start of a session or a sub-agent, and
+    after a summary.** Claude Code: with "continue": false, "Claude stops
+    processing entirely after the hook runs", on every event that takes
+    it. The hooks package read it so on SessionStart, SubagentStart and
+    PostCompact, and the session went on regardless. A moment can now
+    return agent.StopWork: the session's start refuses the prompt it
+    stands before and every one after it, with the hook's words (a run
+    exits 1 and sends the model nothing); a sub-agent's start refuses its
+    task, and the model that started it reads why; the end of a summary
+    made in a turn (PostCompact, or SessionStart with "compact") ends
+    that turn as halted, once what it gave back is kept. After /compact
+    no turn runs, and nothing is ended. Also found on the way, in CI: a
+    test of background runs stood in for gnosh with `sh -c "sleep 30" id`,
+    and dash puts sleep in its own place, so the command line lost the
+    session's id on a busy machine (the stand-in now keeps it); and the
+    agent's stress test takes GNOSH_STRESS_SEED to play a seed again
+    (one run in a full suite saw a turn end with a request still out;
+    thirty more runs did not, and the seed alone does not bring it back:
+    a race of the loop's, left open).
+
+155. **A turn stopped while a fallback is made ready ends with its request
+    closed.** The agent's stress test saw a turn end with a request still
+    out (154). The path: the model fails, a fallback is being made ready
+    (fallbackModel, 140), and the person stops the turn; the loop gave
+    back no reply, as after a retry's wait, but no retry had closed that
+    request, so no reply event came for it, and an interface waiting on
+    one waited for good. The failed try is now closed as stopped, with an
+    empty reply (what had arrived of it is still not kept), for a turn's
+    request and a summary's alike. TestStopWhileAFallbackIsMade checks the
+    order of the events and catches it every time.
+
+156. **The security review of sub-agents: the first three findings.** A
+    fresh-eyes review of the sub-agent machinery found no high finding;
+    the first of its medium ones fixed here:
+    - Agent(kind) deny and ask rules compared the kind as the model wrote
+      it, while the tool leaves blanks off and takes none for the
+      general-purpose kind: "" and " Explore" went past
+      Agent(general-purpose) and Agent(Explore), and past hooks' "if"
+      filters. The engine now reads the kind as the tool does.
+    - A definition's tools and disallowedTools were compared by name as
+      written, so Claude Code's old name Task did not take the Agent tool
+      away (a read-only kind from ~/.claude/agents with
+      `disallowedTools: Write, Edit, Task` could still start a sub-agent
+      with every tool), and under --agent, `tools: Task(worker)` took it
+      away entirely. Old names count as the tools they name now.
+    - The agent and skill definition files were read whole once their
+      size was small: a cloned repository's .claude/agents/a.md that is a
+      link to /dev/zero or a terminal hung gnosh, or ran it out of memory,
+      at startup, in a folder nobody trusted (the count of what an
+      untrusted folder holds reads them). Only plain files are read, and
+      never past the size cap.
+
+157. **The security review of sub-agents: the rest of its medium findings
+    and one low.**
+    - A sub-agent's permission question looked like one of the
+      conversation the person is in ("Allow Bash?"), though a background
+      sub-agent may have read a hostile page. It now says who asks: "The
+      sub-agent Explore asks: Allow Bash?", and for one in the background
+      what it was started for. Its bare "No" says that it stops that
+      sub-agent. In the plain front end a second question took the place
+      of the one being answered, which then waited for good, and the
+      answer typed for it went to the other; questions wait their turn
+      there now.
+    - A background command a sub-agent started announced its end to the
+      session's model, in gnosh's words, with what the sub-agent wrote of
+      it (its description) in them, and the sub-agent, told it would hear,
+      never did. The command now knows the sub-agent that started it: while
+      that sub-agent works, the news is its own; once it has ended, the
+      session's model is told the command ended, by its id and output
+      file, without the sub-agent's words.
+    - The MCP tools --agent's list leaves out were left out of the
+      session's tools, and given to its sub-agents all the same. They are
+      left out of both.
+    Not changed yet: a skill's allowed-tools hold in the shared engine
+    until the person's next prompt, for a sub-agent running then too (a
+    sub-agent's own preloaded skills take the same path, so the grant
+    cannot simply be refused to sub-agents); and an Agent call's model may
+    name a model of another provider the person set up. TaskStop in a
+    sub-agent can stop any background command of the session, and
+    definition files pass over keys they do not know (a "disallowedtools"
+    typo is lost without a word).
+
+158. **A definition's setting in another letter case is not passed over.**
+    Agent definitions pass over keys they do not know, as Claude Code's
+    do, so that a key from a newer Claude Code does not stop gnosh. One
+    that gnosh knows written in another letter case ("disallowedtools",
+    "permissionmode") was passed over too, and the agent ran without what
+    it was meant to take away (the sub-agents review's note). Such a
+    definition is now not used, and the files that hold no usable
+    definition (/status, gnosh doctor) say why.
+
+159. **CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH and
+    CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS.** Claude Code's variables (its
+    environment reference, read 2026-11-19): how many layers of sub-agents
+    there may be below the conversation (3; 1 turns nesting off), and how
+    many may run at once before the Agent tool refuses another (20). Each
+    takes a whole number above 0 in plain digits, and anything else is
+    passed over, so a limit can be moved and not taken away. gnosh had
+    both limits fixed, and the second counted only sub-agents in the
+    background; it counts every one that runs now, as Claude Code's does.
+
+160. **A sub-agent's TaskStop stops only what it started.** TaskStop in a
+    sub-agent could stop any background command of the session and any
+    sub-agent running in the background (the sub-agents review's note):
+    one that read a hostile page could stop the person's build or server.
+    A background command now knows the sub-agent that started it (157), so
+    a sub-agent's TaskStop refuses a command it did not start, and refuses
+    every background sub-agent (a sub-agent starts none). The session's
+    own TaskStop is as it was.
+
+161. **The "No" of a background sub-agent's question says what it stops.**
+    The screen sets a permission question's bare "no" out as its own row,
+    "the call does not run, and the turn stops". For a sub-agent in the
+    background it stops that sub-agent alone (157), and the row said the
+    turn. The question's data now says what a bare "no" stops when it is
+    not the turn (QuestionData.Stops), and the row says it. Also a new
+    box check, subask: the model has a sub-agent run a command, and the
+    question says which sub-agent asks (passed on box 1 with Qwen,
+    a4ef214).
+
+162. **The sign-in's listener is shut down gently.** An MCP server's
+    sign-in waits for the browser to come back with a code; the code goes
+    to the sign-in before the page "Signed in" is written, and the sign-in
+    then closed the listener at once. A CI run under load saw the browser
+    get nothing (EOF): the person would have seen an error in the tab of
+    a sign-in that worked. The listener now shuts down gracefully, with
+    what does not finish in two seconds closed.
+
+163. **The review of compaction: the three high findings.** A fresh-eyes
+    review of how gnosh keeps a conversation within the model's window
+    found that no tool call loses its result across a summary or a slide,
+    and that a summary that fails leaves the conversation as it was; and:
+    - One tool result could fill most of a small window: Read gives up to
+      25,000 tokens, which on a model with a 32K window is over the point
+      where a summary is made. The summary leaves the file out, the model
+      reads it again, and the window fills again, a summary every round;
+      past the room a summary leaves, nothing could be sent at all, and
+      the session stood still until /rewind. A tool's result now takes at
+      most a quarter of the model's window, cut with a line that says how
+      much there was and to read the rest in parts. On a large window the
+      tools' own limits are smaller, and nothing is cut.
+    - Any text was taken as the summary, and the first try offers the
+      session's tools: a reply "Let me check the failing test first." with
+      a Read call would have stood for the whole conversation. A reply
+      that calls a tool, or stops for one, or refuses, is not taken; the
+      try without tools follows.
+    - The summary reached the model as a plain message on the user's side,
+      the person's voice, with gnosh's marks in it live, though the model
+      wrote it from a conversation that held pages and tool output. It now
+      comes after gnosh's own line, in its marks, that says the model
+      wrote it and that what it quotes of files, pages and tool output is
+      data; and gnosh's marks and chat-template tokens in it are broken,
+      as in a tool's output.
+
+164. **The review of compaction: three of its medium findings.**
+    - What goes out with a prompt (an @-mentioned file, up to ten of 100
+      KB; the environment; what a hook added) was worked out after room
+      was made for the prompt, and counted only then: on a small window
+      the first round's summary took the new prompt, unanswered, with the
+      rest. It is worked out first now, and counted when room is made.
+    - After a summary the file tools still took the files the model had
+      read as read, though the model no longer saw them: Write and Edit
+      let it change a file from a copy it could not see. Every file is
+      forgotten at a summary, as the ones in a slide are, and must be read
+      again before it is changed.
+    - A hook that failed after a summary (a SessionStart one with the
+      source "compact") took with it everything the session is given back
+      then: the instructions it started with, its kinds of sub-agent, its
+      skills, for the rest of the session. What was made is given back,
+      with a word on what could not be.
+    Left: the session is not given back the files it was working on, nor
+    a fresh account of its environment, after a summary (Claude Code reads
+    the files again); the slide protects gnosh's own hidden prompt after a
+    nudge rather than the person's; a large pasted prompt can turn
+    automatic summaries off as "not helping"; the trimmed fallback leaves
+    out the first message even when it is the last summary.
+
+165. **The review of compaction: two more of its findings.**
+    - A slide keeps the prompt the model is answering and all after it.
+      After a nudge, a driver's objection or a checkpoint, the newest
+      prompt is gnosh's own, and a slide that kept only that one took the
+      person's words before it with the rest ("handle the error case;
+      don't touch the tests"). It keeps the turn's newest prompt that
+      came through the queue, the person's (or a /loop's), and what follows.
+    - A summary that left the conversation over the point turns automatic
+      summaries off for the session, since another would not help. What
+      was over could be the prompt about to go out, a long paste no
+      summary makes shorter, and then summaries went off for good though
+      the next one would have helped. A summary is now judged by what it
+      left, without the prompt about to go out.
+
+166. **After a summary the model is told where the conversation as it was
+    is.** The line gnosh gives after a summary had a place for the
+    session's file, for what the summary left out ("The conversation as
+    it was is in …: read from it only what you need"), and nothing filled
+    it, so the line went out without it (the compaction review's note).
+    It names the session's file now, as Claude Code names its transcript
+    after compacting. (A sub-agent shares the session's words and is
+    pointed at the session's file.)
+
+167. **A summary that has to leave out the earliest part keeps the first
+    message.** When neither the session's own request nor the bare one
+    fits, the summary is asked for with the earliest part left out, cut
+    at one of the model's own messages. The cut took the first message
+    with it, and that is the task as it was set or, after a summary, the
+    summary all the rest builds on: a second summary forgot the first.
+    The first message is kept now, with the note of what was left out
+    after it ("Part of this conversation is left out here…"); only when
+    no asking with it fits, a first message too big to keep (a long
+    paste), is it left out as well (the compaction review's note).
+
+168. **A summary gives back the files the model was working on.** A
+    summary takes every copy of a file out of the model's view, and since
+    the compaction review no file counts as read after one: the work went
+    on with a Read of each file it had in hand. As Claude Code does after
+    compacting, the files the session read or wrote last (up to five, the
+    most recent first) are read again as they now are and given back
+    after the summary, and count as read, so that an Edit of one needs no
+    Read first. They keep to a tenth of the model's window (at most 50K
+    tokens, 5K for one), so that what the summary made room for is not
+    filled again at once; a file too long, a picture, or one the budget
+    has no room left for is named instead, to be read again before it is
+    changed. Read deny rules hold, and a file that is gone is passed
+    over. The person reads which files were given back.
+    - What the after-summary step made is kept when the turn is stopped
+      while it runs, as the summary is, with which it goes; it was
+      dropped, with the instructions and skills given back. When the step
+      is stopped, the files it read again do not count as read, since a
+      step that does not finish in time is gone on without.
+    - A sub-agent forgets what it read at its own summary, as the
+      session does: it kept counting files as read after it lost them.
+
+169. **Two MCP servers that connect at once no longer lose one's tools.**
+    Each server, once connected, offers the model the tools of every
+    server connected by then, and the list was taken and offered in two
+    steps: two servers connecting together could have the older list
+    offered last, in place of the newer, and one server's tools were gone
+    until the next change of tools. A session running as an agent with a
+    server of its own beside a file's lost the agent's in one run in 300
+    (the clean-copy CI caught it twice; with the fix 1000 runs in 1000
+    kept both). Taking the list and offering it are one step now.
+
+170. **Claude Code's language and includeGitInstructions.** language (a
+    name, as the person writes it: "japanese") asks in the system prompt,
+    after the output style, for replies in that language, as Claude Code
+    passes it to the model; code, commands, file names and quoted text
+    stay as they are. It holds under --system-prompt too, being the
+    person's choice and not gnosh's words. A sub-agent's system prompt
+    does not carry it: its report is read by the session's model, which
+    replies. includeGitInstructions false leaves git out of the block
+    ahead of a session's first prompt; gnosh says there only whether the
+    folder is a repository and its branch, read from files, and has no
+    commit or pull request instructions to leave out besides. Both are
+    read as a session starts.
+
+171. **Claude Code's bashOutputMaxChars.** The characters of a command's
+    output the model reads, which BASH_MAX_OUTPUT_LENGTH already set:
+    from 1 to 128,000 as Claude Code takes it (the variable goes to
+    150,000), 30,000 when neither is set. A longer output is shown as its
+    start and its end around a line that says what was left out, and is
+    kept whole in a file. The variable, when set, wins, as the
+    environment outranks the files; a failed command's output keeps its
+    own bound (10,000), never more than this.
+
+172. **The review of the MCP client: its transports.** A fresh-eyes
+    review of gnosh's MCP code (2026-11-19) found calls that could wait
+    for ever, and fixed here:
+    - A server at a URL gives a request's answer with the request: as
+      JSON, or in a stream of events (gnosh opens no stream of its own
+      where a later answer could come). A request answered with 202, with
+      JSON that held no answer to it, or with a stream that ended before
+      its answer (the server restarted, a proxy cut it) waited for ever
+      when the call had no timeout, which is the default; a run never
+      ended. Each now fails at once as unreachable, so the server is
+      connected again and the model is told that whether the call ran is
+      not known. One event of a stream is held to the size of an answer
+      (16 MiB): a larger one ends the stream, where it grew without end.
+    - A server gnosh starts that stops reading its input held a call
+      larger than the pipe, and every message after it, for ever, past
+      the call's timeout and Esc. The write gives up with the call now,
+      or after two minutes; one that gave up partway leaves half a line
+      in the pipe, so the connection ends there.
+    - A server that exited while a process it left outside its group
+      held its output open kept its calls waiting, and closing it (at
+      the end of a session or a sub-agent, /mcp) waited for that process
+      to let go. Two seconds after the server exits its output is
+      closed; what it left in its group is stopped as it closes.
+    - An answer that came as the connection ended could be sent on a
+      closed channel: answers are handed over under the lock now.
+
+173. **The review of the MCP client: the session's side.**
+    - A connection is made for the server as the caller marked it, and
+      not taken when the server was disabled or connected again since.
+      The connection read the server's generation as it began, after the
+      caller had let go of the lock and closed the old connection (up to
+      five seconds for a server at a URL): /mcp disable in that time was
+      undone, two reconnects could both be taken (and one connection
+      never closed), and a sign-in that ended after /mcp disable, or /mcp
+      logout, connected a disabled server again. A sub-agent's own server
+      is the sub-agent's before it connects, so that one that ends
+      meanwhile closes it.
+    - A flood of notices that a server's tools changed ran a listing of
+      them each on a goroutine of its own; one runs at a time now, and
+      once more after the notices that came while it ran. The server's
+      own requests (pings) are answered 32 at a time; more are refused.
+    - Two of a server's tools whose names come to one (listed twice, or
+      "gr.eet" beside "gr_eet"), or two servers' ("a" with "b__c" beside
+      "a__b" with "c"), had every offer of tools to the model refused, so
+      that servers that connected later were never offered and disabled
+      ones stayed offered. The first of each name is offered, and the
+      person is told of a server's own.
+    - A tool's description and input schema are the server's words: they
+      reach the model with gnosh's own tags broken, as what the tool
+      returns does.
+    - The own servers of sub-agents still running end with the session.
+
+174. **Claude Code's fileSuggestion.** A command of the person's own
+    offers the paths an @ mention completes to, in place of gnosh's own
+    search (for a big repository with an index of its own):
+    {"type": "command", "command": ...}. As Claude Code runs it, it is
+    given {"query": what was typed after the @} on its standard input
+    and the variables a hook has (CLAUDE_PROJECT_DIR among them), prints
+    a path a line, of which fifteen are offered in its order, and is
+    given five seconds; what it started ends with it (its process
+    group). It runs in the background, one at a time: until it answers,
+    the last answer's paths that still hold what was typed are offered,
+    and the list fills in when it answers, with no key pressed; what was
+    typed meanwhile goes to it next, the latest only. Answers are kept
+    until a turn ends (a turn may make files), and a failure is told
+    once. It is a program to run, so a project's waits for trust, as a
+    hook's and the status line's do, and safe mode and disableAllHooks
+    turn it off, which /status says.
+
+175. **Claude Code's attribution, and includeCoAuthoredBy.**
+    {"commit": ..., "pr": ...}, or false: the lines the model ends a
+    commit's message and a pull request's description with, asked for
+    in the system prompt of the session and of its sub-agents (which
+    commit too), with the person's own instructions about it first, as
+    Claude Code tells the model. gnosh signs with nothing of its own
+    (Jae's rule for his repositories is no agent trailers), so with
+    nothing set nothing is said. sessionUrl is taken and adds nothing: a
+    gnosh session has no web address to link. includeCoAuthoredBy,
+    Claude Code's older word for leaving its own attribution out, is
+    taken and changes nothing.
+
+176. **An MCP tool's name longer than the model's APIs take is
+    shortened.** OpenAI's API refuses a request whose tools hold a name
+    longer than 64 characters (Anthropic's takes no longer one either),
+    and mcp__<server>__<tool> passes that with a long server name and a
+    long tool name: every request of the session failed (the MCP
+    review's note). Such a name keeps its start and ends in a short hash
+    of the whole, so that two long names that begin alike stay apart;
+    the server is still called by its own name. A rule for that tool
+    names it as offered, which the permission question shows.
+
+177. **A session file from outside gnosh's folder goes on as a copy.** -r
+    takes a session file by its path, and opened it where it was, for
+    writing, with its checkpoints taken from beside it. A fresh-eyes
+    review of the session store (2026-11-19) found what that let a
+    shared file do: a checkpoints index beside it could make /rewind
+    write, delete or copy any file the person can (its entries were not
+    checked, and a copy's name could climb out of the folder); its tool
+    results, summaries and notes reached the model as gnosh's own words,
+    its prompts as the person's standing rules; its scheduled tasks came
+    back and fired; and the person's own conversation was then written
+    into the file. Now a file outside gnosh's folder (links followed) is
+    copied into a new session of gnosh's own and gone on with there: the
+    file is never written, nothing beside it is used, what would steer
+    the session (scheduled tasks, goal, todos, the kind it runs as) is
+    left out, and every word in it but the model's replies is read as
+    data. The copy holds the whole conversation itself, so a /fork of it
+    or -c later keeps it (a copy that pointed back at such a file found
+    nothing when opened again). The person is told. A checkpoints index
+    is read only with whole paths and plain names for its copies, and a
+    session's id is checked before it names a folder.
+
+178. **The session store review's smaller findings.**
+    - A redaction puts a new file in a session file's place. One that
+      did so between another gnosh's open and its lock left that gnosh
+      holding the old file: what was redacted, and every entry it wrote
+      lost. The file at the path is checked to be the one locked, and
+      opened again when it is not.
+    - A write that failed partway (a full disk) left the whole lines
+      before the tear in the file, where they came back as entries the
+      session never had: the file is cut back to its size before the
+      write, and only when that fails is the torn line left to be passed
+      over.
+    - The newest session, which -c goes on with, is the one talked in
+      last: a name given to an old session later (gnosh session rename)
+      made it the newest.
+    Left as they are: a kill between /cd's move of the file and its note
+    of where to (the session is then found by its id alone), /resume N
+    listing again as it is typed, and sessions read whole.
+
+179. **A tool call written out as text is told so.** Qwen on llama.cpp
+    now and then writes a tool call in its template's markup that the
+    server does not take as a call, or leaves only the closing tag (a
+    ship's smoke test ended on "</tool_call>"): the reply calls no tool,
+    and the turn ended on it with nothing run; in a run (-p) the task was
+    lost. A reply that calls no tool and begins with "<tool_call>" or
+    ends with "</tool_call>" now gets a line of gnosh's own, as an empty
+    reply does: it held a tool call written out as text, which runs
+    nothing; call the tool, or answer in words. No count gives up, and
+    the person is told at every third in a row. A reply that only speaks
+    of the markup is an answer.
+
+180. **The review of the shell tool.** A fresh-eyes review (2026-11-19)
+    found no hole in where commands may run or what reaches other
+    machines, and these:
+    - A command of the person's (!) that gives gnokey a password on its
+      standard input was refused, but only after the line was kept in the
+      session's file (and so in the history Up brings back, in later
+      sessions too) and sent to the model with what it printed: the
+      refusal's own reason had already come true. It is refused before
+      any of that now.
+    - A working directory taken away (a checkout without the folder, a
+      clean) kept every command from running, the model's and the
+      person's own cd alike, with nothing to get out by. A command now
+      runs in the nearest folder above it that is there, inside the
+      session's folders, and the session moves there; a command that
+      takes its own working directory away moves the session up as well,
+      where the result said the shell had replaced itself.
+    - The person's own !cd told the model the working directory had
+      moved, and the session had not: the next command ran where it was.
+      Their cd moves the session now, as one in the model's own calls
+      does, with the CwdChanged hooks.
+    - The file in which the shell says where it ended is read without
+      following a link and without waiting on a pipe, only when it is a
+      plain file, and only so much of it: a command that put a pipe in
+      its place held the result up for ever, and a link to /dev/zero
+      filled memory.
+    - Folder names in the notes under a result are written as the
+      stamp's are: a name with a line break in it could pass for a note
+      of gnosh's.
+    Left: background commands' output files and ended tasks are kept
+    until the session ends, and a process left running after its
+    command is not held to the output limit.
+
+181. **A long session lets go of old ended background commands.** Every
+    background command that ended was kept until the session ended: its
+    output's start and end in memory (some 120 KiB) and its output file
+    on disk (up to 64 MiB), so that a /loop running for hours built up
+    both (the shell tool review's note). The last 100 that ended are
+    kept; an older one is let go of, and its output file with it, unless
+    something it left running still writes there. The model is told of
+    each as it ends, with its file.
+
+182. **The review of print mode.** A fresh-eyes review (2026-11-19) of -p
+    and the stream-json protocol:
+    - A stream-json message that begins with "/" and names no command
+      ("/etc/nginx/nginx.conf fails to load, why?", or any "/" message
+      with slash commands off) waited under no id: nothing was answered,
+      no result line was written, and the run never ended. It is a
+      prompt like any other now, as in the text path.
+    - Every run that used Bash was taken for one with work in the
+      background (a command that ended in the foreground counted), so
+      in stream-json its result line was written before the structured
+      output was asked for: --json-schema never reached the result, a run
+      whose structured output failed exited 1 under a "success" line, and
+      each such run waited a second more. Only work that went to the
+      background counts now.
+    - The turn the model is given when a run's end would stop what it
+      left running (DECISIONS 117) is gnosh's own: its reply ("Restarted
+      the server with setsid") took the place of the answer to the
+      prompt as the run's result. The answer stays the result.
+
+183. **--max-turns with stream-json input counts each message's turn
+    afresh.** As Claude Code's: "a message still queued when the cap ends
+    a turn starts a new turn with a fresh count". The count ran over the
+    whole run, so after one turn reached the cap every later message was
+    stopped before its first request (the print mode review's note). And
+    the cap was asked before each request, after what the person had
+    queued meanwhile was handed to the turn: the next message went into
+    a turn the cap then stopped, and was never answered. The cap is
+    asked after a round now, before anything queued is handed over (the
+    agent's MoreRounds moment): the turn ends there, and the queued
+    message goes out as a turn of its own. With text input the count is
+    still the run's.
+
+184. **A signal stops print mode wherever it is.** SIGINT, SIGTERM and
+    SIGHUP were read only while a turn ran (the print mode review's
+    note). While gnosh -p read what was piped in, ran a slash command
+    given as the prompt, or asked for the structured output (three tries
+    of up to ten minutes), a signal waited unread, so "producer | timeout
+    60 gnosh -p" could not stop it short of SIGKILL, and the run later
+    ended with its own exit code rather than the signal's. Each of those
+    parts now runs under a watch that cancels it at the first signal; the
+    run ends as one a signal stopped does: 130 or 143, and the result
+    line in the JSON formats, written at once when no turn of the run's
+    own is left to report.
+
+185. **A run whose turns are spent stops its background work at the
+    checkpoint.** gnosh asks the model, after ten minutes of idle
+    waiting for background work, whether to wait on, where Claude Code
+    stops what is left (DECISIONS 117's wait). With --max-turns spent, the
+    turn that asked was stopped before its first request, the next
+    checkpoint asked again, and a run whose background work never ended
+    never ended either (the print mode review's note). When the model
+    cannot be asked (its turns are spent, or the session is closing),
+    the run says so on stderr, stops what is left, as Claude Code's wait
+    does, and ends with the last turn's result.
+
+186. **An MCP server's name keeps its tools apart from another's.** Tools
+    are named mcp__<server>__<tool>, and a rule for a server's tools
+    (mcp__github) reads as mcp__github__*: it covered the tools of a
+    server named github__x or github_ too, so an allow for one server
+    reached another that a project's .mcp.json added (the MCP review's
+    note). And FitToolName, shortening a name to the 64 characters the
+    model's APIs take, could cut through a long server name, so that a
+    deny rule for that server covered none of its tools. A server whose
+    name, as its tools' names write it, holds "__", ends in "_" or is
+    longer than 48 characters is not used now: the configuration's
+    problem says why and to rename it, and gnosh mcp add refuses the
+    name. Two servers whose names come to one (a.b and a_b) still have
+    the first one's tools offered.
+
+187. **An MCP server is said to be connected once its tools are
+    offered.** Its status read "connected" a moment before the model was
+    given its tools, and a prompt typed in between went without them (a
+    CI run under load: /mcp said connected, and the model's call found no
+    tool of that name). The tools are offered first now; /mcp says
+    connected after, and a disable in between still wins.
+
+188. **/resume N opens the Nth session of the list as it was shown.** The
+    number was looked up in the list made again when it was typed, so a
+    session beside this one written to in between (a peer in the same
+    folder, a gnosh -p) came first and was opened in place of the one
+    picked (the session store review's note). The list /resume showed is
+    kept; with none shown, a number is the place in the list as it
+    stands.
+
+189. **A session whose /cd was cut short is still listed.** /cd moves the
+    file to the new folder's directory and then writes the move down; a
+    gnosh killed between the two left a session listed with neither
+    folder (its file in the one, its folder named the other's). The list
+    now holds a session whose folder belongs in another directory with
+    the folders of the directory its file is in; a session of another
+    folder whose name only comes to the same directory is that folder's
+    alone, as before.
+
+190. **A sub-agent's retry leaves the session's reply alone.** When a
+    request whose reply had begun to arrive is tried again, print mode
+    throws away what had arrived of the reply. It did so for a sub-agent's
+    retry too (a background sub-agent working while the session wrote
+    its answer): the session's own half-written reply was lost, and in
+    stream-json with --include-partial-messages its message was closed
+    half written (the print mode review's note). Only the session's own
+    main request's retry throws its reply away now.
+
+191. **A stream-json message with priority "now" stops what runs when it
+    arrives.** Messages are sent one at a time, each once the one before
+    it has started its turn; the "now" message stopped the running turn
+    only when its own turn came to be sent. With a message before it still
+    waiting, the turn it was sent to stop ran on (a long one to its end),
+    and the turn after, which started after it came, was stopped in its
+    place (the print mode review's note). It stops the running turn as it
+    is read now. The person's messages before it stay in line and are
+    answered first: Interrupt drops only gnosh's own queued prompts.
+
+192. **The result is the last line a run writes.** After the result line,
+    the session goes on closing (SessionEnd hooks, the memory, what is
+    left running), and what it said went out as before: in stream-json a
+    notice became a system line after the result, which a reader takes
+    for the start of another (the print mode review's note). Once the
+    result is written, notices go to standard error alone.
+
+193. **A provider's failures are given up on by the clock, whatever each
+    try sent first.** The five minutes a failing provider is given
+    (GoneAfter) were set back by the first piece of every reply. One that
+    sends a little of each reply and then fails the same way each time
+    (llama.cpp's "Failed to parse tool call arguments as JSON", a proxy
+    that cuts at the same byte) was asked again every twenty seconds for
+    ever, and gnosh -p never ended (the model client review of
+    2026-11-19). The clock now runs from the first failure until a reply
+    is whole; "answering again" is still said as the first piece comes. A
+    reply that streams for longer than the five minutes and then fails a
+    second time ends the turn, and the person says go on. A provider's
+    own wait (Retry-After) is kept to up to BusyMax: a proxy that asked
+    for a day had a run sleep a day without a word.
+
+194. **"Overloaded" in a message no longer outranks a refusal's code, and
+    a wait hint is read without recursion.** The word "overloaded"
+    anywhere in an error body made it a busy service's, waited on without
+    end, though its code said the request was refused as invalid (a C++
+    "overloaded function" quoted back) or a proxy echoed a prompt holding
+    it. The phrase is now read in the error's own message, after the
+    codes that refuse a request and before a server's own. And the reader
+    of "try again in 6m0s" called itself for each part, so an error of a
+    million "1s" ran the stack out, which no recover catches; it reads up
+    to four parts in a loop, in the first 4 KiB of the message (the model
+    client review of 2026-11-19).
+
+195. **Anthropic: no thinking is asked for the way each model takes it,
+    and a default cap fits the model.** gnosh asked for no thinking with
+    thinking {type: "disabled"} (/think off, MAX_THINKING_TOKENS=0, the
+    side requests of a model with no known levels). Claude Opus 5.5 and
+    the Fable and Mythos models refuse that value with a 400, and Claude
+    Sonnet 5.5 takes only {type: "between_tools"}, so every such request
+    failed. The Models API says which a model takes
+    (capabilities.thinking.types.disabled.supported and
+    between_tools.supported, read 2026-11-19 at platform.claude.com);
+    gnosh now reads it when it lists the models and sends "disabled",
+    "between_tools", or, for a model whose thinking cannot be turned off,
+    no thinking field and effort "low". A model the list did not say
+    anything of is asked with "disabled", as before. And a request with
+    no cap of its own asks for at most what the model writes in one
+    answer, as listed: the default of 64000 is above the 32000 of the
+    older Opus models (the model client review of 2026-11-19).
+
+196. **An image the model's server will not take for its size no longer
+    wedges the session.** A conversation keeps the pictures its tools
+    read, so a request a server refused for one was refused again on
+    every later turn, until /rewind (the model client review of
+    2026-11-19). Anthropic's API refuses an image over 8000 pixels a side,
+    and holds every image of a request with more than 20 to a lower limit
+    (its message names "many-image requests"), which screenshots it took
+    before can be over: a session that read many was refused from its
+    21st on (limits read 2026-11-19 at platform.claude.com, vision). The
+    image fallback that leaves out what a server could not read now also
+    leaves out, as too large, the images a refusal for size can be about
+    (those the server has not taken before), and after a many-image
+    refusal sends only the newest 20 images whole, the older ones as a
+    line that says so, then and from then on. The conversation keeps
+    every picture.
+
+197. **An MCP tool whose input is not described as an object is not
+    offered.** The model's APIs take a tool's input schema only as an
+    object schema. A server that listed a tool with another type
+    ({"type": "array"}) or a schema that is no object at all had every
+    request of the session refused while the tool was offered, until the
+    server was disabled. Such a tool is now left out, with a warning that
+    names it; a schema that only leaves the type out gets "type":
+    "object". As in Claude Code 2.1.328 ("an MCP tool with an invalid
+    input schema ... is now left out and Claude is told why", changelog
+    read 2026-11-19).
+
+198. **A host whose login shell is zsh runs "[ a == b ]" as written.** A
+    command on a declared host is eval'd by that account's login shell,
+    which on a Mac is zsh, and zsh takes a word that begins with "=" for
+    a command's path: "[ a == b ]", the usual bash test, and "echo ===="
+    failed with "= not found". The line gnosh puts in front of a host
+    command now turns that off in zsh (setopt no_equals) and is nothing
+    to the other shells. As in Claude Code 2.1.328 (changelog read
+    2026-11-19). Commands on this machine run in /bin/bash, as before.
+
+199. **/review marks its findings as Claude Code 2.1.328's /code-review
+    does.** It reviews for bugs and now also for what goes against the
+    project's instruction files (GNOSH.md, CLAUDE.md, AGENTS.md); each
+    finding is marked Important (the changes bring it), Pre-existing (it
+    was there, in code the changes touch) or Nit, and ends with the fix
+    suggested; a review that finds nothing says "Code review found no
+    issues." (changelog read 2026-11-19). Reuse, simplification and
+    efficiency stay /simplify's.
+
+200. **The config review's quick fixes (2026-11-19).** A fresh-eyes review
+    of the settings loader and the folder-trust gate:
+    - A project's own file cannot set options.projectDataDir. The data
+      folder is where the project's local settings are read from; the
+      trust question was asked of .gnosh/settings.local.json while a Yes
+      put in force the file of a folder the repository had named (with
+      a hook and an allow rule in it). Only the person's own files, /config
+      and --settings move it now, like the other options a repository must
+      not change.
+    - --settings naming the folder's own settings file is refused in an
+      untrusted folder by what the file is, not by how its path is spelled:
+      through a link (/tmp on a Mac) or in another case on a disk that
+      ignores case, it was read as the command line's file.
+    - A skill's name in skillOverrides is shown made safe in a message,
+      as every other key is: the file is read before any question, and an
+      escape in it reached the terminal.
+    - A named pipe where a repository's git settings would be is refused
+      before it is opened: gnosh hung at start in such a folder.
+
+201. **The trust question shows everything a Yes turns on.** It listed
+    what the folder's settings files hold and the programs its git
+    settings name; a Yes also turned on the servers of the project's
+    .mcp.json, its skills and commands (their hooks, the commands they
+    run as they are used, the tools they let run without asking) and its
+    kinds of sub-agent (their hooks, the MCP servers they start). A
+    repository with one harmless option and a .mcp.json server that ran
+    a stranger's command got a question that named only the option, and
+    a folder with nothing else of its own was never asked at all (the
+    config review of 2026-11-19). Those are listed now, with what each
+    runs (a server's command as the file writes it, no variable filled
+    in) or lets run, and counted: a folder that has any of them is asked
+    about, once, when gnosh starts there, at /cd and by gnosh trust.
+
+202. **The person's status line and file suggestion commands are held where
+    git would run a repository's programs.** In a folder that is not
+    trusted, whose repository's own git settings name a program (a
+    file-system monitor, a filter, a diff driver), gnosh holds its own
+    look at the repository, since git would run that program. The
+    person's status line and fileSuggestion commands still ran there, and
+    a status line that calls git status ran the repository's monitor (the
+    config review of 2026-11-19). In such a folder the status line is not
+    started, with a notice that says why, and the @ picker uses gnosh's
+    own search, which keeps git from running them.
+
+203. **A variable the person's env setting takes away is gone from every
+    command gnosh starts.** "env": {"NAME": ""} takes NAME away; the Bash
+    tool and hooks did that, while the status line, the file suggestion
+    command, a skill's own commands (!`...`) and gnokey were handed the
+    whole inherited environment with the settings appended, so the one
+    taken away stayed (the config review of 2026-11-19). The person's own
+    commands now get the inherited environment under the env block, a
+    bare name taking a variable out; a skill's commands get the Bash
+    tool's environment, which also leaves out what changes how a shell
+    reads its line (BASH_ENV, SHELLOPTS, PS4, exported functions).
+
+204. **The config review's last fixes (2026-11-19).**
+    - An http hook's address is shown and logged without what can be its
+      secret: the user name, the query, and each long piece of the path
+      (a Slack or Discord webhook's token). It went whole to /status,
+      gnosh doctor, /hooks and the hook records.
+    - A project's env block cannot set the variables that move where
+      gnosh and the programs it starts keep their own files (HOME, TMPDIR,
+      XDG_*, CLAUDE_CONFIG_DIR, GNOSH_*_DIR), trusted or not, as
+      spec/cc/settings.md 2 says; a trusted project's could.
+    - disableBypassPermissionsMode only takes a mode away, so a folder
+      that is not trusted keeps it too, as DECISIONS 2 says of what only
+      restricts (a new kind of setting, "restriction"); it was held.
+
+205. **The oracle no longer counts a redirected command against the
+    engine.** Its check that every command the engine read did run
+    trusted bash's trace, and a command whose standard error goes
+    elsewhere takes its own trace line with it (seed 157's ":&> $((x))"
+    ran and made the file 0, which then held the trace), while one whose
+    redirection fails does not run at all. The check passes over a
+    command with redirections; reading more than runs is the safe way
+    round. Also: the config doc said a provider key in an env block wins
+    over the shell's; it is read from the shell alone, as the code does.
+
+206. **The file --settings names is watched where it was read.** The
+    watcher made the path again from the flag, relative to the folder the
+    session works in; the loader reads it relative to where gnosh was
+    started, with a ~ filled in. With --cwd (or a quoted ~) it watched
+    another file, and edits to the one in force were never taken in (the
+    config review of 2026-11-19). It watches the loader's path now.
+
+208. **gnosh does not rewrite a local settings file that holds a key
+    twice.** Saving an approval reads the project's local file, changes its
+    rules and writes it back; it read the file as Go does, keeping the last
+    of a key given twice, so a duplicate the person had added (which the
+    loader refuses, with a mistake) lost its first copy unseen at the next
+    save (the config review of 2026-11-19). The file is left as it is now,
+    and the message names the key (config.DuplicateKey).
+
+209. **The agent loop review's fixes (2026-11-19).** A fresh-eyes review of
+    internal/agent:
+    - Stopping a turn drops only the prompts gnosh queued for itself
+      (Prompt.Own: /loop's next prompt, the "go on" after the session
+      moved, and notes that were to start a turn, which stay as notes).
+      It dropped every hidden prompt, among them the person's own: the
+      output of a !command they ran while a turn worked, a skill, /review.
+      Esc lost that output, and nobody was told.
+    - A stop as a round's tools end ends the turn as stopped at once, and
+      the fold of what the person sent meanwhile checks for a stop under
+      the lock Interrupt cancels under. A prompt in line was folded into
+      the stopped turn and never answered when Esc came while another
+      prompt was still in its check.
+    - /loop goes off when its prompt is refused (a session start that said
+      stop): it sent the next one at once, refused the same way, until
+      Esc.
+
+210. **Esc and End stop the moments that run after a turn ended.** The
+    turn-failed and turn-ended moments (StopFailure and Stop hooks) ran
+    under the session's own context, which only End cancelled, after it
+    had waited for them: a hook that hung there (ten minutes by default)
+    held the next prompt, Esc did nothing, and /exit waited (the agent
+    loop review of 2026-11-19). They run under a context of their own now,
+    which Interrupt and End cancel first.
+
+211. **The oracle's redirect exception keeps the checks that end a line.**
+    DECISIONS 205 passed over a redirected command before the checks that
+    end the whole line, so seed 158 counted against the engine a command
+    after a redirected exec (a failed exec ends the shell) and one after a
+    redirected command holding ${} (a bad substitution ends a
+    non-interactive bash). The redirected command is now left out of what
+    must have run only after those checks, and a redirection whose word
+    the engine cannot know (> ${}, &> $((x))) ends the check for the line.
+    Probed in fresh jails: all three lines of seeds 157 and 158 pass.
+
+212. **A prompt in line is not returned after a turn's end failed to be
+    written.** When a turn's end cannot be written (a full disk), the next
+    turn settles the log first, and that pass took every prompt written
+    down as queued and not sent for one a dead gnosh left behind: the
+    person was told it was not sent while it went out all the same, twice
+    once they sent it again (the agent loop review of 2026-11-19). In a
+    session this process opened, such prompts are still in its line, so
+    the pass runs only when a session is opened.
+
+213. **A prompt taken back during its check is handed back once.** One
+    taken back (Up, /withdraw) while its UserPromptSubmit check still ran
+    stayed in intake for the admitting goroutine to drop, marked taken,
+    and nothing passed over the mark: a second take handed it back again,
+    so the box held its text twice, and it was counted and shown as
+    waiting until its check ended (the agent loop review of 2026-11-19).
+    Taken prompts are passed over now, and the queue is told again when
+    the last one is dropped.
+
+214. **End writes off the prompts it returns.** A prompt written down as
+    queued and handed back by End (the session closed, or /clear opened a
+    new one) had no record that it was handed back, so the session opened
+    again returned it a second time (the agent loop review of
+    2026-11-19). End writes it off as it returns it.
+
+215. **A note stopped in its check is kept.** A note that was to start a
+    turn (a background task's end, a channel's event) passes the session's
+    start like a prompt; stopped there (Esc while the SessionStart hook
+    ran for it), it came back as a hidden prompt that no front end shows,
+    and was lost, against Tell's promise that stopping never loses a note
+    (the agent loop review of 2026-11-19). It is kept as a note now, and
+    goes with the next request.
+
+216. **With two questions open, the session says it waits on the one
+    left.** Parallel sub-agents can each ask at once. The answer to the
+    first put back the phase from before it, so the session read as
+    working while the second question still waited, and the second's end
+    put back the first's "waiting for an answer" (the agent loop review of
+    2026-11-19). What the session did before the first question is put
+    back when the last one closes; until then it waits on one still open.

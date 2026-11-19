@@ -29,6 +29,8 @@ type builder struct {
 	// before the state file's were put on top, to fall back on when the
 	// state file's choice turns out to be stale.
 	largeBefore, smallBefore Value[ModelRef]
+	// fallback is "fallbackModel" or --fallback-model.
+	fallback Value[[]ModelRef]
 
 	hosts    []Host
 	hooks    []Hook
@@ -37,6 +39,11 @@ type builder struct {
 	agent Value[string]
 	// statusLine is the status line command; a later file wins.
 	statusLine Value[StatusLine]
+	// fileSuggestion is the @ file suggestion command; a later file wins.
+	fileSuggestion Value[FileSuggestion]
+	// attribution is what commits and pull requests are signed with; a
+	// later file wins.
+	attribution Value[Attribution]
 
 	layers []*RuleLayer
 	mode   Value[string]
@@ -438,6 +445,10 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 		note("disableAllHooks")
 		b.hooksOff = Value[bool]{}
 	}
+	if !ok(KindFileSuggest) && b.fileSuggestion.Set && from(b.fileSuggestion.Origin) {
+		note("fileSuggestion")
+		b.fileSuggestion = Value[FileSuggestion]{}
+	}
 	if !ok(KindStatusLine) && b.statusLine.Set && from(b.statusLine.Origin) {
 		note("statusLine")
 		b.statusLine = Value[StatusLine]{}
@@ -464,14 +475,14 @@ func (b *builder) sweep(keep func(kind string) bool, projectFiles []string) (rem
 			note("defaultMode")
 			b.mode = Value[string]{}
 		}
-		if b.bypassDisabled.Set && from(b.bypassDisabled.Origin) {
-			note("disableBypassPermissionsMode")
-			b.bypassDisabled = Value[bool]{}
-		}
 		if b.denyInstead.Set && from(b.denyInstead.Origin) {
 			note("denyInsteadOfPrompting")
 			b.denyInstead = Value[bool]{}
 		}
+	}
+	if !ok(KindRestriction) && b.bypassDisabled.Set && from(b.bypassDisabled.Origin) {
+		note("disableBypassPermissionsMode")
+		b.bypassDisabled = Value[bool]{}
 	}
 	if !ok(KindAddDir) {
 		b.dirs = slices.DeleteFunc(b.dirs, func(d ListItem) bool {

@@ -101,6 +101,16 @@
 //     stays. These are the one choice of the person's that changes the
 //     system prompt: a choice made on purpose, for the whole session.
 //
+//   - language, after the style, when the person set the language replies
+//     are in (Claude Code's language): it is asked for in the system
+//     prompt, as Claude Code does, since it holds for the whole session;
+//     code, commands and quoted text stay as they are.
+//
+//   - attribution, after it, when a settings file says what the model
+//     signs its commits and pull requests with (Claude Code's
+//     attribution). gnosh signs with nothing of its own: Jae's rule for
+//     his repositories is no agent trailers.
+//
 //   - no-tools, only in a session with no tools at all: a model with no
 //     tools otherwise writes its tool calls out as text.
 //
@@ -232,6 +242,10 @@
 //     refused; it quotes the refusal and says the work is still to do. A
 //     model once sent one refused close three hundred times through thirty
 //     nudges that said only "do not repeat".
+//   - text-call (TextCall) tells a model whose reply is a tool call written
+//     out as text (a chat template's <tool_call> markup that its server did
+//     not take as a call) that nothing ran: Qwen on llama.cpp does this
+//     now and then, and the turn ended on it.
 //   - empty-reply (EmptyReply) asks again after a reply with no text and
 //     no tool call.
 //   - stop-hook (StopHook) carries a Stop hook's reason, and says the hook
@@ -269,6 +283,10 @@
 //     command a Monitor watched has ended.
 //   - agent-ended (AgentEnded) says the same of a sub-agent the model
 //     started in the background, with its report, marked as its own words.
+//   - subtask-ended (SubtaskEnded) says the same of a copy of the
+//     conversation the person set to work in the background with
+//     /subtask, with the answer it printed, marked as its own words: the
+//     model is to tell the person what came of it.
 //   - btw (Btw) stands before a side question the person asks with /btw,
 //     in a request beside the session's own that is not kept: answer in
 //     words from the conversation, call no tool, start on nothing.
@@ -320,8 +338,12 @@
 //     user asked to be told or asked, and otherwise without asking. (A
 //     plain "carry on without asking" took the model past such a stop:
 //     Claude Code's own summary line did, on 16 November 2026.)
-//     earlier-left-out (EarlierLeftOut) opens a summary request whose
-//     earliest turns did not fit.
+//     earlier-left-out (EarlierLeftOut) stands where part of a summary
+//     request did not fit: after its first message, or at its start.
+//   - files-back (FileShownBack, FilesNotShownBack) gives back after a
+//     summary the files the model read or changed last, as Read returns
+//     them now, and names those too long to give back, to be read again
+//     before they are changed (as Claude Code does after compacting).
 //
 // # Notes inside tool results
 //

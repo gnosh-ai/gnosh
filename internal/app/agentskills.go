@@ -113,6 +113,12 @@ func (l *live) agentHooks(def agentdef.Def, id string) (func(), error) {
 	where := firstOf(def.Source, "gnosh's own definition")
 	cfg, err := hooks.ParseConfig(def.Hooks, where+" (hooks)")
 	if err == nil {
+		// "once" is a skill's: in an agent's definition it is not read,
+		// as in Claude Code, so that the agent's guard is not gone after
+		// its first run.
+		for i := range cfg.Hooks {
+			cfg.Hooks[i].Once = false
+		}
 		if id == "" {
 			return none, l.hookErr(def, l.hooks.r.Add(cfg))
 		}

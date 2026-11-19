@@ -131,7 +131,7 @@ func fuzzWire(f *testing.F, typ string) wire {
 	}
 	switch typ {
 	case TypeAnthropic:
-		return &anthropic{p}
+		return &anthropic{provider: p}
 	case TypeLlamaCpp:
 		return &llamaCpp{openAI{p}}
 	}

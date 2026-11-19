@@ -2,9 +2,12 @@ package app
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/agent"
 	"github.com/gnosh-ai/gnosh/internal/app/apptest"
@@ -30,7 +33,7 @@ func TestRewindInThePlainSession(t *testing.T) {
 	s.see("the first prompt")
 	s.see("the third prompt")
 	s.see("/rewind N takes the conversation back to before prompt N")
-	s.see("what shell commands changed cannot")
+	s.see("what a file holds when it is put back is kept first")
 	s.typeLine("/rewind 9")
 	s.see("is not the number of one of your prompts")
 	s.typeLine("/rewind 2")
@@ -241,4 +244,170 @@ func TestRewindThroughTheControls(t *testing.T) {
 	has(t, "what the model was sent after the rewind", sent, "prompt one", "One.", "prompt two, again")
 	hasNot(t, "what the model was sent after the rewind", sent, "Two.", "prompt three", "Held.")
 	checkSession(t, w, w.Sessions()[0])
+}
+
+// What a file holds when a rewind puts it back, or takes it away, is kept
+// first: here the person had changed by hand a file the model wrote.
+func TestRewindKeepsWhatAFileHolds(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Write", Args: `{"file_path":"notes.txt","content":"first\n"}`}}},
+		apptest.Reply{Text: "Written."},
+	)
+	s := sit(t, w, "--permission-mode", "acceptEdits")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("write the notes")
+	s.see("Written.")
+	w.Write("notes.txt", "mine, by hand\n")
+	s.typeLine("/rewind 1 files")
+	s.see("taken away: it was not there; what it held is kept at ")
+	s.typeLine("/exit")
+	s.exit()
+	if w.Exists("notes.txt") {
+		t.Error("notes.txt was not there before the prompt, and is there after the rewind")
+	}
+	kept, _ := filepath.Glob(filepath.Join(w.DataDir(), "projects", "*", "*", "checkpoints", "replaced", "*-notes.txt"))
+	if len(kept) != 1 {
+		t.Fatalf("what notes.txt held was not kept: %q", kept)
+	}
+	if b, _ := os.ReadFile(kept[0]); string(b) != "mine, by hand\n" {
+		t.Errorf("the kept copy holds %q", b)
+	}
+}
+
+// A rewind of the conversation alone leaves the files as they are; a later
+// rewind of the files to an earlier prompt still finds what they held then,
+// under the prompt that was taken out of the conversation.
+func TestRewindFilesAfterAConversationRewind(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "Nothing to change."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "r1", Name: "Read", Args: `{"file_path":"util.txt"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Edit", Args: `{"file_path":"util.txt","old_string":"v0","new_string":"v1"}`}}},
+		apptest.Reply{Text: "Edited."},
+		apptest.Reply{Calls: []apptest.Call{{ID: "r2", Name: "Read", Args: `{"file_path":"util.txt"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Edit", Args: `{"file_path":"util.txt","old_string":"v1","new_string":"v2"}`}}},
+		apptest.Reply{Text: "Edited again."},
+	)
+	w.Write("util.txt", "v0\n")
+	s := sit(t, w, "--permission-mode", "acceptEdits")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("look around")
+	s.see("Nothing to change.")
+	s.typeLine("edit util")
+	s.see("Edited.")
+	s.typeLine("/rewind 2")
+	s.see("The conversation is back to before this prompt of yours")
+	s.typeLine("edit util once more")
+	s.see("Edited again.")
+	if got := w.Read("util.txt"); got != "v2\n" {
+		t.Fatalf("util.txt holds %q before the second rewind", got)
+	}
+	s.typeLine("/rewind 1 files")
+	s.see("Put back: ")
+	s.typeLine("/exit")
+	s.exit()
+	if got := w.Read("util.txt"); got != "v0\n" {
+		t.Errorf("util.txt holds %q after a rewind to before the first prompt, want what it held then", got)
+	}
+}
+
+// What a sub-agent changes is its own, as in Claude Code: a rewind of the
+// session does not take it back.
+func TestRewindLeavesWhatASubAgentChanged(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Agent", Args: `{"description":"write the file","prompt":"Write sub.txt.","subagent_type":"general-purpose"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "s1", Name: "Write", Args: `{"file_path":"sub.txt","content":"by the sub-agent\n"}`}}},
+		apptest.Reply{Text: "Wrote it."},
+		apptest.Reply{Text: "The sub-agent wrote it."},
+	)
+	s := sit(t, w, "--permission-mode", "acceptEdits")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("have it written")
+	s.see("The sub-agent wrote it.")
+	if !w.Exists("sub.txt") {
+		t.Fatal("the sub-agent wrote nothing")
+	}
+	s.typeLine("/rewind 1 files")
+	s.see("No file was changed by Write or Edit since then")
+	s.typeLine("/exit")
+	s.exit()
+	if !w.Exists("sub.txt") {
+		t.Error("a rewind took back what a sub-agent wrote")
+	}
+}
+
+// A branch finds the copies kept under the prompts it took over, in the
+// folder of the session it was branched from.
+func TestRewindInABranch(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Write", Args: `{"file_path":"notes.txt","content":"first\n"}`}}},
+		apptest.Reply{Text: "Written."},
+	)
+	s := sit(t, w, "--permission-mode", "acceptEdits")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("write the notes")
+	s.see("Written.")
+	s.typeLine("/branch")
+	s.see("You are in a copy of the conversation")
+	s.typeLine("/rewind 1 files")
+	s.see("taken away: it was not there")
+	s.typeLine("/exit")
+	s.exit()
+	if w.Exists("notes.txt") {
+		t.Error("the branch's rewind did not find the copy kept before the branch")
+	}
+}
+
+// A prompt typed while a turn ran waited in the queue. A rewind to before
+// it goes back to where it went out, after that turn, and the session that
+// opens again does not send it by itself.
+func TestRewindToAPromptThatWaited(t *testing.T) {
+	hold := make(chan struct{})
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "First, slowly.", Hold: hold},
+		apptest.Reply{Text: "Second."},
+	)
+	s := sit(t, w)
+	s.see("Type a prompt and Enter.")
+	s.typeLine("first")
+	for deadline := time.Now().Add(patience); len(w.Model.Requests()) == 0; {
+		if time.Now().After(deadline) {
+			t.Fatal("the first prompt never reached the model")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	s.typeLine("second")
+	close(hold)
+	s.see("Second.")
+	s.typeLine("/rewind 2")
+	s.see("The conversation is back to before this prompt of yours")
+	time.Sleep(time.Second)
+	if n := len(w.Model.Requests()); n != 2 {
+		t.Errorf("the model was asked %d times: the session sent the prompt it went back to before", n)
+	}
+	s.typeLine("/exit")
+	s.exit()
+}
+
+// With fileCheckpointingEnabled false, nothing is kept, and a rewind of the
+// files says why it cannot be done.
+func TestRewindWithoutCheckpoints(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Write", Args: `{"file_path":"notes.txt","content":"first\n"}`}}},
+		apptest.Reply{Text: "Written."},
+	)
+	w.Settings(`{"options": {"fileCheckpointingEnabled": false}}`)
+	s := sit(t, w, "--permission-mode", "acceptEdits")
+	s.see("Type a prompt and Enter.")
+	s.typeLine("write the notes")
+	s.see("Written.")
+	s.typeLine("/rewind 1 files")
+	s.see("fileCheckpointingEnabled is false")
+	s.typeLine("/exit")
+	s.exit()
+	if !w.Exists("notes.txt") {
+		t.Error("a rewind with nothing kept took a file away")
+	}
+	if kept, _ := filepath.Glob(filepath.Join(w.DataDir(), "projects", "*", "*", "checkpoints", "index.jsonl")); len(kept) != 0 {
+		t.Errorf("copies were kept: %q", kept)
+	}
 }

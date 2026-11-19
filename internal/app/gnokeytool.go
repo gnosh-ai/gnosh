@@ -323,12 +323,7 @@ func (t *gnokeyTool) Run(ctx context.Context, call core.ToolCall, env *core.Tool
 	defer cancel()
 	cmd := exec.CommandContext(runCtx, t.bin, args...)
 	cmd.Dir = c.dir
-	cmd.Env = slices.Clone(t.l.p.o.Environ)
-	for _, kv := range t.l.cfg.CommandEnv() {
-		if strings.Contains(kv, "=") { // (a bare name takes one out, for the shell)
-			cmd.Env = append(cmd.Env, kv)
-		}
-	}
+	cmd.Env = t.l.ownCommandEnv()
 	// gnokey runs without the terminal, as the shell's commands do: it
 	// reads nothing typed at gnosh's.
 	noTerminal(cmd)

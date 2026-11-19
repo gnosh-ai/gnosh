@@ -39,7 +39,7 @@ func (g *rig) show(what string) *rig {
 func TestIdleScreen(t *testing.T) {
 	each(t, func(t *testing.T, cols int) {
 		g := newRig(t, cols, 24, text.NoColor)
-		g.committedHas("GNOSH test-build", "qwen3.8-27b", "~/src/proj")
+		g.committedHas("GNOSH test-build", "qwen3.8-27b", "~/src/proj", "https://gnosh.ai · built on gno.land (https://gno.land) · /license")
 		g.liveHas("> ", "idle", "manual mode")
 		if cols >= 80 {
 			g.liveHas("qwen3.8-27b", "thinking on", "context 11%", "~/src/proj (main)")
@@ -188,14 +188,14 @@ func TestActivityLine(t *testing.T) {
 	g.liveHas("~ thinking", "Let me think about this.")
 	g.wait(12 * time.Second)
 	one("qwen3.8-27b is thinking · 12s")
-	// A thought that has gone on for forty seconds is a deep one.
-	g.wait(27 * time.Second)
-	one("qwen3.8-27b is thinking · 39s")
+	// A thought that has gone on for fifteen seconds is a deep one.
+	g.wait(2 * time.Second)
+	one("qwen3.8-27b is thinking · 14s")
 	g.wait(time.Second)
-	one("* qwen3.8-27b is deep in thought · 40s")
+	one("* qwen3.8-27b is deep in thought · 15s")
 	g.ev(said("Here it is."))
 	one("* qwen3.8-27b is writing")
-	g.once("~ thought for 40s")
+	g.once("~ thought for 15s")
 	g.ev(toolCall("c1", "Bash"), toolInput("c1", `{"command":"go test`))
 	one("* qwen3.8-27b is writing a Bash call")
 	g.liveHas("$ go test")

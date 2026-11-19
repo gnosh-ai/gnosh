@@ -512,14 +512,46 @@ func TestAgentViewWatchAnswers(t *testing.T) {
 			t.Errorf("watching the run that asks does not show %q:\n%s", want, all)
 		}
 	}
+	// (Read first: a key in the moment the question came is typing.)
+	g.clk.add(time.Second)
 	g.keys(`"1"`)
 	if !slices.Equal(g.src.answered, []string{runDocs + " q1 yes "}) || g.v.watch == nil {
 		t.Fatalf("1 while watching: answered %q, watching %v", g.src.answered, g.v.watch != nil)
 	}
 	ask()
+	g.clk.add(time.Second)
 	g.keys(`"not now, read the README first" <Enter>`)
 	if len(g.src.answered) != 2 || g.src.answered[1] != runDocs+" q1 no not now, read the README first" || len(g.src.told) != 0 {
 		t.Errorf("words while watching the run that asks: answered %q, told %q", g.src.answered, g.src.told)
+	}
+}
+
+// A question takes no answer in the moment it came, as the session's own
+// questions do: a digit typed then is typing, in the box, and words sent
+// then go to the run, which reads them once it goes on; once it has been
+// on the screen a while and the person has stopped typing, the digit
+// answers (a review: "2 tests still fail…" answered a question that had
+// just come 2).
+func TestAgentViewQuestionGuard(t *testing.T) {
+	g := newAgentRig(t)
+	g.v.sel = runDocs
+	g.keys("<Enter>")
+	if g.v.watch == nil {
+		t.Fatal("Enter did not watch the working run")
+	}
+	g.src.set(runDocs, func(r *app.AgentRun) {
+		r.State, r.Question = "blocked", &app.AgentQuestion{ID: "q1", Title: "Allow Bash?",
+			Choices: []app.QuestionChoice{{Key: "yes", Label: "Yes"}, {Key: "dont", Label: "Yes, and don't ask again"}, {Key: "no", Label: "No"}}}
+	})
+	g.v.refresh()
+	g.keys(`"2 tests still fail" <Enter>`)
+	if len(g.src.answered) != 0 || !slices.Equal(g.src.told, []string{runDocs + " 2 tests still fail"}) {
+		t.Fatalf("typed as the question came: answered %q, told %q", g.src.answered, g.src.told)
+	}
+	g.clk.add(time.Second)
+	g.keys(`"1"`)
+	if !slices.Equal(g.src.answered, []string{runDocs + " q1 yes "}) {
+		t.Errorf("1 a second later: answered %q", g.src.answered)
 	}
 }
 
@@ -602,6 +634,7 @@ func TestAgentViewNeedsInput(t *testing.T) {
 	if live[len(live)-1] != "1-3 answers · words and Enter: no, with them · Enter watches · Esc closes" || g.v.watch != nil {
 		t.Errorf("the keys line while answering: %q", live[len(live)-1])
 	}
+	g.clk.add(time.Second)
 	g.keys(`"1"`)
 	if !slices.Equal(g.src.answered, []string{runAsk + " q7 yes "}) {
 		t.Fatalf("1 answered %q", g.src.answered)
@@ -613,6 +646,7 @@ func TestAgentViewNeedsInput(t *testing.T) {
 	g.src.set(runAsk, func(r *app.AgentRun) { r.State, r.Question = "blocked", question() })
 	g.v.refresh()
 	g.v.sel = runAsk
+	g.clk.add(time.Second)
 	g.keys(`<Enter> "use git clean instead" <Enter>`)
 	if len(g.src.answered) != 2 || g.src.answered[1] != runAsk+" q7 no use git clean instead" || len(g.src.dispatched) != 0 {
 		t.Errorf("words and Enter answered %q and started %q", g.src.answered, g.src.dispatched)
@@ -984,6 +1018,7 @@ func TestAgentViewAnsweringKeepsCommands(t *testing.T) {
 		t.Errorf("/rename while a question is shown: answered %q, renamed %q", g.src.answered, g.src.renamed)
 	}
 	g.v.peek = true
+	g.clk.add(time.Second)
 	g.keys(`"use smaller steps"`)
 	if _, live = g.screen(); live[len(live)-1] != "Enter answers no, with your words · Esc empties the box" {
 		t.Errorf("the keys line with words for the question: %q", live[len(live)-1])

@@ -306,6 +306,7 @@ func (t *editTool) Describe(call core.ToolCall, env *core.ToolEnv) (core.Action,
 	if f != nil {
 		return core.Action{Kind: core.ActionEdit, Paths: c.loc.paths(), Summary: c.summary}, f
 	}
+	t.sys.judge(call.ID, c.loc.real)
 	return c.action(), nil
 }
 
@@ -331,6 +332,9 @@ func (t *editTool) Run(ctx context.Context, call core.ToolCall, env *core.ToolEn
 	}
 	if c.loc.real != where.real {
 		return refused(failf("%s leads somewhere else than it did a moment ago (%s, not %s). Nothing was changed. Run the call again if that is what you mean.", c.loc.abs, c.loc.real, where.real))
+	}
+	if was, moved := t.sys.judgedElsewhere(call.ID, c.loc.real); moved {
+		return refused(failf("%s leads somewhere else than when the call was looked at (%s, not %s): a link or a folder on the way changed in between. Nothing was changed. Run the call again if that is what you mean.", c.loc.abs, c.loc.real, was))
 	}
 	if err := ctx.Err(); err != nil {
 		return core.ToolResult{}, fmt.Errorf("%s of %s stopped before anything was changed: %w", o.EditName, c.loc.abs, context.Cause(ctx))

@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -1141,6 +1142,52 @@ func TestIDs(t *testing.T) {
 // under that folder's project directory, a meta entry says so, and the
 // session is listed with that folder's sessions from then on, with new
 // entries stamped with it. A branch of it is listed there too.
+// A session whose file a move put in another folder's directory, cut short
+// before the move was written down (gnosh killed in the middle of /cd), is
+// listed with the sessions of the folders of that directory: it was listed
+// with none (the session store review of 2026-11-19). A session of another
+// folder whose name comes to the same directory is still that folder's
+// alone.
+func TestListAMoveCutShort(t *testing.T) {
+	st, _ := newStore(t)
+	s, _ := st.Create("/work/app")
+	mustAppend(t, s, PromptEntry("fix the flaky test"))
+	s.Close()
+	to := filepath.Join(st.ProjectDir("/work/lib"), s.ID()+".jsonl")
+	if err := os.MkdirAll(filepath.Dir(to), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(s.Path(), to); err != nil {
+		t.Fatal(err)
+	}
+	if Slug("/work/lib") != Slug("/work-lib") {
+		t.Fatalf("the test needs two folders of one directory: %s, %s", Slug("/work/lib"), Slug("/work-lib"))
+	}
+	twin, _ := st.Create("/work-lib")
+	mustAppend(t, twin, PromptEntry("the twin's"))
+	twin.Close()
+	ids := func(dir string) []string {
+		list, err := st.List(ctx, dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, info := range list {
+			out = append(out, info.ID)
+		}
+		return out
+	}
+	if got := ids("/work/lib"); !slices.Equal(got, []string{s.ID()}) {
+		t.Errorf("List(/work/lib) = %v, want the session whose move was cut short alone", got)
+	}
+	if got := ids("/work-lib"); !slices.Contains(got, twin.ID()) {
+		t.Errorf("List(/work-lib) = %v, want its own session in it", got)
+	}
+	if got := ids("/work/app"); len(got) != 0 {
+		t.Errorf("List(/work/app) = %v, want none", got)
+	}
+}
+
 func TestMove(t *testing.T) {
 	st, _ := newStore(t)
 	s, _ := st.Create("/work/app")

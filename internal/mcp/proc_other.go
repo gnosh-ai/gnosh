@@ -8,6 +8,8 @@ import "os/exec"
 func ownGroup(cmd *exec.Cmd) {}
 
 // stop ends the server: there is no gentler signal to send here.
-func stop(cmd *exec.Cmd, step int) {
-	_ = cmd.Process.Kill()
+func stop(cmd *exec.Cmd, step int, reaped bool) {
+	if !reaped {
+		_ = cmd.Process.Kill()
+	}
 }

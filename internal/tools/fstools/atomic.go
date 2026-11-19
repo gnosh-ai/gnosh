@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 // fileOps is the file-system calls Write and Edit make that a test needs
@@ -15,6 +16,29 @@ import (
 type fileOps struct {
 	// rename puts a finished temporary file in the place of the real one.
 	rename func(oldpath, newpath string) error
+	// judged are the real paths of Write and Edit calls as they were
+	// described, by call id: what the permission layer judged, which a run
+	// is held to.
+	judged sync.Map
+}
+
+// judge notes the real path a call was described with.
+func (s *fileOps) judge(id, real string) {
+	if id != "" {
+		s.judged.Store(id, real)
+	}
+}
+
+// judgedElsewhere reports the real path a call was described with when it
+// is not real: between the question and the run, a link or a folder on the
+// way changed, and the call would write what nobody was asked about.
+func (s *fileOps) judgedElsewhere(id, real string) (string, bool) {
+	v, ok := s.judged.LoadAndDelete(id)
+	if !ok {
+		return "", false
+	}
+	was, _ := v.(string)
+	return was, was != real
 }
 
 func newFileOps() *fileOps {
