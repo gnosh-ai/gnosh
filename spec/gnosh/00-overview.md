@@ -117,6 +117,7 @@ Names in mem are lowercase, printed in backticks, and typed back exactly:
 | `close-check.md` | the checks on a close, the judge prompts' requirements, the option, the evidence |
 | `peers.md` | many sessions on one mem: the lock, order, `.Parallel()`, the pick, waiting, turn locks, what was measured |
 | `swarm.md` | mem as a realm on gno.land: the realm's calls, leases, events, the chain client, the demo runner, measured runs, what is not built |
+| `bridge.md` | `gnosh bridge`: the machine tools and the frames view for another harness, as JSON lines over standard input and output |
 | `integration-contract.md` | the list the clean side builds from: every hook-up point between the harness and these subsystems, with a priority |
 | `open-questions.md` | what the sources contradict or leave unsettled, with a recommended reading |
 
