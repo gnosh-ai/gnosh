@@ -367,6 +367,15 @@ func layTranscript(th *Theme, m text.Metrics, entries []app.TranscriptEntry, wid
 		}
 		return out
 	}
+	screenRowsOf := func(words string, style func(string) string, first, rest string) []string {
+		var out []string
+		lead := first
+		for _, l := range screenLines(words) {
+			out = append(out, wrap(m, style(l), width, lead, rest)...)
+			lead = rest
+		}
+		return out
+	}
 	quiet := func(l string) string { return th.Quiet.Render(l) }
 	plain := func(l string) string { return l }
 	// part is a long part, cut at viewPart rows until everything is shown.
@@ -392,7 +401,7 @@ func layTranscript(th *Theme, m text.Metrics, entries []app.TranscriptEntry, wid
 		if r.IsError {
 			style, first = func(l string) string { return th.Fail.Render(l) }, "  "+th.Fail.Render(th.FailMark)+" "
 		}
-		out := rowsOf(resultText(r), style, first, "    ", false)
+		out := screenRowsOf(resultText(r), style, first, "    ")
 		if len(out) == 0 {
 			out = []string{"  ⎿ " + quiet("(nothing)")}
 		}
@@ -440,7 +449,7 @@ func layTranscript(th *Theme, m text.Metrics, entries []app.TranscriptEntry, wid
 			for _, b := range e.Message.Blocks {
 				switch {
 				case b.Type == core.BlockToolResult && !shown[b.ToolUseID]:
-					add(part(rowsOf(resultText(b), plain, quiet("  ⎿ "+oneLine(b.ToolUseID)+": "), "    ", false))...)
+					add(part(screenRowsOf(resultText(b), plain, quiet("  ⎿ "+oneLine(b.ToolUseID)+": "), "    "))...)
 				case b.Type == core.BlockText:
 					add(part(rowsOf(unwrapped(b.Text), quiet, "  + ", "    ", false))...)
 				}
@@ -462,7 +471,7 @@ func layTranscript(th *Theme, m text.Metrics, entries []app.TranscriptEntry, wid
 				continue
 			}
 			for _, t := range blockTexts(e.Message) {
-				add(part(rowsOf(unwrapped(t), quiet, "  gnosh: ", "    ", false))...)
+				add(part(screenRowsOf(unwrapped(t), quiet, "  gnosh: ", "    "))...)
 			}
 		case "summary":
 			add(part(rowsOf(e.Text, quiet, "※ what came before, in short: ", "  ", true))...)

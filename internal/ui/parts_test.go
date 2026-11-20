@@ -81,6 +81,12 @@ func TestSafeLines(t *testing.T) {
 	if got := screenLine("10%\r50%\r100% done\r"); got != "100% done (written over 2 earlier states of this line)" {
 		t.Errorf("screenLine gave %q", got)
 	}
+	if got := screenLine("N\bNA\bAM\bME\bE — _\bd_\bi_\bf_\bf"); got != "NAME — diff" {
+		t.Errorf("screenLine overstrike gave %q", got)
+	}
+	if got := screenLine("\x1b[31merror\x1b[0m and \x1b[2J"); got != "error and ^[[2J" {
+		t.Errorf("screenLine SGR gave %q", got)
+	}
 	if got := screenLine("no return"); got != "no return" {
 		t.Errorf("screenLine gave %q", got)
 	}

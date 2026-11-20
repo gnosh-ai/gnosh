@@ -92,6 +92,7 @@ func TestCaptureView(t *testing.T) {
 		{name: "characters are counted, not bytes", data: "ééééé\nééééé\n", keep: 100, limit: 12, want: "ééééé\nééééé\n"},
 		{name: "wide characters stay whole", data: strings.Repeat("한", 30), keep: 100, limit: 10, want: "한한한한한\n<0 lines out>\n한한한한한", cut: true},
 		{name: "NULs and bad bytes", data: "a\x00b\xff\xfec\n", keep: 100, limit: 10, want: "ab\uFFFDc\n"},
+		{name: "man overstrike and SGR colour codes", data: "N\bNA\bAM\bME\bE \x1b[32m_\bo_\bk\x1b[0m\n", keep: 100, limit: 20, want: "NAME ok\n"},
 		{name: "only the ends are kept", data: strings.Repeat("0123456789\n", 100), keep: 44, limit: 44,
 			want: "0123456789\n0123456789\n<96 lines out>\n0123456789\n0123456789\n", cut: true},
 		{name: "characters cut by the edges of what is kept", data: "ab" + strings.Repeat("é", 100) + "c\n", keep: 9, limit: 8,

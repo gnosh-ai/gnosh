@@ -124,9 +124,11 @@ func lastLines(s string, n int) []string {
 
 // screenLine is a line of a command's output as a terminal would have left
 // it: a carriage return inside it begins the line again, so a progress
-// meter shows as its last state. That the line was written over is said
-// after it, so that nothing is hidden without a word. It is then made
-// safe.
+// meter shows as its last state, man-page backspace overstrikes (X\bX and
+// _\bX) collapse to the character they mark, and SGR colour codes
+// (\x1b[...m) are stripped while all other control sequences remain visible.
+// That the line was written over is said after it, so that nothing is
+// hidden without a word. It is then made safe.
 func screenLine(s string) string {
 	s = strings.TrimRight(s, "\r")
 	over := ""
@@ -136,6 +138,7 @@ func screenLine(s string) string {
 		}
 		s = s[i+1:]
 	}
+	s = stripSGR(foldOverstrikes(s))
 	if len(s) > longLine {
 		cut := longLine
 		for cut > 0 && !utf8.RuneStart(s[cut]) {
@@ -144,6 +147,88 @@ func screenLine(s string) string {
 		s = s[:cut] + fmt.Sprintf(" (a line of %s bytes, cut here)", grouped(len(s)))
 	}
 	return safeLine(s) + over
+}
+
+// screenLines splits command or tool output into lines and passes each
+// through screenLine.
+func screenLines(s string) []string {
+	s = strings.TrimRight(s, "\n")
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, "\n")
+	for i, p := range parts {
+		parts[i] = screenLine(p)
+	}
+	return parts
+}
+
+// foldOverstrikes collapses man-page bold (X\bX), underline (_\bX or X\b_)
+// and bullet (+\bo or o\b+) overstrikes into the character they format,
+// leaving arbitrary backspaces untouched so they still render visibly.
+func foldOverstrikes(s string) string {
+	if strings.IndexByte(s, '\b') < 0 {
+		return s
+	}
+	runes := []rune(s)
+	out := make([]rune, 0, len(runes))
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		if r == '\b' && len(out) > 0 && i+1 < len(runes) {
+			prev, next := out[len(out)-1], runes[i+1]
+			if collapsed, ok := overstrikeRune(prev, next); ok {
+				out[len(out)-1] = collapsed
+				i++
+				continue
+			}
+		}
+		out = append(out, r)
+	}
+	return string(out)
+}
+
+func overstrikeRune(prev, next rune) (rune, bool) {
+	if prev <= 0x20 || prev == 0x7f || next <= 0x20 || next == 0x7f {
+		return 0, false
+	}
+	switch {
+	case prev == next:
+		return next, true
+	case prev == '_':
+		return next, true
+	case next == '_':
+		return prev, true
+	case (prev == '+' && next == 'o') || (prev == 'o' && next == '+'):
+		return '•', true
+	default:
+		return 0, false
+	}
+}
+
+// stripSGR removes benign CSI SGR colour/style sequences (\x1b[[0-9;:]*m)
+// while keeping all other escape sequences intact so safeLine renders them
+// as visible caret notation.
+func stripSGR(s string) string {
+	if !strings.Contains(s, "\x1b[") {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if i+1 < len(s) && s[i] == '\x1b' && s[i+1] == '[' {
+			j := i + 2
+			for j < len(s) && ((s[j] >= '0' && s[j] <= '9') || s[j] == ';' || s[j] == ':') {
+				j++
+			}
+			if j < len(s) && s[j] == 'm' {
+				i = j + 1
+				continue
+			}
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
 }
 
 // head is what a call does, in the parts its heading is made of.
@@ -713,7 +798,7 @@ func (s *session) endBlock(c *call, ev *agent.ToolEndEvent) (rows []string, comp
 	case res.IsError:
 		failed = true
 		summary = join("failed", took)
-		under = s.clipHead(safeLines(text), s.limit(errorLines))
+		under = s.clipHead(screenLines(text), s.limit(errorLines))
 	case res.Display != nil && res.Display.Kind == "diff":
 		// An edit is shown as its diff. The diff's own first line names
 		// the file and counts the lines, so it is the block's heading.
