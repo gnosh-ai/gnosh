@@ -153,7 +153,6 @@ func defaultOptions() Options {
 	o.MaxBackgroundTasks.V = 50
 	o.BashOutputMaxChars.V = 30000
 	o.MemReviewCloses.V = true
-	o.RespondToBashCommands.V = true
 	o.FileCheckpointingEnabled.V = true
 	o.ShowTurnDuration.V = true
 	o.RespectGitignore.V = true
@@ -240,8 +239,8 @@ var optionDefs = []optionDef{
 		what: "how long a question the model asks (AskUserQuestion) may go without a key before it closes by itself, with what was picked by then, and the model goes on on its own judgment: 60s, 5m or 10m; permission questions never close so; not from a project's file",
 		from: fromClaudeCode + ": the settings key", enum: []string{"60s", "5m", "10m"}, ownOnly: true,
 		text: func(o *Options) *Value[string] { return &o.AskUserQuestionTimeout }},
-	{key: "respondToBashCommands", kind: oBool, def: "true",
-		what:  "the model answers what a command you ran behind ! printed, as soon as it ends; false puts the command and its output in front of the model with your next prompt instead",
+	{key: "respondToBashCommands", kind: oBool, def: "false",
+		what:  "the model answers what a command you ran behind ! printed, as soon as it ends; false (the default) puts the command and its output in front of the model with your next prompt instead",
 		from:  fromClaudeCode + ": the settings key",
 		truth: func(o *Options) *Value[bool] { return &o.RespondToBashCommands }},
 	{key: "fileCheckpointingEnabled", kind: oBool, def: "true",

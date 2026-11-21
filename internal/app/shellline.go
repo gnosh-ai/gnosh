@@ -23,12 +23,13 @@ import (
 // and the shell tool leaves out what is there to steer a model. A person
 // may type ssh.
 //
-// The front end is shown it as a tool call. When it has ended, the command
-// and what it printed go to the model as a prompt of gnosh's own, which
-// says whose command it was, and the model answers. One that the person
-// stopped is not answered, and with the respondToBashCommands option off
-// none is: it is put in the conversation at once, before their next
-// prompt.
+// The front end is shown it as a tool call. By default
+// (respondToBashCommands off), or when the person stopped the command,
+// the command and what it printed are recorded in the conversation at
+// once before their next prompt without starting a model turn. With
+// respondToBashCommands on, they go to the model as a prompt of gnosh's
+// own so it can briefly answer what the output shows without running
+// unrequested commands.
 //
 // The command line is also kept in the session's file as a meta entry
 // (metaShell), for the prompt history: Up and shell mode's Tab offer it
@@ -111,19 +112,19 @@ func (l *live) shellLine(command string) error {
 		}
 		// Into the conversation. The command's output is data, like a
 		// tool's: it is made harmless on its way in.
-		// (Not "go on with what they asked for before": on box 1, in a
-		// session with nothing asked before, Qwen went looking for it.)
-		text := prompt.Wrap("The user ran this shell command themselves, in this session's working directory, and this is what it printed. It was their own command, not a request to run it again: answer what it shows, in a few words, and if you were in the middle of something for them, go on with it.") +
-			"\n\n$ " + prompt.Untrusted(command) + "\n" + prompt.Untrusted(core.TextOf(res.Content))
 		// One the model does not answer now is put in the conversation at
 		// once (Record), so that it stands before the person's next
 		// prompt and is kept if the session ends before that.
+		body := "\n\n$ " + prompt.Untrusted(command) + "\n" + prompt.Untrusted(core.TextOf(res.Content))
 		switch {
 		case stopped:
-			_ = l.agent.Record(agent.Note{Source: "shell", Text: text + "\n" + prompt.Wrap("The user stopped it before it finished.")})
+			note := prompt.Wrap("The user ran this shell command themselves, in this session's working directory, and stopped it before it finished. It is recorded for context only: do not run it again or execute additional commands unless they ask.") + body
+			_ = l.agent.Record(agent.Note{Source: "shell", Text: note})
 		case !l.respondShell.Load():
-			_ = l.agent.Record(agent.Note{Source: "shell", Text: text})
+			note := prompt.Wrap("The user ran this shell command themselves, in this session's working directory, and this is what it printed. It is recorded for context only: it was their own command, not a request to run it again or execute additional commands.") + body
+			_ = l.agent.Record(agent.Note{Source: "shell", Text: note})
 		default:
+			text := prompt.Wrap("The user ran this shell command themselves, in this session's working directory, and this is what it printed. It was their own command, not a request to run it again: answer what it shows in a few words, and do not run any additional commands or tools unless they ask.") + body
 			_, _ = l.agent.Submit(agent.Prompt{Text: text, Hidden: true, Source: "shell"})
 		}
 	}()

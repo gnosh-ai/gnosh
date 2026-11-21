@@ -12,13 +12,12 @@ import (
 
 // The person's command lines behind "!" are in the prompt history, with
 // the "!", in the session that ran them and in the folder's later ones; a
-// prompt sent with a blank before its "!" stays a prompt there. With
-// respondToBashCommands off, the model does not answer a command when it
+// prompt sent with a blank before its "!" stays a prompt there. By default
+// (respondToBashCommands off), the model does not answer a command when it
 // ends: the command and what it printed are put in the conversation at
 // once, before the next prompt, which the model then answers.
 func TestShellLinesInTheHistoryAndUnanswered(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "It printed a greeting."}, apptest.Reply{Text: "Words, not a command."})
-	w.Settings(`{"options": {"respondToBashCommands": false}}`)
 	var during []string
 	front, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
 		if err := c.Shell("echo hello from the person"); err != nil {
@@ -75,7 +74,6 @@ func TestShellLinesInTheHistoryAndUnanswered(t *testing.T) {
 // file at once: a session opened again before that prompt still has it.
 func TestShellOutputKeptAcrossARestart(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "It said hello."})
-	w.Settings(`{"options": {"respondToBashCommands": false}}`)
 	w.Write("AGENTS.md", "The project's rule: the codeword is marmalade.\n")
 	_, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
 		if err := c.Shell("echo kept for later"); err != nil {
@@ -126,5 +124,35 @@ func TestPersonsGnokeyPasswordIsNotKept(t *testing.T) {
 	}
 	if n := len(w.Model.Requests()); n != 0 {
 		t.Errorf("the model was sent %d requests", n)
+	}
+}
+
+// Running multiple "!" commands in a row with default settings executes only
+// the requested commands and never triggers an unrequested model turn (#4).
+func TestRepeatedBangCommandsTriggerNoModelTurnByDefault(t *testing.T) {
+	w := apptest.NewWorld(t)
+	front, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
+		for _, cmd := range []string{"echo first-run", "echo second-run"} {
+			if err := c.Shell(cmd); err != nil {
+				t.Errorf("Shell(%q): %v", cmd, err)
+				return 1
+			}
+			find(f, "recorded shell note for "+cmd, func(e *agent.NoteEvent) bool {
+				return e.Note.Source == "shell" && strings.Contains(e.Note.Text, cmd)
+			})
+		}
+		c.Quit("prompt_input_exit")
+		return 0
+	})
+	r.wantCode(t, 0)
+	if n := len(w.Model.Requests()); n != 0 {
+		t.Fatalf("the model was asked %d times after ! commands, want 0", n)
+	}
+	for _, ev := range front.events {
+		if e, ok := ev.(*agent.NoteEvent); ok && e.Note.Source == "shell" {
+			if strings.Contains(e.Note.Text, "go on with it") {
+				t.Errorf("recorded shell note should not instruct the model to continue work: %q", e.Note.Text)
+			}
+		}
 	}
 }
