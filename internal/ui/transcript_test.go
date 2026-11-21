@@ -199,3 +199,37 @@ func TestEveryStateKeysInTheTranscriptView(t *testing.T) {
 		t.Errorf("after Ctrl+L the view shows:\n%s", strings.Join(g.scr.Lines(), "\n"))
 	}
 }
+
+// A "!" command's entry in the conversation carries gnosh's internal
+// instruction for the model and the shell tool's host stamp around the
+// command and its output. The transcript view (Ctrl+O / Ctrl+E) shows the
+// command and its output without exposing the internal instruction or tags.
+func TestTranscriptViewPersonsShellOutput(t *testing.T) {
+	g := newRig(t, 80, 20, text.NoColor)
+	g.free = true
+	at := time.Date(2026, 11, 19, 10, 0, 0, 0, time.Local)
+	var out strings.Builder
+	for i := range 30 {
+		out.WriteString("help line " + string(rune('A'+i%26)) + "\n")
+	}
+	shellText := "<gnosh>\nThe user ran this shell command themselves, in this session's working directory, and this is what it printed. It was their own command, not a request to run it again: answer what it shows, in a few words, and if you were in the middle of something for them, go on with it.\n</gnosh>\n\n$ gnosh help\n<host>local (user@box)</host><cwd>/work</cwd>\n" + out.String() + "\n<gnosh>\nThe user stopped it before it finished.\n</gnosh>"
+	g.c.mu.Lock()
+	g.c.trans = []app.TranscriptEntry{
+		{Kind: "notice", Time: at, Message: core.UserText(shellText)},
+	}
+	g.c.mu.Unlock()
+	g.keys(`<Ctrl+O> <Home>`)
+	if g.s.view == nil {
+		t.Fatal("Ctrl+O did not open the transcript view")
+	}
+	g.viewHas("$ gnosh help", "help line A")
+	g.keys(`<Ctrl+E> <Home>`)
+	screen := g.screenText()
+	for _, forbidden := range []string{"<gnosh>", "</gnosh>", "The user ran this shell command themselves", "The user stopped it before it finished", "<host>"} {
+		if strings.Contains(screen, forbidden) {
+			t.Errorf("expanded transcript view exposed %q:\n%s", forbidden, screen)
+		}
+	}
+	g.keys(`<End>`)
+	g.viewHas("help line D")
+}

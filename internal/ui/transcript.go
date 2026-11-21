@@ -13,6 +13,7 @@ import (
 	"github.com/gnosh-ai/gnosh/internal/markdown"
 	"github.com/gnosh-ai/gnosh/internal/term"
 	"github.com/gnosh-ai/gnosh/internal/text"
+	"github.com/gnosh-ai/gnosh/internal/tools/shelltool"
 )
 
 // The transcript view (Ctrl+O, as Claude Code's): the session's whole
@@ -412,7 +413,15 @@ func layTranscript(th *Theme, m text.Metrics, entries []app.TranscriptEntry, wid
 				add(mark + quiet(when))
 				continue
 			}
-			add(rowsOf(texts[0], plain, mark, strings.Repeat(" ", m.Width(th.PromptMark)), false)...)
+			first := texts[0]
+			if e.Hidden {
+				first = unwrapped(first)
+			}
+			firstRows := rowsOf(first, plain, mark, strings.Repeat(" ", m.Width(th.PromptMark)), false)
+			if e.Hidden {
+				firstRows = part(firstRows)
+			}
+			add(firstRows...)
 			// The rest came with the prompt: what gnosh and the hooks added.
 			for _, t := range texts[1:] {
 				add(part(rowsOf(unwrapped(t), quiet, "  + ", "    ", false))...)
@@ -462,7 +471,12 @@ func layTranscript(th *Theme, m text.Metrics, entries []app.TranscriptEntry, wid
 				continue
 			}
 			for _, t := range blockTexts(e.Message) {
-				add(part(rowsOf(unwrapped(t), quiet, "  gnosh: ", "    ", false))...)
+				u := unwrapped(t)
+				lead := "  gnosh: "
+				if strings.HasPrefix(u, "$ ") {
+					lead = "  "
+				}
+				add(part(rowsOf(u, quiet, lead, "    ", false))...)
 			}
 		case "summary":
 			add(part(rowsOf(e.Text, quiet, "※ what came before, in short: ", "  ", true))...)
@@ -482,8 +496,10 @@ func layTranscript(th *Theme, m text.Metrics, entries []app.TranscriptEntry, wid
 
 // unwrapped is a text gnosh added, without the marker around it (the
 // <gnosh> of prompt.Open and Close, or mem's own <mem>): the label beside
-// it in the view already says whose it is. A text that is more than one
-// marked piece is left as it is.
+// it in the view already says whose it is. When gnosh's marker wraps an
+// instruction to the model around outside content (such as a "!" command
+// and its output), the instruction blocks are stripped so the view shows
+// the content itself.
 func unwrapped(s string) string {
 	t := strings.TrimSpace(s)
 	for _, tag := range []string{"gnosh", "mem"} {
@@ -494,7 +510,51 @@ func unwrapped(s string) string {
 			}
 		}
 	}
+	if strings.HasPrefix(t, "<gnosh>") {
+		if rest := stripGnoshWrappers(t); rest != "" {
+			return cleanShellText(rest)
+		}
+	}
 	return s
+}
+
+// stripGnoshWrappers removes leading and trailing <gnosh>...</gnosh>
+// instruction blocks when outside text remains between them.
+func stripGnoshWrappers(t string) string {
+	const open, end = "<gnosh>", "</gnosh>"
+	rest := t
+	for strings.HasPrefix(rest, open) {
+		i := strings.Index(rest, end)
+		if i < 0 {
+			break
+		}
+		rest = strings.TrimSpace(rest[i+len(end):])
+	}
+	for strings.HasSuffix(rest, end) {
+		i := strings.LastIndex(rest, open)
+		if i <= 0 {
+			break
+		}
+		rest = strings.TrimSpace(rest[:i])
+	}
+	return rest
+}
+
+// cleanShellText drops the internal <host>...</host><cwd>...</cwd> stamp
+// line after a "$ command" heading, matching the main tool output view.
+func cleanShellText(s string) string {
+	if !strings.HasPrefix(s, "$ ") {
+		return s
+	}
+	head, body, ok := strings.Cut(s, "\n")
+	if !ok {
+		return s
+	}
+	_, body = shelltool.SplitStamp(body)
+	if body == "" {
+		return head
+	}
+	return head + "\n" + body
 }
 
 // blockTexts are the texts of a message's text blocks.
@@ -514,7 +574,8 @@ func resultText(b core.Block) string {
 	for _, c := range b.Content {
 		switch c.Type {
 		case core.BlockText:
-			parts = append(parts, c.Text)
+			_, text := shelltool.SplitStamp(c.Text)
+			parts = append(parts, text)
 		case core.BlockImage:
 			parts = append(parts, "[a picture, "+c.MediaType+"]")
 		}
