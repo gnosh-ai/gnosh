@@ -630,10 +630,15 @@ solved files, so that a check is seen to pass too); runs the same short task
 every other way a run can be made (without mem, the fuller text, thinking
 off, the plain format, a pinned slot, a prompt experiment, a second session
 that is new, a turn cap, a wall cap on a session and on the run, a swarm of
-two, two ways side by side through `matrix.sh`, a summary); puts the rows
-through the scoring scripts; and checks that
-every run kept to its own directory, that the directories are removed, and
-that nothing is left running.
+two, two ways side by side through `matrix.sh`, a summary); counts the
+room gnosh makes by itself (an automatic summary, a slide in an open frame,
+and a retry after the server refuses a request as too long), each against a
+server of its own and each held to the proxy's count, the session file and
+gnosh's stream-json, with the point where room is made moved early by
+`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, so that they check the counting and not a
+task larger than the window; puts the rows through the scoring scripts; and
+checks that every run kept to its own directory, that the directories are
+removed, and that nothing is left running.
 
     GO=/usr/local/go/bin/go bench/dryrun.sh
 

@@ -9,9 +9,12 @@
 # left. The dry run holds every number it can to what the scripted server is
 # known to have served (dryrun.py says how), runs the same short task the
 # other ways a run can be made (without mem, with the fuller text about mem,
-# thinking off, a pinned slot, a wall cap, a turn cap, a swarm), puts the
-# rows through the scoring scripts, and checks at the end that every run
-# kept to its own directory and that nothing is left running.
+# thinking off, a pinned slot, a wall cap, a turn cap, a swarm), counts the
+# summaries and slides gnosh makes, by hand and by itself (an automatic
+# summary, a slide in an open frame, a retry after the server refuses a
+# request as too long), puts the rows through the scoring scripts, and
+# checks at the end that every run kept to its own directory and that
+# nothing is left running.
 #
 # No model is asked anything, and nothing outside this machine is reached.
 # A failing score is the expected one: the scripted model solves no task,
@@ -253,6 +256,100 @@ if want ways; then
   # The words the proxy tells a summary request by are the first words of
   # gnosh's own text for it: if that text changes, this says so.
   if grep -q "about to be replaced by a summary" "$TREE/internal/prompt/texts/summary.md"; then ok "gnosh's text for a summary still begins as the proxy expects"; else fail "internal/prompt/texts/summary.md no longer says what proxy.py's SUMMARY_RE looks for"; fi
+
+  # The same counting when gnosh makes room by itself. Each scenario is one
+  # session that reads two files of about 11,000 tokens each, as Read shows
+  # them, in a window of 65,536 tokens, against its own scripted server.
+  # CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=45 moves the point where room is made to
+  # 29,491 tokens, between the request after the first file and the one
+  # after the second, so these are functional checks of the counting, not
+  # measures of a task larger than the window. Where room is made, and what
+  # the proxy, the session file and gnosh's stream-json must then say:
+  #   automatic summary  no frame is open, so nothing can slide: one summary,
+  #                      triggered "auto", and no slide
+  #   slide              a frame was pushed after the first file, so the
+  #                      rounds before it slide out: one slide, no summary,
+  #                      and no request reaches the point
+  #   too long           no override; the server refuses the third request
+  #                      as too long for its context, gnosh takes the window
+  #                      to be smaller, and a summary makes room before it
+  #                      asks again: one refusal, one retry, one summary
+  room() { # name pct script.json prompt
+    local name=$1 pct=$2 s=$DRY/scripts/room-$1 d=$DRY/runs/room-$1
+    mkdir -p "$d/home/.config/gnosh" "$d/work"
+    for part in 1 2; do
+      python3 -c 'import sys; print("\n".join("part %s line %04d %s" % (sys.argv[1], i, "x" * 80) for i in range(1, 801)))' "$part" > "$d/work/part$part.txt"
+    done
+    cp "$3" "$s.json"
+    "$DRY/bin/scriptmodel" "$s.json" > "$s.url" 2> "$s.err" & model=$!; models+=("$model")
+    for _ in $(seq 100); do [ -s "$s.url" ] && break; sleep 0.1; done
+    python3 "$BENCH/proxy.py" serve --listen 127.0.0.1:0 --port-file "$d/port" --upstream "$(cat "$s.url")" \
+      --model test-model --window 65536 --log "$d/proxy.jsonl" > "$d/proxy.err" 2>&1 & proxy=$!
+    echo "$proxy" > "$d/proxy.pid"
+    for _ in $(seq 100); do [ -s "$d/port" ] && break; sleep 0.1; done
+    printf '{"providers": {"box": {"type": "llamacpp", "baseUrl": "http://127.0.0.1:%s", "listModels": false}},\n "models": {"box/test-model": {"contextWindow": 65536}},\n "model": "box/test-model"}\n' "$(cat "$d/port")" > "$d/home/.config/gnosh/gnosh.json"
+    env -i ${pct:+CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=$pct} PATH="$PATH" HOME="$d/home" XDG_CONFIG_HOME="$d/home/.config" \
+      XDG_DATA_HOME="$d/home/.local/share" XDG_CACHE_HOME="$d/home/.cache" TERM=dumb \
+      "$DRY/bin/gnosh" -p -y --cwd "$d/work" --output-format stream-json -- "$4" < /dev/null > "$d/session.out" 2> "$d/session.err"
+    kill "$proxy" "$model" 2>/dev/null; wait "$proxy" "$model" 2>/dev/null
+    # One line: requests, summaries and errors by the proxy; summaries and
+    # slides in the session file; compact boundaries by trigger and retries
+    # by error in stream-json; and the largest request the proxy saw.
+    python3 - "$d" "$BENCH" <<'PY'
+import json, os, subprocess, sys
+d, bench = sys.argv[1], sys.argv[2]
+p = json.loads(subprocess.run([sys.executable, os.path.join(bench, "proxy.py"), "summarize", os.path.join(d, "proxy.jsonl")],
+                              capture_output=True, text=True, check=True).stdout)
+a = json.loads(subprocess.run([sys.executable, os.path.join(bench, "analyze.py"), d], capture_output=True, text=True, check=True).stdout)
+boundaries, retries = [], []
+for line in open(os.path.join(d, "session.out")):
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if e.get("type") == "system" and e.get("subtype") == "compact_boundary":
+        boundaries.append((e.get("compact_metadata") or {}).get("trigger"))
+    if e.get("type") == "system" and e.get("subtype") == "api_retry":
+        retries.append(e.get("error"))
+print(p["requests"], p["summaries"], p["errors"], a.get("summary_messages"), a.get("slides"),
+      ",".join(boundaries) or "-", ",".join(retries) or "-", p["peak_context"])
+PY
+  }
+  read1='{"name": "Read", "args": {"file_path": "part1.txt"}}'
+  read2='{"name": "Read", "args": {"file_path": "part2.txt"}}'
+  ask="Read part1.txt and part2.txt."
+
+  say "an automatic summary, counted by the proxy and by gnosh alike"
+  printf '[{"calls": [%s]}, {"calls": [%s]}, {"text": "The user asked for both parts to be read; both were read."}, {"text": "Both parts are read."}]\n' \
+    "$read1" "$read2" > "$DRY/scripts/room-auto.in"
+  set -- $(room auto 45 "$DRY/scripts/room-auto.in" "$ask")
+  if [ "$1 $2 $3 $4 $5 $6 $7" = "4 1 0 1 0 auto -" ]; then
+    ok "four requests, the third a summary; one summary in the session file, made automatically, and no slide"
+  else
+    fail "requests, summaries and errors by the proxy, summaries and slides in the session file, boundaries, retries: $*, want 4 1 0 1 0 auto - ($(head -2 "$DRY/runs/room-auto/session.err" | tr '\n' ' '))"
+  fi
+
+  say "a slide in an open frame, instead of a summary"
+  push='{"name": "gnovm_run", "args": {"name": "mem", "code": "mem.Todo(\"read the second part\", \"read it\").Push()"}}'
+  printf '[{"calls": [{"name": "Bash", "args": {"command": "echo start"}}]}, {"calls": [%s]}, {"calls": [%s]}, {"text": "second-part-read\\nread-it"}, {"calls": [%s]}, {"text": "Both parts are read."}]\n' \
+    "$read1" "$push" "$read2" > "$DRY/scripts/room-slide.in"
+  set -- $(room slide 45 "$DRY/scripts/room-slide.in" "$ask")
+  if [ "$1 $2 $3 $4 $5 $6 $7" = "6 0 0 0 1 - -" ] && [ "${8:-0}" -lt 29491 ]; then
+    ok "six requests, one of them naming the new todos; one slide and no summary, and no request reached the point ($8 tokens at most)"
+  else
+    fail "requests, summaries and errors by the proxy, summaries and slides in the session file, boundaries, retries, peak: $*, want 6 0 0 0 1 - - and a peak under 29491 ($(head -2 "$DRY/runs/room-slide/session.err" | tr '\n' ' '))"
+  fi
+
+  say "a request the server refuses as too long, asked again after a summary"
+  too_long='{"status": 400, "body": "{\"error\": {\"code\": 400, \"message\": \"the request exceeds the available context size, try increasing it\", \"type\": \"exceed_context_size_error\"}}"}'
+  printf '[{"calls": [%s]}, {"calls": [%s]}, %s, {"text": "The user asked for both parts to be read; both were read."}, {"text": "Both parts are read."}]\n' \
+    "$read1" "$read2" "$too_long" > "$DRY/scripts/room-retry.in"
+  set -- $(room retry "" "$DRY/scripts/room-retry.in" "$ask")
+  if [ "$1 $2 $3 $4 $5 $6 $7" = "5 1 1 1 0 auto context_too_long" ]; then
+    ok "five requests: one refused as too long, then a summary, then the same turn asked again; one retry and one automatic summary"
+  else
+    fail "requests, summaries and errors by the proxy, summaries and slides in the session file, boundaries, retries: $*, want 5 1 1 1 0 auto context_too_long ($(head -3 "$DRY/runs/room-retry/session.err" | tr '\n' ' '))"
+  fi
 fi
 
 if want scoring; then
