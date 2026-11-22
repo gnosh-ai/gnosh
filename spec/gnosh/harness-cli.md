@@ -150,6 +150,7 @@ own. A name gnosh does not know is a startup error (CFG-40).
 | Command | Does |
 | :- | :- |
 | `gnosh ssh [ssh arguments]` | Runs ssh and puts whatever is copied on the far side onto this computer's clipboard (UI-12). |
+| `gnosh bridge [--cwd <folder>]` | Gives another harness gnosh's machine tools and the frames view over JSON lines on standard input and output (`bridge.md`). |
 | `gnosh session web [--port N]` | Serves a page on this machine to read and edit a session's messages (UI-40). |
 | `gnosh projects [--json]` | The project folders gnosh has been used in. |
 | `gnosh stats [--all] [--crawl-dir <dir>]` | Usage totals across sessions. |
