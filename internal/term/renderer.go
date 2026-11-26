@@ -29,9 +29,12 @@ import (
 // shorter than the rows from its top to the screen's last, blank rows
 // above it make up the difference, instead of the rows below it being left
 // empty, and the next committed lines fill those blank rows first (Jae, 22
-// November 2026: "the text field is not fixed on bottom of screen"). A
-// resize, or the screen lent to another program, loses the row until the
-// terminal is asked again (WantsCursor).
+// November 2026: "the text field is not fixed on bottom of screen"). The
+// first rows of the region may go on with the committed lines, as the open
+// rows of a paragraph whose first rows were committed do; those stand
+// right under the committed lines, and the blank rows go below them
+// (SetJoined). A resize, or the screen lent to another program, loses the
+// row until the terminal is asked again (WantsCursor).
 //
 // Lines given to the renderer are already styled and already wrapped. Each
 // must stand on its own: its colours end with it, and it takes exactly one
@@ -54,10 +57,13 @@ type Renderer struct {
 
 	// lines is the live region as last asked for, all of it, and
 	// wantRow, wantCol and wantShown are where the cursor was asked for.
+	// joined is how many of its first lines go on with the committed
+	// lines (SetJoined).
 	lines     []rline
 	wantRow   int
 	wantCol   int
 	wantShown bool
+	joined    int
 
 	// screen is what the terminal shows from the top of the live region
 	// down: the last rows of lines, as they were drawn. row and col are
@@ -184,6 +190,20 @@ func (r *Renderer) SetLive(lines []string, cursorRow, cursorCol int) error {
 	defer r.mu.Unlock()
 	r.setLive(lines, cursorRow, cursorCol)
 	return r.paint(nil)
+}
+
+// SetJoined says that the first n lines of the live region go on with the
+// committed lines above it, as the open rows of a paragraph whose first
+// rows were committed do (Jae, 26 November 2026: "green text has newlines
+// where it shouldn't", of a paragraph seen in two pieces). They stand
+// right under the committed lines, and the blank rows that keep the
+// region on the bottom of the screen go below them instead of above. It
+// counts from the next update on; zero, the default, puts the whole
+// region below the blank rows.
+func (r *Renderer) SetJoined(n int) {
+	r.mu.Lock()
+	r.joined = max(n, 0)
+	r.mu.Unlock()
 }
 
 func (r *Renderer) setLive(lines []string, cursorRow, cursorCol int) {
@@ -428,7 +448,7 @@ func (r *Renderer) rowsAboveCursor() int {
 
 // padding is how many blank rows go between n committed lines and a live
 // region of h rows, so that the region's last row is the screen's last row
-// (see Renderer).
+// (see Renderer). The region's joined rows stand above them.
 func (r *Renderer) padding(n, h int) int {
 	if !r.known || r.stale || h == 0 {
 		return 0
@@ -447,14 +467,23 @@ func (r *Renderer) paint(commit []rline) error {
 	vis := r.window()
 	n := len(commit)
 	pad := r.padding(n, len(vis))
+	// The region's first rows that go on with the committed lines stand
+	// right under them, above the blank rows. (When the region is taller
+	// than the screen its first rows are not shown, and there are no
+	// blank rows.)
+	head := 0
+	if len(vis) == len(r.lines) {
+		head = min(r.joined, len(vis))
+	}
 	desired := vis
 	if n > 0 || pad > 0 {
 		desired = make([]rline, 0, n+pad+len(vis))
 		desired = append(desired, commit...)
+		desired = append(desired, vis[:head]...)
 		for range pad {
 			desired = append(desired, rline{})
 		}
-		desired = append(desired, vis...)
+		desired = append(desired, vis[head:]...)
 	}
 	old := r.screen
 	b := r.body[:0]
@@ -549,7 +578,11 @@ func (r *Renderer) paint(commit []rline) error {
 	// there is no live region.
 	row, to := n, 0
 	if r.wantShown && len(vis) > 0 {
-		row += pad + min(max(r.wantRow-(len(r.lines)-len(vis)), 0), len(vis)-1)
+		k := min(max(r.wantRow-(len(r.lines)-len(vis)), 0), len(vis)-1)
+		if k >= head {
+			k += pad
+		}
+		row += k
 		to = min(r.wantCol, r.cols-1)
 	}
 	if row >= have {

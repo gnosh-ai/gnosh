@@ -13,7 +13,8 @@ import (
 
 // The live region, from its first row to its last:
 //
-//	(a blank row)                      between the scrollback and what follows
+//	(a blank row)                      between the scrollback and what follows,
+//	                                   but for the answer's own next rows
 //	the part of the answer that may still change, or the end of the
 //	  model's reasoning while that is folded
 //	each call being written or run: its heading, and its last output
@@ -32,6 +33,16 @@ import (
 // should be above the prompt not below it"). The renderer keeps the
 // region on the bottom rows of the screen from the first frame (Jae,
 // 2026-11-22: "the text field is not fixed on bottom of screen").
+//
+// The rows of the answer that may still change go on with its rows in the
+// scrollback when those are the last thing committed: the last row of a
+// paragraph stays open until the paragraph or the reply ends, which takes
+// as long as the model takes to write a call after it. They stand right
+// under the committed rows then, with no blank row between them, not even
+// the blank rows that keep the region on the bottom of the screen (the
+// renderer's SetJoined): a paragraph is never seen in two pieces (Jae,
+// 2026-11-26: "green text has newlines where it shouldn't", of
+// "...flatter a bad", a blank row, and "lemma, though, ...").
 //
 // It is kept small: everything above the row that says what gnosh is
 // doing is cut from its top when the region would grow past its bound,
@@ -57,8 +68,9 @@ func liveBound(rows int) int {
 
 // compose lays the live region out for the terminal's width, and says
 // where the cursor is: on row row of lines at cell col, or row -1 when it
-// is hidden.
-func (s *session) compose() (lines []string, row, col int) {
+// is hidden. joined is how many of the first lines go on with the rows
+// committed last (the renderer's SetJoined).
+func (s *session) compose() (lines []string, row, col, joined int) {
 	w, bound := s.cols, liveBound(s.rows)
 	now := s.now()
 
@@ -153,16 +165,20 @@ func (s *session) compose() (lines []string, row, col int) {
 
 	// What is still being written, in what room is left: its last rows
 	// when it has more. A blank row goes above it when there is one to
-	// spare, and another below it when there are two.
+	// spare, unless it begins with the answer's own next rows, and
+	// another below it when there are two.
 	var stream []string
 	if room > 0 {
-		stream = s.streamLines(w)
+		stream, joined = s.streamLines(w)
 		if len(stream) > room {
 			stream = stream[len(stream)-room:]
+			// Its first rows are cut: what is left no longer goes
+			// on from the committed rows.
+			joined = 0
 		}
 	}
 	spare := room - len(stream)
-	gapAbove := spare >= 1 && s.last != blkNone
+	gapAbove := spare >= 1 && s.last != blkNone && joined == 0
 	gapBelow := len(stream) > 0 && (spare >= 2 || spare == 1 && !gapAbove)
 
 	lines = make([]string, 0, bound)
@@ -195,6 +211,9 @@ func (s *session) compose() (lines []string, row, col int) {
 			over = min(over, row)
 			row -= over
 		}
+		if over > 0 {
+			joined = 0
+		}
 		lines = lines[over:]
 		if len(lines) > bound {
 			lines = lines[:bound]
@@ -206,7 +225,7 @@ func (s *session) compose() (lines []string, row, col int) {
 	for i, l := range lines {
 		lines[i] = fit(s.m, l, w)
 	}
-	return lines, row, col
+	return lines, row, col, joined
 }
 
 // lock gives the keys to whoever has them: the prompt box is locked while
@@ -255,9 +274,10 @@ func failHintFor(kind string) string {
 
 // streamLines is what is still being written: the answer's lines that may
 // change, the end of the reasoning while it is folded, and the calls in
-// flight.
-func (s *session) streamLines(width int) []string {
-	var out []string
+// flight. joined is how many of its first rows go on with the answer's
+// rows committed last: the open rows of a paragraph whose first rows are
+// in the scrollback, which must stand right under them.
+func (s *session) streamLines(width int) (out []string, joined int) {
 	if s.focus && s.fold.calls > 0 {
 		// (Above what is being written, where the scrollback will have it.)
 		out = append(out, fit(s.m, s.foldLine(true), width))
@@ -293,6 +313,11 @@ func (s *session) streamLines(width int) []string {
 		if !rp.begun && len(live) > 0 && len(out) > 0 {
 			out = append(out, "")
 		}
+		if len(out) == 0 && rp.begun && s.last == blkAnswer {
+			// Its next lines are committed under those, with no
+			// blank line (answer).
+			joined = len(live)
+		}
 		out = append(out, live...)
 	}
 	if len(s.calls) > 0 && len(out) > 0 {
@@ -307,7 +332,7 @@ func (s *session) streamLines(width int) []string {
 	for _, c := range shown {
 		out = append(out, s.liveRows(c)...)
 	}
-	return out
+	return out, joined
 }
 
 // thinkLive is how many rows of reasoning show in the live region while

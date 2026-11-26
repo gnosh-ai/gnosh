@@ -5969,3 +5969,24 @@ or kept with the reason said (27).
     rows away with the region, so the shell's prompt comes right under the
     conversation when gnosh ends; a terminal that answers no questions
     keeps the old behaviour.
+
+391. **A paragraph is never seen in two pieces.** Jae, 26 November 2026,
+    over ssh to the Mac Studio, of an answer he copied from the screen
+    with a blank row between "...flatter a bad" and "lemma, though,
+    ...": "green text has newlines where it shouldn't", and "yes" to
+    taking the blank row out. An answer's rows are committed as the
+    Markdown renderer declares them final, and the last row of a
+    paragraph stays open until the paragraph or the reply ends, which
+    takes as long as the model takes to write a call after it. The open
+    row stood in the live region under the region's first blank row (the
+    one between blocks), and on a screen not yet full under the blank
+    rows that keep the region on the bottom rows too (item 390), so the
+    paragraph was seen in two pieces, and a copy of the screen took the
+    blank rows with it. Now, when what is still being written begins
+    with the answer's own next rows, and its earlier rows are the last
+    thing committed, no blank row goes above them, and the renderer keeps
+    them right under the committed lines, above the blank rows that keep
+    the region down (term.Renderer.SetJoined). When they are committed in
+    their turn, nothing on the screen moves. The line end at each row of
+    a copied paragraph stays: gnosh wraps prose itself, and the terminal
+    draws one line a row.

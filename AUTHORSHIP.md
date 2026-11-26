@@ -268,6 +268,19 @@ Studio again, inside tmux:
 Set: the box stands on the bottom rows from the first frame, whatever is
 above it (`spec/DECISIONS.md` item 390).
 
+26 November 2026, over ssh to the Mac Studio, of an answer he copied from the
+screen with a blank row between "...flatter a bad" and "lemma, though, ...":
+
+> ssh studio green text has newlines where it shouldn't
+
+and "yes" to taking the blank row out.
+
+Set: a paragraph's open row stands right under its rows already in the
+scrollback, with no blank row between them, while the model finishes it or
+writes a call after it (`spec/DECISIONS.md` item 391). Claude's part: the
+blank rows that keep the box on the bottom rows go below the open row too, so
+that a paragraph on a screen not yet full stays in one piece as well.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

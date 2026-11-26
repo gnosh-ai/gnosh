@@ -70,7 +70,7 @@
 // Below the committed text are a few rows that are redrawn in place
 // (term.Renderer.SetLive). From its first row to its last:
 //
-//	a blank row
+//	a blank row, but none above the answer's own next rows (below)
 //	what is still being written: the lines of the answer that may still
 //	  change, the last rows of the reasoning while it is folded, and each
 //	  call that is being written or is running, with the last rows of its
@@ -95,7 +95,13 @@
 // or after the screen was lent to the shell or an editor), and keeps the
 // region's last row on the screen's last row, with blank rows above it
 // that the next committed lines fill. The conversation fills the screen
-// from the top down to the region, as in a chat.
+// from the top down to the region, as in a chat. The answer's rows that
+// may still change belong to the conversation: once its first rows are
+// committed, its open rows stand right under them, with neither the
+// region's first blank row nor the blank rows that keep it down between
+// them, so that a paragraph is never seen in two pieces while the model
+// finishes it or writes a call after it (Jae, 26 November 2026: "green
+// text has newlines where it shouldn't").
 //
 // The line that says what gnosh is doing is always the truth as the
 // session reports it, in plain words with the time that state has lasted:

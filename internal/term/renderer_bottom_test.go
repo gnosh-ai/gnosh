@@ -389,3 +389,69 @@ func TestPaddingRowsAreBlank(t *testing.T) {
 		t.Fatalf("screen = %q", got)
 	}
 }
+
+// The first rows of the live region that go on with the committed lines,
+// such as the open row of a paragraph whose first rows were committed,
+// stand right under them, and the blank rows that keep the region on the
+// bottom of the screen go below them (Jae, 2026-11-26: "green text has
+// newlines where it shouldn't", of "...flatter a bad", blank rows, and
+// "lemma, though, ..."). When the open row is committed in its turn,
+// nothing on the screen moves.
+func TestJoinedRowsStandUnderTheCommittedLines(t *testing.T) {
+	scr := vtest.New(30, 12)
+	scr.SetScrollOnClear(true)
+	r := NewRenderer(scr, 30, 12, vtest.Width)
+	told(r, scr)
+	draw := func(commit []string, joined, row int, lines ...string) {
+		t.Helper()
+		r.SetJoined(joined)
+		if err := r.CommitLive(commit, lines, row, 2); err != nil {
+			t.Fatal(err)
+		}
+		sameRow(t, r, scr, fmt.Sprintf("CommitLive(%q, %q) with %d joined", commit, lines, joined))
+	}
+	screen := func(when string, want ...string) {
+		t.Helper()
+		if got := scr.Lines(); !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s the screen is\n  %q\nwant\n  %q", when, got, want)
+		}
+	}
+	cursor := func(when string, wantRow, wantCol int) {
+		t.Helper()
+		if row, col := scr.Cursor(); row != wantRow || col != wantCol {
+			t.Fatalf("%s the cursor is on row %d, cell %d; want row %d, cell %d\n%s", when, row, col, wantRow, wantCol, scr.Dump())
+		}
+	}
+
+	// Nothing of the answer is final yet: it is all in the region, on the
+	// bottom rows, as before.
+	draw([]string{"> go"}, 0, 4, "", "flatter a", "", "act", "> ", "status")
+	screen("before a row of the answer is final,",
+		"> go", "", "", "", "", "", "", "flatter a", "", "act", ">", "status")
+
+	// Its first row is final and committed; the open row goes on with it.
+	draw([]string{"", "flatter a bad"}, 1, 3, "lemma,", "", "act", "> ", "status")
+	screen("with the first row committed,",
+		"> go", "", "flatter a bad", "lemma,", "", "", "", "", "", "act", ">", "status")
+	cursor("with the first row committed,", 10, 2)
+
+	// A hidden cursor waits at the region's top: the open row.
+	r.SetJoined(1)
+	if err := r.SetLive([]string{"lemma,", "", "act", "> ", "status"}, -1, 0); err != nil {
+		t.Fatal(err)
+	}
+	sameRow(t, r, scr, "SetLive with the cursor hidden")
+	cursor("with the cursor hidden,", 3, 0)
+
+	// The model writes a call after the paragraph, whose last row stays
+	// open meanwhile, under the rest of it.
+	draw(nil, 1, 5, "lemma, though.", "", "$ cat big.go", "", "act", "> ", "status")
+	want := []string{"> go", "", "flatter a bad", "lemma, though.", "", "", "", "$ cat big.go", "", "act", ">", "status"}
+	screen("while the call is written,", want...)
+	cursor("while the call is written,", 10, 2)
+
+	// The reply ends: the open row is committed where it stood.
+	draw([]string{"lemma, though."}, 0, 4, "", "$ cat big.go", "", "act", "> ", "status")
+	screen("after the reply,", want...)
+	cursor("after the reply,", 10, 2)
+}

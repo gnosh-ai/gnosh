@@ -617,6 +617,13 @@ type liveCommitter interface {
 	CommitLive(commit, lines []string, cursorRow, cursorCol int) error
 }
 
+// joiner is a screen that can keep the first rows of the live region
+// right under the committed lines, above the blank rows that keep the
+// region on the bottom of the screen (term.Renderer).
+type joiner interface {
+	SetJoined(n int)
+}
+
 // frame writes what is waiting: first the lines to commit, for good, and
 // then the live region as it stands now. It is the only place the session
 // writes to the terminal.
@@ -634,7 +641,10 @@ func (s *session) frame() {
 	if s.panel != nil {
 		s.keep(s.panel.SetPanel(s.panelLines(s.panel.TextWidth())))
 	}
-	lines, row, col := s.compose()
+	lines, row, col, joined := s.compose()
+	if j, ok := s.r.(joiner); ok {
+		j.SetJoined(joined)
+	}
 	// What moves from the live region to the scrollback goes in the same
 	// write as the region without it: committed first and drawn again
 	// below, it would stand on the screen twice for a moment, and at the
