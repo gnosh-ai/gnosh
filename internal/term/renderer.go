@@ -30,11 +30,11 @@ import (
 // above it make up the difference, instead of the rows below it being left
 // empty, and the next committed lines fill those blank rows first (Jae, 22
 // November 2026: "the text field is not fixed on bottom of screen"). The
-// first rows of the region may go on with the committed lines, as the open
-// rows of a paragraph whose first rows were committed do; those stand
-// right under the committed lines, and the blank rows go below them
-// (SetJoined). A resize, or the screen lent to another program, loses the
-// row until the terminal is asked again (WantsCursor).
+// first rows of the region may go on with the committed lines, as what is
+// still being written does (an answer's open rows, a call in flight);
+// those stand right under the committed lines, and the blank rows go below
+// them (SetJoined). A resize, or the screen lent to another program, loses
+// the row until the terminal is asked again (WantsCursor).
 //
 // Lines given to the renderer are already styled and already wrapped. Each
 // must stand on its own: its colours end with it, and it takes exactly one

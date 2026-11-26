@@ -6063,3 +6063,22 @@ or kept with the reason said (27).
     the model is not shown it. The arguments come from kern.procargs2 on
     macOS and /proc on Linux; elsewhere nothing is named. A command on
     another machine is not looked at: here it is only ssh.
+
+395. **What is still being written stands under the conversation, and the
+    blank rows that keep the box down go under it.** Jae, 26 November
+    2026, with a copy of the Mac Studio's screen that had five blank rows
+    between an answer ("... seconds instead of minutes.") and the call
+    after it ("$ cat > /tmp/bucket/main.go <<'EOF'") while the call ran:
+    "too many blank spaces". The region gets shorter by itself (item 387):
+    a folded thought's heading and its last four rows go when it ends.
+    The renderer keeps the box on the bottom rows by putting blank rows
+    above the region (item 390), and only the answer's open rows stood
+    above them (item 391), so once the answer was committed the call's
+    heading stood under the blank rows, apart from the answer, until the
+    next committed lines filled them. Now all that is still being written,
+    the reasoning while it is folded, the answer's rows that may still
+    change and the calls in flight, with the blank row above it, goes on
+    with the conversation (term.Renderer.SetJoined), and the blank rows go
+    under it, above the line that says what gnosh is doing. The blank
+    space does not go away while the box is kept down: it is below what
+    is being written now, where the call's output and the next rows come.

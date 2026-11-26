@@ -95,13 +95,18 @@
 // or after the screen was lent to the shell or an editor), and keeps the
 // region's last row on the screen's last row, with blank rows above it
 // that the next committed lines fill. The conversation fills the screen
-// from the top down to the region, as in a chat. The answer's rows that
-// may still change belong to the conversation: once its first rows are
-// committed, its open rows stand right under them, with neither the
-// region's first blank row nor the blank rows that keep it down between
-// them, so that a paragraph is never seen in two pieces while the model
-// finishes it or writes a call after it (Jae, 26 November 2026: "green
-// text has newlines where it shouldn't").
+// from the top down to the region, as in a chat. All that is still being
+// written belongs to the conversation, the reasoning while it is folded,
+// the answer's rows that may still change and the calls in flight: it
+// stands right under the committed rows, the region's first blank row
+// between, and the blank rows that keep the region down go under it,
+// above the line that says what gnosh is doing. So an answer and the
+// call after it are never held apart by the rows a folded thought left
+// (Jae, 26 November 2026: "too many blank spaces"). Once an answer's
+// first rows are committed, its open rows stand right under them with no
+// blank row at all, so that a paragraph is never seen in two pieces while
+// the model finishes it or writes a call after it (Jae, 26 November 2026:
+// "green text has newlines where it shouldn't").
 //
 // The line that says what gnosh is doing is always the truth as the
 // session reports it, in plain words with the time that state has lasted:

@@ -34,15 +34,21 @@ import (
 // region on the bottom rows of the screen from the first frame (Jae,
 // 2026-11-22: "the text field is not fixed on bottom of screen").
 //
-// The rows of the answer that may still change go on with its rows in the
+// What is still being written, down to the calls in flight, goes on with
+// the conversation: it stands right under the committed rows, and the
+// blank rows that keep the region on the bottom of the screen go under
+// it, above the row that says what gnosh is doing (the renderer's
+// SetJoined). So the rows a folded thought gives up as it ends make no
+// hole between an answer and the call after it (Jae, 2026-11-26: "too
+// many blank spaces", of five blank rows there while the call ran). The
+// rows of the answer that may still change go on with its rows in the
 // scrollback when those are the last thing committed: the last row of a
 // paragraph stays open until the paragraph or the reply ends, which takes
 // as long as the model takes to write a call after it. They stand right
-// under the committed rows then, with no blank row between them, not even
-// the blank rows that keep the region on the bottom of the screen (the
-// renderer's SetJoined): a paragraph is never seen in two pieces (Jae,
-// 2026-11-26: "green text has newlines where it shouldn't", of
-// "...flatter a bad", a blank row, and "lemma, though, ...").
+// under the committed rows then, with no blank row between them: a
+// paragraph is never seen in two pieces (Jae, 2026-11-26: "green text has
+// newlines where it shouldn't", of "...flatter a bad", a blank row, and
+// "lemma, though, ...").
 //
 // It is kept small: everything above the row that says what gnosh is
 // doing is cut from its top when the region would grow past its bound,
@@ -168,18 +174,32 @@ func (s *session) compose() (lines []string, row, col, joined int) {
 	// spare, unless it begins with the answer's own next rows, and
 	// another below it when there are two.
 	var stream []string
+	cut := false
 	if room > 0 {
 		stream, joined = s.streamLines(w)
 		if len(stream) > room {
 			stream = stream[len(stream)-room:]
 			// Its first rows are cut: what is left no longer goes
 			// on from the committed rows.
-			joined = 0
+			joined, cut = 0, true
 		}
 	}
 	spare := room - len(stream)
 	gapAbove := spare >= 1 && s.last != blkNone && joined == 0
 	gapBelow := len(stream) > 0 && (spare >= 2 || spare == 1 && !gapAbove)
+	// All that is still being written goes on from the conversation: it
+	// stands right under the committed rows, with the blank row above it
+	// when there is one, and the blank rows that keep the region on the
+	// bottom rows of the screen go under it, above what gnosh is doing.
+	// Above it they made a hole between an answer and the call after it,
+	// where a folded thought's rows had been, for as long as the call ran
+	// (Jae, 26 November 2026: "too many blank spaces").
+	if len(stream) > 0 && !cut {
+		joined = len(stream)
+		if gapAbove {
+			joined++
+		}
+	}
 
 	lines = make([]string, 0, bound)
 	if gapAbove {
