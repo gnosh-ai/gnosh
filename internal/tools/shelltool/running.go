@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gnosh-ai/gnosh/internal/core"
-	"github.com/gnosh-ai/gnosh/internal/shellquote"
 )
 
 // maxProgramChars is how much of one program's command line is named.
@@ -99,13 +98,28 @@ func (j *job) runningNow() string {
 	return strings.Join(names, ", ")
 }
 
-// programLine is a program's command line as it would be typed: its name
-// without the folder it was found in, then its arguments, quoted where the
-// shell would need it, cut short past maxProgramChars.
+// programLine is a program's command line for a person to read: its name
+// without the folder it was found in, then its arguments, each cut at its
+// first line ("…" where more follows) and in double quotes when it holds
+// a space, the whole cut short past maxProgramChars. A script handed over
+// as one argument (ssh box "python3 - <<'EOF' ..."), shell-quoted whole,
+// took the whole line and read as a run of escaped quotes (Jae, 26 November 2026,
+// "is it stuck now?"). It is for reading, not for pasting into a shell.
 func programLine(args []string) string {
-	words := slices.Clone(args)
-	words[0] = filepath.Base(words[0])
-	line := shellquote.Words(words)
+	words := make([]string, len(args))
+	for i, a := range args {
+		if i == 0 {
+			a = filepath.Base(a)
+		}
+		if first, _, more := strings.Cut(a, "\n"); more {
+			a = strings.TrimRight(first, " \t\r") + " …"
+		}
+		if a == "" || strings.ContainsAny(a, " \t") {
+			a = `"` + a + `"`
+		}
+		words[i] = a
+	}
+	line := strings.Join(words, " ")
 	if r := []rune(line); len(r) > maxProgramChars {
 		line = string(r[:maxProgramChars]) + "…"
 	}

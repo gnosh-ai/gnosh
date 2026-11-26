@@ -6129,3 +6129,18 @@ or kept with the reason said (27).
     terminal's magenta, green, bright blue, bright magenta and yellow.
     The rest of the screen keeps its colours, the prompt mark's
     blue-green among them.
+
+398. **A command's line keeps its time.** Jae, 26 November 2026, a
+    while after item 394 was installed: "is it stuck now?". It was not:
+    the command had run a few seconds, but the line named it as `ssh
+    workbench 'python3 - <<'\''PYEOF'\'' src = open(...`, a whole Python
+    script handed to ssh as one argument, quoted for a shell, which took
+    the whole width, and the time and "Esc stops" fell off the end. A
+    line with no time looks stuck. Now the tool calls' own words (what
+    a command runs, which may be as long as anything) are cut with "…"
+    to leave room for the time, unless that would leave fewer than 12
+    cells of them; gnosh's own words on the line, made to fit, are not
+    cut. And a program is named for a person to read, not for pasting:
+    an argument with a space in plain double quotes, and one of several
+    lines cut at its first line, "…" after it, as in `ssh workbench
+    "python3 - <<'PYEOF' …"`.

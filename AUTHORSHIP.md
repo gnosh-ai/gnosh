@@ -332,6 +332,16 @@ the gold between, the earlier gnosh's colours (`spec/DECISIONS.md` item
 purple and hot pink, with green and gold hints), four purples in seven,
 and a second purple that stays purple in 256 colours.
 
+That evening, of the line naming a script sent over ssh, which had pushed
+the time off the screen:
+
+> is it stuck now?
+
+Set: a command's words are cut to leave the time room, and a script given
+as one argument is named by its first line (`spec/DECISIONS.md` item
+398). Claude's part: seeing that the line had lost its time, and cutting
+only the tool calls' own words, which can be any length, not gnosh's own.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

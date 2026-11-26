@@ -84,8 +84,9 @@ func TestRunningNotSaidOfAQuickCommand(t *testing.T) {
 	}
 }
 
-// A program is named as it would be typed: its own name without the folder
-// it was found in, its arguments quoted where the shell would need it, and
+// A program is named for a person to read: its own name without the
+// folder it was found in, an argument with a space in double quotes, a
+// script handed over as one argument cut at its first line, and the whole
 // cut short when long.
 func TestProgramLine(t *testing.T) {
 	for _, c := range []struct {
@@ -94,7 +95,8 @@ func TestProgramLine(t *testing.T) {
 	}{
 		{[]string{"/usr/local/go/bin/go", "run", "main.go"}, "go run main.go"},
 		{[]string{"tail", "-15"}, "tail -15"},
-		{[]string{"/usr/bin/python3", "-c", "print('hi there')"}, `python3 -c 'print('\''hi there'\'')'`},
+		{[]string{"/usr/bin/python3", "-c", "print('hi there')"}, `python3 -c "print('hi there')"`},
+		{[]string{"ssh", "workbench", "python3 - <<'PYEOF'\nsrc = open('x').read()\nPYEOF"}, `ssh workbench "python3 - <<'PYEOF' …"`},
 	} {
 		if got := programLine(c.args); got != c.want {
 			t.Errorf("programLine(%q) = %q, want %q", c.args, got, c.want)

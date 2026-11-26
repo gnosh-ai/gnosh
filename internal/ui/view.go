@@ -528,6 +528,10 @@ func (s *session) hintLines(width int, now time.Time) []string {
 	return rows
 }
 
+// minActivity is the fewest cells of the tool calls' words that the
+// activity line cuts them to, to leave room for how long they have run.
+const minActivity = 12
+
 // activityLine is the one line that says what gnosh is doing or waiting
 // for, with how long that has lasted. It is empty when the session is
 // idle; the status line then says so.
@@ -541,6 +545,10 @@ func (s *session) activityLine(width int, now time.Time) string {
 	// what says it in full and brief in fewer words, for a terminal too
 	// narrow for the first.
 	what, brief, extra := "", "", ""
+	// cuttable says what is the tool calls' own words, a command line
+	// say, which may be as long as anything: they are cut to leave the
+	// time room (below). gnosh's own words, made to fit, are not.
+	cuttable := false
 	since := s.since
 	model := firstNonEmpty(oneLine(s.model), "the model")
 	switch {
@@ -600,7 +608,7 @@ func (s *session) activityLine(width int, now time.Time) string {
 				brief = "writing a " + oneLine(s.calls[n-1].name) + " call"
 			}
 		case phTools:
-			what = s.running()
+			what, cuttable = s.running(), true
 		case phRetry:
 			what, brief = "waiting to try "+model+" again", "waiting to try again"
 			tail := ""
@@ -630,9 +638,21 @@ func (s *session) activityLine(width int, now time.Time) string {
 	if brief != "" && s.m.Width(what) > room {
 		what = brief
 	}
+	took := ""
+	if d := now.Sub(since); !since.IsZero() && d >= time.Second {
+		took = span(d)
+	}
+	// How long the tool calls have run shows however long their words
+	// are: a line whose time cannot be seen looks stuck (Jae, 26 November
+	// 2026, "is it stuck now?", of a command line that took the whole
+	// width). Words too long to leave the time room are cut, unless that
+	// would leave too little of them to read.
+	if keep := s.m.Width(th.Sep) + s.m.Width(took); cuttable && took != "" && s.m.Width(what)+keep > room && room-keep >= minActivity {
+		what = s.m.Truncate(what, room-keep, "…")
+	}
 	parts := []string{what}
-	if took := now.Sub(since); !since.IsZero() && took >= time.Second {
-		parts = append(parts, span(took))
+	if took != "" {
+		parts = append(parts, took)
 	}
 	if extra != "" {
 		parts = append(parts, extra)
