@@ -154,6 +154,10 @@ type Controls interface {
 	// (a turn finished a while ago and nothing was typed since). It does
 	// not wait for them.
 	Notify(kind, title, message string)
+	// Away tells the session that the person seems to be away: it has sat
+	// idle, with no key pressed, for SessionInfo.AwayAfter. The session may
+	// start a turn of its own, which the person's next prompt stops.
+	Away()
 	// RunEnd is called by the front end of a non-interactive run when its
 	// last turn has ended, with the exit code the run would end with, and
 	// returns the code it ends with: a feature may raise it. The features
@@ -424,6 +428,10 @@ type SessionInfo struct {
 	// NotifyHooks says a Notification hook is configured, so that the
 	// timers behind Controls.Notify are worth keeping.
 	NotifyHooks bool
+	// AwayAfter is how long the session sits idle with no key pressed
+	// before the interface calls Controls.Away (the awayAfter option);
+	// zero for never.
+	AwayAfter time.Duration
 }
 
 // HookEvent says that hooks ran at one of the session's moments, and what

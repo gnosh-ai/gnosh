@@ -151,6 +151,9 @@
 //	  autoCompactEnabled       make room in the model's window when it fills
 //	  autoCompactWindow        tokens of context before room is made
 //	  loopMaxTurns             an optional cap on /loop
+//	  awayAfter                seconds idle with no key before the session
+//	                           works on its own while you are away (0, off;
+//	                           not from a project's file)
 //	  maxBackgroundTasks       background commands that may run at once
 //	  bashOutputMaxChars       characters of a command's output the model
 //	                           reads (30000; BASH_MAX_OUTPUT_LENGTH wins)

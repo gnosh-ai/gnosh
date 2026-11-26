@@ -378,6 +378,13 @@ type session struct {
 	// the Notification hooks were told of it.
 	idleSince time.Time
 	idleTold  bool
+	// begun is when the interface began, and awayTold the start of the
+	// time away the session was last told of (Controls.Away), so that it
+	// is told once for each. awayTurn says the turn running is one the
+	// session started on its own while the person was away.
+	begun    time.Time
+	awayTold time.Time
+	awayTurn bool
 
 	// done says the session is over; code is the exit code and why the
 	// reason, in the SessionEnd hooks' words. restarting says it ends for
@@ -415,6 +422,7 @@ func newSession(cfg config) *session {
 
 // start writes the header and takes in what the session is.
 func (s *session) start() {
+	s.begun = s.now()
 	s.agentsHintUntil = s.now().Add(agentsHintFor)
 	s.refresh()
 	s.tasks = s.c.Tasks()
@@ -794,6 +802,7 @@ func (s *session) tick() {
 		}
 	}
 	s.notify(now)
+	s.away(now)
 }
 
 // wake is when the loop should next call tick with nothing else going on,
@@ -839,6 +848,9 @@ func (s *session) wake() time.Time {
 		if s.idleWaits() {
 			soon(s.idleSince.Add(idleNotifyAfter))
 		}
+	}
+	if s.awayWaits() {
+		soon(s.awayFrom().Add(s.info.AwayAfter))
 	}
 	return at
 }
@@ -910,6 +922,31 @@ func (s *session) idleWaits() bool {
 	return !s.busy && !s.idleTold && !s.idleSince.IsZero() && !s.lastInput.After(s.idleSince)
 }
 
+// awayFrom is when the person's time away began: the last of the
+// interface's start, the session's going idle and the last key pressed.
+func (s *session) awayFrom() time.Time {
+	return later(later(s.begun, s.idleSince), s.lastInput)
+}
+
+// awayWaits reports whether the session is still to be told that the
+// person is away (the awayAfter option): nothing is in hand, asked or
+// running behind !, and it was not told of this time away yet.
+func (s *session) awayWaits() bool {
+	return s.info.AwayAfter > 0 && !s.busy && !s.done && s.q == nil && s.cmdRun == "" && !s.begun.IsZero() && !s.awayTold.Equal(s.awayFrom())
+}
+
+// away tells the session that the person is away, once the awayAfter
+// option's time has gone by with the session idle and no key pressed, once
+// for each time away: it may start a turn of its own (Jae, 26 November
+// 2026: "i don't want the studio to be idle for long").
+func (s *session) away(now time.Time) {
+	if !s.awayWaits() || now.Before(s.awayFrom().Add(s.info.AwayAfter)) {
+		return
+	}
+	s.awayTold = s.awayFrom()
+	s.c.Away()
+}
+
 // later returns the later of two moments.
 func later(a, b time.Time) time.Time {
 	if b.After(a) {
@@ -921,6 +958,7 @@ func later(a, b time.Time) time.Time {
 // goIdle notes that the session has nothing in hand.
 func (s *session) goIdle() {
 	s.busy, s.stopping = false, false
+	s.awayTurn = false
 	s.ph, s.since = phIdle, s.now()
 	s.idleSince, s.idleTold = s.now(), false
 	s.retries = 0

@@ -67,6 +67,7 @@ const (
 	textLoop             = "loop"
 	textLoopProve        = "loop-prove"
 	textLoopCheckIn      = "loop-check-in"
+	textAway             = "away"
 	textCloseSendBack    = "close-sendback"
 	textGoalNotMet       = "goal-not-met"
 	textInterrupted      = "interrupted"
@@ -206,6 +207,8 @@ func specs() []spec {
 			when: "When a reply under /loop first says it is done: show it."},
 		{name: textLoopCheckIn, kind: KindLine, need: []string{"marker"}, may: []string{"turns"},
 			when: "Every 25 turns under /loop, in place of the usual line: is there a real reason to stop?"},
+		{name: textAway, kind: KindLine, need: []string{"marker"},
+			when: "As a hidden prompt of the session's own, when the person has been away for the awayAfter option's time: take the next step of the recent work, and how to say nothing is worth doing."},
 		{name: textCloseSendBack, kind: KindLine, need: []string{"todo"}, may: []string{"undone", "refusal"},
 			when: "Once per turn, when the turn would end in a todo whose last close was refused."},
 		{name: textGoalNotMet, kind: KindLine, need: []string{"name", "condition", "reason"},

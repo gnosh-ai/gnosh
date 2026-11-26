@@ -95,6 +95,14 @@ func (s *session) handle(ev any) {
 			s.c.Interrupt()
 		}
 	case *agent.PromptEvent:
+		// A turn the session starts on its own while the person is away says
+		// so on its working line until a prompt of theirs goes out.
+		switch {
+		case ev.Prompt.Hidden && ev.Prompt.Source == "away":
+			s.awayTurn = true
+		case !ev.Prompt.Hidden:
+			s.awayTurn = false
+		}
 		s.prompt(ev)
 	case *agent.RequestEvent:
 		s.request(ev)

@@ -43,6 +43,10 @@ type Options struct {
 	// LoopMaxTurns is an optional cap on /loop. Unset, zero or negative
 	// means none.
 	LoopMaxTurns Value[int]
+	// AwayAfter is how many seconds an interactive session waits, idle
+	// and with no key pressed, before it works on its own while the person
+	// is away. Zero, the default, is off.
+	AwayAfter Value[int]
 	// MaxBackgroundTasks is how many background commands may run at once.
 	MaxBackgroundTasks Value[int]
 	// BashOutputMaxChars is how many characters of a command's output the
@@ -227,6 +231,11 @@ var optionDefs = []optionDef{
 	{key: "loopMaxTurns", kind: oInt, def: "unset (no cap)",
 		what: "an optional cap on /loop; zero or less means none", from: fromPlain + ", with the words of Claude Code's --max-turns",
 		num: func(o *Options) *Value[int] { return &o.LoopMaxTurns }},
+	{key: "awayAfter", kind: oInt, def: "0 (off)",
+		what: "seconds an interactive session waits, idle and with no key pressed, before it works on its own while you are away: a turn at a time on the next step of the recent work or the most pressing todo in mem, in the same conversation, until your next prompt stops it; 0 is off (each such turn is requests to the model); not from a project's file",
+		from: fromPlain, ownOnly: true,
+		bounded: true, min: 0, max: 86400,
+		num: func(o *Options) *Value[int] { return &o.AwayAfter }},
 	{key: "maxBackgroundTasks", kind: oInt, def: "50",
 		what: "background commands that may run at once", from: fromPlain + ", with Claude Code's word for them (background tasks)",
 		bounded: true, min: 1, max: 100000,

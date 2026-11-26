@@ -1,0 +1,4 @@
+=== the person is away ===
+<gnosh>The user is away from the keyboard, and the time is theirs: use it. Take the one next step their recent work most likely calls for, or else the most pressing open todo in mem, and do it now, as a todo of its own: `mem.Todo("what it is").Push()` first, and `mem.Pop("what you found")` when it is done. Do only what stays on this machine and can be undone: no git push, posts, messages, purchases, or deletions outside a scratch folder; leave anything like that to the user as a mem ask. The user's next prompt stops you at once, and what you did is kept. When nothing is worth doing, write this word alone on a line and stop:
+AWAY_IDLE</gnosh>
+

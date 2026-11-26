@@ -237,6 +237,15 @@ func goldenFiles() []goldenFile {
 			},
 		},
 		{
+			file:  "away",
+			texts: []string{textAway},
+			cases: func(s *Set) []goldenCase {
+				return []goldenCase{
+					{"the person is away", s.Away()},
+				}
+			},
+		},
+		{
 			file:  "notices",
 			texts: []string{textInterrupted, textBackgroundEnded, textMonitorLines, textAgentEnded, textSubtaskEnded, textBtw, textRecap, textNextPrompt, textThinkingBudget, textMention, textAgentMention, textPasted, textStructured, textPrintWait, textPrintLeftovers, textStatusLine},
 			cases: func(s *Set) []goldenCase {

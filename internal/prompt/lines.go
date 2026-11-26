@@ -27,6 +27,8 @@ const (
 	LoopDone = "LOOP_DONE"
 	// LoopStop stops /loop at a check-in.
 	LoopStop = "LOOP_STOP"
+	// AwayIdle says nothing is worth doing while the person is away.
+	AwayIdle = "AWAY_IDLE"
 )
 
 // Environment is where a session runs, as its first prompt tells the
@@ -372,6 +374,14 @@ func (s *Set) LoopCheckIn(turns int) string {
 		vals["turns"] = strconv.Itoa(turns)
 	}
 	return s.fill(textLoopCheckIn, vals)
+}
+
+// Away returns the prompt a session sends itself when the person seems to
+// be away (the awayAfter option): take the next step of the recent work,
+// or the most pressing todo in mem, in a todo of its own, and write
+// AwayIdle alone on a line when nothing is worth doing.
+func (s *Set) Away() string {
+	return s.fill(textAway, values{"marker": AwayIdle})
 }
 
 // CloseSendBack returns what the model reads when its turn would end in

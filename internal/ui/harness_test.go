@@ -539,6 +539,7 @@ type controls struct {
 	ctxs      agent.ContextStatus
 	info      app.SessionInfo
 	notified  []string
+	aways     int // how often Away was called
 	quit      string
 	sigs      chan os.Signal
 	tasks     []app.Task
@@ -811,6 +812,12 @@ func (c *controls) Signals() <-chan os.Signal { return c.sigs }
 func (c *controls) Notify(kind, title, message string) {
 	c.mu.Lock()
 	c.notified = append(c.notified, kind)
+	c.mu.Unlock()
+}
+
+func (c *controls) Away() {
+	c.mu.Lock()
+	c.aways++
 	c.mu.Unlock()
 }
 

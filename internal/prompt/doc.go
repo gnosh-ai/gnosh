@@ -264,6 +264,11 @@
 //     are /loop's: keep going; show that it is done, since a model once
 //     wrote the word that ends the loop to get out of a hard step; and the
 //     check-in every 25 turns.
+//   - away (Away) is the prompt a session sends itself when the person has
+//     been away for the awayAfter option's time: the next step of the
+//     recent work, or the most pressing todo in mem, in a todo of its own;
+//     only what stays on the machine and can be undone; and the word that
+//     says nothing is worth doing, which rests the work a while.
 //   - close-sendback (CloseSendBack) sends the model back to a todo whose
 //     close was refused, once per turn, and ends "Do not tell the user it
 //     is done": a model that was refused once told the user "Fixed".

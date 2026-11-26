@@ -71,6 +71,9 @@ type live struct {
 	// suggest the suggestion being made (suggest.go).
 	suggestOn atomic.Bool
 	suggest   suggester
+	// away is the work the session does on its own while the person is
+	// away (away.go).
+	away awayState
 	// respondShell is the respondToBashCommands option as it stands: the
 	// model answers a command the person ran behind "!" (shellline.go).
 	respondShell atomic.Bool
@@ -1510,6 +1513,7 @@ func (l *live) info() SessionInfo {
 		ShowPast:         l.showPast,
 		NotifChannel:     l.notifChannel(),
 		AskTimeout:       time.Duration(l.askIdle.Load()),
+		AwayAfter:        l.awayAfter(),
 		Resume:           "gnosh -r " + l.ts.ID(),
 	}
 	for _, it := range l.cfg.Options.VimInsertModeRemaps {
@@ -1628,7 +1632,17 @@ func (c *controls) Submit(p agent.Prompt) (string, error) {
 		l.nameAfter(p.Text)
 		l.restartedByModel.Store(false)
 	}
-	return l.agent.Submit(p)
+	if p.Hidden || !l.awayYield(l.agent) {
+		return l.agent.Submit(p)
+	}
+	// The person is back while the session works on its own: the turn
+	// stops, as Ctrl+X Ctrl+S stops one, so that their prompt starts the
+	// next one at once.
+	id, err := l.agent.Submit(p)
+	if err == nil {
+		l.agent.Interrupt()
+	}
+	return id, err
 }
 
 // Interrupt stops the turn that is running, and the command of the
@@ -1641,6 +1655,7 @@ func (c *controls) Interrupt() {
 	if stop != nil {
 		stop()
 	}
+	l.awayStopped()
 	l.agent.Interrupt()
 }
 

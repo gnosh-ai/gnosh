@@ -654,6 +654,9 @@ func (s *session) activityLine(width int, now time.Time) string {
 	if took != "" {
 		parts = append(parts, took)
 	}
+	if s.awayTurn {
+		parts = append(parts, "on its own while you are away")
+	}
 	if extra != "" {
 		parts = append(parts, extra)
 	}

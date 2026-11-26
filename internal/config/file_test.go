@@ -272,6 +272,7 @@ func TestOptions(t *testing.T) {
     "autoCompactEnabled": false,
     "autoCompactWindow": 200000,
     "loopMaxTurns": 25,
+    "awayAfter": 90,
     "maxBackgroundTasks": 7,
     "bashOutputMaxChars": 12000,
     "userInstructionFiles": ["~/notes", "/etc/gnosh/RULES.md", "rules"],
@@ -325,6 +326,7 @@ func TestOptions(t *testing.T) {
 	check("autoCompactEnabled", o.AutoCompactEnabled, Value[bool]{V: false, Set: true, Origin: at("autoCompactEnabled")})
 	check("autoCompactWindow", o.AutoCompactWindow.V, 200000)
 	check("loopMaxTurns", o.LoopMaxTurns.V, 25)
+	check("awayAfter", o.AwayAfter.V, 90)
 	check("maxBackgroundTasks", o.MaxBackgroundTasks.V, 7)
 	check("bashOutputMaxChars", o.BashOutputMaxChars.V, 12000)
 	check("userInstructionFiles", items(o.UserInstructionFiles), []string{testHome + "/notes", "/etc/gnosh/RULES.md", userDir + "/rules"})

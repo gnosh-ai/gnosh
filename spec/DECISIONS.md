@@ -6144,3 +6144,36 @@ or kept with the reason said (27).
     an argument with a space in plain double quotes, and one of several
     lines cut at its first line, "…" after it, as in `ssh workbench
     "python3 - <<'PYEOF' …"`.
+
+399. **The session works on its own while the person is away.** Jae, 26
+    November 2026, of gnosh on the Mac Studio: "i want ssh studio to always
+    be doing something in the background after an idle like a minute...
+    such that it doesn't affect my UX in terms of responsiveness etc, so
+    that it extrapolates from my recent line of thinking, or does what else
+    is priority, in the background. i want to see that in the prompt or
+    sidebar too; in short, i don't want the studio to be idle for long".
+    The awayAfter option (seconds; 0, the default, is off; not from a
+    project's file, since a project must not set a session working
+    unattended) has the interface tell the session (Controls.Away) once
+    the session has sat idle, with nothing asked and no key pressed, for
+    that long, once for each time away; a key or a turn's end starts the
+    count again. The session then sends itself a hidden prompt of its own
+    (Source "away"): take the next step the recent work most likely calls
+    for, or the most pressing open todo in mem, as a todo of its own,
+    pushed and popped; only what stays on the machine and can be undone,
+    anything else left to the person as a mem ask; and AWAY_IDLE alone on
+    a line when nothing is worth doing. The turn runs in the conversation
+    itself and not beside it: the model has the whole line of thought, and a model server of one's
+    own keeps the conversation's cache. A conversation beside it would
+    take that place among the server's slots (the Studio's server keeps
+    the session on slot 0, with two of its four slots held by another
+    client), and the person's next prompt would wait while the server read
+    everything again, minutes at 200K tokens. The person's next prompt
+    stops the turn at once, as Ctrl+X Ctrl+S does, and goes out on that
+    cache; what was done is kept. AWAY_IDLE, a failed turn, or Esc rest
+    the work for ten of the option's waits; the person's next prompt ends
+    the rest. Plan mode, /loop and anything in hand or waiting keep it
+    from starting. The person sees a quiet line as such a turn starts
+    ("Working on its own while you are away: your next prompt stops it,
+    and what it did is kept.") and "on its own while you are away" on its
+    working line.

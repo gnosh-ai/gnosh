@@ -1004,6 +1004,7 @@ func (l *live) turnEnded(ctx context.Context, res agent.TurnResult) {
 	}
 	l.tellNewBuild()
 	l.loopTurnEnded()
+	l.awayTurnEnded(res)
 	l.suggestNext(res)
 }
 
