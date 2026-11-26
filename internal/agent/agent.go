@@ -1010,6 +1010,10 @@ func (a *Agent) toolEnv(callID string) *core.ToolEnv {
 			if p.CallID == "" {
 				p.CallID = callID
 			}
+			if p.Stream == core.StreamRunning {
+				a.emit(&ToolRunningEvent{CallID: p.CallID, Text: p.Text})
+				return
+			}
 			a.emit(&ToolProgressEvent{CallID: p.CallID, Stream: p.Stream, Text: p.Text})
 		},
 	}

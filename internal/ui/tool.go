@@ -70,6 +70,10 @@ type call struct {
 	action  core.Action
 	// tail is the end of the call's live output.
 	tail tailBuf
+	// now is what the call runs just now, in the tool's own words
+	// (agent.ToolRunningEvent): for a command, the programs its shell has
+	// going. It is "" until the tool says.
+	now string
 	// hooks are the hooks that ran on the call, one line each.
 	hooks []string
 	// subs counts the tool calls a sub-agent made under this call, and

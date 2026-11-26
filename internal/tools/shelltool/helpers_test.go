@@ -121,6 +121,11 @@ func newManager(t *testing.T, o Options) *Manager {
 	if o.PipeGrace == 0 {
 		o.PipeGrace = 100 * time.Millisecond
 	}
+	if o.RunningAfter == 0 {
+		// What a command runs is told only to the tests that ask for it,
+		// so that the others see their live output alone.
+		o.RunningAfter = time.Hour
+	}
 	if o.Local == "" {
 		o.Local = "dev@box"
 	}

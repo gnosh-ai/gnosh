@@ -470,6 +470,17 @@ type ToolProgressEvent struct {
 	Text   string
 }
 
+// ToolRunningEvent says what a running call runs just now, in the tool's
+// own words (core.StreamRunning): for a shell command, the programs its
+// shell has going, where the call's heading names only the command's
+// first line. Each says it in place of the one before. It is for the
+// person; the model is not shown it.
+type ToolRunningEvent struct {
+	Meta
+	CallID string
+	Text   string
+}
+
 // ToolEndEvent says a tool call has its result.
 type ToolEndEvent struct {
 	Meta

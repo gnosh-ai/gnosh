@@ -292,6 +292,24 @@ Claude's part: stopping the turn first rather than clearing under it,
 putting what he had queued back in the box, and letting a side question
 that waits go, as /exit does.
 
+Later that day, of the line saying "running cat > /tmp/bucket/main.go
+<<'EOF' · 2m 05s · Esc stops":
+
+> why is it stuck seemingly
+
+It was not: the `cat` had ended at once, and the time went to the `go run
+main.go | tail -15` after it, which the line did not name. Asked whether
+the line should name what runs:
+
+> do it
+
+Set: while a command runs, the line names the programs its shell runs just
+now, as in "running go run main.go, tail -15" (`spec/DECISIONS.md` item
+394). Claude's part: finding them among the processes of the command's
+session by the shell's own arguments, naming them with commas rather than
+guessing at pipes, and waiting two seconds, then naming a program once it
+has been seen twice.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

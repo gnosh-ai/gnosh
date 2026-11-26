@@ -6036,3 +6036,30 @@ or kept with the reason said (27).
     75.9k of about 215k tokens", the total the estimate until the server's
     count passes it. With every slot busy, or two such slots, nothing is
     claimed.
+
+394. **The working line names what a command runs.** Jae, 26 November
+    2026, over ssh on the Mac Studio, of "running cat >
+    /tmp/bucket/main.go <<'EOF' · 2m 05s · Esc stops": "why is it stuck
+    seemingly", and "do it" to naming what runs. The command wrote a
+    file with a here-document and then ran `go run main.go | tail -15`:
+    the `cat` had ended at once, and the minutes went to the program,
+    while the line named only the command's first line, which is all a
+    call's heading takes. Now, once a command in the foreground has run
+    2 seconds, the shell tool looks each second at the processes of its
+    session and names the programs whose parent is one of the command's
+    shells: the shell gnosh started, the copies of it that a pipeline or
+    a subshell makes, and a sandbox that wraps it, all of which carry
+    the shell's arguments, among them the file for the command's last
+    directory, which nothing else names. Each program is named by its
+    command line as it would be typed, its name without its folder, cut
+    at 200 characters; several are named in the order they began, with
+    commas between them ("go run main.go, tail -15"), since the
+    processes do not say whether pipes join them. What a program started
+    is not named: `go run` is, the program it builds is not. A name is
+    said once it has been seen twice, so that a quick program does not
+    flash past, and it stays while the shell runs nothing of its own
+    for a moment. It goes to the person as a Progress of the stream
+    core.StreamRunning, which the agent passes on as a ToolRunningEvent;
+    the model is not shown it. The arguments come from kern.procargs2 on
+    macOS and /proc on Linux; elsewhere nothing is named. A command on
+    another machine is not looked at: here it is only ssh.

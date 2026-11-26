@@ -671,7 +671,10 @@ func (s *session) running() string {
 		c := started[0]
 		h := s.headOf(c.name, c.input, &c.action)
 		if h.shell {
-			return "running " + firstNonEmpty(h.arg, "a command")
+			// What the command's shell runs just now, once the tool has
+			// said: the command's first line may be a file it wrote at
+			// once, the time going to the line after it.
+			return "running " + firstNonEmpty(oneLine(c.now), h.arg, "a command")
 		}
 		// (The name as the call's heading gives it: an MCP tool's as
 		// Claude Code names it.)

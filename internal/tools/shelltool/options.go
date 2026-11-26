@@ -125,6 +125,15 @@ type Options struct {
 	// Default: 500 milliseconds.
 	PipeGrace time.Duration
 
+	// RunningAfter is how long a command in the foreground runs before the
+	// person watching it is told which programs its shell runs (Progress,
+	// core.StreamRunning), and RunningEvery how often that is looked at
+	// again after. A program is named once it has been seen twice running,
+	// so that a quick one does not flash past. Defaults: 2 seconds, and 1
+	// second.
+	RunningAfter time.Duration
+	RunningEvery time.Duration
+
 	// MaxOutputChars is how many characters of a command's output the model
 	// is shown. Longer output is shown as its start and its end, this many
 	// characters together, around a line that says what was left out.
@@ -240,6 +249,8 @@ const (
 	defaultTermGrace      = 2 * time.Second
 	defaultKillWait       = 5 * time.Second
 	defaultPipeGrace      = 500 * time.Millisecond
+	defaultRunningAfter   = 2 * time.Second
+	defaultRunningEvery   = time.Second
 	defaultOutputChars    = 30_000
 	defaultFailedChars    = 10_000
 	defaultSpoolBytes     = 64 << 20
@@ -291,6 +302,12 @@ func (o Options) withDefaults() Options {
 	}
 	if o.PipeGrace <= 0 {
 		o.PipeGrace = defaultPipeGrace
+	}
+	if o.RunningAfter <= 0 {
+		o.RunningAfter = defaultRunningAfter
+	}
+	if o.RunningEvery <= 0 {
+		o.RunningEvery = defaultRunningEvery
 	}
 	if o.MaxOutputChars <= 0 {
 		o.MaxOutputChars = defaultOutputChars

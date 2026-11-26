@@ -2,6 +2,8 @@ package shelltool
 
 import (
 	"bytes"
+	"encoding/binary"
+	"errors"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -36,9 +38,41 @@ func sessionProcs(sid int) ([]procInfo, error) {
 		}
 		start := uint64(p.Proc.P_starttime.Sec)*1_000_000 + uint64(p.Proc.P_starttime.Usec)
 		// The name is all there is here to tell one program from the next.
-		out = append(out, procInfo{pid: pid, pgid: int(p.Eproc.Pgid), start: start, name: string(name), image: string(name)})
+		out = append(out, procInfo{pid: pid, ppid: int(p.Eproc.Ppid), pgid: int(p.Eproc.Pgid), start: start, name: string(name), image: string(name)})
 	}
 	return out, nil
+}
+
+// procArgs returns the arguments process pid began its program with, the
+// program's own name first. kern.procargs2 holds the count of them, the
+// path the program was run from, NULs up to the arguments, the arguments,
+// and then the environment, which this system shows nobody else (empty).
+func procArgs(pid int) ([]string, error) {
+	b, err := unix.SysctlRaw("kern.procargs2", pid)
+	if err != nil {
+		return nil, err
+	}
+	if len(b) < 4 {
+		return nil, errors.New("kern.procargs2: too short")
+	}
+	argc := int(binary.LittleEndian.Uint32(b))
+	b = b[4:]
+	path := bytes.IndexByte(b, 0)
+	if path < 0 {
+		return nil, errors.New("kern.procargs2: no end to the program's path")
+	}
+	b = bytes.TrimLeft(b[path:], "\x00")
+	args := make([]string, 0, min(argc, 64))
+	for len(args) < argc && len(b) > 0 {
+		end := bytes.IndexByte(b, 0)
+		if end < 0 {
+			args = append(args, string(b))
+			break
+		}
+		args = append(args, string(b[:end]))
+		b = b[end+1:]
+	}
+	return args, nil
 }
 
 // procEnvHas cannot tell here: macOS keeps a process's environment from

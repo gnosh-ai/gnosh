@@ -175,11 +175,18 @@ func (t WorkTree) Checkouts() []string { return append([]string{t.Repo}, t.Outer
 type Progress struct {
 	// CallID is the ToolCall.ID the output belongs to.
 	CallID string
-	// Stream is "stdout", "stderr" or "status".
+	// Stream is "stdout", "stderr" or "status"; or StreamRunning, which is
+	// no output.
 	Stream string
 	// Text is the output.
 	Text string
 }
+
+// StreamRunning is the Progress stream that says what a running call runs
+// just now, such as the programs a shell command has going, each time in
+// place of what it said before. It is for the person; the model is not
+// shown it.
+const StreamRunning = "running"
 
 // Display is something to show a person: more than the model needs.
 type Display struct {

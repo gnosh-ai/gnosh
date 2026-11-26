@@ -83,6 +83,10 @@ func (l *live) shellLine(command string) error {
 		meta := func() agent.Meta { return agent.Meta{Time: l.p.now(), Session: l.ts.ID()} }
 		env := l.env()
 		env.Progress = func(p core.Progress) {
+			if p.Stream == core.StreamRunning {
+				l.deliver(&agent.ToolRunningEvent{Meta: meta(), CallID: call.ID, Text: p.Text})
+				return
+			}
 			l.deliver(&agent.ToolProgressEvent{Meta: meta(), CallID: call.ID, Stream: p.Stream, Text: p.Text})
 		}
 		action, _ := describe(bash, call, env)

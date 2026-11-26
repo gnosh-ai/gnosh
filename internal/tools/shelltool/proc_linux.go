@@ -46,6 +46,7 @@ func sessionProcs(sid int) ([]procInfo, error) {
 		}
 		out = append(out, procInfo{
 			pid:   pid,
+			ppid:  st.ppid,
 			pgid:  st.pgid,
 			start: st.start,
 			name:  st.name,
@@ -53,6 +54,24 @@ func sessionProcs(sid int) ([]procInfo, error) {
 		})
 	}
 	return out, nil
+}
+
+// procArgs returns the arguments process pid began its program with, the
+// program's own name first, as /proc keeps them.
+func procArgs(pid int) ([]string, error) {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
+	if err != nil {
+		return nil, err
+	}
+	data = bytes.TrimSuffix(data, []byte{0})
+	if len(data) == 0 {
+		return nil, nil // a kernel thread, or a process on its way out
+	}
+	var args []string
+	for a := range bytes.SplitSeq(data, []byte{0}) {
+		args = append(args, string(a))
+	}
+	return args, nil
 }
 
 // procEnvHas reports whether the environment process pid began its

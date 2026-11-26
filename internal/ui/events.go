@@ -140,6 +140,11 @@ func (s *session) handle(ev any) {
 		if c := s.call(ev.CallID); c != nil {
 			c.tail.add(ev.Text)
 		}
+	case *agent.ToolRunningEvent:
+		if c := s.call(ev.CallID); c != nil {
+			c.now = ev.Text
+			s.dirty = true
+		}
 	case *agent.ToolEndEvent:
 		s.toolEnd(ev)
 	case *agent.QuestionEvent:

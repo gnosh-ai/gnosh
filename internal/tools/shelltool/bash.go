@@ -148,6 +148,10 @@ func (m *Manager) start(a bashArgs, env *core.ToolEnv, callID string) (*job, err
 		close(j.done)
 		return nil, err
 	}
+	if env.Progress != nil && !a.background && !a.watch && j.host == nil {
+		tell := env.Progress
+		m.wg.Go(func() { j.tellRunning(tell, callID) })
+	}
 	if a.background {
 		m.publish(j)
 		m.wg.Go(func() { j.background(a.limit) })

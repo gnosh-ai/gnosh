@@ -10,6 +10,7 @@ import (
 // it.
 type procInfo struct {
 	pid  int
+	ppid int // its parent
 	pgid int // its process group
 	// start is when the process began, in whatever units the system counts
 	// in. A pid can be handed out again; a pid with its start time names
