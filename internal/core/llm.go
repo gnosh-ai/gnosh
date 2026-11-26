@@ -200,7 +200,14 @@ type SlotLoad struct {
 	Busy bool
 	// Prompt is how many tokens the prompt of that request is, and Read
 	// how many of them the server has read so far, a cache's included.
+	// Some servers count a prompt only as far as they have read it, while
+	// they read (llama.cpp's builds of late 2026: Prompt is then Read and
+	// the batch in hand), and the reply's tokens with it after.
 	Prompt, Read int
+	// Replying says the request has begun its reply: the server is done
+	// reading its prompt and writes. A server that does not say leaves it
+	// false.
+	Replying bool
 }
 
 // LoadReporter is a Provider whose server can say how busy it is, for the

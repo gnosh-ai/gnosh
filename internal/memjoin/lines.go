@@ -245,7 +245,8 @@ func (j *join) beforeRequest(_ context.Context, info agent.RequestInfo) ([]agent
 // can pop or split the todo while there is room. (It was half the point
 // itself, which a todo entered past half the point could never reach
 // before the slide: every late todo of a long session, the AI-box peer
-// found.)
+// found.) info.Used is measured as the request goes out, so a pop just
+// made counts: the todo it returns to has not taken in what it removed.
 func (j *join) largeStep(info agent.RequestInfo) string {
 	if info.Point <= 0 || (j.s.Config != nil && !j.s.Config.Options.AutoCompactEnabled.V) {
 		return ""

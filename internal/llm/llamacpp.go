@@ -109,8 +109,9 @@ func (l *llamaCpp) Models(ctx context.Context) ([]core.ModelInfo, error) {
 }
 
 // Load asks the server how busy it is: its /slots, each with whether a
-// request is in it, how long that request's prompt is, and how much of it
-// has been read (from the cache, or worked through). A server that holds
+// request is in it, how long that request's prompt is, how much of it has
+// been read (from the cache, or worked through), and whether its reply has
+// begun (next_token's n_decoded). A server that holds
 // several models answers for the one named; one that runs a single model
 // takes no notice of the name. A server that keeps its slots to itself
 // (--no-slots) answers with an error.
@@ -124,10 +125,11 @@ func (l *llamaCpp) Load(ctx context.Context, model string) (core.ServerLoad, err
 		return core.ServerLoad{}, err
 	}
 	var slots []struct {
-		Busy      bool `json:"is_processing"`
-		Prompt    *num `json:"n_prompt_tokens"`
-		Processed *num `json:"n_prompt_tokens_processed"`
-		Cached    *num `json:"n_prompt_tokens_cache"`
+		Busy      bool            `json:"is_processing"`
+		Prompt    *num            `json:"n_prompt_tokens"`
+		Processed *num            `json:"n_prompt_tokens_processed"`
+		Cached    *num            `json:"n_prompt_tokens_cache"`
+		Next      json.RawMessage `json:"next_token"`
 	}
 	if err := json.Unmarshal(body, &slots); err != nil {
 		return core.ServerLoad{}, l.fail(core.ErrBadResponse, "the server's slots cannot be read: %v", err)
@@ -135,9 +137,27 @@ func (l *llamaCpp) Load(ctx context.Context, model string) (core.ServerLoad, err
 	var load core.ServerLoad
 	for _, s := range slots {
 		prompt := countOf(s.Prompt)
-		load.Slots = append(load.Slots, core.SlotLoad{Busy: s.Busy, Prompt: prompt, Read: min(countOf(s.Processed)+countOf(s.Cached), prompt)})
+		load.Slots = append(load.Slots, core.SlotLoad{Busy: s.Busy, Prompt: prompt, Read: min(countOf(s.Processed)+countOf(s.Cached), prompt), Replying: decoded(s.Next) > 0})
 	}
 	return load, nil
+}
+
+// decoded is how many tokens of its reply a slot has written, from its
+// next_token: one object in older llama.cpp builds, a list of one in later
+// ones. Anything else counts as none.
+func decoded(next json.RawMessage) int {
+	type token struct {
+		Decoded *num `json:"n_decoded"`
+	}
+	var one token
+	if json.Unmarshal(next, &one) == nil {
+		return countOf(one.Decoded)
+	}
+	var list []token
+	if json.Unmarshal(next, &list) == nil && len(list) > 0 {
+		return countOf(list[0].Decoded)
+	}
+	return 0
 }
 
 // contextSize asks the server's /props for the context size it runs its

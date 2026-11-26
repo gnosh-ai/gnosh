@@ -100,16 +100,18 @@ func TestSlideInsteadOfASummary(t *testing.T) {
 		}
 	}
 
-	// Before the slide the model was sent all four files, and was told
-	// the todo had grown large: more than half of the room left when it
-	// was entered had come in. After the slide the oldest reads are gone
-	// (three of the four: the large-step line is in the todo too, and a
+	// The model was told the todo had grown large as the second file came
+	// in, when more than half of the room left as it was entered had come
+	// in, counted with that read. After the slide the oldest reads are
+	// gone (two of the four, with the large-step line between them: a
 	// slide takes at least half of what the todo holds), and the newest
-	// is there.
+	// are there.
 	before, after := string(reqs[5].Body), string(reqs[6].Body)
+	hasNot(t, "the request after the first read", string(reqs[3].Body), "This todo is large")
+	has(t, "the request after the second read", string(reqs[4].Body), "This todo is large")
 	has(t, "the request before the slide", before, "alpha line 0005", "bravo line 0005", "charlie line 0005", "This todo is large")
-	hasNot(t, "the request after the slide", after, "alpha line 0005", "bravo line 0005", "charlie line 0005")
-	has(t, "the request after the slide", after, "delta line 0005")
+	hasNot(t, "the request after the slide", after, "alpha line 0005", "bravo line 0005", "This todo is large")
+	has(t, "the request after the slide", after, "charlie line 0005", "delta line 0005")
 	t.Logf("a window of %d tokens, with room made at %d; the request before the slide: about %d tokens; the request after it: about %d tokens", window, point, len(before)/4, len(after)/4)
 	// The slide was made for want of room, and when the fourth read came
 	// in, no sooner: the request before it was under the point, with
@@ -125,7 +127,7 @@ func TestSlideInsteadOfASummary(t *testing.T) {
 
 	// The answer that entered the todo says what went, and why.
 	push := find(reqs[6], "mem.Next()")
-	if got := messagesOf(reqs[6])[push+1].text; !strings.HasSuffix(got, "\n[Then came the work in it, 3 tool calls (Read 3), removed from your context to make room.]") {
+	if got := messagesOf(reqs[6])[push+1].text; !strings.HasSuffix(got, "\n[Then came the work in it, 2 tool calls (Read 2), removed from your context to make room.]") {
 		t.Errorf("the answer that entered the todo does not end with the slide's note:\n%s", got)
 	}
 	samePrefix(t, "the requests before and after the slide", reqs[5], reqs[6], push+1)
@@ -260,9 +262,17 @@ func TestLargeStepLine(t *testing.T) {
 	w.script.add(reply(call("c7", "Read", map[string]any{"file_path": "alpha.txt", "limit": 5})), says("Still here."))
 	r = w.run("-y", "-c", "-p", "carry on")
 	r.wantCode(t, 0)
-	reqs = w.script.requests()
-	if n := strings.Count(string(reqs[len(reqs)-1].Body), "This todo is large"); n != 1 {
-		t.Errorf("after a restart the large-step line stands %d times in the conversation, want once", n)
+	// Counted in the session's file, not in the last request: the process
+	// that takes the session up may slide the todo's start, the line with
+	// it, out of the model's view.
+	n := 0
+	for _, e := range w.session(w.Sessions()[0]).Entries() {
+		for _, b := range e.Message.Blocks {
+			n += strings.Count(b.Text, "This todo is large")
+		}
+	}
+	if n != 1 {
+		t.Errorf("after a restart the session's file holds the large-step line %d times, want once", n)
 	}
 }
 
@@ -358,6 +368,50 @@ func TestLargeStepLineForALateTodo(t *testing.T) {
 	// (Where it entered: past half the point, the line's old trigger.)
 	if push, point := tokensBefore(t, reqs, "read the rest"), pointOf(40000); push*2 <= point {
 		t.Errorf("the todo was entered at about %d tokens, with room made at %d: the test wants it past half", push, point)
+	}
+}
+
+// A todo is not told it is large as a todo under it pops. The line reads
+// the size of the conversation as the next request goes out, after the
+// pop, and not the last request's count, which still held all the pop
+// took out. Told then, the once it is ever told, the todo grew large later
+// on its own work with no word until the slide (a Mac Studio session, 21
+// to 26 November). It is told when its own work makes it large.
+func TestLargeStepLineNotSaidAsASubTodoPops(t *testing.T) {
+	const parentLine = "since you entered `review-files`."
+	w := newWorld(t,
+		reply(memCall("c1", `mem.Todo("review the files", "read the first three").Push()`)),
+		reply(memCall("c2", `mem.Next()`)),
+		reply(call("c3", "Read", map[string]any{"file_path": "alpha.txt"})),
+		reply(call("c4", "Read", map[string]any{"file_path": "bravo.txt"})),
+		reply(call("c5", "Read", map[string]any{"file_path": "charlie.txt"})),
+		reply(memCall("c6", `mem.Pop("read alpha.txt, bravo.txt and charlie.txt: each holds numbered lines")`)),
+		reply(call("c7", "Read", map[string]any{"file_path": "delta.txt"})),
+		reply(call("c8", "Read", map[string]any{"file_path": "echo.txt"})),
+		says("All five hold numbered lines."),
+	)
+	for _, name := range []string{"alpha", "bravo", "charlie", "delta", "echo"} {
+		w.Write(name+".txt", filler(name, 6000))
+	}
+	w.Model.SetWindow(windowWithRoom(startTokens(t, "review the files")))
+	r := w.run("-y", "-p", "review the files")
+	r.wantCode(t, 0)
+	w.script.done()
+	reqs := w.script.requests()
+	if len(reqs) != 9 {
+		t.Fatalf("the run made %d requests, want 9", len(reqs))
+	}
+	has(t, "stderr", r.err, "popped `review-files/read-first-three`: about ")
+	hasNot(t, "stderr", r.err, "slid `", "summar")
+	// The sub-todo took in enough to be large itself, and was told so.
+	has(t, "the request that made the pop", string(reqs[5].Body), "since you entered `review-files/read-first-three`.")
+	// The request after the pop: the parent stands on top again, with
+	// little of its own in the conversation.
+	hasNot(t, "the request after the pop", string(reqs[6].Body), parentLine)
+	// Two files read in the parent itself make it large, and it is told,
+	// once.
+	if n := strings.Count(string(reqs[8].Body), parentLine); n != 1 {
+		t.Errorf("after two files read in it, the parent was told it is large %d times, want once:\n%s", n, conversation(reqs[8]))
 	}
 }
 

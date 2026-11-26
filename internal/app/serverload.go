@@ -128,10 +128,16 @@ func (l *live) stopLoad() {
 }
 
 // loadText says what the server is doing, for a request of about estimate
-// tokens: the slot reading a prompt about that long is taken for this
-// request's, since the server does not say whose a request is.
+// tokens. The server does not say whose a request is, so this request's
+// is taken to be the slot reading a prompt about that long. A server that
+// counts a prompt only as far as it has read it gives no such slot until
+// the reading is nearly done; there, with a slot standing idle, so that
+// this request waits for none, the one slot still reading a prompt not
+// yet past this one's length is taken for it. (A Mac Studio, 26
+// November: nine minutes of reading this request's own prompt were shown
+// as "the server is also answering 1 other request".)
 func loadText(load core.ServerLoad, estimate int) string {
-	busy, mine := 0, -1
+	busy, mine, reader, readers := 0, -1, -1, 0
 	for i, s := range load.Slots {
 		if !s.Busy {
 			continue
@@ -140,11 +146,23 @@ func loadText(load core.ServerLoad, estimate int) string {
 		if mine < 0 && estimate > 0 && s.Prompt > 0 && near(s.Prompt, estimate) {
 			mine = i
 		}
+		if estimate > 0 && !s.Replying && s.Read < s.Prompt && s.Prompt <= estimate+slack(estimate) {
+			reader, readers = i, readers+1
+		}
+	}
+	if mine < 0 && readers == 1 && busy < len(load.Slots) {
+		mine = reader
 	}
 	switch {
 	case mine >= 0:
 		s := load.Slots[mine]
-		text := "reading the prompt: " + kTokens(s.Read) + " of " + kTokens(s.Prompt) + " tokens"
+		// The server's count of the prompt, unless it has not counted as
+		// far as the session's estimate yet.
+		of := kTokens(s.Prompt)
+		if estimate > s.Prompt {
+			of = "about " + kTokens(estimate)
+		}
+		text := "reading the prompt: " + kTokens(s.Read) + " of " + of + " tokens"
 		if others := busy - 1; others > 0 {
 			text += ", beside " + countWords(others, "other request", "other requests")
 		}
@@ -166,7 +184,13 @@ func near(count, estimate int) bool {
 	if d < 0 {
 		d = -d
 	}
-	return d <= max(estimate/4, 500)
+	return d <= slack(estimate)
+}
+
+// slack is how far a server's count of a prompt's tokens may stand from
+// the session's estimate of it and still be taken for it.
+func slack(estimate int) int {
+	return max(estimate/4, 500)
 }
 
 // kTokens writes a number of tokens shortly: 950, 8.1k, 12k.

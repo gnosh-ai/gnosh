@@ -278,6 +278,19 @@ type fitError struct{ msg string }
 
 func (e *fitError) Error() string { return e.msg }
 
+// measure is the size of the conversation as the next request would send
+// it, counted as fit counts it, and the point at which room is made, both
+// in tokens. It makes no room and tells no one.
+func (a *Agent) measure() (used, point int, err error) {
+	su := a.setup()
+	v, err := a.view()
+	if err != nil {
+		return 0, 0, err
+	}
+	req := a.assemble(su, v.Messages)
+	return a.predict(a.estimate(req, su.model), su.model), a.limits(su).point, nil
+}
+
 // fit builds the next request and makes sure the model can hold it. Above
 // the compaction point it first asks the log to take the oldest part out
 // of the view, and only when nothing can go does it write a summary. A

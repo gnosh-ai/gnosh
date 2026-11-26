@@ -646,8 +646,10 @@ type RequestInfo struct {
 	// Turn is the turn's id and Round counts its requests from one.
 	Turn  string
 	Round int
-	// Used and Point are the size of the conversation at the last count
-	// and the point at which room is made, both in tokens.
+	// Used is the size of the conversation as the request would send it,
+	// measured as the request is about to be made, so that what a pop or a
+	// slide took out since the last request counts; Point is the point at
+	// which room is made. Both are in tokens.
 	Used  int
 	Point int
 }

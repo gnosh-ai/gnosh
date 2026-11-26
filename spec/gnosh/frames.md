@@ -581,6 +581,13 @@ pushed, the model gets one hidden system reminder before its next reply
 this step is large: pop it with what you have, or split it into sub-steps (you are in `x`, and about 12K tokens came in since you entered it).
 ```
 
+The total it reads is measured as the request goes out (§10's `T − E`),
+so a pop or a slide made since the last request counts. (Read from the
+last request's count, a pop in the round between left the todo it
+returned to looking as if it had just taken in all the pop removed: told
+then that it was large, its one telling, a todo on a Mac Studio grew large
+on its own work days later with no word, and slid. DECISIONS 393.)
+
 Not given when automatic summarizing is turned off. The design calls the
 line "safe (unlike deferring the compaction check, which was rejected)":
 deferring the check by one step to ask for a pop "sends a request already

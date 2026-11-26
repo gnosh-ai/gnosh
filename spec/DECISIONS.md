@@ -6007,3 +6007,32 @@ or kept with the reason said (27).
     cleared under a turn that is still stopping: that turn's last events
     and the new session's reach the screen by different ways, in either
     order. /resume still asks for Esc first.
+
+393. **The large-step line reads the conversation's size as the request
+    goes out, and the waiting line knows its own request.** Jae, 26
+    November 2026, in gnosh on the Mac Studio, after a turn waited nine
+    minutes for its first word: "why does it need to wait so long for a
+    response", then "fix the failure, i guess there's a bug". The session
+    had stood five days in one todo that was never popped; it grew to
+    about 226K tokens and slid twice, and after each slide the server read
+    the whole conversation again, at about 360 tokens a second. The line
+    that should have come before (frames.md §8.7) had been spent on 21
+    November, the one time it is given: the reminders were told the size
+    counted for the last request, which still held the 91K tokens a
+    sub-todo took out as it popped, so its parent, back on top, read as
+    having just taken them in and was told it was large. When its own
+    work made it large, a day later, nothing came. The reminders are now
+    told the size measured as the request goes out (§10's T − E), so a pop
+    or a slide made since the last request counts, and the line comes a
+    round sooner than it did, the last round's results counted. The nine
+    minutes were shown as "the server is also answering 1 other request":
+    llama.cpp's builds of late 2026 give a slot's n_prompt_tokens as the
+    count so far while it reads (what it has read and the batch in hand),
+    so no slot was about as long as the session's estimate until the
+    reading was nearly done. With a slot idle, so that the request waits
+    for none, the one busy slot that is still reading (its reply not
+    begun: next_token's n_decoded is 0) a prompt not yet past the
+    request's length is now taken for the request's: "reading the prompt:
+    75.9k of about 215k tokens", the total the estimate until the server's
+    count passes it. With every slot busy, or two such slots, nothing is
+    claimed.

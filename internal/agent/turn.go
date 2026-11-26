@@ -497,14 +497,22 @@ func (a *Agent) tellNotes(t *turn) error {
 }
 
 // remind asks the BeforeRequest moments for what to put in front of the
-// model, and stores it.
+// model, and stores it. They are told the size of the conversation as it
+// stands now, measured afresh: the count of the last request knows
+// nothing of a pop made in the round since, so the todo the pop returns
+// to would seem to have taken in all the pop removed. (A Mac Studio
+// session, 21 November: a todo was told it was large as its sub-todo
+// popped, the once it is ever told, and it then grew for days with no
+// word until the slide.)
 func (a *Agent) remind(ctx context.Context, t *turn) error {
 	if len(a.opts.Moments.BeforeRequest) == 0 {
 		return nil
 	}
-	a.mu.Lock()
-	info := RequestInfo{Turn: t.id, Round: t.requests, Used: a.context.Used, Point: a.context.Point}
-	a.mu.Unlock()
+	used, point, err := a.measure()
+	if err != nil {
+		return err
+	}
+	info := RequestInfo{Turn: t.id, Round: t.requests, Used: used, Point: point}
 	var entries []Entry
 	for _, f := range a.opts.Moments.BeforeRequest {
 		parts, err, ok := await(ctx, a, "a reminder", func(ctx context.Context) ([]Part, error) { return f(ctx, info) })

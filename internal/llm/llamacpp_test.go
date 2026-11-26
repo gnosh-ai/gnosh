@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -480,9 +481,10 @@ func TestLlamaCppCountTokens(t *testing.T) {
 }
 
 // Load reads the server's /slots for the model named: whether each slot is
-// busy, how long its prompt is, and how much of it is read, the cache's
-// part with what was worked through. A server that keeps its slots to
-// itself answers with an error.
+// busy, how long its prompt is, how much of it is read, the cache's part
+// with what was worked through, and whether its reply has begun (next_token
+// a list of one, or one object as older builds give it). A server that
+// keeps its slots to itself answers with an error.
 func TestLlamaCppLoad(t *testing.T) {
 	f := newFake(t, func(f *fake, w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -490,16 +492,18 @@ func TestLlamaCppLoad(t *testing.T) {
 			http.Error(w, `{"error":{"code":404,"message":"File Not Found","type":"not_found_error"}}`, 404)
 			return
 		}
-		io.WriteString(w, `[{"id":0,"n_ctx":262144,"is_processing":true,"id_task":7,"n_prompt_tokens":12400,"n_prompt_tokens_processed":5100,"n_prompt_tokens_cache":3000,"params":{}},`+
-			`{"id":1,"n_ctx":262144,"is_processing":false,"id_task":-1,"n_prompt_tokens":0,"n_prompt_tokens_processed":0,"n_prompt_tokens_cache":0,"params":{}}]`)
+		io.WriteString(w, `[{"id":0,"n_ctx":262144,"is_processing":true,"id_task":7,"n_prompt_tokens":12400,"n_prompt_tokens_processed":5100,"n_prompt_tokens_cache":3000,"params":{},"next_token":[{"has_next_token":false,"n_remain":-1,"n_decoded":0}]},`+
+			`{"id":1,"n_ctx":262144,"is_processing":false,"id_task":-1,"n_prompt_tokens":0,"n_prompt_tokens_processed":0,"n_prompt_tokens_cache":0,"params":{}},`+
+			`{"id":2,"n_ctx":262144,"is_processing":true,"id_task":9,"n_prompt_tokens":36897,"n_prompt_tokens_processed":365,"n_prompt_tokens_cache":36308,"params":{},"next_token":[{"has_next_token":true,"n_remain":-1,"n_decoded":224}]},`+
+			`{"id":3,"n_ctx":262144,"is_processing":true,"id_task":5,"n_prompt_tokens":900,"n_prompt_tokens_processed":900,"n_prompt_tokens_cache":0,"params":{},"next_token":{"has_next_token":true,"n_remain":-1,"n_decoded":31}}]`)
 	})
 	p := f.provider(TypeLlamaCpp, nil)
 	got, err := p.(core.LoadReporter).Load(context.Background(), "qwen3.8-27b")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := core.ServerLoad{Slots: []core.SlotLoad{{Busy: true, Prompt: 12400, Read: 8100}, {}}}
-	if len(got.Slots) != 2 || got.Slots[0] != want.Slots[0] || got.Slots[1] != want.Slots[1] {
+	want := core.ServerLoad{Slots: []core.SlotLoad{{Busy: true, Prompt: 12400, Read: 8100}, {}, {Busy: true, Prompt: 36897, Read: 36673, Replying: true}, {Busy: true, Prompt: 900, Read: 900, Replying: true}}}
+	if !slices.Equal(got.Slots, want.Slots) {
 		t.Errorf("Load = %+v, want %+v", got, want)
 	}
 	if reqs := f.requests(); len(reqs) != 1 || reqs[0].Path != "/slots" || reqs[0].Query != "model=qwen3.8-27b" {
