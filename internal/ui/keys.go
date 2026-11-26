@@ -106,7 +106,8 @@ func (s *session) reportVim() {
 
 // atOnce are the commands that run while a turn runs. Every other command
 // typed meanwhile waits for the session to go idle (spec/cc
-// interactive.md, 2.8).
+// interactive.md, 2.8), except /clear, which stops the turn and runs as
+// soon as it has stopped (clearNow).
 var atOnce = map[string]bool{
 	"status": true, "tasks": true, "model": true, "permissions": true, "config": true,
 	"deliverables": true, "artifacts": true,
@@ -643,7 +644,8 @@ var ownCommands = []struct {
 
 // command takes a line that begins with a slash. While a turn runs it
 // waits for the session to go idle, unless it is one of the few commands
-// that act at once.
+// that act at once, or /clear, which stops the turn instead of waiting
+// for it (clearNow).
 func (s *session) command(d editor.Draft) {
 	line := strings.TrimSpace(d.Text)
 	word, _, _ := strings.Cut(strings.TrimPrefix(line, "/"), " ")
@@ -653,6 +655,10 @@ func (s *session) command(d editor.Draft) {
 		}
 	}
 	if s.busy && !atOnce[strings.ToLower(word)] {
+		if s.clearCommand(line) {
+			s.clearNow(line)
+			return
+		}
 		s.cmdq = append(s.cmdq, line)
 		s.queued()
 		return
@@ -680,9 +686,9 @@ func shownCommand(line string) (shown string, held bool) {
 // and Esc stops it.
 func (s *session) run(line string) {
 	if s.cmdRun != "" {
-		if sideCommand(s.cmdRun) && exitCommand(line) {
-			// /exit does not wait behind a side question, which may take
-			// minutes: that is let go, and /exit is next.
+		if sideCommand(s.cmdRun) && (exitCommand(line) || s.clearCommand(line)) {
+			// /exit and /clear do not wait behind a side question, which
+			// may take minutes: that is let go, and the command is next.
 			if s.cmdStop != nil {
 				s.cmdStop()
 			}
@@ -731,6 +737,56 @@ func exitCommand(line string) bool {
 		return true
 	}
 	return false
+}
+
+// clearCommand reports whether line opens a fresh session: the session's
+// /clear, by its name or an alias (/new, /reset), with or without a name
+// after it.
+func (s *session) clearCommand(line string) bool {
+	word, _, _ := strings.Cut(strings.TrimPrefix(strings.TrimSpace(line), "/"), " ")
+	word = strings.ToLower(word)
+	for _, c := range s.info.CommandList {
+		if c.Name == "clear" && (word == c.Name || slices.Contains(c.Aliases, word)) {
+			return true
+		}
+	}
+	return false
+}
+
+// clearNow is /clear (or /new, /reset) typed while a turn runs. It does
+// not wait for the turn to end, which on a local model reading a long
+// conversation may take minutes (Jae, 26 November 2026: "/clear doesn't
+// work when it's thinking on a previous prompt... i have to wait. i don't
+// want to"). What the person queued comes back into the box first, so
+// that none of it starts another turn in the session being left, or is
+// lost. Then the turn is stopped, with a side question that waits, and
+// the command goes first in the queue, to run as soon as the turn's end
+// is in (goIdle). The session is not cleared under a turn that is still
+// stopping: that turn's last events would land on the new session's
+// screen.
+func (s *session) clearNow(line string) {
+	waits := len(s.cmdq) > 0
+	for _, q := range s.c.Queued() {
+		waits = waits || !q.Prompt.Hidden
+	}
+	if waits {
+		s.takeBack()
+	}
+	// (What waited is in the box now.)
+	s.cmdq = []string{line}
+	if s.cmdStop != nil {
+		s.cmdStop()
+	}
+	s.stopping = true
+	s.c.Interrupt()
+	s.queued()
+	s.flash("The turn is being stopped so that " + oneLine(strings.Fields(line)[0]) + " runs now.")
+}
+
+// clearWaits reports whether /clear waits, first in the queue, for the
+// turn to end (clearNow).
+func (s *session) clearWaits() bool {
+	return len(s.cmdq) > 0 && s.clearCommand(s.cmdq[0])
 }
 
 // isCommand reports whether line names one of the session's commands, by

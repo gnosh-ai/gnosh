@@ -87,6 +87,13 @@ func (s *session) handle(ev any) {
 	case *agent.TurnStartEvent:
 		s.busy = true
 		s.setPhase(phStarting)
+		if s.clearWaits() {
+			// A turn that started after the one /clear stopped, such as
+			// one a prompt of gnosh's own began, is stopped too: /clear
+			// does not wait for it either (clearNow).
+			s.stopping = true
+			s.c.Interrupt()
+		}
 	case *agent.PromptEvent:
 		s.prompt(ev)
 	case *agent.RequestEvent:

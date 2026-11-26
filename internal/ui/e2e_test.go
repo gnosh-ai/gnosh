@@ -730,6 +730,45 @@ func TestQueueKeysWithTheProgram(t *testing.T) {
 	}
 }
 
+// /clear typed while the model writes, with the real program, does not
+// wait for the turn: the turn is stopped first, then the new session
+// opens, and the prompt that was queued is back in the box, sent only in
+// the new session (Jae, 26 November 2026: "/clear doesn't work when it's
+// thinking on a previous prompt... i have to wait. i don't want to").
+func TestClearWhileTheModelWritesWithTheProgram(t *testing.T) {
+	hold := make(chan struct{})
+	defer close(hold)
+	w := apptest.NewWorld(t,
+		apptest.Reply{Text: "A reply that is held back.", Hold: hold},
+		apptest.Reply{Text: "The new session's answer."},
+	)
+	p := runProgram(t, w)
+	p.has("manual mode", "idle")
+	p.keys(`"the held prompt" <Enter>`)
+	p.has("A reply")
+	p.keys(`"the queued prompt" <Enter>`)
+	p.has("the queued prompt")
+	p.keys(`"/clear" <Enter>`)
+	p.has("stopped by you", "A new session is open")
+	if text := p.ft.text(); strings.Index(text, "stopped by you") > strings.Index(text, "A new session is open") {
+		t.Errorf("the new session opened before the turn had stopped:\n%s", text)
+	}
+	p.has("> the queued prompt")
+	p.keys(`<Enter>`)
+	p.has("The new session's answer.")
+	reqs := w.Model.Requests()
+	if len(reqs) != 2 {
+		t.Fatalf("the model was sent %d requests, want 2", len(reqs))
+	}
+	if sent := string(reqs[1].Body); !strings.Contains(sent, "the queued prompt") || strings.Contains(sent, "the held prompt") {
+		t.Errorf("the new session's first request was:\n%s", sent)
+	}
+	p.keys(`<Ctrl+D> <Ctrl+D>`)
+	if code := p.end(); code != 0 {
+		t.Fatalf("exit code %d\nstderr:\n%s", code, p.errs.String())
+	}
+}
+
 // Sent at once while a command runs: the command moves to the background,
 // where it goes on, and the model reads the queued prompt in the same
 // turn, which is not stopped.

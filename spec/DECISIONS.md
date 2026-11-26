@@ -5990,3 +5990,20 @@ or kept with the reason said (27).
     their turn, nothing on the screen moves. The line end at each row of
     a copied paragraph stays: gnosh wraps prose itself, and the terminal
     draws one line a row.
+
+392. **/clear does not wait for the turn.** Jae, 26 November 2026, over
+    ssh on the Mac Studio, where a long conversation took minutes to
+    answer: "but /clear doesn't work when it's thinking on a previous
+    prompt... i have to wait. i don't want to". Claude Code keeps a
+    command typed while a turn runs until the turn ends (`spec/cc`
+    interactive.md, 2.8), and gnosh kept /clear so too. Now /clear, and
+    /new and /reset with it, typed while a turn runs stops the turn, as
+    Esc does, and runs as soon as the turn's end is in. What the person
+    had queued comes back into the box first, so that none of it starts
+    another turn in the session being left, and none of it is lost. A
+    turn that starts before the session has gone idle, such as one a
+    prompt of gnosh's own begins, is stopped too. A side question that
+    waits (/btw, /recap) is let go, as for /exit. The session is not
+    cleared under a turn that is still stopping: that turn's last events
+    and the new session's reach the screen by different ways, in either
+    order. /resume still asks for Esc first.

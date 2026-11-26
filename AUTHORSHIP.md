@@ -281,6 +281,17 @@ writes a call after it (`spec/DECISIONS.md` item 391). Claude's part: the
 blank rows that keep the box on the bottom rows go below the open row too, so
 that a paragraph on a screen not yet full stays in one piece as well.
 
+The same day, over ssh on the Mac Studio, after a long conversation there
+had kept him waiting minutes for each answer:
+
+> but /clear doesn't work when it's thinking on a previous prompt... i have to wait. i don't want to
+
+Set: /clear typed while a turn runs stops the turn and opens the new
+session as soon as the turn has stopped (`spec/DECISIONS.md` item 392).
+Claude's part: stopping the turn first rather than clearing under it,
+putting what he had queued back in the box, and letting a side question
+that waits go, as /exit does.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude
