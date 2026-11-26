@@ -310,6 +310,18 @@ session by the shell's own arguments, naming them with commas rather than
 guessing at pipes, and waiting two seconds, then naming a program once it
 has been seen twice.
 
+Later still:
+
+> allow gnosh to restart itself, like when i say 'restart yourself', or when it thinks it needs to, but keep a root PID so gnosh can still be killed externally
+
+Set: a Restart tool the model calls, which starts gnosh again in the
+session by exec, in place of itself, so that the process id stays
+(`spec/DECISIONS.md` item 396). Claude's part: going on with the task by
+itself afterwards, as a moved session does; refusing a second restart
+until he has said something; never asking first, as EnterWorktree does
+not; and the test at a real terminal that the id stays and that a SIGTERM
+to it still ends gnosh.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

@@ -589,7 +589,7 @@ func (s *source) settingsEnv(f jfield) {
 // never was (the cd review of 2026-11-19).
 func handoffMarker(name string) bool {
 	switch name {
-	case "GNOSH_RESTARTED", "GNOSH_MOVED_FROM", "GNOSH_TREE_MOVE", "GNOSH_RUN_ASKS":
+	case "GNOSH_RESTARTED", "GNOSH_MOVED_FROM", "GNOSH_TREE_MOVE", "GNOSH_RUN_ASKS", "GNOSH_RESTART_ASKED":
 		return true
 	}
 	return false

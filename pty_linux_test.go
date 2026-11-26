@@ -199,3 +199,36 @@ func TestBinaryPipedPromptThenTyping(t *testing.T) {
 	}
 	w.Model.Done()
 }
+
+// The model's Restart, at a real terminal: gnosh starts again in place of
+// itself, so the process id stays the one it was started with, and
+// whatever holds it, a terminal's pane, a supervisor or a kill from
+// outside, still reaches gnosh (Jae, 26 November 2026: "keep a root PID so
+// gnosh can still be killed externally"). A command run before the
+// restart and one after it see the same gnosh as their parent, the process
+// the test started; the gnosh that started again goes on by itself; and a
+// SIGTERM sent to that id from outside still ends it.
+func TestBinaryRestartKeepsItsPid(t *testing.T) {
+	w := apptest.NewWorld(t,
+		apptest.Reply{Calls: []apptest.Call{{ID: "c1", Name: "Bash", Args: `{"command":"echo $PPID > before.pid"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c2", Name: "Restart", Args: `{"reason":"asked to"}`}}},
+		apptest.Reply{Calls: []apptest.Call{{ID: "c3", Name: "Bash", Args: `{"command":"echo $PPID > after.pid"}`}}},
+		apptest.Reply{Text: "Back after the restart."},
+	)
+	term := openTerminal(t)
+	p := term.run(w, "", "-y")
+	term.see("Type a prompt and Enter.")
+	term.typeLine("restart yourself")
+	term.see("gnosh starts again in this session, at the model's call (asked to).")
+	term.see("Back after the restart.")
+	term.see("-- done in ")
+	before, after := readPid(t, w, "before.pid"), readPid(t, w, "after.pid")
+	if before != p.cmd.Process.Pid || after != p.cmd.Process.Pid {
+		t.Errorf("gnosh was started as process %d; its commands saw it as %d before the restart and %d after", p.cmd.Process.Pid, before, after)
+	}
+	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("SIGTERM to the process gnosh was started as: %v", err)
+	}
+	p.wait(30*time.Second).wantCode(t, 143)
+	checkSession(t, w)
+}

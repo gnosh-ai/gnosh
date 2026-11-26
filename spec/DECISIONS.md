@@ -6082,3 +6082,30 @@ or kept with the reason said (27).
     under it, above the line that says what gnosh is doing. The blank
     space does not go away while the box is kept down: it is below what
     is being written now, where the call's output and the next rows come.
+
+396. **The model restarts gnosh, in place of itself.** Jae, 26 November
+    2026: "allow gnosh to restart itself, like when i say 'restart
+    yourself', or when it thinks it needs to, but keep a root PID so gnosh
+    can still be killed externally". A Restart tool does what /restart
+    does: the call ends the turn, the session closes, and gnosh starts
+    again in it from the program file there is now, with the same flags
+    and --resume, a work tree carried as /restart carries it. The gnosh
+    that starts is told it was the model's call (GNOSH_RESTART_ASKED,
+    with the call's reason, taken from no settings file, as the other
+    handoff markers are), tells the model so, with the build it runs and
+    the one it took over from, and starts the turn that goes on with the
+    task, as a session EnterWorktree moved does. The process id stays:
+    gnosh starts again by exec, in place of itself, so the id a
+    terminal's pane, a supervisor or a kill from outside holds is gnosh's
+    still, nothing runs beside it, and what the session started is
+    stopped first, as the session closes. A test at a real terminal
+    checks it: a command before the restart and one after it see the same
+    parent, and a SIGTERM to the id gnosh was started with ends the gnosh
+    that started again. The tool is an attended session's, offered where
+    gnosh can start itself again, never to a sub-agent (its tools are
+    taken before the tool is added) or to a run. It never asks, as
+    EnterWorktree, which also starts gnosh again, does not. It is refused
+    while work runs in the background or the person has sent more that
+    waits, as a move is; and a gnosh the model restarted refuses another
+    restart until the person has sent something, so that a model cannot
+    restart for ever.

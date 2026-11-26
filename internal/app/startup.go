@@ -80,7 +80,7 @@ type startup struct {
 func ownTools() []string {
 	d := fstools.Defaults()
 	return []string{d.ReadName, d.WriteName, d.EditName, d.GlobName, d.GrepName, d.NotebookEditName, shelltool.BashName, shelltool.StopName, shelltool.MonitorName,
-		webFetchName, webSearchName, agentToolName, sendMessageName, askToolName, enterPlanName, exitPlanName, enterTreeName, exitTreeName, cronCreateName, cronListName, cronDeleteName, scheduleWakeupName, pushName, skillToolName, gnokeyToolName}
+		webFetchName, webSearchName, agentToolName, sendMessageName, askToolName, enterPlanName, exitPlanName, enterTreeName, exitTreeName, restartToolName, cronCreateName, cronListName, cronDeleteName, scheduleWakeupName, pushName, skillToolName, gnokeyToolName}
 }
 
 // toolNames returns the one list of tool names of this program: gnosh's
@@ -409,6 +409,10 @@ func (st *startup) permissionOptions(cfg *config.Config, protected []string) per
 	// engine does not know by itself: they ask before every call unless a
 	// rule or the mode allows them.
 	known = append(known, gnokeyToolName)
+	// Restart never asks, as EnterWorktree, which also starts gnosh again,
+	// does not: what it does, the person can do with /restart, and nothing
+	// is lost by it (restarttool.go).
+	quiet = append(quiet, restartToolName)
 	o := permission.Options{
 		Mode:            permission.Mode(cfg.Permissions.Mode.V),
 		Cwd:             cfg.Paths.Cwd,

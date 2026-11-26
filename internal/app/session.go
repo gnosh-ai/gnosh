@@ -308,6 +308,10 @@ type live struct {
 	// ExitWorktree), is what the front end is told when the turn has
 	// ended: the session closes for gnosh to start again (RestartEvent).
 	restartWhy atomic.Pointer[string]
+	// restartedByModel says this gnosh was started again at the model's
+	// Restart call and the person has sent nothing since: the tool is
+	// refused until they do, so that a model cannot restart for ever.
+	restartedByModel atomic.Bool
 	// crons is the session's scheduled prompts (crontool.go), and self its
 	// self-paced /loop, under loopMu (cronloop.go).
 	crons  cronBook
@@ -687,6 +691,7 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	l.whatsNew()
 	l.movedHere()
 	l.treeMoved()
+	l.restartedAtCall()
 	return l, nil
 }
 
@@ -1617,9 +1622,11 @@ func (c *controls) Submit(p agent.Prompt) (string, error) {
 	l := c.cur()
 	if !p.Hidden {
 		// The rules a skill brought with it hold until the person's next
-		// prompt, which this is.
+		// prompt, which this is; and the Restart tool may start gnosh
+		// again once more.
 		l.dropSkillGrants()
 		l.nameAfter(p.Text)
+		l.restartedByModel.Store(false)
 	}
 	return l.agent.Submit(p)
 }

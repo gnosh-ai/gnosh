@@ -176,6 +176,9 @@ func (l *live) buildTools() error {
 		case l.st.tree != nil && l.st.tree.entered:
 			all = append(all, &exitTreeTool{l: l})
 		}
+		// And starting gnosh again in the session, at the model's call
+		// (restarttool.go).
+		all = append(all, &restartTool{l: l})
 	}
 	if l.interactive {
 		// Calling the person back (pushtool.go).

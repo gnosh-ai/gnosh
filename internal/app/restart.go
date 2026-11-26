@@ -121,18 +121,7 @@ func (l *live) slashRestart(ctx context.Context, c *SlashContext) error {
 	p := l.p
 	p.restartMu.Lock()
 	p.restart = args
-	switch t := l.st.tree; {
-	case t != nil && t.entered:
-		// A tree EnterWorktree moved the session into stays one in the
-		// new start: ExitWorktree may take the session back out.
-		move, _ := json.Marshal(treeMove{Entered: t.path, Named: t.named, Carried: true})
-		p.treeMoving = string(move)
-	case t != nil && !t.named && !t.reused:
-		// One --worktree made under a made-up name stays one that goes at
-		// the end when left as made (treeMove.Made).
-		move, _ := json.Marshal(treeMove{Made: t.path, Carried: true})
-		p.treeMoving = string(move)
-	}
+	l.carryTreeLocked()
 	p.restartMu.Unlock()
 	if p.newBuild() {
 		c.Say("gnosh starts again, the newer one, in this session." + l.loopEndsNote())
@@ -140,6 +129,23 @@ func (l *live) slashRestart(ctx context.Context, c *SlashContext) error {
 		c.Say("gnosh starts again, in this session." + l.loopEndsNote())
 	}
 	return nil
+}
+
+// carryTreeLocked has the gnosh that starts again in this session keep
+// the work tree the session is in as what it is (treeMove.Carried): one
+// EnterWorktree moved it into stays one ExitWorktree may take it back
+// out of, and one --worktree made under a made-up name stays one that
+// goes at the end when left as made (treeMove.Made). The caller holds
+// restartMu.
+func (l *live) carryTreeLocked() {
+	switch t := l.st.tree; {
+	case t != nil && t.entered:
+		move, _ := json.Marshal(treeMove{Entered: t.path, Named: t.named, Carried: true})
+		l.p.treeMoving = string(move)
+	case t != nil && !t.named && !t.reused:
+		move, _ := json.Marshal(treeMove{Made: t.path, Carried: true})
+		l.p.treeMoving = string(move)
+	}
 }
 
 // goOnArgs is the command line that opens this session again, with its
@@ -154,6 +160,13 @@ func (l *live) goOnArgs(c *SlashContext, name string, adjust ...func(*cli.Relaun
 	if work := l.runningWork(); len(work) > 0 {
 		return nil, fmt.Errorf("this is still running in the background, and would be stopped: %s. /%s once it has ended, or /tasks stop <id> stops it", strings.Join(work, ", "), name)
 	}
+	return l.goOnWith(adjust...)
+}
+
+// goOnWith is goOnArgs's command line, asked for where nothing is to be
+// refused first: by the Restart tool, whose own turn ends before the
+// session does.
+func (l *live) goOnWith(adjust ...func(*cli.Relaunch)) ([]string, error) {
 	session, fresh := l.ts.ID(), false
 	switch _, err := os.Stat(l.ts.Path()); {
 	case errors.Is(err, fs.ErrNotExist):

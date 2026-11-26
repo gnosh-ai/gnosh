@@ -357,6 +357,9 @@ func (p *program) movingEnv() []string {
 	if p.treeMoving != "" {
 		env = append(env, TreeMoveEnv+"="+p.treeMoving)
 	}
+	if p.restartAsking != "" {
+		env = append(env, RestartAskedEnv+"="+p.restartAsking)
+	}
 	return env
 }
 

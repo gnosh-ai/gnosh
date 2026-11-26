@@ -172,8 +172,14 @@ type program struct {
 	detached *detachPlan
 	// moving is the folder /cd moves the session from, for the gnosh it
 	// starts, and treeMoving what EnterWorktree or ExitWorktree did, for
-	// the one they start (TreeMoveEnv, as JSON).
-	moving, treeMoving string
+	// the one they start (TreeMoveEnv, as JSON). restartAsking is the
+	// Restart tool's reason ("1" for none), for the gnosh it starts
+	// (RestartAskedEnv).
+	moving, treeMoving, restartAsking string
+	// restartCalled says this gnosh is one the Restart tool started, for
+	// restartReason, until the model has been told (restartedAtCall).
+	restartCalled bool
+	restartReason string
 	// runs are the /fork and /subtask runs a session of this program
 	// started and watches, by id (*watchedRun): kept here, and watched
 	// again, when the session is opened again (a rewind), so that a
@@ -370,6 +376,17 @@ func newProgram(o Options) *program {
 		}
 		delete(p.env, TreeMoveEnv)
 		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, TreeMoveEnv+"=") })
+	}
+	if why, ok := p.env[RestartAskedEnv]; ok {
+		// The Restart tool's word, as /cd's is.
+		if p.restarted && why != "" {
+			p.restartCalled = true
+			if why != "1" {
+				p.restartReason = oneLine(why, maxRestartReason)
+			}
+		}
+		delete(p.env, RestartAskedEnv)
+		p.o.Environ = slices.DeleteFunc(slices.Clone(p.o.Environ), func(kv string) bool { return strings.HasPrefix(kv, RestartAskedEnv+"=") })
 	}
 	if o.Executable != "" {
 		p.started, _ = os.Stat(o.Executable)

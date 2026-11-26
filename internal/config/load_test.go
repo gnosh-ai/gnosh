@@ -2216,12 +2216,12 @@ func TestProjectEnvCannotMoveOwnDirs(t *testing.T) {
 	}
 	// What gnosh tells the gnosh it starts again is taken from no file,
 	// the person's own neither (the cd review of 2026-11-19).
-	in = inputs(newFS().put(userJSON, `{"env": {"GNOSH_MOVED_FROM": "/tmp/x", "GNOSH_RESTARTED": "1", "GNOSH_TREE_MOVE": "{}", "GNOSH_RUN_ASKS": "/tmp/r", "KEEP": "1"}}`))
+	in = inputs(newFS().put(userJSON, `{"env": {"GNOSH_MOVED_FROM": "/tmp/x", "GNOSH_RESTARTED": "1", "GNOSH_TREE_MOVE": "{}", "GNOSH_RUN_ASKS": "/tmp/r", "GNOSH_RESTART_ASKED": "why", "KEEP": "1"}}`))
 	cfg, probs = load(t, in)
 	if got := envOf(cfg); !slices.Equal(got, []string{"KEEP=1"}) {
 		t.Errorf("the markers in force: %q", got)
 	}
-	for _, name := range []string{"GNOSH_MOVED_FROM", "GNOSH_RESTARTED", "GNOSH_TREE_MOVE", "GNOSH_RUN_ASKS"} {
+	for _, name := range []string{"GNOSH_MOVED_FROM", "GNOSH_RESTARTED", "GNOSH_TREE_MOVE", "GNOSH_RUN_ASKS", "GNOSH_RESTART_ASKED"} {
 		wantProblem(t, probs, Warning, userJSON, 1, `"env.`+name+`" is not taken from a settings file`)
 	}
 }
