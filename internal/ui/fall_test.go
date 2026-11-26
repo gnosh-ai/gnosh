@@ -461,13 +461,13 @@ func TestFallSettles(t *testing.T) {
 // words in a grey, what follows them in the quiet grey. What falls
 // through them while calm is pale and even, and never bold: a head nearly
 // the colour of the person's own words, its tail fading into the letters'
-// own colour. In a deep thought the heads are the palette's own four
-// colours, bold, and some of them glint.
+// own colour. In a deep thought the heads are the fall's own colours,
+// bold, and some of them glint.
 func TestFallTakesColourAsItDeepens(t *testing.T) {
 	var m text.Metrics
 	th := DefaultTheme(text.TrueColor)
 	f, pal := th.Fall, th.Palette
-	hues := []text.Color{pal.Aqua, pal.Purple, pal.Pink, pal.Sun}
+	hues := []text.Color{pal.Orchid, pal.Mint, pal.Violet, pal.Blush, pal.Sun}
 	nWords := m.Width(fallWords)
 	cells := nWords + m.Width(fallRest)
 	if f.Text == pal.Prompt || f.Text == text.Default || f.Text == f.Quiet || f.Quiet != pal.Grey {
@@ -629,7 +629,7 @@ func TestTheMarkTurns(t *testing.T) {
 	if calm.bold != 0 || deep.bold == 0 {
 		t.Errorf("the mark was bold in %d calm frames and %d deep ones", calm.bold, deep.bold)
 	}
-	for _, hue := range []text.Color{pal.Aqua, pal.Purple, pal.Pink, pal.Sun} {
+	for _, hue := range []text.Color{pal.Orchid, pal.Mint, pal.Violet, pal.Blush, pal.Sun} {
 		if calm.colours[fg(hue)] {
 			t.Errorf("a calm mark shows %v outright", hue)
 		}
@@ -671,7 +671,7 @@ func TestFallWithFewColours(t *testing.T) {
 	})
 	var deep strings.Builder
 	runFall(1, cells, 10*time.Second, f.EveryDeep, func(fl *fall) { deep.WriteString(fl.wash(&f, m, fallWords, fallRest)) })
-	for _, want := range []string{"\x1b[1;96m", "\x1b[1;35m", "\x1b[1;95m", "\x1b[1;33m"} {
+	for _, want := range []string{"\x1b[1;35m", "\x1b[1;32m", "\x1b[1;94m", "\x1b[1;95m", "\x1b[1;33m"} {
 		if !strings.Contains(deep.String(), want) {
 			t.Errorf("a deep fall with sixteen colours lacks %q", want)
 		}

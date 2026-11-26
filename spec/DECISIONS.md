@@ -6109,3 +6109,23 @@ or kept with the reason said (27).
     waits, as a move is; and a gnosh the model restarted refuses another
     restart until the person has sent something, so that a model cannot
     restart for ever.
+
+397. **A deep thought falls mostly in purple.** Jae, 26 November 2026,
+    of the working line's colours in a thought: "the color scheme isn't
+    what i want when multi colored... remember the old gnosh color
+    scheme? I think it was green, yellow but mostly purple and
+    something". The earlier gnosh kept Crush's purple and hot pink as
+    its base, with green and gold only as hints, and its fades ran
+    green, blue, purple, pink and gold. The fall's drops took four
+    colours in turn, one each: the site's blue-green, the purple, the
+    hot pink and the gold. Now they take seven in turn, four of them
+    purple: Orchid (#BE58FF, the earlier gnosh's purple), the mint
+    (#00FFB2), Violet (#8B5CF6), Blush (#FF82D3, its pink), Orchid, the
+    gold (#FBD237) and Violet, each drop's tail fading into the next.
+    Violet is not the earlier fade's blue (#7680EE): in 256 colours,
+    which is how Jae mostly sees gnosh, that one is a cornflower blue
+    (69), and this one stays a purple (99); the seven are 135, 49, 99,
+    212, 135, 220 and 99 there. With sixteen colours they are the
+    terminal's magenta, green, bright blue, bright magenta and yellow.
+    The rest of the screen keeps its colours, the prompt mark's
+    blue-green among them.

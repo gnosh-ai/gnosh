@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -184,7 +185,15 @@ func TestOnePalette(t *testing.T) {
 	pal.Green = text.RGB(7, 8, 9)
 	pal.Rose = text.RGB(10, 11, 12)
 	pal.Aqua = text.RGB(13, 14, 15)
+	pal.Orchid = text.RGB(16, 17, 18)
+	pal.Violet = text.RGB(19, 20, 21)
+	pal.Blush = text.RGB(22, 23, 24)
 	th := NewTheme(text.TrueColor, pal)
+	// The working mark's drops are the palette's colours for it: mostly
+	// the two purples, with the mint, the pink and the gold between.
+	if want := []text.Color{pal.Orchid, pal.Mint, pal.Violet, pal.Blush, pal.Orchid, pal.Sun, pal.Violet}; fmt.Sprint(th.Fall.Hues) != fmt.Sprint(want) {
+		t.Errorf("the working mark's colours are %v, want %v", th.Fall.Hues, want)
+	}
 	for what, seq := range map[string]string{
 		"the tool mark":                 th.Tool.Sequence(),
 		"the box's paste":               th.Editor.Paste.Sequence(),
@@ -192,16 +201,14 @@ func TestOnePalette(t *testing.T) {
 		"Markdown's list marks":         th.Markdown.ListMark.Sequence(),
 		"Markdown's links":              th.Markdown.Link.Sequence(),
 		"the wordmark with few colours": th.WordmarkPlain[3].Sequence(),
-		"the working mark's second":     th.Fall.Plain.Fg(th.Fall.Hues[1]).Sequence(),
 	} {
 		if !strings.Contains(seq, "38;2;1;2;3") {
 			t.Errorf("%s is not in the palette's purple: %q", what, seq)
 		}
 	}
 	for what, seq := range map[string]string{
-		"a question's chosen row":  th.Menu.Selected.Sequence(),
-		"Markdown's headings":      th.Markdown.Heading.Sequence(),
-		"the working mark's third": th.Fall.Plain.Fg(th.Fall.Hues[2]).Sequence(),
+		"a question's chosen row": th.Menu.Selected.Sequence(),
+		"Markdown's headings":     th.Markdown.Heading.Sequence(),
 	} {
 		if !strings.Contains(seq, "38;2;4;5;6") {
 			t.Errorf("%s is not in the palette's pink: %q", what, seq)
@@ -212,7 +219,6 @@ func TestOnePalette(t *testing.T) {
 		"the box's prompt mark":     th.Editor.PromptStyle.Sequence(),
 		"a question's pointer":      th.Menu.PointerStyle.Sequence(),
 		"the line that says busy":   th.Busy.Sequence(),
-		"the working mark's first":  th.Fall.Plain.Fg(th.Fall.Hues[0]).Sequence(),
 		"a question's field prompt": th.Menu.Field.PromptStyle.Sequence(),
 	} {
 		if !strings.Contains(seq, "38;2;13;14;15") {

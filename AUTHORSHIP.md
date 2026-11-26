@@ -322,6 +322,16 @@ until he has said something; never asking first, as EnterWorktree does
 not; and the test at a real terminal that the id stays and that a SIGTERM
 to it still ends gnosh.
 
+Meanwhile, of the colours of the working line in a thought:
+
+> when gnosh is thinking i see the multi colored spinner (whereas awhen running bash and waiting it is white), but the color scheme isn't what i want when multi colored... remember the old gnosh color scheme? I think it was green, yellow but mostly purple and something...
+
+Set: a deep thought's drops are mostly purple, with the mint, a pink and
+the gold between, the earlier gnosh's colours (`spec/DECISIONS.md` item
+397). Claude's part: finding the earlier palette in its notes (Crush's
+purple and hot pink, with green and gold hints), four purples in seven,
+and a second purple that stays purple in 256 colours.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

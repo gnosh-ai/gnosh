@@ -50,6 +50,15 @@ type Palette struct {
 	// brand's two it is light: on a white background it is faint, and
 	// nothing but a mark is drawn in it.
 	Aqua text.Color
+	// Orchid and Blush are the purple and the pink of the earlier gnosh's
+	// fades, and Violet a deeper purple beside them (one that stays a
+	// purple in 256 colours), for the working mark: a deep
+	// thought's drops are mostly the two purples, with the brand's mint,
+	// the pink and the gold between (Jae, 26 November 2026: "remember the
+	// old gnosh color scheme? I think it was green, yellow but mostly
+	// purple and something"). Like the brand's colours they are light, and
+	// nothing but the working mark and its drops is drawn in them.
+	Orchid, Violet, Blush text.Color
 
 	// Prompt is the text of the person's prompts, in the box and in the
 	// conversation, and Reply the prose of the model's answers (not its
@@ -85,6 +94,7 @@ func DefaultPalette(p text.Profile) Palette {
 			Purple: text.Magenta, Pink: text.BrightMagenta, Lilac: text.Cyan,
 			Green: text.Green, Gold: text.Yellow, Rose: text.Red, Grey: text.Default,
 			Mint: text.Green, Sun: text.Yellow, Aqua: text.BrightCyan,
+			Orchid: text.Magenta, Violet: text.BrightBlue, Blush: text.BrightMagenta,
 			Prompt: text.BrightWhite, Reply: text.BrightGreen,
 		}
 	}
@@ -99,6 +109,9 @@ func DefaultPalette(p text.Profile) Palette {
 		Mint:   text.RGB(0x00, 0xFF, 0xB2),
 		Sun:    text.RGB(0xFB, 0xD2, 0x37),
 		Aqua:   text.RGB(0x68, 0xFF, 0xD6),
+		Orchid: text.RGB(0xBE, 0x58, 0xFF),
+		Violet: text.RGB(0x8B, 0x5C, 0xF6),
+		Blush:  text.RGB(0xFF, 0x82, 0xD3),
 		Prompt: text.RGB(0xFF, 0xFF, 0xFF),
 		Reply:  text.RGB(0x4A, 0xDE, 0x80),
 	}
@@ -295,9 +308,10 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 		// the words in a grey lighter than the quiet one, and through
 		// them drops of colour: pale while calm (the colour of the
 		// person's own words, white on a dark background), and in a deep
-		// thought the colours every fade of gnosh's runs through: the
-		// site's blue-green, the purple, the hot pink and the gold. A
-		// glint is toward the pale colour again.
+		// thought the earlier gnosh's colours, mostly its two purples,
+		// with the mint, the pink and the gold between (each drop takes
+		// the next, its tail the one after). A glint is toward the pale
+		// colour again.
 		th.Fall = Fall{
 			Marks: []string{"∙", "⋆", "✧", "✦", "✧", "⋆"},
 			Every: 110 * time.Millisecond, EveryDeep: 60 * time.Millisecond,
@@ -305,7 +319,7 @@ func NewTheme(p text.Profile, pal Palette) Theme {
 			Text:  text.Blend(pal.Grey, pal.Prompt, 0.4),
 			Quiet: pal.Grey,
 			Bland: pal.Prompt,
-			Hues:  []text.Color{pal.Aqua, pal.Purple, pal.Pink, pal.Sun},
+			Hues:  []text.Color{pal.Orchid, pal.Mint, pal.Violet, pal.Blush, pal.Orchid, pal.Sun, pal.Violet},
 			Glint: pal.Prompt,
 		}
 	}
