@@ -5,7 +5,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 bad=0
-for t in rename algos bugs continue; do
+for t in rename algos bugs continue recall; do
 	bash "$here/$t/make.sh" "$tmp/$t" >/dev/null || { echo "$t: make.sh failed"; bad=1; continue; }
 	bash "$here/$t/make.sh" --solved "$tmp/$t-solved" >/dev/null || { echo "$t: make.sh --solved failed"; bad=1; continue; }
 	if msg=$(bash "$here/$t/check.sh" "$tmp/$t"); then

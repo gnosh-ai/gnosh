@@ -23,6 +23,7 @@ The tasks are Go only and need Go 1.21 or later.
 | algos | Implement nine small Go packages whose functions panic with "TODO" | A long task: many steps, each with its own reading and testing, so the context outgrows a 64K window |
 | bugs | Fix six seeded bugs, one per package, each caught by a failing test, without touching the tests | Debugging: read the failure, find the cause, fix the code |
 | continue | Session 1: make changes 1-2 of a list of six. Session 2: "finish the remaining changes from before" | Carrying work across sessions |
+| recall | Read six ~31 KB operational logs (~185 KB total), fix six services, then synthesize all six discovered anomaly codes and limits into a standalone summary package | Cross-context retention of facts from earlier tool results after automatic trimming or summarization (#7, item 3) |
 
 The checks are strict but only about results:
 - Test files must match the original byte for byte (algos, bugs), or carry

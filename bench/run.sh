@@ -20,6 +20,10 @@
 #   TASKS      tasks directory (default: tasks/ next to this script)
 #   RUNS       where run directories go (default: ~/runs)
 #   RESULTS    JSONL file the row is appended to (default: ~/results.jsonl)
+#   CLAUDE_AUTOCOMPACT_PCT_OVERRIDE
+#              optional 1..100 threshold forwarded into the clean harness env
+#              for functional checks of automatic context management (#7);
+#              recorded on row.json so lowered-threshold runs stay marked
 #   TIMEOUT    seconds one harness session may take (default 3600); a session
 #              that runs out is stopped and the row says timed_out, and its
 #              outcome is "stopped", never "failed", unless the check passes
@@ -149,6 +153,15 @@ runenv=(env -i PATH="$PATH" HOME="$H" USER="$(id -un)" LANG=C.UTF-8 TERM=dumb
   XDG_STATE_HOME="$H/.local/state" GOPATH="$H/go" GOCACHE="$H/.cache/go-build" GOFLAGS=-mod=mod
   GOTOOLCHAIN=local DO_NOT_TRACK=1
   CRUSH_DISABLE_METRICS=1 CRUSH_DISABLE_PROVIDER_AUTO_UPDATE=1)
+if [ -n "${CLAUDE_AUTOCOMPACT_PCT_OVERRIDE:-}" ]; then
+  case "$CLAUDE_AUTOCOMPACT_PCT_OVERRIDE" in
+    *[!0-9]*) echo "run.sh: CLAUDE_AUTOCOMPACT_PCT_OVERRIDE must be 1..100, got $CLAUDE_AUTOCOMPACT_PCT_OVERRIDE" >&2; exit 2 ;;
+  esac
+  if [ "$CLAUDE_AUTOCOMPACT_PCT_OVERRIDE" -lt 1 ] || [ "$CLAUDE_AUTOCOMPACT_PCT_OVERRIDE" -gt 100 ]; then
+    echo "run.sh: CLAUDE_AUTOCOMPACT_PCT_OVERRIDE must be 1..100, got $CLAUDE_AUTOCOMPACT_PCT_OVERRIDE" >&2; exit 2
+  fi
+  runenv+=(CLAUDE_AUTOCOMPACT_PCT_OVERRIDE="$CLAUDE_AUTOCOMPACT_PCT_OVERRIDE")
+fi
 reason=()
 # cap: the seconds the next session may take: TIMEOUT, or what is left of
 # RUN_TIMEOUT when that is less. left: whether RUN_TIMEOUT leaves any.
@@ -300,14 +313,16 @@ summary=$(python3 "$BENCH/proxy.py" summarize "$dir/proxy.jsonl")
 python3 - "$dir" "$LANE" "$MODEL" "$WINDOW" "$harness" "$version" "$task" "$rep" "$passed_rc" "$check_msg" \
   "$t0" "$t1" "$timed_out" "$summary" "${exits[*]}" "$check1" "${VARIANT:-}" "${N:-}" "$planned_s" \
   "$BENCH" "$mem" "$memtext" "$thinking" "${SLOT:-}" "${SIDE_SLOT:-}" "${MAX_TURNS:-}" "$TIMEOUT" "${RUN_TIMEOUT:-}" \
-  "${SERVER_WINDOW:-}" "${REASONING:-}" "${SERVER_REASONING:-}" "$ptype" <<'PY' | tee "$dir/row.json" >> "$RESULTS"
+  "${SERVER_WINDOW:-}" "${REASONING:-}" "${SERVER_REASONING:-}" "$ptype" "${CLAUDE_AUTOCOMPACT_PCT_OVERRIDE:-}" <<'PY' | tee "$dir/row.json" >> "$RESULTS"
 import json, os, sys
 (d, lane, model, window, harness, version, task, rep, rc, msg, t0, t1, to, summ, exits, check1, variant, swarm, planned) = sys.argv[1:20]
-(bench, mem, memtext, thinking, slot, side_slot, max_turns, timeout, run_timeout, server_window, reasoning, server_reasoning, ptype) = sys.argv[20:33]
+(bench, mem, memtext, thinking, slot, side_slot, max_turns, timeout, run_timeout, server_window, reasoning, server_reasoning, ptype, autocompact_pct) = sys.argv[20:34]
 row = {"lane": lane, "model": model, "window": int(window), "harness": harness, "version": version,
        "task": task, "rep": int(rep), "passed": rc == "0", "check_msg": msg,
        "wall_s": round(float(t1) - float(t0), 1), "timed_out": to == "true",
        "exit_codes": [int(x) for x in exits.split()], "dir": d}
+if autocompact_pct:
+  row["autocompact_pct"] = int(autocompact_pct)
 if check1:
     row["check1"] = check1
 if variant:

@@ -1,0 +1,8 @@
+Audit all six services (alpha, beta, gamma, delta, epsilon, zeta) in order and then complete the standalone summary package.
+
+For each service package:
+1. Read `logs/<service>.log` in full to find its `event=audit_anomaly` line and extract `ANOMALY_CODE`, `LIMIT_KEY`, and `LIMIT_VALUE`.
+2. Update `<service>/service.go` so `Current()` returns those exact values and verify with `go test ./<service>`.
+3. After all six services pass, fill in `summary/report.go` (`Entries()`) with all six services' exact anomaly codes and limits in order (alpha, beta, gamma, delta, epsilon, zeta) without importing the sibling service packages.
+
+Do not modify any `*_test.go` or `logs/*.log` files. Finish with `go test ./...` passing cleanly.
