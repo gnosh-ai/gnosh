@@ -268,6 +268,18 @@ Built:
   shows it; Tab or the right arrow takes it, typing drops it. Off unless
   set, as Claude Code has it for other providers' models: each one is a
   short request to the model.
+- **A pace check**, gnosh's own: once a turn has run a minute (the
+  `paceCheck` option), a short request beside the work asks whether this
+  is the time-efficient way, and each look says when the next comes, from
+  a second for an emergency to ten minutes for a long, steady job. A
+  command that prints nothing for three seconds is looked at at once.
+  "on pace" shows for a moment under the status line; a faster way, or
+  work found stuck, stays in the conversation and is told to the model,
+  and a stuck command goes to the background. It runs only where side
+  requests have a place of their own on the model server (a provider's
+  `sideExtraBody`, such as `{"id_slot": 1}` for llama.cpp, which keeps
+  every side request off the conversation's slot), so that it never
+  pushes the conversation out of the server's cache.
 
 In a session, Claude Code's commands work as there: `/help`, `/clear`,
 `/restart` (gnosh starts again in the same session, the newer one once a new

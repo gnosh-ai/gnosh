@@ -1391,6 +1391,11 @@ func (f *plain) Event(ev any) {
 		f.printTasks(ev.Tasks)
 	case *PushEvent:
 		ev.Reply <- "not sent: the plain interface sends no notifications"
+	case *PaceEvent:
+		// A faster way, or work found stuck; "ok" is not worth a line here.
+		if ev.Pace != "ok" {
+			f.say("%s", visible(paceLine(ev)))
+		}
 	case *RestartEvent:
 		f.say("%s", visible(ev.Why))
 		f.restarting.Store(true)

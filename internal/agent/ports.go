@@ -62,6 +62,14 @@ type Model struct {
 	// Extra is merged into every request to this model, main and side.
 	Extra map[string]any
 
+	// SideExtra is merged, after Extra, into the side requests asked of
+	// this model that are not about the conversation (SideRequest.Session):
+	// a place of their own on the model server, such as {"id_slot": 1} for
+	// llama.cpp, so that a short side question never takes the session's
+	// place in the server's cache. With it set, a side request may be
+	// asked beside the session's own (SideRequest.Beside).
+	SideExtra map[string]any
+
 	// ResendsThinking says the provider sends the thinking of earlier
 	// replies back to the model, so that the loop counts it when it
 	// estimates how long a request is.

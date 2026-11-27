@@ -6177,3 +6177,47 @@ or kept with the reason said (27).
     ("Working on its own while you are away: your next prompt stops it,
     and what it did is kept.") and "on its own while you are away" on its
     working line.
+
+400. **The pace check: a look beside the work at whether it is the
+    time-efficient way.** Jae, 26 November 2026: "when a task/prompt/todo
+    takes too long, every minute there should be a little frame that pops
+    up, 'is this time efficient?' (better wording needed); and this system
+    should extrapolate to emergencies too, so by default 1 minute, but
+    some things will require every 10 seconds... can it handle even every
+    second? ... should look briefly to see if it's the time efficient way
+    to do something. of course you can't dwell on that either so i guess
+    it should be its own lane? and when running bash scripts or whatever i
+    guess, if it doesn't complete in 3 seconds is it worth thinking 'is
+    this working?' kinda thing". The paceCheck option (seconds; 60, the
+    default; 0 is off; sessions a person attends) has a look taken beside
+    a turn once it has run that long. A short side request (pace-check,
+    pace-request) is shown the task, the mem todo in hand, the time so
+    far, the turn's newest thirty steps with when each began, how long it
+    took and how it ended, what the agent does now (a command and how long
+    it has printed nothing, or how long the model has been writing its
+    reply) and the turn's last five looks; it answers one line of JSON:
+    "ok", "faster" with the quicker way, or "stuck", and in how many
+    seconds to look again. That time, kept within a second and ten
+    minutes, is how the check rises to an emergency (5 to 15 seconds) or
+    settles into a long, steady job: each look says when the next comes. A
+    look takes as long as the model takes to answer, so "every second"
+    means one look after another. A Bash command that has printed nothing
+    for three seconds is looked at at once, once for each silence. "ok" is
+    shown for a moment under the status line ("pace 1:00 · on pace: …");
+    "faster" and "stuck" are kept in the conversation ("pace 3:05 · stuck:
+    …") and told to the model with its next request (pace-note): gnosh's
+    own look, to weigh for a moment and no more, so that the clock never
+    ends the work by itself (item 10's rule). A command found stuck goes to
+    the background, as Ctrl+B sends it, so that the model has the turn
+    back at once. The look is its own lane: SideRequest.Beside sends it
+    while the session's own request runs, and only where side requests
+    have a place of their own (agent.SidePlace): a provider's
+    sideExtraBody (new: merged into side requests only, such as
+    {"id_slot": 1} for llama.cpp), a small model on another server, or a
+    server that is not local. Elsewhere no look is taken, and a person who
+    set the option is told why, once: a side request beside the session's
+    on a local server would take the conversation's place in the server's
+    cache, minutes of reading it again at 200K tokens (item 399's
+    finding). sideExtraBody keeps every other side request (names,
+    reviews, suggestions) off the conversation's slot too; a side question
+    about the conversation (/btw) still goes where the conversation is.

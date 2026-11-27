@@ -74,6 +74,8 @@ type live struct {
 	// away is the work the session does on its own while the person is
 	// away (away.go).
 	away awayState
+	// pace is what the pace check knows of the turn it watches (pace.go).
+	pace paceState
 	// respondShell is the respondToBashCommands option as it stands: the
 	// model answers a command the person ran behind "!" (shellline.go).
 	respondShell atomic.Bool
@@ -653,6 +655,10 @@ func (p *program) openSession(ctx context.Context, st *startup, front Frontend, 
 	l.agentReady.Store(a)
 	if err != nil {
 		return l, fmt.Errorf("the session could not be put together: %w", err)
+	}
+	if l.interactive {
+		// The pace check looks at the clock beside the session (pace.go).
+		l.background(l.paceLoop)
 	}
 	if l.asAgent != nil && l.inv.Effort == "" {
 		l.agentEffort(l.agent, *l.asAgent)
@@ -1418,6 +1424,7 @@ func (l *live) deliver(ev any) {
 		l.front.Event(ev)
 	}
 	l.evMu.Unlock()
+	l.paceObserve(ev)
 	if _, ok := ev.(*agent.TurnEndEvent); ok {
 		// A tool moved the session: with its turn over, the front end
 		// closes it, and the program starts again where it moved.

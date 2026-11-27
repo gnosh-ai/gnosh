@@ -234,6 +234,13 @@ type Provider struct {
 	Headers []Header
 	// ExtraBody is merged into every request body. Nil when none was given.
 	ExtraBody map[string]any
+	// SideExtraBody is merged, after ExtraBody, into the body of the side
+	// requests (a name, a review, the pace check) and not the session's
+	// own: a place of their own on the server, such as {"id_slot": 1} for
+	// llama.cpp, so that they never take the session's place in its cache,
+	// and may be asked beside the session's own request. Nil when none was
+	// given.
+	SideExtraBody map[string]any
 	// ListModels says whether to ask the server which models it has.
 	// When nothing set it, it is true exactly when no model is registered
 	// for the provider.

@@ -269,6 +269,10 @@
 //     recent work, or the most pressing todo in mem, in a todo of its own;
 //     only what stays on the machine and can be undone; and the word that
 //     says nothing is worth doing, which rests the work a while.
+//   - pace-note (PaceNote) is told to the model with its next request when
+//     a pace check found the work stuck or saw a faster way, and moved a
+//     stuck command to the background: gnosh's own look, to weigh for a
+//     moment and no more.
 //   - close-sendback (CloseSendBack) sends the model back to a todo whose
 //     close was refused, once per turn, and ends "Do not tell the user it
 //     is done": a model that was refused once told the user "Fixed".
@@ -409,6 +413,11 @@
 //     are the earlier gnosh's own, arrived at by replaying 244 real
 //     closes. The question comes last, names the todo and asks first
 //     whether the result is that todo's own.
+//   - pace-check and pace-request (PaceCheck) are the pace check, a look
+//     beside the work while a turn runs: the task, the time so far, the
+//     steps with their times, what the agent does now and the earlier
+//     looks; the answer is one line of JSON, "ok", "faster" or "stuck",
+//     and when to look again.
 //   - goal-judge and goal-judge-request (GoalJudge) judge a goal or a
 //     closed task. The answer's "basis" is a field the code reads, not a
 //     phrase the judge writes.

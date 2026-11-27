@@ -47,6 +47,11 @@ type Options struct {
 	// and with no key pressed, before it works on its own while the person
 	// is away. Zero, the default, is off.
 	AwayAfter Value[int]
+	// PaceCheck is how many seconds a turn runs before the first pace
+	// check: a look beside the work, by a short side request, at whether
+	// it goes about its task the time-efficient way. Each look says when
+	// the next one comes. Zero is off.
+	PaceCheck Value[int]
 	// MaxBackgroundTasks is how many background commands may run at once.
 	MaxBackgroundTasks Value[int]
 	// BashOutputMaxChars is how many characters of a command's output the
@@ -155,6 +160,7 @@ func defaultOptions() Options {
 	var o Options
 	o.AutoCompactEnabled.V = true
 	o.MaxBackgroundTasks.V = 50
+	o.PaceCheck.V = 60
 	o.BashOutputMaxChars.V = 30000
 	o.MemReviewCloses.V = true
 	o.RespondToBashCommands.V = true
@@ -236,6 +242,10 @@ var optionDefs = []optionDef{
 		from: fromPlain, ownOnly: true,
 		bounded: true, min: 0, max: 86400,
 		num: func(o *Options) *Value[int] { return &o.AwayAfter }},
+	{key: "paceCheck", kind: oInt, def: "60",
+		what: "seconds a turn runs before the first pace check: a short side request, beside the work, asks whether it goes about its task the time-efficient way, and each look says when the next one comes (1 second to 10 minutes); a Bash command that prints nothing for 3 seconds is looked at at once; a faster way, or work found stuck, is shown and told to the model, and a stuck command goes to the background; 0 is off; it runs only where side requests have a place of their own (sideExtraBody, a small model on another server, or a model server that is not local), so that it never pushes the conversation out of the server's cache",
+		from: fromPlain, bounded: true, min: 0, max: 3600,
+		num: func(o *Options) *Value[int] { return &o.PaceCheck }},
 	{key: "maxBackgroundTasks", kind: oInt, def: "50",
 		what: "background commands that may run at once", from: fromPlain + ", with Claude Code's word for them (background tasks)",
 		bounded: true, min: 1, max: 100000,

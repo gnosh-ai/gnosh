@@ -157,6 +157,9 @@ func (b *builder) addProvider(id string, ch providerChange, o Origin) {
 	if ch.hasExtraBody {
 		p.ExtraBody = ch.extraBody
 	}
+	if ch.hasSideBody {
+		p.SideExtraBody = ch.sideBody
+	}
 	if ch.hasHeaders {
 		p.Headers = ch.headers
 	}

@@ -342,6 +342,21 @@ as one argument is named by its first line (`spec/DECISIONS.md` item
 398). Claude's part: seeing that the line had lost its time, and cutting
 only the tool calls' own words, which can be any length, not gnosh's own.
 
+Later that night, of the work itself:
+
+> when a task/prompt/todo takes too long, every minute there should be a little frame that pops up, "is this time efficient?" (better wording needed); and this system should extrapolate to emergencies too, so by default 1 minute, but some things will require every 10 seconds... can it handle even every second? etc. the idea is, should look briefly to see if it's the time efficient way to do something. of course you can't dwell on that either so i guess it should be its own lane? and when running bash scripts or whatever i guess, if it doesn't complete in 3 seconds is it worth thinking "is this working?" kinda thing.
+
+Set: the pace check (`spec/DECISIONS.md` item 400): a look beside the
+work, a minute into a turn and then whenever the last look says, from a
+second to ten minutes; a command silent for three seconds is looked at at
+once; "on pace" shows for a moment, a faster way or work found stuck is
+shown and told to the model, and a stuck command goes to the background.
+Claude's part: the wording ("pace", "on pace", "faster", "stuck"); each
+look setting the time of the next, which is how the check rises to an
+emergency; the side requests' own slot on the model server
+(sideExtraBody), without which no look is taken, so that the conversation
+keeps its place in the server's cache.
+
 ## Standing rules of his that shaped the build
 
 - "in terms of naming conventions and such i want it to be more like claude

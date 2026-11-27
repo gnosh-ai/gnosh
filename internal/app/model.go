@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"maps"
 	"net"
 	"net/url"
 	"slices"
@@ -331,6 +332,11 @@ func (l *live) buildModel(ctx context.Context, ref config.ModelRef, slot config.
 		Local:    pu.endpoint.Local,
 		Levels:   levels,
 		Level:    level,
+	}
+	if len(pu.cfg.SideExtraBody) > 0 {
+		// Side requests have a place of their own on the server
+		// (sideExtraBody): they never take the session's place there.
+		m.SideExtra = maps.Clone(pu.cfg.SideExtraBody)
 	}
 	switch {
 	case registered && cm.MaxOutputTokens.Set:

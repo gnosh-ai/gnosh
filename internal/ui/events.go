@@ -233,6 +233,15 @@ func (s *session) handle(ev any) {
 	case *app.DeliverablesEvent:
 		s.deliv = ev.List
 		s.dirty = true
+	case *app.PaceEvent:
+		// What a pace check found: "on pace" for a moment under the
+		// status line; a faster way, or work found stuck, as a line of
+		// the conversation.
+		if ev.Pace == "ok" {
+			s.flash(oneLine(ev.Line()))
+		} else {
+			s.notice(agent.LevelInfo, ev.Line())
+		}
 	case *app.SuggestionEvent:
 		// The person's likely next prompt (promptSuggestionEnabled): shown
 		// in the box while it is empty and nothing runs.

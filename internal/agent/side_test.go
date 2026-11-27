@@ -482,3 +482,114 @@ func TestSideTriesAgainAfterAPassingFailure(t *testing.T) {
 		t.Error("a request that gives way was tried again")
 	}
 }
+
+// A side request asked beside the session's own (the pace check) goes out
+// while the session's request is still being answered, where side requests
+// have a place of their own on the model server; it carries that place
+// (Model.SideExtra), which the session's own requests never do.
+func TestSideBesideTheMainRequest(t *testing.T) {
+	r := newRig(t, func(o *Options) {
+		o.Model.Local = true
+		o.Model.SideExtra = map[string]any{"id_slot": 1}
+	})
+	wait := make(chan struct{})
+	reached := make(chan struct{})
+	r.model.push(step{at: once(reached), wait: wait, evs: say("the answer").evs})
+	r.model.push(say(`{"pace": "ok", "why": "fine", "next": 60}`))
+	done := make(chan TurnResult, 1)
+	go func() { done <- r.run("a long question") }()
+	<-reached
+	if !r.a.SidePlace() {
+		t.Fatal("a model with SideExtra gives side requests no place of their own")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), bound)
+	res, err := r.a.Side(ctx, SideRequest{Purpose: "pace", Prompt: "is this the fastest way?", Beside: true})
+	cancel()
+	if err != nil || !strings.Contains(res.Text, `"ok"`) {
+		t.Fatalf("the side request beside the main one: %+v, %v", res, err)
+	}
+	select {
+	case <-done:
+		t.Fatal("the main request ended before the side request was answered")
+	default:
+	}
+	close(wait)
+	if res := <-done; res.Reason != EndCompleted {
+		t.Fatalf("turn = %+v", res)
+	}
+	reqs := r.model.requests()
+	if len(reqs) != 2 {
+		t.Fatalf("%d requests, want the main one and the side one", len(reqs))
+	}
+	if _, ok := reqs[0].Extra["id_slot"]; ok {
+		t.Errorf("the session's own request carries the side requests' place: %v", reqs[0].Extra)
+	}
+	if reqs[1].Extra["id_slot"] != 1 {
+		t.Errorf("the side request does not carry its place: %v", reqs[1].Extra)
+	}
+
+	// A question about the conversation goes where the conversation is.
+	r.model.push(say("it is about the answer"))
+	if _, err := r.a.Side(context.Background(), SideRequest{Session: true, Prompt: "what is this about?"}); err != nil {
+		t.Fatal(err)
+	}
+	reqs = r.model.requests()
+	if _, ok := reqs[len(reqs)-1].Extra["id_slot"]; ok {
+		t.Errorf("a side question about the conversation carries the side requests' place: %v", reqs[len(reqs)-1].Extra)
+	}
+}
+
+// Where side requests have no place of their own, a side request asked
+// beside the session's own waits for it, as any other: it would take the
+// conversation's place in the model server's cache.
+func TestSideBesideWithoutAPlaceWaits(t *testing.T) {
+	r := newRig(t, func(o *Options) { o.Model.Local = true })
+	if r.a.SidePlace() {
+		t.Fatal("a local model with no SideExtra gives side requests a place of their own")
+	}
+	wait := make(chan struct{})
+	reached := make(chan struct{})
+	r.model.push(step{at: once(reached), wait: wait, evs: say("the answer").evs})
+	done := make(chan TurnResult, 1)
+	go func() { done <- r.run("a long question") }()
+	<-reached
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	_, err := r.a.Side(ctx, SideRequest{Purpose: "pace", Prompt: "is this the fastest way?", Beside: true})
+	cancel()
+	if !errors.Is(err, context.DeadlineExceeded) || r.model.count() != 1 {
+		t.Errorf("err = %v, %d requests: the side request went out beside the main one", err, r.model.count())
+	}
+	close(wait)
+	<-done
+}
+
+// Side requests have a place of their own with SideExtra, with a small
+// model on another server, or with a provider that is not local.
+func TestSidePlace(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		mod  func(o *Options)
+		want bool
+	}{
+		{"a local server", func(o *Options) { o.Model.Local = true }, false},
+		{"a local server with a slot for side requests", func(o *Options) {
+			o.Model.Local = true
+			o.Model.SideExtra = map[string]any{"id_slot": 1}
+		}, true},
+		{"a provider that is not local", nil, true},
+		{"a small model on the same server", func(o *Options) {
+			o.Model.Local = true
+			o.Small = &Model{Provider: &fakeModel{name: "small"}, Info: core.ModelInfo{ID: "tiny"}, Address: o.Model.Address, Local: true}
+		}, false},
+		{"a small model on another server", func(o *Options) {
+			o.Model.Local = true
+			o.Small = &Model{Provider: &fakeModel{name: "small"}, Info: core.ModelInfo{ID: "tiny"}, Address: "http://203.0.113.9:8081", Local: true}
+		}, true},
+	} {
+		r := newRig(t, c.mod)
+		if got := r.a.SidePlace(); got != c.want {
+			t.Errorf("%s: SidePlace = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

@@ -73,6 +73,9 @@ func (c *Config) String() string {
 		if len(p.ExtraBody) > 0 {
 			line("    extra body fields: %s", list(slices.Sorted(maps.Keys(p.ExtraBody))))
 		}
+		if len(p.SideExtraBody) > 0 {
+			line("    side request body fields: %s", list(slices.Sorted(maps.Keys(p.SideExtraBody))))
+		}
 		line("    listModels: %v", p.ListModels.V)
 	}
 	if len(c.Providers) == 0 {

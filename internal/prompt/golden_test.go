@@ -443,6 +443,33 @@ func goldenFiles() []goldenFile {
 			},
 		},
 		{
+			file:  "pace",
+			texts: []string{textPaceCheck, textPaceRequest, textPaceNote},
+			cases: func(s *Set) []goldenCase {
+				full := s.PaceCheck(PaceInput{
+					Ask:     "make the flaky test pass every time",
+					Todo:    "find why TestFlaky fails",
+					Elapsed: 3*time.Minute + 5*time.Second,
+					Steps: []PaceStep{
+						{At: 4 * time.Second, Took: 2 * time.Second, What: "Read internal/net/listen_test.go", Outcome: "212 lines"},
+						{At: 20 * time.Second, Took: 95 * time.Second, What: "Bash: go test ./...", Outcome: "exit 1"},
+						{At: 2*time.Minute + 1*time.Second, Took: 50 * time.Second, What: "Bash: go test ./...", Outcome: "exit 1"},
+					},
+					LeftOut: 2,
+					Now:     "running go test ./... for 0:41, which has printed nothing for 0:38",
+					Before:  []string{"1:00 ok: reading the failing test before running it"},
+				})
+				bare := s.PaceCheck(PaceInput{Elapsed: time.Minute, Now: "the model has been writing its reply for 1:00"})
+				return []goldenCase{
+					{"the instructions", full.System},
+					{"what the look is shown", full.Prompt},
+					{"a look with nothing to show yet", bare.Prompt},
+					{"the note for a faster way", s.PaceNote(PaceNoteInput{Elapsed: 3*time.Minute + 5*time.Second, Why: "run go test -run TestFlaky ./internal/net, not the whole tree"})},
+					{"the note for a command found stuck", s.PaceNote(PaceNoteInput{Elapsed: 61 * time.Second, Stuck: true, Why: "git fetch has printed nothing for 0:30 and seems to wait for a password", Command: "Bash: git fetch origin"})},
+				}
+			},
+		},
+		{
 			file:  "goal-judge",
 			texts: []string{textGoalJudge, textGoalRequest},
 			cases: func(s *Set) []goldenCase {

@@ -114,6 +114,7 @@ var providerFields = []keyDef{
 	{"apiKey", "", "the key; none for a server on the person's own machine", fromAPIs + ": the API key"},
 	{"headers", "", "more request headers, as an object of names and values; an empty value is not sent", fromClaudeCode + ": the key of .mcp.json for a server's request headers"},
 	{"extraBody", "", "an object merged into the body of every request", fromAPIs + ": the extra_body of the OpenAI and Anthropic SDKs"},
+	{"sideExtraBody", "", "an object merged into the body of side requests only (names, reviews, the pace check), after extraBody: {\"id_slot\": 1} gives them a slot of their own on a llama.cpp server, so that they never push the conversation out of its cache and may run beside it", fromPlain},
 	{"listModels", "", "ask the server which models it has; when not given, it is asked exactly when no model is registered for it", fromAPIs + ": the request they call \"list models\""},
 	{"disabled", "", "keep the entry and do not use it", fromPlain},
 }

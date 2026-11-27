@@ -157,8 +157,11 @@ var budgets = map[string]int{
 	textSummaryFrom:   220,
 	// (Both grew by the line that an indented "the user:" is never the
 	// user's word: the side-request review of 2026-11-19.)
-	textCloseReview:    820,
-	textGoalJudge:      560,
+	textCloseReview: 820,
+	textGoalJudge:   560,
+	// (Sent with every look, on the side requests' own slot, where a
+	// server that keeps it reads it once.)
+	textPaceCheck:      360,
 	textCloseRequest:   190, // with the counts of what a long todo leaves out
 	textGoalRequest:    80,
 	textNamer:          110,

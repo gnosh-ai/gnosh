@@ -51,6 +51,14 @@ type SideRequest struct {
 	// running (Texts.AsideRunning), and a tool call in the answer is
 	// dropped: nothing runs, and nothing is kept.
 	Session bool
+	// Beside asks the question while the session's own request may be
+	// running, without waiting for its turn at the model: a look at the
+	// work as it goes (the pace check). It is honoured only where side
+	// requests have a place of their own on the model server (SidePlace),
+	// so that it never takes the session's place in the server's cache;
+	// elsewhere the request waits its turn as any other. It does not give
+	// way, and cannot be a Session request.
+	Beside bool
 }
 
 // SideResult is the answer to a SideRequest.
@@ -252,18 +260,25 @@ func (a *Agent) sideOnce(ctx context.Context, sr SideRequest, purpose string, m 
 		return fmt.Errorf("%s %s the %s request: %w", m.label(), what, purpose, err)
 	}
 
-	if sr.Yield {
+	switch {
+	case sr.Beside && !sr.Session && a.sidePlaceOf(m):
+		// Beside the session's own request, on a place of its own: it
+		// takes no turn at the model (SideRequest.Beside).
+	case sr.Yield:
 		select {
 		case a.modelLock <- struct{}{}:
 		case <-tctx.Done():
 			return res, fail("could not be sent", tctx.Err())
 		}
-	} else if err := a.takeModel(wctx); err != nil {
-		// (One that does not give way, /btw say, makes a suggestion give
-		// way to it as the session's own requests do.)
-		return res, fail("could not be sent", err)
+		defer func() { <-a.modelLock }()
+	default:
+		if err := a.takeModel(wctx); err != nil {
+			// (One that does not give way, /btw say, makes a suggestion
+			// give way to it as the session's own requests do.)
+			return res, fail("could not be sent", err)
+		}
+		defer func() { <-a.modelLock }()
 	}
-	defer func() { <-a.modelLock }()
 	if tctx == nil {
 		tctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
@@ -283,13 +298,21 @@ func (a *Agent) sideOnce(ctx context.Context, sr SideRequest, purpose string, m 
 		if sr.Prompt != "" {
 			msgs = withQuestion(msgs, core.Text(sr.Prompt))
 		}
+		extra := maps.Clone(m.Extra)
+		if len(m.SideExtra) > 0 {
+			// The side requests' own place on the server (Model.SideExtra).
+			if extra == nil {
+				extra = map[string]any{}
+			}
+			maps.Copy(extra, m.SideExtra)
+		}
 		req = &core.Request{
 			Model:       m.Info.ID,
 			Messages:    msgs,
 			MaxTokens:   sr.MaxTokens,
 			Temperature: sr.Temperature,
 			Thinking:    m.lowestThinking(),
-			Extra:       maps.Clone(m.Extra),
+			Extra:       extra,
 		}
 		if sr.System != "" {
 			req.System = []string{sr.System}
@@ -468,4 +491,31 @@ func JSONObject(s string) (string, bool) {
 		return "", false
 	}
 	return obj, true
+}
+
+// SidePlace reports whether the session's side requests have a place of
+// their own, where one asked beside the session's own request
+// (SideRequest.Beside) cannot take the session's place in the model
+// server's cache: the model they are asked of first has SideExtra, is a
+// small model on another server than the session's, or is served by a
+// provider that is not on the person's own machine or network.
+func (a *Agent) SidePlace() bool {
+	su := a.setup()
+	m := su.model
+	if su.small != nil && su.small.Provider != nil && modelKey(*su.small) != modelKey(su.model) {
+		m = *su.small
+	}
+	return a.sidePlaceOf(m)
+}
+
+// sidePlaceOf reports whether side requests asked of m have a place of
+// their own (SidePlace).
+func (a *Agent) sidePlaceOf(m Model) bool {
+	if len(m.SideExtra) > 0 || m.Provider != nil && !m.Local {
+		// (A server that is not the person's own keeps no slots for one
+		// conversation to take from another.)
+		return true
+	}
+	main := a.setup().model
+	return m.Address != "" && main.Address != "" && m.Address != main.Address
 }

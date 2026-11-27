@@ -126,6 +126,8 @@
 //	  apiKey          the key; none for a server on the person's own machine
 //	  headers         more request headers, as an object of names and values
 //	  extraBody       an object merged into the body of every request
+//	  sideExtraBody   an object merged into side requests only, such as
+//	                  {"id_slot": 1}: their own slot on a llama.cpp server
 //	  listModels      ask the server which models it has
 //	  disabled        keep the entry and do not use it
 //	models      what gnosh should know about a model, each under
@@ -154,6 +156,9 @@
 //	  awayAfter                seconds idle with no key before the session
 //	                           works on its own while you are away (0, off;
 //	                           not from a project's file)
+//	  paceCheck                seconds into a turn before the first pace
+//	                           check, a look beside the work at whether it
+//	                           is the time-efficient way (60; 0, off)
 //	  maxBackgroundTasks       background commands that may run at once
 //	  bashOutputMaxChars       characters of a command's output the model
 //	                           reads (30000; BASH_MAX_OUTPUT_LENGTH wins)

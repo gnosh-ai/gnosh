@@ -183,6 +183,8 @@ type providerChange struct {
 	hasHeaders   bool
 	extraBody    map[string]any
 	hasExtraBody bool
+	sideBody     map[string]any
+	hasSideBody  bool
 	listModels   *bool
 	noListModels bool // "listModels": null
 	disabled     *bool
@@ -383,6 +385,15 @@ func (s *source) provider(id string, m jfield) {
 				ch.extraBody, _ = s.plain(v, key+".").(map[string]any)
 			default:
 				s.errorf(fl.line, "%q is a JSON object that is merged into the body of every request, such as {\"id_slot\": 1}, and here it is %s.", key, shown(v))
+			}
+		case "sideExtraBody":
+			ch.hasSideBody = true
+			switch v.kind {
+			case jNull:
+			case jObject:
+				ch.sideBody, _ = s.plain(v, key+".").(map[string]any)
+			default:
+				s.errorf(fl.line, "%q is a JSON object that is merged into the body of side requests only, such as {\"id_slot\": 1} to give them a slot of their own on a llama.cpp server, and here it is %s.", key, shown(v))
 			}
 		case "listModels":
 			switch v.kind {

@@ -114,6 +114,9 @@ const (
 	textCloseCommand     = "close-review-command"
 	textGoalJudge        = "goal-judge"
 	textGoalRequest      = "goal-judge-request"
+	textPaceCheck        = "pace-check"
+	textPaceRequest      = "pace-request"
+	textPaceNote         = "pace-note"
 	textNamer            = "namer"
 	textTitle            = "title"
 )
@@ -207,6 +210,8 @@ func specs() []spec {
 			when: "When a reply under /loop first says it is done: show it."},
 		{name: textLoopCheckIn, kind: KindLine, need: []string{"marker"}, may: []string{"turns"},
 			when: "Every 25 turns under /loop, in place of the usual line: is there a real reason to stop?"},
+		{name: textPaceNote, kind: KindLine, need: []string{"elapsed", "why"}, may: []string{"stuck", "faster", "command"},
+			when: "With the next request, when a pace check found the work stuck or saw a faster way, and moved a stuck command to the background."},
 		{name: textAway, kind: KindLine, need: []string{"marker"},
 			when: "As a hidden prompt of the session's own, when the person has been away for the awayAfter option's time: take the next step of the recent work, and how to say nothing is worth doing."},
 		{name: textCloseSendBack, kind: KindLine, need: []string{"todo"}, may: []string{"undone", "refusal"},
@@ -308,6 +313,11 @@ func specs() []spec {
 		{name: textGoalRequest, kind: KindSide, need: []string{"condition", "mem", "conversation"},
 			may:  []string{"no_mem", "no_conversation"},
 			when: "What that request shows the judge."},
+		{name: textPaceCheck, kind: KindSide,
+			when: "The instructions of the pace check, a look beside the work while a turn runs: is this the time-efficient way?"},
+		{name: textPaceRequest, kind: KindSide, need: []string{"ask", "elapsed", "steps", "now"},
+			may:  []string{"todo", "no_steps", "left_out", "before"},
+			when: "What that look is shown: the task, the time so far, the steps with their times, what the agent does now, and the earlier looks."},
 		{name: textNamer, kind: KindSide,
 			when: "The instructions of the request that names new todos, thoughts and facts."},
 		{name: textTitle, kind: KindSide,

@@ -273,6 +273,7 @@ func TestOptions(t *testing.T) {
     "autoCompactWindow": 200000,
     "loopMaxTurns": 25,
     "awayAfter": 90,
+    "paceCheck": 30,
     "maxBackgroundTasks": 7,
     "bashOutputMaxChars": 12000,
     "userInstructionFiles": ["~/notes", "/etc/gnosh/RULES.md", "rules"],
@@ -327,6 +328,7 @@ func TestOptions(t *testing.T) {
 	check("autoCompactWindow", o.AutoCompactWindow.V, 200000)
 	check("loopMaxTurns", o.LoopMaxTurns.V, 25)
 	check("awayAfter", o.AwayAfter.V, 90)
+	check("paceCheck", o.PaceCheck.V, 30)
 	check("maxBackgroundTasks", o.MaxBackgroundTasks.V, 7)
 	check("bashOutputMaxChars", o.BashOutputMaxChars.V, 12000)
 	check("userInstructionFiles", items(o.UserInstructionFiles), []string{testHome + "/notes", "/etc/gnosh/RULES.md", userDir + "/rules"})
@@ -622,7 +624,7 @@ func TestFileRefusals(t *testing.T) {
 
 		// providers.
 		{"providers of the wrong shape", `{"providers": [{"id": "x"}]}`, "", []string{`"providers" is an object`, `"local": {"type": "llamacpp"`, "a list"}},
-		{"a provider of the wrong shape", `{"providers": {"x": "llamacpp"}}`, "", []string{"the provider x is an object", "type, name, baseUrl, apiKey, headers, extraBody, listModels, disabled", "a string"}},
+		{"a provider of the wrong shape", `{"providers": {"x": "llamacpp"}}`, "", []string{"the provider x is an object", "type, name, baseUrl, apiKey, headers, extraBody, sideExtraBody, listModels, disabled", "a string"}},
 		{"a bad id", `{"providers": {"a/b": {"type": "llamacpp"}}}`, "", []string{"not a usable id for a provider", "letters, digits, dots, dashes and underscores"}},
 		{"an unknown field", "{\"providers\": {\"x\": {\"type\": \"llamacpp\",\n \"baseURL\": \"http://h\"}}}", "baseURL", []string{`"baseURL"`, "not a field of a provider", "baseUrl"}},
 		{"a field given twice", "{\"providers\": {\"x\": {\"type\": \"llamacpp\",\n \"type\": \"openai\"}}}", "\"openai\"", []string{`"providers.x.type"`, "given twice"}},
