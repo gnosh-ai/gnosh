@@ -180,7 +180,12 @@ sessions), and the proxy's counts: `requests`, `prompt_tokens`,
   result, so for it these are empty and the proxy's counts are all there
   is.
 - From `rescore.py`: `tools` (calls by name), `gnovm_runs`, `mem` (mem's
-  calls by name), `pops`, `slides`, `summary_messages`, `subagents`.
+  calls by name), `pops`, `slides`, `summary_messages`, `subagents`, and for
+  gnosh `summaries_auto` and `summaries_manual` (what started each summary in
+  the session files: gnosh making room by itself, or `/compact`) and
+  `summary_pre_tokens_max` (the longest conversation a summary replaced, by
+  gnosh's estimate). A run whose summaries are all manual made no room by
+  itself, whatever its summary count.
 
 ## The earlier results
 

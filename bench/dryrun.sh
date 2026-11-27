@@ -250,6 +250,20 @@ if want ways; then
   sum=$(python3 "$BENCH/proxy.py" summarize "$d/proxy.jsonl")
   got="$(python3 -c 'import json, sys; s = json.loads(sys.argv[1]); print(s["requests"], s["summaries"])' "$sum") $(python3 "$BENCH/analyze.py" "$d" | python3 -c 'import json, sys; print(json.load(sys.stdin).get("summary_messages"))')"
   if [ "$got" = "2 1 1" ]; then ok "two requests, one of them a summary; one summary in the session file"; else fail "requests, summaries by the proxy, summaries in the session file: $got, want 2 1 1 ($(head -2 "$d/session-2.err" | tr '\n' ' '))"; fi
+  # What started it: /compact is manual, in the session file (analyze.py) and
+  # in stream-json's compact_boundary alike.
+  got="$(python3 "$BENCH/analyze.py" "$d" | python3 -c 'import json, sys; a = json.load(sys.stdin); print(a.get("summaries_manual"), a.get("summaries_auto"), a.get("summary_pre_tokens_max", 0) > 0)') $(python3 -c '
+import json, sys
+n = 0
+for line in open(sys.argv[1]):
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if e.get("subtype") == "compact_boundary" and e.get("compact_metadata", {}).get("trigger") == "manual":
+        n += 1
+print(n)' "$d/session-2.out")"
+  if [ "$got" = "1 0 True 1" ]; then ok "the /compact summary counts as manual, with its size, and stream-json says the same"; else fail "manual and auto summaries in the session file, a size, manual compact_boundary lines: $got, want 1 0 True 1"; fi
   # The words the proxy tells a summary request by are the first words of
   # gnosh's own text for it: if that text changes, this says so.
   if grep -q "about to be replaced by a summary" "$TREE/internal/prompt/texts/summary.md"; then ok "gnosh's text for a summary still begins as the proxy expects"; else fail "internal/prompt/texts/summary.md no longer says what proxy.py's SUMMARY_RE looks for"; fi

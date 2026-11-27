@@ -4,9 +4,11 @@
 Usage: table.py results.jsonl [--lane SUBSTR]...
 
 Per lane: one table per task (harness rows) and one overall table. Numbers
-are medians over reps, except "passed", "summaries", "slides" and "mem calls",
-which add up. Tokens in thousands. Feed it rescore.py's output to get slides
-and mem calls.
+are medians over reps, except "passed", "summaries", "auto summaries",
+"slides" and "mem calls", which add up. Tokens in thousands. Feed it
+rescore.py's output to get auto summaries, slides and mem calls. "summaries" is
+the proxy's count of summary requests; "auto summaries" is how many of gnosh's
+summaries it made by itself rather than for /compact (its session files).
 
 A run that a cap ended (its wall time, or its turns) and whose check did not
 pass was stopped, not failed: "passed" counts it apart, and it is listed as
@@ -38,8 +40,8 @@ def stopped(r):
 
 def table(rows, title):
     out = ["", "**%s**" % title, "",
-           "| harness | passed | wall | requests | prompt sent | read (uncached) | generated | peak context | summaries | slides | mem calls | errors |",
-           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+           "| harness | passed | wall | requests | prompt sent | read (uncached) | generated | peak context | summaries | auto summaries | slides | mem calls | errors |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     by = defaultdict(list)
     for r in rows:
         by[r["harness"]].append(r)
@@ -49,12 +51,13 @@ def table(rows, title):
         passed = sum(1 for r in rs if r["passed"])
         cut = sum(1 for r in rs if stopped(r))
         gn = h.startswith("gnosh")
-        out.append("| %s | %d/%d%s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+        out.append("| %s | %d/%d%s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
             h, passed, len(rs), ", %d stopped" % cut if cut else "", s(med([r["wall_s"] for r in rs])),
             med([r["requests"] for r in rs]),
             k(med([r["prompt_tokens"] for r in rs])), k(med([r["read_tokens"] for r in rs])),
             k(med([r["generated"] for r in rs])), k(med([r["peak_context"] for r in rs])),
             sum(r.get("summaries", 0) for r in rs),
+            sum(r.get("summaries_auto", 0) or 0 for r in rs) if gn else "",
             sum(r.get("slides", 0) or 0 for r in rs) if gn else "",
             "%d in %d runs" % (sum(r.get("gnovm_runs", 0) or 0 for r in rs),
                                sum(1 for r in rs if r.get("gnovm_runs"))) if gn else "",

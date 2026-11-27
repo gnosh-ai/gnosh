@@ -66,10 +66,26 @@ def from_sessions(root):
     tools = collections.Counter()
     mem = collections.Counter()
     main, subs = sessions.session_files(root), sessions.subagent_files(root)
-    out = {"pops": 0, "slides": 0, "summary_messages": 0, "sessions": len(main), "subagents": len(subs)}
+    out = {"pops": 0, "slides": 0, "summary_messages": 0, "summaries_auto": 0, "summaries_manual": 0,
+           "summary_pre_tokens_max": 0, "sessions": len(main), "subagents": len(subs)}
     for path in main + subs:
         ents = sessions.entries(path)
-        out["summary_messages"] += sum(1 for e in ents if e.get("type") == "summary")
+        for e in ents:
+            if e.get("type") != "summary":
+                continue
+            out["summary_messages"] += 1
+            # The loop's fields on a summary entry say what started it: "auto"
+            # (gnosh making room by itself, a retry after a too-long refusal
+            # included) or "manual" (/compact), and about how long the
+            # conversation was before it. The same values go out in
+            # stream-json's compact_boundary. An entry from before gnosh kept
+            # them counts in summary_messages only.
+            loop = e.get("loop") if isinstance(e.get("loop"), dict) else {}
+            if loop.get("trigger") in ("auto", "manual"):
+                out["summaries_" + loop["trigger"]] += 1
+            pre = loop.get("preTokens")
+            if isinstance(pre, int) and pre > out["summary_pre_tokens_max"]:
+                out["summary_pre_tokens_max"] = pre
         out["pops"] += len(sessions.frames(ents, "pop"))
         out["slides"] += len(sessions.frames(ents, "slide"))
         for _, name, inp in sessions.calls(ents):

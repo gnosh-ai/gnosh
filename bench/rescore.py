@@ -4,8 +4,9 @@ summarize() and analyze.py, so rows written by older versions count alike.
 
 Usage: rescore.py results.jsonl > results-rescored.jsonl
 Adds: mem (gnosh's mem verbs), gnovm_runs, pops, slides, subagents,
-summary_messages (the harness's own count), tools (calls by name), and for
-gnosh what each session printed of itself (sessions.py).
+summary_messages (the harness's own count), for gnosh summaries_auto and
+summaries_manual (what started each) and summary_pre_tokens_max, tools (calls
+by name), and for gnosh what each session printed of itself (sessions.py).
 """
 import json
 import os
@@ -31,7 +32,8 @@ for line in open(sys.argv[1]):
             a = analyze.analyze(d)
             row["tools"] = a.get("tools")
             row["gnovm_runs"] = (a.get("tools") or {}).get("gnovm_run", 0)
-            for k in ("mem", "pops", "popped", "slides", "subagents", "summary_messages", "compactions"):
+            for k in ("mem", "pops", "popped", "slides", "subagents", "summary_messages", "summaries_auto",
+                      "summaries_manual", "summary_pre_tokens_max", "compactions"):
                 if k in a:
                     row[k] = a[k]
             if str(row.get("harness", "")).startswith("gnosh"):
