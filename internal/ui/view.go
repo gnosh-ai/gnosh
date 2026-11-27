@@ -866,13 +866,13 @@ func (s *session) statusLine(width int) string {
 		segs = append(segs, segment{"thinking " + lvl, th.Status, 70})
 	}
 	if c := s.ctxs; c.Window > 0 {
-		pct := c.Used * 100 / c.Window
-		words := fmt.Sprintf("context %d%%", pct)
-		if !c.Known {
-			words += " of an assumed " + tokens(c.Window)
+		var draft int
+		if s.ed.Mode() == editor.ModePrompt && !s.ed.IsEmpty() {
+			draft = draftContextTokens(s.ed.Text(), s.cwd, s.home)
 		}
+		words, full := formatContextSegment(c, draft)
 		style := th.Status
-		if c.Point > 0 && c.Used*10 >= c.Point*9 {
+		if full {
 			style = th.Full
 		}
 		segs = append(segs, segment{words, style, 80})
