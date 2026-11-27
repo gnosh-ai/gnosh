@@ -293,16 +293,18 @@ func TestSSHInACommand(t *testing.T) {
 	}
 
 	// The person's own command, typed behind "!", is theirs.
-	w, far = hostWorld(t, apptest.Reply{Text: "I see you ran ssh yourself."})
+	w, far = hostWorld(t)
 	s := sit(t, w)
 	s.see("Type a prompt and Enter.")
-	s.typeLine("!ssh -- root@203.0.113.7 'echo typed by hand'")
+	s.typeLine(`!ssh -- root@203.0.113.7 'printf "%s %s\n" typed "by hand"'`)
 	s.see("typed by hand")
-	s.see("I see you ran ssh yourself.")
 	s.typeLine("/exit")
 	s.exit()
 	if calls := far.Calls(); !slices.Equal(calls, []string{"root@203.0.113.7"}) {
 		t.Errorf("the person's own ssh: calls %q", calls)
+	}
+	if n := len(w.Model.Requests()); n != 0 {
+		t.Errorf("the person's own ssh triggered %d model requests, want 0", n)
 	}
 	hasNot(t, "the screen", s.out.String(), "the command runs ssh")
 }

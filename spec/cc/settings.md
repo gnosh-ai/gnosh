@@ -143,7 +143,7 @@ from project or local files.
 | `verbose` | boolean | `false` | Show full tool input and output inline instead of short summaries. |
 | `viewMode` | `default` \| `verbose` \| `focus` | unset | Transcript view at start. |
 | `editorMode` | `normal` \| `vim` | `normal` | Key-binding mode of the input box. |
-| `respondToBashCommands` | boolean | `true` | After a `!` shell command typed by the user, have the model reply to its output (`false` = just add it to context). |
+| `respondToBashCommands` | boolean | `false` | After a `!` shell command typed by the user, have the model reply to its output (`false` = just add it to context without starting a turn). |
 | `respectGitignore` | boolean | `true` | Leave gitignored files out of the `@` file picker. |
 | `fileSuggestion` | `{ "type": "command", "command": "..." }` | built-in | Custom command supplying `@` path completion. |
 | `claudeMdExcludes` | string[] (globs or absolute paths) | none | Memory files to skip — `memory-files.md`. |

@@ -293,7 +293,7 @@ func TestOptions(t *testing.T) {
     "preferredNotifChannel": "terminal_bell",
     "vimInsertModeRemaps": ["jj", "jk"],
     "promptSuggestionEnabled": true,
-    "respondToBashCommands": false,
+    "respondToBashCommands": true,
     "fileCheckpointingEnabled": false,
     "askUserQuestionTimeout": "5m",
     "theme": "light",
@@ -348,7 +348,7 @@ func TestOptions(t *testing.T) {
 	check("preferredNotifChannel", o.PreferredNotifChannel.V, "terminal_bell")
 	check("vimInsertModeRemaps", items(o.VimInsertModeRemaps), []string{"jj", "jk"})
 	check("promptSuggestionEnabled", o.PromptSuggestionEnabled.V, true)
-	check("respondToBashCommands", o.RespondToBashCommands.V, false)
+	check("respondToBashCommands", o.RespondToBashCommands.V, true)
 	check("fileCheckpointingEnabled", o.FileCheckpointingEnabled.V, false)
 	check("askUserQuestionTimeout", o.AskUserQuestionTimeout.V, "5m")
 	check("theme", o.Theme.V, "light")

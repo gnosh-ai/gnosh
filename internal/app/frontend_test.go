@@ -120,6 +120,7 @@ func TestInterfaceMakerIsHandedThePromptAndMayDecline(t *testing.T) {
 // the status line's facts count it.
 func TestShellLineOfThePersonsOwn(t *testing.T) {
 	w := apptest.NewWorld(t, apptest.Reply{Text: "I see the file was made and the command said so."}, apptest.Reply{Text: "It runs in the background now."})
+	w.Settings(`{"options": {"respondToBashCommands": true}}`)
 	front, r := attach(t, w, nil, func(ctx context.Context, c SessionControls, f *scripted) int {
 		// In the default mode the model would be asked about this one.
 		if err := c.Shell("touch mine.txt && echo made it myself"); err != nil {
