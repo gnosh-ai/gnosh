@@ -152,13 +152,74 @@ func tailOf(src string, limit int, atStart bool) string {
 	return last
 }
 
-// clean makes output fit to show: NUL bytes are dropped, and bytes that are
-// not valid UTF-8 become U+FFFD, one for each run of them.
+// foldOverstrikes collapses man-page bold (X\bX), underline (_\bX or X\b_)
+// and bullet (+\bo or o\b+) overstrikes into the character they format.
+func foldOverstrikes(s string) string {
+	if strings.IndexByte(s, '\b') < 0 {
+		return s
+	}
+	runes := []rune(s)
+	out := make([]rune, 0, len(runes))
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		if r == '\b' && len(out) > 0 && i+1 < len(runes) {
+			prev, next := out[len(out)-1], runes[i+1]
+			if prev > 0x20 && prev != 0x7f && next > 0x20 && next != 0x7f {
+				switch {
+				case prev == next, prev == '_':
+					out[len(out)-1] = next
+					i++
+					continue
+				case next == '_':
+					out[len(out)-1] = prev
+					i++
+					continue
+				case (prev == '+' && next == 'o') || (prev == 'o' && next == '+'):
+					out[len(out)-1] = '\u2022'
+					i++
+					continue
+				}
+			}
+		}
+		out = append(out, r)
+	}
+	return string(out)
+}
+
+// stripSGR removes benign CSI SGR colour/style sequences (\x1b[[0-9;:]*m)
+// while keeping all other control sequences intact.
+func stripSGR(s string) string {
+	if !strings.Contains(s, "\x1b[") {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if i+1 < len(s) && s[i] == '\x1b' && s[i+1] == '[' {
+			j := i + 2
+			for j < len(s) && ((s[j] >= '0' && s[j] <= '9') || s[j] == ';' || s[j] == ':') {
+				j++
+			}
+			if j < len(s) && s[j] == 'm' {
+				i = j + 1
+				continue
+			}
+		}
+		b.WriteByte(s[i])
+		i++
+	}
+	return b.String()
+}
+
+// clean makes output fit to show: NUL bytes are dropped, bytes that are
+// not valid UTF-8 become U+FFFD (one for each run of them), man-page
+// backspace overstrikes (X\bX and _\bX) collapse to the character they
+// mark, and SGR colour codes (\x1b[...m) are stripped.
 func clean(b []byte) string {
 	if bytes.IndexByte(b, 0) >= 0 {
 		b = bytes.ReplaceAll(b, []byte{0}, nil)
 	}
-	return strings.ToValidUTF8(string(b), "�")
+	return stripSGR(foldOverstrikes(strings.ToValidUTF8(string(b), "\uFFFD")))
 }
 
 // incompleteSuffix returns how many bytes at the end of b are the start of
